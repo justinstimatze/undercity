@@ -44,7 +44,6 @@ import {
 	planToQuests,
 	type ParsedPlan,
 } from "./plan-parser.js";
-import { Persistence } from "./persistence.js";
 import { RaidOrchestrator } from "./raid.js";
 import type { RaidStatus } from "./types.js";
 
@@ -884,15 +883,21 @@ program
 	.description("Process the backlog continuously (run in separate terminal)")
 	.option("-n, --count <n>", "Process only N goals then stop", "0")
 	.option("-s, --stream", "Stream agent activity")
-	.action(async (options: { count?: string; stream?: boolean }) => {
+	.option("--reload-every <n>", "Re-exec CLI after every N completed quests (0=disabled)", "0")
+	.action(async (options: { count?: string; stream?: boolean; reloadEvery?: string }) => {
 		const maxCount = Number.parseInt(options.count || "0", 10);
+		const reloadEvery = Math.max(0, Number.parseInt(options.reloadEvery || "0", 10));
 		let processed = 0;
+		let completedQuests = 0;
 
 		console.log(chalk.cyan("Starting backlog worker..."));
 		if (maxCount > 0) {
 			console.log(chalk.dim(`  Will process ${maxCount} quest(s) then stop`));
 		} else {
 			console.log(chalk.dim("  Will process all pending goals"));
+		}
+		if (reloadEvery > 0) {
+			console.log(chalk.dim(`  Will reload after every ${reloadEvery} completed quest(s)`));
 		}
 		console.log();
 
@@ -929,6 +934,41 @@ program
 				if (finalRaid?.status === "complete") {
 					markComplete(nextGoal.id);
 					console.log(chalk.green(`✓ Quest complete: ${nextGoal.objective.substring(0, 40)}...`));
+					completedQuests++;
+
+					// Check for reload after successful quest completion
+					if (reloadEvery > 0 && completedQuests >= reloadEvery) {
+						console.log(chalk.yellow(`\n🔄 Reloading CLI after ${completedQuests} completed quest(s)...`));
+
+						// Build arguments for re-exec
+						const execArgs = ['work'];
+						if (options.stream) execArgs.push('--stream');
+
+						// Adjust count to reflect remaining work
+						const remainingCount = maxCount > 0 ? maxCount - processed - 1 : 0;
+						if (remainingCount > 0) {
+							execArgs.push('--count', remainingCount.toString());
+						}
+
+						// Preserve reload-every setting
+						execArgs.push('--reload-every', reloadEvery.toString());
+
+						// Clear state before re-exec
+						orchestrator.surrender();
+						const persistence = new Persistence();
+						persistence.clearAll();
+
+						// Re-exec the CLI process
+						const { spawn } = await import('node:child_process');
+						const child = spawn(process.execPath, [process.argv[1], ...execArgs], {
+							stdio: 'inherit',
+							detached: false
+						});
+
+						// Exit this process
+						child.on('exit', (code) => process.exit(code || 0));
+						return;
+					}
 				} else if (finalRaid?.status === "failed") {
 					markFailed(nextGoal.id, "Raid failed");
 					console.log(chalk.red(`✗ Quest failed: ${nextGoal.objective.substring(0, 40)}...`));
@@ -936,6 +976,41 @@ program
 					// Raid didn't fully complete (maybe awaiting something)
 					markComplete(nextGoal.id); // Consider it done for now
 					console.log(chalk.yellow(`⚠ Quest processed: ${nextGoal.objective.substring(0, 40)}...`));
+					completedQuests++;
+
+					// Check for reload after quest completion
+					if (reloadEvery > 0 && completedQuests >= reloadEvery) {
+						console.log(chalk.yellow(`\n🔄 Reloading CLI after ${completedQuests} completed quest(s)...`));
+
+						// Build arguments for re-exec
+						const execArgs = ['work'];
+						if (options.stream) execArgs.push('--stream');
+
+						// Adjust count to reflect remaining work
+						const remainingCount = maxCount > 0 ? maxCount - processed - 1 : 0;
+						if (remainingCount > 0) {
+							execArgs.push('--count', remainingCount.toString());
+						}
+
+						// Preserve reload-every setting
+						execArgs.push('--reload-every', reloadEvery.toString());
+
+						// Clear state before re-exec
+						orchestrator.surrender();
+						const persistence = new Persistence();
+						persistence.clearAll();
+
+						// Re-exec the CLI process
+						const { spawn } = await import('node:child_process');
+						const child = spawn(process.execPath, [process.argv[1], ...execArgs], {
+							stdio: 'inherit',
+							detached: false
+						});
+
+						// Exit this process
+						child.on('exit', (code) => process.exit(code || 0));
+						return;
+					}
 				}
 
 				// Clear raid state for next goal
