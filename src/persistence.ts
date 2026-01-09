@@ -23,6 +23,7 @@ import type {
 	Loadout,
 	QuestMetrics,
 	Raid,
+	RateLimitState,
 	SafePocket,
 	ScoutCache,
 	ScoutCacheEntry,
@@ -581,5 +582,112 @@ export class Persistence {
 			oldestEntry: new Date(Math.min(...dates)),
 			newestEntry: new Date(Math.max(...dates)),
 		};
+	}
+
+	// ============== Rate Limiting ==============
+	// Track API usage and rate limit events
+
+	/**
+	 * Get rate limit state
+	 */
+	getRateLimitState(): RateLimitState {
+		return this.readJson<RateLimitState>("rate-limits.json", {
+			quests: [],
+			rateLimitHits: [],
+			config: {
+				maxTokensPer5Hours: 1_000_000,
+				maxTokensPerWeek: 5_000_000,
+				warningThreshold: 0.8,
+				tokenMultipliers: {
+					haiku: 0.25,
+					sonnet: 1.0,
+					opus: 12.0,
+				},
+			},
+			lastUpdated: new Date(),
+		});
+	}
+
+	/**
+	 * Save rate limit state
+	 */
+	saveRateLimitState(state: RateLimitState): void {
+		state.lastUpdated = new Date();
+		this.writeJson("rate-limits.json", state);
+	}
+
+	/**
+	 * Clear rate limit state
+	 */
+	clearRateLimitState(): void {
+		this.writeJson<RateLimitState>("rate-limits.json", {
+			quests: [],
+			rateLimitHits: [],
+			config: {
+				maxTokensPer5Hours: 1_000_000,
+				maxTokensPerWeek: 5_000_000,
+				warningThreshold: 0.8,
+				tokenMultipliers: {
+					haiku: 0.25,
+					sonnet: 1.0,
+					opus: 12.0,
+				},
+			},
+			lastUpdated: new Date(),
+		});
+	}
+
+	// ============== Quest Metrics ==============
+	// Track efficiency metrics for completed quests
+
+	/**
+	 * Get all quest metrics
+	 */
+	getQuestMetrics(): QuestMetrics[] {
+		return this.readJson<QuestMetrics[]>("quest-metrics.json", []);
+	}
+
+	/**
+	 * Save quest metrics
+	 */
+	saveQuestMetrics(metrics: QuestMetrics[]): void {
+		this.writeJson("quest-metrics.json", metrics);
+	}
+
+	/**
+	 * Add a new quest metric
+	 */
+	addQuestMetric(metric: QuestMetrics): void {
+		const metrics = this.getQuestMetrics();
+		metrics.push(metric);
+
+		// Keep only last 1000 metrics to prevent unbounded growth
+		if (metrics.length > 1000) {
+			metrics.splice(0, metrics.length - 1000);
+		}
+
+		this.saveQuestMetrics(metrics);
+	}
+
+	/**
+	 * Clear quest metrics
+	 */
+	clearQuestMetrics(): void {
+		this.saveQuestMetrics([]);
+	}
+
+	/**
+	 * Get quest metrics for a specific raid
+	 */
+	getQuestMetricsForRaid(raidId: string): QuestMetrics[] {
+		return this.getQuestMetrics().filter(m => m.raidId === raidId);
+	}
+
+	/**
+	 * Get recent quest metrics (last N days)
+	 */
+	getRecentQuestMetrics(days = 30): QuestMetrics[] {
+		const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+		return this.getQuestMetrics().filter(m => new Date(m.startedAt) >= cutoff);
 	}
 }

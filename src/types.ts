@@ -311,102 +311,155 @@ export interface ScoutCache {
 	lastUpdated: Date;
 }
 
-// ============== Efficiency Metrics Types ==============
+// ============== Rate Limiting Types ==============
 
 /**
- * Token usage information extracted from Claude SDK responses
+ * Token usage for a quest/request
  */
 export interface TokenUsage {
 	/** Input tokens consumed */
 	inputTokens: number;
 	/** Output tokens generated */
 	outputTokens: number;
-	/** Cache creation tokens (if applicable) */
-	cacheCreationTokens?: number;
-	/** Cache read tokens (if applicable) */
-	cacheReadTokens?: number;
-	/** Total tokens (sum of all) */
+	/** Total tokens (input + output) */
 	totalTokens: number;
+	/** Tokens normalized to Sonnet equivalent (Opus ~12x, Haiku ~0.25x) */
+	sonnetEquivalentTokens: number;
 }
 
 /**
- * Efficiency metrics for a single quest execution
+ * A quest represents a single request/task tracked for rate limiting
+ */
+export interface QuestUsage {
+	/** Unique quest identifier */
+	questId: string;
+	/** Model used for the quest */
+	model: "haiku" | "sonnet" | "opus";
+	/** Token usage for this quest */
+	tokens: TokenUsage;
+	/** When this quest started */
+	timestamp: Date;
+	/** Duration of the quest in milliseconds */
+	durationMs?: number;
+	/** Associated raid ID if applicable */
+	raidId?: string;
+	/** Associated agent ID if applicable */
+	agentId?: string;
+}
+
+/**
+ * Rate limit hit event (429 response)
+ */
+export interface RateLimitHit {
+	/** When the 429 occurred */
+	timestamp: Date;
+	/** Model that hit the limit */
+	model: "haiku" | "sonnet" | "opus";
+	/** Current usage state when limit hit */
+	currentUsage: {
+		/** Tokens used in last 5 hours */
+		last5Hours: number;
+		/** Tokens used in current week */
+		currentWeek: number;
+		/** Sonnet equivalent tokens in last 5 hours */
+		last5HoursSonnet: number;
+		/** Sonnet equivalent tokens in current week */
+		currentWeekSonnet: number;
+	};
+	/** Response headers from 429 (if available) */
+	responseHeaders?: Record<string, string>;
+	/** Error message from 429 */
+	errorMessage?: string;
+}
+
+/**
+ * Time window for rate limit calculations
+ */
+export type TimeWindow = "5hour" | "week";
+
+/**
+ * Rate limit configuration
+ */
+export interface RateLimitConfig {
+	/** Maximum tokens per 5-hour window (in Sonnet equivalents) */
+	maxTokensPer5Hours: number;
+	/** Maximum tokens per week (in Sonnet equivalents) */
+	maxTokensPerWeek: number;
+	/** Warning threshold as percentage (0.8 = 80%) */
+	warningThreshold: number;
+	/** Token multipliers for Sonnet equivalence */
+	tokenMultipliers: {
+		haiku: number;
+		sonnet: number;
+		opus: number;
+	};
+}
+
+/**
+ * Current rate limit state
+ */
+export interface RateLimitState {
+	/** All quest usage records */
+	quests: QuestUsage[];
+	/** All rate limit hit events */
+	rateLimitHits: RateLimitHit[];
+	/** Configuration */
+	config: RateLimitConfig;
+	/** Last updated timestamp */
+	lastUpdated: Date;
+}
+
+// ============== Metrics Types ==============
+
+/**
+ * Quest completion metrics for efficiency tracking
  */
 export interface QuestMetrics {
-	/** Quest ID */
+	/** Quest identifier */
 	questId: string;
-	/** Quest objective */
-	objective: string;
-	/** Raid ID associated with this quest */
+	/** Raid identifier */
 	raidId: string;
-	/** Quest completion status */
+	/** Quest objective/goal */
+	objective: string;
+	/** Whether quest completed successfully */
 	success: boolean;
+	/** Total execution time in milliseconds */
+	durationMs: number;
+	/** Total tokens consumed */
+	totalTokens: number;
+	/** Number of agents spawned */
+	agentsSpawned: number;
+	/** Agent types used */
+	agentTypes: AgentType[];
 	/** When quest started */
 	startedAt: Date;
-	/** When quest completed/failed */
+	/** When quest completed */
 	completedAt: Date;
-	/** Total execution time in milliseconds */
-	executionTimeMs: number;
-	/** Token usage across all agent interactions */
-	tokenUsage: TokenUsage;
-	/** Number of agents spawned during execution */
-	agentsSpawned: number;
-	/** Agent type breakdown */
-	agentTypes: Record<AgentType, number>;
-	/** Error message if quest failed */
+	/** Error message if failed */
 	error?: string;
 }
 
 /**
- * Aggregated efficiency analytics
+ * Efficiency analytics calculated from historical metrics
  */
 export interface EfficiencyAnalytics {
 	/** Total quests tracked */
 	totalQuests: number;
-	/** Successful quest completions */
-	successfulQuests: number;
-	/** Failed quest attempts */
-	failedQuests: number;
-	/** Success rate percentage */
+	/** Success rate as percentage */
 	successRate: number;
-	/** Average tokens per quest */
-	avgTokensPerQuest: number;
-	/** Average tokens per successful completion */
+	/** Average tokens per completed quest */
 	avgTokensPerCompletion: number;
-	/** Average execution time in minutes */
-	avgExecutionTimeMinutes: number;
-	/** Token efficiency trend (tokens per minute) */
-	tokenEfficiency: number;
-	/** Most token-intensive quest */
-	mostExpensiveQuest?: {
-		questId: string;
-		objective: string;
-		tokens: number;
-		timeMinutes: number;
+	/** Average execution time per quest */
+	avgDurationMs: number;
+	/** Average agents spawned per quest */
+	avgAgentsSpawned: number;
+	/** Most efficient agent type (lowest tokens/completion) */
+	mostEfficientAgentType: AgentType | null;
+	/** Token usage by agent type */
+	tokensByAgentType: Record<AgentType, { total: number; avgPerQuest: number }>;
+	/** Time period of analysis */
+	analysisPeriod: {
+		from: Date;
+		to: Date;
 	};
-	/** Most efficient quest */
-	mostEfficientQuest?: {
-		questId: string;
-		objective: string;
-		tokensPerMinute: number;
-		success: boolean;
-	};
-	/** Agent utilization statistics */
-	agentUtilization: Record<AgentType, {
-		timesUsed: number;
-		avgTokens: number;
-		successRate: number;
-	}>;
-}
-
-/**
- * Extended stash with efficiency metrics
- */
-export interface ExtendedStash extends Stash {
-	/** Efficiency metrics for completed quests */
-	questMetrics: QuestMetrics[];
-	/** Metadata about metrics collection */
-	metricsVersion: string;
-	/** When metrics collection started */
-	metricsStartedAt: Date;
 }

@@ -5,18 +5,13 @@
  * Provides tokens-per-completion ratios and historical analytics.
  */
 
-import { persistenceLogger } from "./logger.js";
 import type {
 	AgentType,
 	EfficiencyAnalytics,
-	ExtendedStash,
 	QuestMetrics,
-	Raid,
-	SquadMember,
 	TokenUsage,
 } from "./types.js";
-
-const METRICS_VERSION = "1.0";
+import { RateLimitTracker } from "./rate-limit.js";
 
 /**
  * Tracks efficiency metrics for quests and raids
@@ -26,24 +21,14 @@ export class MetricsTracker {
 	private questId?: string;
 	private raidId?: string;
 	private objective?: string;
-	private totalTokens: TokenUsage = {
-		inputTokens: 0,
-		outputTokens: 0,
-		cacheCreationTokens: 0,
-		cacheReadTokens: 0,
-		totalTokens: 0,
-	};
-	private agentsSpawned: number = 0;
-	private agentTypes: Record<AgentType, number> = {
-		scout: 0,
-		planner: 0,
-		fabricator: 0,
-		auditor: 0,
-	};
+	private totalTokens = 0;
+	private agentsSpawned = 0;
+	private agentTypes: AgentType[] = [];
 	private currentError?: string;
+	private rateLimitTracker: RateLimitTracker;
 
-	constructor() {
-		this.reset();
+	constructor(rateLimitTracker?: RateLimitTracker) {
+		this.rateLimitTracker = rateLimitTracker || new RateLimitTracker();
 	}
 
 	/**
@@ -54,20 +39,9 @@ export class MetricsTracker {
 		this.questId = undefined;
 		this.raidId = undefined;
 		this.objective = undefined;
-		this.totalTokens = {
-			inputTokens: 0,
-			outputTokens: 0,
-			cacheCreationTokens: 0,
-			cacheReadTokens: 0,
-			totalTokens: 0,
-		};
+		this.totalTokens = 0;
 		this.agentsSpawned = 0;
-		this.agentTypes = {
-			scout: 0,
-			planner: 0,
-			fabricator: 0,
-			auditor: 0,
-		};
+		this.agentTypes = [];
 		this.currentError = undefined;
 	}
 
@@ -80,113 +54,101 @@ export class MetricsTracker {
 		this.questId = questId;
 		this.raidId = raidId;
 		this.objective = objective;
-
-		persistenceLogger.debug(
-			{ questId, raidId, objective: objective.substring(0, 50) },
-			"Started tracking quest metrics"
-		);
 	}
 
 	/**
 	 * Record agent spawn
 	 */
 	recordAgentSpawn(agentType: AgentType): void {
-		if (!this.questStartTime) {
-			persistenceLogger.warn("Attempted to record agent spawn without active quest tracking");
-			return;
-		}
-
 		this.agentsSpawned++;
-		this.agentTypes[agentType]++;
-
-		persistenceLogger.debug(
-			{ questId: this.questId, agentType, totalSpawned: this.agentsSpawned },
-			"Recorded agent spawn"
-		);
+		if (!this.agentTypes.includes(agentType)) {
+			this.agentTypes.push(agentType);
+		}
 	}
 
 	/**
 	 * Extract token usage from Claude SDK message
 	 */
 	extractTokenUsage(message: unknown): TokenUsage | null {
-		try {
-			const msg = message as Record<string, unknown>;
-
-			// Check for usage in message metadata
-			if (msg.usage && typeof msg.usage === "object") {
-				const usage = msg.usage as Record<string, unknown>;
-
-				const tokenUsage: TokenUsage = {
-					inputTokens: Number(usage.input_tokens || 0),
-					outputTokens: Number(usage.output_tokens || 0),
-					cacheCreationTokens: Number(usage.cache_creation_input_tokens || 0),
-					cacheReadTokens: Number(usage.cache_read_input_tokens || 0),
-					totalTokens: 0,
-				};
-
-				// Calculate total
-				tokenUsage.totalTokens =
-					tokenUsage.inputTokens +
-					tokenUsage.outputTokens +
-					(tokenUsage.cacheCreationTokens || 0) +
-					(tokenUsage.cacheReadTokens || 0);
-
-				return tokenUsage.totalTokens > 0 ? tokenUsage : null;
-			}
-
-			// Check for usage in result messages
-			if (msg.type === "result" && msg.usage && typeof msg.usage === "object") {
-				const usage = msg.usage as Record<string, unknown>;
-
-				const tokenUsage: TokenUsage = {
-					inputTokens: Number(usage.input_tokens || 0),
-					outputTokens: Number(usage.output_tokens || 0),
-					cacheCreationTokens: Number(usage.cache_creation_input_tokens || 0),
-					cacheReadTokens: Number(usage.cache_read_input_tokens || 0),
-					totalTokens: 0,
-				};
-
-				tokenUsage.totalTokens =
-					tokenUsage.inputTokens +
-					tokenUsage.outputTokens +
-					(tokenUsage.cacheCreationTokens || 0) +
-					(tokenUsage.cacheReadTokens || 0);
-
-				return tokenUsage.totalTokens > 0 ? tokenUsage : null;
-			}
-
-			return null;
-		} catch (error) {
-			persistenceLogger.warn({ error }, "Error extracting token usage from message");
+		// Handle different Claude SDK message formats
+		if (!message || typeof message !== "object") {
 			return null;
 		}
+
+		const msg = message as any;
+
+		// Try different property paths based on SDK version
+		let inputTokens = 0;
+		let outputTokens = 0;
+
+		// Common patterns in Claude SDK responses
+		if (msg.usage) {
+			inputTokens = msg.usage.input_tokens || msg.usage.inputTokens || 0;
+			outputTokens = msg.usage.output_tokens || msg.usage.outputTokens || 0;
+		} else if (msg.metadata?.usage) {
+			inputTokens = msg.metadata.usage.input_tokens || msg.metadata.usage.inputTokens || 0;
+			outputTokens = msg.metadata.usage.output_tokens || msg.metadata.usage.outputTokens || 0;
+		} else if (msg.meta?.usage) {
+			inputTokens = msg.meta.usage.input_tokens || msg.meta.usage.inputTokens || 0;
+			outputTokens = msg.meta.usage.output_tokens || msg.meta.usage.outputTokens || 0;
+		} else if (msg.inputTokens !== undefined && msg.outputTokens !== undefined) {
+			inputTokens = msg.inputTokens;
+			outputTokens = msg.outputTokens;
+		} else if (msg.input_tokens !== undefined && msg.output_tokens !== undefined) {
+			inputTokens = msg.input_tokens;
+			outputTokens = msg.output_tokens;
+		}
+
+		if (inputTokens === 0 && outputTokens === 0) {
+			return null;
+		}
+
+		const totalTokens = inputTokens + outputTokens;
+
+		return {
+			inputTokens,
+			outputTokens,
+			totalTokens,
+			sonnetEquivalentTokens: totalTokens, // Will be recalculated based on model
+		};
 	}
 
 	/**
 	 * Record token usage from Claude SDK message
 	 */
-	recordTokenUsage(message: unknown): void {
-		if (!this.questStartTime) {
-			return; // Not tracking a quest
+	recordTokenUsage(message: unknown, model?: "haiku" | "sonnet" | "opus"): void {
+		const usage = this.extractTokenUsage(message);
+		if (!usage) {
+			return;
 		}
 
-		const usage = this.extractTokenUsage(message);
-		if (usage) {
-			this.totalTokens.inputTokens += usage.inputTokens;
-			this.totalTokens.outputTokens += usage.outputTokens;
-			this.totalTokens.cacheCreationTokens = (this.totalTokens.cacheCreationTokens || 0) + (usage.cacheCreationTokens || 0);
-			this.totalTokens.cacheReadTokens = (this.totalTokens.cacheReadTokens || 0) + (usage.cacheReadTokens || 0);
-			this.totalTokens.totalTokens += usage.totalTokens;
+		this.totalTokens += usage.totalTokens;
 
-			persistenceLogger.debug(
+		// Record in rate limit tracker if we have enough info
+		if (this.questId && model) {
+			this.rateLimitTracker.recordQuest(
+				this.questId,
+				model,
+				usage.inputTokens,
+				usage.outputTokens,
 				{
-					questId: this.questId,
-					currentUsage: usage.totalTokens,
-					cumulativeUsage: this.totalTokens.totalTokens
-				},
-				"Recorded token usage"
+					raidId: this.raidId,
+					timestamp: new Date(),
+				}
 			);
 		}
+	}
+
+	/**
+	 * Record a 429 rate limit hit
+	 */
+	recordRateLimitHit(
+		model: "haiku" | "sonnet" | "opus",
+		error?: Error | string,
+		responseHeaders?: Record<string, string>
+	): void {
+		const errorMessage = typeof error === "string" ? error : error?.message;
+		this.rateLimitTracker.recordRateLimitHit(model, errorMessage, responseHeaders);
 	}
 
 	/**
@@ -194,7 +156,6 @@ export class MetricsTracker {
 	 */
 	recordQuestFailure(error: string): void {
 		this.currentError = error;
-		persistenceLogger.debug({ questId: this.questId, error }, "Recorded quest failure");
 	}
 
 	/**
@@ -202,42 +163,48 @@ export class MetricsTracker {
 	 */
 	completeQuest(success: boolean): QuestMetrics | null {
 		if (!this.questStartTime || !this.questId || !this.raidId || !this.objective) {
-			persistenceLogger.warn("Attempted to complete quest tracking without active tracking");
 			return null;
 		}
 
 		const completedAt = new Date();
-		const executionTimeMs = completedAt.getTime() - this.questStartTime.getTime();
+		const durationMs = completedAt.getTime() - this.questStartTime.getTime();
 
 		const metrics: QuestMetrics = {
 			questId: this.questId,
-			objective: this.objective,
 			raidId: this.raidId,
+			objective: this.objective,
 			success,
+			durationMs,
+			totalTokens: this.totalTokens,
+			agentsSpawned: this.agentsSpawned,
+			agentTypes: [...this.agentTypes],
 			startedAt: this.questStartTime,
 			completedAt,
-			executionTimeMs,
-			tokenUsage: { ...this.totalTokens },
-			agentsSpawned: this.agentsSpawned,
-			agentTypes: { ...this.agentTypes },
-			error: success ? undefined : this.currentError,
+			error: this.currentError,
 		};
 
-		persistenceLogger.info(
-			{
-				questId: this.questId,
-				success,
-				tokens: this.totalTokens.totalTokens,
-				timeMinutes: Math.round(executionTimeMs / 60000),
-				agents: this.agentsSpawned,
-			},
-			"Completed quest metrics tracking"
-		);
-
-		// Reset for next quest
-		this.reset();
-
 		return metrics;
+	}
+
+	/**
+	 * Get rate limit tracker instance for external use
+	 */
+	getRateLimitTracker(): RateLimitTracker {
+		return this.rateLimitTracker;
+	}
+
+	/**
+	 * Get rate limit usage summary
+	 */
+	getRateLimitSummary(): ReturnType<RateLimitTracker["getUsageSummary"]> {
+		return this.rateLimitTracker.getUsageSummary();
+	}
+
+	/**
+	 * Generate rate limit usage report
+	 */
+	generateRateLimitReport(): string {
+		return this.rateLimitTracker.generateReport();
 	}
 
 	/**
@@ -247,110 +214,94 @@ export class MetricsTracker {
 		if (questMetrics.length === 0) {
 			return {
 				totalQuests: 0,
-				successfulQuests: 0,
-				failedQuests: 0,
 				successRate: 0,
-				avgTokensPerQuest: 0,
 				avgTokensPerCompletion: 0,
-				avgExecutionTimeMinutes: 0,
-				tokenEfficiency: 0,
-				agentUtilization: {
-					scout: { timesUsed: 0, avgTokens: 0, successRate: 0 },
-					planner: { timesUsed: 0, avgTokens: 0, successRate: 0 },
-					fabricator: { timesUsed: 0, avgTokens: 0, successRate: 0 },
-					auditor: { timesUsed: 0, avgTokens: 0, successRate: 0 },
+				avgDurationMs: 0,
+				avgAgentsSpawned: 0,
+				mostEfficientAgentType: null,
+				tokensByAgentType: {} as Record<AgentType, { total: number; avgPerQuest: number }>,
+				analysisPeriod: {
+					from: new Date(),
+					to: new Date(),
 				},
 			};
 		}
 
+		const completedQuests = questMetrics.filter((m) => m.success);
 		const totalQuests = questMetrics.length;
-		const successfulQuests = questMetrics.filter((m) => m.success).length;
-		const failedQuests = totalQuests - successfulQuests;
-		const successRate = (successfulQuests / totalQuests) * 100;
+		const successRate = (completedQuests.length / totalQuests) * 100;
 
-		// Token analytics
-		const totalTokens = questMetrics.reduce((sum, m) => sum + m.tokenUsage.totalTokens, 0);
-		const avgTokensPerQuest = totalTokens / totalQuests;
-		const successfulMetrics = questMetrics.filter((m) => m.success);
-		const successfulTokens = successfulMetrics.reduce((sum, m) => sum + m.tokenUsage.totalTokens, 0);
-		const avgTokensPerCompletion = successfulQuests > 0 ? successfulTokens / successfulQuests : 0;
+		// Calculate averages from completed quests only
+		const avgTokensPerCompletion = completedQuests.length > 0
+			? completedQuests.reduce((sum, m) => sum + m.totalTokens, 0) / completedQuests.length
+			: 0;
 
-		// Time analytics
-		const totalTimeMs = questMetrics.reduce((sum, m) => sum + m.executionTimeMs, 0);
-		const avgExecutionTimeMinutes = totalTimeMs / (totalQuests * 60000);
+		const avgDurationMs = questMetrics.length > 0
+			? questMetrics.reduce((sum, m) => sum + m.durationMs, 0) / questMetrics.length
+			: 0;
 
-		// Efficiency (tokens per minute)
-		const tokenEfficiency = totalTimeMs > 0 ? (totalTokens / (totalTimeMs / 60000)) : 0;
+		const avgAgentsSpawned = questMetrics.length > 0
+			? questMetrics.reduce((sum, m) => sum + m.agentsSpawned, 0) / questMetrics.length
+			: 0;
 
-		// Find extremes
-		let mostExpensiveQuest: EfficiencyAnalytics['mostExpensiveQuest'];
-		let mostEfficientQuest: EfficiencyAnalytics['mostEfficientQuest'];
-
-		if (questMetrics.length > 0) {
-			// Most expensive by total tokens
-			const expensive = questMetrics.reduce((max, current) =>
-				current.tokenUsage.totalTokens > max.tokenUsage.totalTokens ? current : max
-			);
-			mostExpensiveQuest = {
-				questId: expensive.questId,
-				objective: expensive.objective,
-				tokens: expensive.tokenUsage.totalTokens,
-				timeMinutes: expensive.executionTimeMs / 60000,
-			};
-
-			// Most efficient (lowest tokens per minute for successful quests)
-			const successful = questMetrics.filter(m => m.success && m.executionTimeMs > 0);
-			if (successful.length > 0) {
-				const efficient = successful.reduce((min, current) => {
-					const currentEfficiency = current.tokenUsage.totalTokens / (current.executionTimeMs / 60000);
-					const minEfficiency = min.tokenUsage.totalTokens / (min.executionTimeMs / 60000);
-					return currentEfficiency < minEfficiency ? current : min;
-				});
-				mostEfficientQuest = {
-					questId: efficient.questId,
-					objective: efficient.objective,
-					tokensPerMinute: efficient.tokenUsage.totalTokens / (efficient.executionTimeMs / 60000),
-					success: efficient.success,
-				};
-			}
-		}
-
-		// Agent utilization
-		const agentUtilization: EfficiencyAnalytics['agentUtilization'] = {
-			scout: { timesUsed: 0, avgTokens: 0, successRate: 0 },
-			planner: { timesUsed: 0, avgTokens: 0, successRate: 0 },
-			fabricator: { timesUsed: 0, avgTokens: 0, successRate: 0 },
-			auditor: { timesUsed: 0, avgTokens: 0, successRate: 0 },
+		// Calculate tokens by agent type
+		const tokensByAgentType: Record<AgentType, { total: number; avgPerQuest: number }> = {
+			scout: { total: 0, avgPerQuest: 0 },
+			planner: { total: 0, avgPerQuest: 0 },
+			fabricator: { total: 0, avgPerQuest: 0 },
+			auditor: { total: 0, avgPerQuest: 0 },
 		};
 
-		for (const agentType of Object.keys(agentUtilization) as AgentType[]) {
-			const agentMetrics = questMetrics.filter(m => m.agentTypes[agentType] > 0);
-			const timesUsed = agentMetrics.length;
+		const agentTypeQuests: Record<AgentType, number> = {
+			scout: 0,
+			planner: 0,
+			fabricator: 0,
+			auditor: 0,
+		};
 
-			if (timesUsed > 0) {
-				const totalTokensForAgent = agentMetrics.reduce((sum, m) => sum + m.tokenUsage.totalTokens, 0);
-				const successfulForAgent = agentMetrics.filter(m => m.success).length;
-
-				agentUtilization[agentType] = {
-					timesUsed,
-					avgTokens: totalTokensForAgent / timesUsed,
-					successRate: (successfulForAgent / timesUsed) * 100,
-				};
+		for (const metrics of questMetrics) {
+			for (const agentType of metrics.agentTypes) {
+				tokensByAgentType[agentType].total += metrics.totalTokens;
+				agentTypeQuests[agentType]++;
 			}
 		}
+
+		// Calculate averages
+		for (const agentType of Object.keys(tokensByAgentType) as AgentType[]) {
+			const questCount = agentTypeQuests[agentType];
+			if (questCount > 0) {
+				tokensByAgentType[agentType].avgPerQuest =
+					tokensByAgentType[agentType].total / questCount;
+			}
+		}
+
+		// Find most efficient agent type (lowest tokens per completion)
+		let mostEfficientAgentType: AgentType | null = null;
+		let lowestTokensPerCompletion = Infinity;
+
+		for (const [agentType, stats] of Object.entries(tokensByAgentType)) {
+			if (stats.avgPerQuest > 0 && stats.avgPerQuest < lowestTokensPerCompletion) {
+				lowestTokensPerCompletion = stats.avgPerQuest;
+				mostEfficientAgentType = agentType as AgentType;
+			}
+		}
+
+		// Analysis period
+		const dates = questMetrics.map((m) => m.startedAt);
+		const analysisPeriod = {
+			from: new Date(Math.min(...dates.map((d) => d.getTime()))),
+			to: new Date(Math.max(...dates.map((d) => d.getTime()))),
+		};
 
 		return {
 			totalQuests,
-			successfulQuests,
-			failedQuests,
 			successRate,
-			avgTokensPerQuest,
 			avgTokensPerCompletion,
-			avgExecutionTimeMinutes,
-			tokenEfficiency,
-			mostExpensiveQuest,
-			mostEfficientQuest,
-			agentUtilization,
+			avgDurationMs,
+			avgAgentsSpawned,
+			mostEfficientAgentType,
+			tokensByAgentType,
+			analysisPeriod,
 		};
 	}
 }
