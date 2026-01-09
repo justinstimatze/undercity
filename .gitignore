@@ -16,3 +16,16 @@ dist/
 
 # Turbo
 .turbo/
+
+# Research data and scraped content
+*.scraped.json
+
+# Local notes and experiments
+*.local.md
+*.local.txt
+notes/
+experiments/
+
+# Large data files
+*.csv
+*.jsonl
