@@ -77,12 +77,17 @@ program
 	.description("Launch a new raid (or resume existing)")
 	.option("-a, --auto-approve", "Auto-approve plans without human review")
 	.option("-v, --verbose", "Enable verbose logging")
+	.option("-s, --stream", "Stream agent activity to console")
 	.option("-m, --max-squad <n>", "Maximum squad size", "5")
 	.action(
-		async (goal: string | undefined, options: { autoApprove?: boolean; verbose?: boolean; maxSquad?: string }) => {
+		async (
+			goal: string | undefined,
+			options: { autoApprove?: boolean; verbose?: boolean; stream?: boolean; maxSquad?: string },
+		) => {
 			const orchestrator = new RaidOrchestrator({
 				autoApprove: options.autoApprove,
 				verbose: options.verbose,
+				streamOutput: options.stream ?? options.verbose,
 				maxSquadSize: Number.parseInt(options.maxSquad || "5", 10),
 			});
 

@@ -20,6 +20,7 @@
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import chalk from "chalk";
 import { createAndCheckout, MergeQueue } from "./git.js";
 import { raidLogger, squadLogger } from "./logger.js";
 import { Persistence } from "./persistence.js";
@@ -55,6 +56,7 @@ export class RaidOrchestrator {
 	private maxSquadSize: number;
 	private autoApprove: boolean;
 	private verbose: boolean;
+	private streamOutput: boolean;
 
 	constructor(
 		options: {
@@ -62,6 +64,7 @@ export class RaidOrchestrator {
 			maxSquadSize?: number;
 			autoApprove?: boolean;
 			verbose?: boolean;
+			streamOutput?: boolean;
 		} = {},
 	) {
 		this.persistence = new Persistence(options.stateDir);
@@ -69,11 +72,58 @@ export class RaidOrchestrator {
 		this.maxSquadSize = options.maxSquadSize || 5;
 		this.autoApprove = options.autoApprove || false;
 		this.verbose = options.verbose || false;
+		this.streamOutput = options.streamOutput ?? options.verbose ?? false;
 	}
 
 	private log(message: string, data?: Record<string, unknown>): void {
 		if (this.verbose) {
 			raidLogger.info(data ?? {}, message);
+		}
+	}
+
+	/**
+	 * Stream agent activity to console for visibility
+	 */
+	private streamAgentActivity(member: SquadMember, message: unknown): void {
+		if (!this.streamOutput) return;
+
+		const msg = message as {
+			type?: string;
+			subtype?: string;
+			tool_name?: string;
+			tool_input?: Record<string, unknown>;
+			content?: string;
+		};
+
+		const prefix = chalk.dim(`[${member.type}]`);
+
+		// Show tool usage
+		if (msg.type === "assistant" && msg.subtype === "tool_use") {
+			const toolName = msg.tool_name || "unknown";
+			const input = msg.tool_input || {};
+
+			// Format tool input nicely
+			let inputSummary = "";
+			if ("file_path" in input) {
+				inputSummary = chalk.cyan(String(input.file_path));
+			} else if ("pattern" in input) {
+				inputSummary = chalk.cyan(String(input.pattern));
+			} else if ("command" in input) {
+				inputSummary = chalk.cyan(String(input.command).substring(0, 60));
+			} else if ("content" in input) {
+				inputSummary = chalk.gray("(content)");
+			}
+
+			console.log(`${prefix} ${chalk.yellow(toolName)} ${inputSummary}`);
+		}
+
+		// Show thinking/progress (assistant text)
+		if (msg.type === "assistant" && msg.subtype === "text" && msg.content) {
+			// Show first line of thinking, truncated
+			const firstLine = msg.content.split("\n")[0].substring(0, 80);
+			if (firstLine.trim()) {
+				console.log(`${prefix} ${chalk.gray(firstLine)}${msg.content.length > 80 ? "..." : ""}`);
+			}
 		}
 	}
 
@@ -225,6 +275,9 @@ export class RaidOrchestrator {
 				prompt: task.description,
 				options: queryOptions,
 			})) {
+				// Stream activity to console
+				this.streamAgentActivity(member, message);
+
 				// Capture session ID for resumption
 				if (message.type === "system" && message.subtype === "init") {
 					sessionId = message.session_id;
