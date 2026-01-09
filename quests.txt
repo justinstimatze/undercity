@@ -1,5 +1,5 @@
-# Undercity dogfood goals - the space pencil roadmap
-# Run: undercity load goals.txt && undercity work -y
+# Undercity quest board - the space pencil roadmap
+# Run: undercity load quests.txt && undercity work -y
 
 # =============================================================================
 # CRITICAL: Merge Queue (blocks autonomous operation)
@@ -62,6 +62,13 @@ Add loadout system - pre-raid configuration for different task types
 Add cross-raid memory in stash - remember patterns/decisions from previous raids
 Add "rival raider" mode - spawn a review agent that tries to break the fabricator's code
 Implement Rule of Five verification - actually check that 5 review passes happened
+
+# =============================================================================
+# LOW: Vocabulary/Theme Consistency
+# =============================================================================
+Update "Raid extracted successfully" to "Extraction complete" or "Squad extracted" - squads extract FROM raids
+Rewrite quest.test.ts tests for the new Quest/QuestBoard API (old backlog tests removed)
+Review all log messages for ARC Raiders theme consistency
 
 # =============================================================================
 # COMPLETED (for reference)

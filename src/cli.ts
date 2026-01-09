@@ -32,7 +32,7 @@ import {
 	markComplete,
 	markFailed,
 	markInProgress,
-} from "./backlog.js";
+} from "./quest.js";
 import { Persistence } from "./persistence.js";
 import { RaidOrchestrator } from "./raid.js";
 import type { RaidStatus } from "./types.js";
@@ -498,7 +498,7 @@ program
 		if (inProgress.length > 0) {
 			console.log(chalk.bold("In Progress"));
 			for (const item of inProgress) {
-				console.log(`  ${chalk.cyan("⚡")} ${item.goal.substring(0, 60)}${item.goal.length > 60 ? "..." : ""}`);
+				console.log(`  ${chalk.cyan("⚡")} ${item.objective.substring(0, 60)}${item.objective.length > 60 ? "..." : ""}`);
 			}
 			console.log();
 		}
@@ -506,7 +506,7 @@ program
 		if (pending.length > 0) {
 			console.log(chalk.bold("Pending"));
 			for (const item of pending.slice(0, 10)) {
-				console.log(`  ${chalk.gray("○")} ${item.goal.substring(0, 60)}${item.goal.length > 60 ? "..." : ""}`);
+				console.log(`  ${chalk.gray("○")} ${item.objective.substring(0, 60)}${item.objective.length > 60 ? "..." : ""}`);
 			}
 			if (pending.length > 10) {
 				console.log(chalk.gray(`  ... and ${pending.length - 10} more`));
@@ -637,7 +637,7 @@ program
 
 		console.log(chalk.cyan("Starting backlog worker..."));
 		if (maxCount > 0) {
-			console.log(chalk.dim(`  Will process ${maxCount} goal(s) then stop`));
+			console.log(chalk.dim(`  Will process ${maxCount} quest(s) then stop`));
 		} else {
 			console.log(chalk.dim("  Will process all pending goals"));
 		}
@@ -647,16 +647,16 @@ program
 			const nextGoal = getNextGoal();
 
 			if (!nextGoal) {
-				console.log(chalk.green("\n✓ Backlog empty - all goals processed"));
+				console.log(chalk.green("\n✓ Backlog empty - all quests processed"));
 				break;
 			}
 
 			if (maxCount > 0 && processed >= maxCount) {
-				console.log(chalk.yellow(`\n✓ Processed ${maxCount} goal(s) - stopping`));
+				console.log(chalk.yellow(`\n✓ Processed ${maxCount} quest(s) - stopping`));
 				break;
 			}
 
-			console.log(chalk.cyan(`\n━━━ Goal ${processed + 1}: ${nextGoal.goal.substring(0, 50)}... ━━━`));
+			console.log(chalk.cyan(`\n━━━ Quest ${processed + 1}: ${nextGoal.objective.substring(0, 50)}... ━━━`));
 
 			const orchestrator = new RaidOrchestrator({
 				autoApprove: true,
@@ -668,21 +668,21 @@ program
 			markInProgress(nextGoal.id, "");
 
 			try {
-				const raid = await orchestrator.start(nextGoal.goal);
+				const raid = await orchestrator.start(nextGoal.objective);
 				markInProgress(nextGoal.id, raid.id);
 
 				const finalRaid = orchestrator.getCurrentRaid();
 
 				if (finalRaid?.status === "complete") {
 					markComplete(nextGoal.id);
-					console.log(chalk.green(`✓ Goal complete: ${nextGoal.goal.substring(0, 40)}...`));
+					console.log(chalk.green(`✓ Quest complete: ${nextGoal.objective.substring(0, 40)}...`));
 				} else if (finalRaid?.status === "failed") {
 					markFailed(nextGoal.id, "Raid failed");
-					console.log(chalk.red(`✗ Goal failed: ${nextGoal.goal.substring(0, 40)}...`));
+					console.log(chalk.red(`✗ Quest failed: ${nextGoal.objective.substring(0, 40)}...`));
 				} else {
 					// Raid didn't fully complete (maybe awaiting something)
 					markComplete(nextGoal.id); // Consider it done for now
-					console.log(chalk.yellow(`⚠ Goal processed: ${nextGoal.goal.substring(0, 40)}...`));
+					console.log(chalk.yellow(`⚠ Quest processed: ${nextGoal.objective.substring(0, 40)}...`));
 				}
 
 				// Clear raid state for next goal
