@@ -56,6 +56,19 @@ node ./bin/undercity.js slingshot "goal"
 pnpm start slingshot "goal"
 ```
 
+## PM2 Daemon
+
+```bash
+pnpm daemon:start    # Start undercity daemon
+pnpm daemon:stop     # Stop daemon
+pnpm daemon:restart  # Restart daemon
+pnpm daemon:status   # Check daemon status
+pnpm daemon:logs     # View daemon logs
+pnpm daemon:kill     # Kill PM2 entirely
+```
+
+PM2 config in `ecosystem.config.cjs`.
+
 ## Code Quality Targets
 
 - Cyclomatic complexity: ≤10 per function
