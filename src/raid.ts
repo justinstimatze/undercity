@@ -405,7 +405,27 @@ export class RaidOrchestrator {
 
 			case "auditor": {
 				// Auditor done - check if approved
-				const approved = result.toLowerCase().includes("approve");
+				const lower = result.toLowerCase();
+
+				// Positive signals
+				const positiveSignals = [
+					"approve",
+					"all tests pass",
+					"tests pass",
+					"implementation is correct",
+					"well-done",
+					"looks good",
+					"lgtm",
+					"✅",
+				];
+
+				// Negative signals (should reject)
+				const negativeSignals = ["reject", "critical issue", "blocking", "must fix", "tests fail", "failed"];
+
+				const hasPositive = positiveSignals.some((s) => lower.includes(s) || result.includes(s));
+				const hasNegative = negativeSignals.some((s) => lower.includes(s));
+
+				const approved = hasPositive && !hasNegative;
 
 				if (approved && task.branch) {
 					// Add to merge queue
