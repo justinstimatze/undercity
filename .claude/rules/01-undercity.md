@@ -44,7 +44,7 @@ undercity slingshot "goal"
 [PLAN] Flute (Haiku) -> Logistics (Opus) -> Human approval
     |
     v
-[EXECUTE] Questers (Opus) -> Sheriff (Opus) -> Elevator
+[EXECUTE] Questers (Sonnet) -> Sheriff (Opus) -> Elevator
     |
     v
 [EXTRACT] Complete
@@ -74,7 +74,7 @@ On session start:
 |-------|-------|-------|---------|
 | Flute | Haiku | Read, Grep, Glob | Fast codebase reconnaissance |
 | Logistics | Opus | Read, Grep, Glob | BMAD-style spec creation |
-| Quester | Opus | Read, Edit, Write, Bash, Grep, Glob | Code implementation |
+| Quester | Sonnet | Read, Edit, Write, Bash, Grep, Glob | Code implementation |
 | Sheriff | Opus | Read, Bash, Grep, Glob | Quality review with Rule of Five |
 
 ## Rule of Five

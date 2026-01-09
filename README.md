@@ -18,7 +18,7 @@ undercity slingshot "Add dark mode toggle"
 [PLAN] Flute (Haiku) → Logistics (Opus) → Human approval
     │
     ▼
-[EXECUTE] Quester (Opus) → Sheriff (Opus) → Elevator
+[EXECUTE] Quester (Sonnet) → Sheriff (Opus) → Elevator
     │
     ▼
 [EXTRACT] Complete
@@ -93,7 +93,7 @@ undercity setup      # Check authentication
 |-------|-------|-------|---------|
 | Flute | Haiku | Read, Grep, Glob | Fast codebase reconnaissance |
 | Logistics | Opus | Read, Grep, Glob | BMAD-style spec creation |
-| Quester | Opus | Read, Edit, Write, Bash, Grep, Glob | Code implementation |
+| Quester | Sonnet | Read, Edit, Write, Bash, Grep, Glob | Code implementation |
 | Sheriff | Opus | Read, Bash, Grep, Glob | Quality review (Rule of Five) |
 
 ## Persistence
@@ -130,13 +130,14 @@ Gas Town runs 20-30 parallel agents across multiple Claude accounts. Undercity i
 | Constraint | Undercity Approach |
 |------------|-------------------|
 | Rate limits | Smaller squad (5-10 agents max) |
-| Single account | Sequential phases, not swarm |
+| Single account | Controlled parallelism, not swarm |
 | Context limits | On-demand loading, not everything upfront |
-| Session crashes | Persistence hierarchy for recovery |
+| Usage limits | Persistence hierarchy for resumption |
 
-**What we stole:**
-- **Gas Town**: GUPP principle, session persistence, agent identities
-- **Beads**: Git-backed state, crash recovery philosophy
+**Looted from:**
+- **Gas Town** (Steve Yegge): GUPP principle, session persistence, agent identities
+- **Jeffrey Emanuel**: Rule of Five (via Gas Town)
+- **Beads** (Steve Yegge): Git-backed state, resumption philosophy
 - **BMAD**: Planning before execution, spec approval gates
 
 ## Configuration
