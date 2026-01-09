@@ -1,18 +1,73 @@
-# Undercity dogfood goals - extracted from plan
-# Run: undercity load goals.txt && undercity work
+# Undercity dogfood goals - the space pencil roadmap
+# Run: undercity load goals.txt && undercity work -y
 
-# Testing - more modules need coverage
-Add vitest tests for the raid module - test the start, approvePlan, and extract methods
-Add vitest tests for the cli module - test command parsing and options handling
-Add vitest tests for the backlog module - test addGoal, getNextGoal, markComplete
+# =============================================================================
+# CRITICAL: Merge Queue (blocks autonomous operation)
+# =============================================================================
+Improve merge queue to auto-resolve conflicts using git merge -X theirs strategy
+Add fallback merge strategies: try ours, then theirs, then report specific conflict files
+Make merge queue retry failed merges after other branches succeed (conflicts may resolve)
 
-# Features from plan that may be missing
-Add a --dry-run flag to slingshot that shows the plan but doesn't execute
-Add a "history" command to show completed raids from the stash
-Add progress percentage to status command based on completed vs total tasks
+# =============================================================================
+# HIGH: Parallelism (the big gap vs Gas Town)
+# =============================================================================
+Add parallel fabricator support - spawn multiple fabricators working on different tasks simultaneously
+Implement task splitting in planner - break large tasks into independent subtasks for parallel execution
+Add a --parallel flag to control max concurrent agents (default 3, max 5)
+Track which files each fabricator is touching to avoid conflicts between parallel agents
 
-# Bugs to fix
-Fix streamAgentActivity in raid.ts - SDK message format differs from expected, not showing tool calls in streaming output
+# =============================================================================
+# HIGH: Speed Improvements
+# =============================================================================
+Consider using Sonnet instead of Opus for fabricator (faster, still good quality)
+Add context summarization - don't pass entire plan file to every agent, summarize relevant parts
+Cache scout results - if codebase hasn't changed, reuse previous scout intel
+Add timeout handling - if an agent takes >10 minutes, log warning and consider intervention
 
-# Critical infrastructure
-Improve merge queue to auto-resolve conflicts - that's the whole point of having a merge queue. Use strategies like -X theirs, auto-merge, or intelligent retry
+# =============================================================================
+# MEDIUM: Plan Decomposition
+# =============================================================================
+Parse plan files into discrete goals/tasks upfront instead of re-reading whole plan each iteration
+Track which plan steps are complete in backlog so we don't re-check via codebase analysis
+Add plan progress tracking - show "Step 3/7: Adding authentication" not just "executing"
+
+# =============================================================================
+# MEDIUM: Visibility & Streaming
+# =============================================================================
+Fix streamAgentActivity to properly show tool calls from SDK message format
+Add progress bar to plan command output (not just status command)
+Show estimated time remaining based on historical raid durations
+Add a --quiet flag for minimal output (just errors and completion)
+
+# =============================================================================
+# MEDIUM: Robustness
+# =============================================================================
+Add retry logic for failed agents - if fabricator fails, retry once before giving up
+Implement graceful degradation - if auditor fails, still allow manual review option
+Add health checks - detect stuck agents (no activity for 5+ minutes)
+Save partial work on agent failure - don't lose progress if one agent crashes
+
+# =============================================================================
+# LOW: Quality of Life
+# =============================================================================
+Add "undercity pause" command to pause a raid without surrendering
+Add "undercity resume" command to continue a paused raid
+Add "undercity logs <agent-id>" to see full output from a specific agent
+Add config file support (.undercityrc) for default options like --stream, model choices
+
+# =============================================================================
+# LOW: Advanced Features (future)
+# =============================================================================
+Add loadout system - pre-raid configuration for different task types
+Add cross-raid memory in stash - remember patterns/decisions from previous raids
+Add "rival raider" mode - spawn a review agent that tries to break the fabricator's code
+Implement Rule of Five verification - actually check that 5 review passes happened
+
+# =============================================================================
+# COMPLETED (for reference)
+# =============================================================================
+# [DONE] Add vitest tests for raid, cli, backlog modules (120 tests total)
+# [DONE] Add --dry-run flag to slingshot
+# [DONE] Add history command for completed raids
+# [DONE] Add progress percentage to status command
+# [DONE] Switch planner from Opus to Sonnet for speed
