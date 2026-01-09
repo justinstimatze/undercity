@@ -1,0 +1,20 @@
+{
+  "allowedTools": [
+    "Bash(pnpm *)",
+    "Bash(npm *)",
+    "Bash(git status)",
+    "Bash(git diff *)",
+    "Bash(git log *)",
+    "Bash(git branch *)",
+    "Bash(git checkout *)",
+    "Bash(git fetch *)",
+    "Bash(git show *)"
+  ],
+  "disallowedTools": [
+    "Bash(git add -A)",
+    "Bash(git add .)",
+    "Bash(git add --all)",
+    "Bash(git stash -u)",
+    "Bash(git stash --include-untracked)"
+  ]
+}
