@@ -21,6 +21,7 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { createAndCheckout, MergeQueue } from "./git.js";
+import { raidLogger, squadLogger } from "./logger.js";
 import { Persistence } from "./persistence.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
 import type { AgentType, Raid, SquadMember, Task } from "./types.js";
@@ -70,9 +71,9 @@ export class RaidOrchestrator {
 		this.verbose = options.verbose || false;
 	}
 
-	private log(message: string): void {
+	private log(message: string, data?: Record<string, unknown>): void {
 		if (this.verbose) {
-			console.log(`[undercity] ${message}`);
+			raidLogger.info(data ?? {}, message);
 		}
 	}
 
@@ -103,7 +104,7 @@ export class RaidOrchestrator {
 		if (this.hasActiveRaid()) {
 			const existing = this.getCurrentRaid();
 			if (existing) {
-				this.log(`Resuming existing raid: ${existing.id}`);
+				this.log("Resuming existing raid", { raidId: existing.id });
 				return existing;
 			}
 		}
@@ -118,7 +119,7 @@ export class RaidOrchestrator {
 		};
 
 		this.persistence.saveRaid(raid);
-		this.log(`Started raid ${raid.id}: ${goal}`);
+		this.log("Started raid", { raidId: raid.id, goal });
 
 		// Start planning phase
 		await this.startPlanningPhase(raid);
@@ -174,7 +175,7 @@ export class RaidOrchestrator {
 			agentId: member.id,
 		});
 
-		this.log(`Spawned ${type} agent: ${member.id}`);
+		squadLogger.info({ agentType: type, agentId: member.id }, "Spawned agent");
 
 		// Run the agent
 		await this.runAgent(member, task);
@@ -250,7 +251,7 @@ export class RaidOrchestrator {
 				lastActivityAt: new Date(),
 			});
 
-			this.log(`Agent ${member.id} completed task ${task.id}`);
+			squadLogger.info({ agentId: member.id, taskId: task.id }, "Agent completed task");
 
 			// Handle next steps based on task type
 			await this.handleTaskCompletion(task, result);
@@ -268,7 +269,7 @@ export class RaidOrchestrator {
 				lastActivityAt: new Date(),
 			});
 
-			this.log(`Agent ${member.id} failed: ${errorMessage}`);
+			squadLogger.error({ agentId: member.id, error: errorMessage }, "Agent failed");
 		}
 	}
 
@@ -348,12 +349,12 @@ export class RaidOrchestrator {
 				if (approved && task.branch) {
 					// Add to merge queue
 					this.mergeQueue.add(task.branch, task.id, task.agentId || "unknown");
-					this.log(`Branch ${task.branch} added to merge queue`);
+					this.log("Branch added to merge queue", { branch: task.branch });
 
 					// Process merge queue
 					await this.processMergeQueue();
 				} else {
-					this.log(`Audit found issues: ${result}`);
+					this.log("Audit found issues", { result });
 					// Could spawn another fabricator to fix, for now just log
 				}
 				break;
@@ -392,7 +393,7 @@ export class RaidOrchestrator {
 			createAndCheckout(branchName);
 			fabricatorTask.branch = branchName;
 		} catch (error) {
-			this.log(`Could not create branch: ${error}`);
+			this.log("Could not create branch", { error: String(error) });
 		}
 
 		this.persistence.addTask(fabricatorTask);
@@ -413,9 +414,9 @@ export class RaidOrchestrator {
 
 		for (const result of results) {
 			if (result.status === "complete") {
-				this.log(`Merged ${result.branch}`);
+				this.log("Merged branch", { branch: result.branch });
 			} else {
-				this.log(`Merge failed for ${result.branch}: ${result.error}`);
+				this.log("Merge failed", { branch: result.branch, error: result.error });
 			}
 		}
 
@@ -448,7 +449,7 @@ export class RaidOrchestrator {
 		// Clear pocket for next raid
 		this.persistence.clearPocket();
 
-		this.log(`Raid ${raid.id} extracted successfully!`);
+		this.log("Raid extracted successfully", { raidId: raid.id });
 	}
 
 	/**
@@ -479,7 +480,7 @@ export class RaidOrchestrator {
 			this.persistence.saveRaid(raid);
 			this.persistence.addCompletedRaid(raid, false);
 			this.persistence.clearPocket();
-			this.log(`Raid ${raid.id} surrendered`);
+			this.log("Raid surrendered", { raidId: raid.id });
 		}
 	}
 }

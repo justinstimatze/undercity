@@ -12,6 +12,7 @@
  */
 
 import { execSync, spawn } from "node:child_process";
+import { gitLogger } from "./logger.js";
 import type { MergeQueueItem } from "./types.js";
 
 /**
@@ -260,6 +261,7 @@ export class MergeQueue {
 			queuedAt: new Date(),
 		};
 		this.queue.push(item);
+		gitLogger.debug({ branch, taskId, agentId }, "Added to merge queue");
 		return item;
 	}
 
@@ -288,10 +290,12 @@ export class MergeQueue {
 
 		try {
 			// Step 1: Checkout the branch
+			gitLogger.debug({ branch: item.branch }, "Checking out branch");
 			checkoutBranch(item.branch);
 
 			// Step 2: Rebase onto main
 			item.status = "rebasing";
+			gitLogger.debug({ branch: item.branch, onto: this.mainBranch }, "Rebasing");
 			const rebaseSuccess = rebase(this.mainBranch);
 
 			if (!rebaseSuccess) {
@@ -303,6 +307,7 @@ export class MergeQueue {
 
 			// Step 3: Run tests
 			item.status = "testing";
+			gitLogger.debug({ branch: item.branch }, "Running tests");
 			const testResult = await runTests();
 
 			if (!testResult.success) {
@@ -315,6 +320,7 @@ export class MergeQueue {
 			// Step 4: Merge into main
 			checkoutBranch(this.mainBranch);
 			item.status = "merging";
+			gitLogger.debug({ branch: item.branch, into: this.mainBranch }, "Merging");
 
 			const mergeSuccess = merge(item.branch, `Merge ${item.branch} via undercity`);
 
@@ -333,6 +339,7 @@ export class MergeQueue {
 			// Remove from queue
 			this.queue = this.queue.filter((i) => i !== item);
 
+			gitLogger.info({ branch: item.branch, taskId: item.taskId }, "Merge complete");
 			return item;
 		} catch (error) {
 			item.status = "conflict";
