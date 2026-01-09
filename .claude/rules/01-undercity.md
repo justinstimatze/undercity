@@ -8,7 +8,7 @@ Use undercity CLI for complex, multi-step tasks that benefit from:
 - **Planning before execution**: Flute + Logistics create specs before Questers build
 - **Parallel agents**: Multiple agents working on different aspects
 - **Crash recovery**: State persists in `.undercity/` for resumption
-- **Clean merges**: Serial rebase + test + merge queue
+- **Clean merges**: Serial rebase + test + elevator
 
 ## Basic Commands
 
@@ -44,7 +44,7 @@ undercity slingshot "goal"
 [PLAN] Flute (Haiku) -> Logistics (Opus) -> Human approval
     |
     v
-[EXECUTE] Questers (Opus) -> Sheriff (Opus) -> Merge Queue
+[EXECUTE] Questers (Opus) -> Sheriff (Opus) -> Elevator
     |
     v
 [EXTRACT] Complete

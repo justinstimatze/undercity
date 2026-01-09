@@ -10,7 +10,7 @@
  * 2. EXECUTE PHASE (Gas Town-style)
  *    - Fabricators implement the approved plan
  *    - Sheriff reviews the work
- *    - Serial merge queue handles integration
+ *    - Serial elevator handles integration
  *
  * 3. EXTRACT
  *    - All work merged
@@ -27,15 +27,15 @@ import { FileTracker, parseFileOperation } from "./file-tracker.js";
 import {
 	calculateCodebaseFingerprint,
 	createAndCheckout,
+	Elevator,
 	hashFingerprint,
 	hashGoal,
 	isCacheableState,
-	MergeQueue,
 } from "./git.js";
 import { raidLogger, squadLogger } from "./logger.js";
 import { Persistence } from "./persistence.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
-import type { AgentType, FileConflict, MergeQueueRetryConfig, Raid, SquadMember, Waypoint } from "./types.js";
+import type { AgentType, ElevatorRetryConfig, FileConflict, Raid, SquadMember, Waypoint } from "./types.js";
 
 /**
  * Timeout configuration for agent monitoring
@@ -68,7 +68,7 @@ function generateTaskId(): string {
  */
 export class RaidOrchestrator {
 	private persistence: Persistence;
-	private mergeQueue: MergeQueue;
+	private elevator: Elevator;
 	private fileTracker: FileTracker;
 	private maxSquadSize: number;
 	private maxParallel: number;
@@ -88,11 +88,11 @@ export class RaidOrchestrator {
 			verbose?: boolean;
 			streamOutput?: boolean;
 			/** Merge queue retry configuration */
-			retryConfig?: Partial<MergeQueueRetryConfig>;
+			retryConfig?: Partial<ElevatorRetryConfig>;
 		} = {},
 	) {
 		this.persistence = new Persistence(options.stateDir);
-		this.mergeQueue = new MergeQueue(undefined, undefined, options.retryConfig);
+		this.elevator = new Elevator(undefined, undefined, options.retryConfig);
 		// Initialize file tracker from persisted state
 		const trackingState = this.persistence.getFileTracking();
 		this.fileTracker = new FileTracker(trackingState);
@@ -777,12 +777,12 @@ export class RaidOrchestrator {
 				const approved = hasPositive && !hasNegative;
 
 				if (approved && waypoint.branch) {
-					// Add to merge queue
-					this.mergeQueue.add(waypoint.branch, waypoint.id, waypoint.agentId || "unknown");
-					this.log("Branch added to merge queue", { branch: waypoint.branch });
+					// Add to elevator
+					this.elevator.add(waypoint.branch, waypoint.id, waypoint.agentId || "unknown");
+					this.log("Branch added to elevator", { branch: waypoint.branch });
 
-					// Process merge queue
-					await this.processMergeQueue();
+					// Process elevator
+					await this.processElevator();
 				} else {
 					this.log("Audit found issues", { result });
 					// Could spawn another quester to fix, for now just log
@@ -839,16 +839,16 @@ export class RaidOrchestrator {
 	}
 
 	/**
-	 * Process the merge queue
+	 * Process the elevator
 	 */
-	private async processMergeQueue(): Promise<void> {
+	private async processElevator(): Promise<void> {
 		const raid = this.getCurrentRaid();
 		if (!raid) return;
 
 		raid.status = "merging";
 		this.persistence.saveRaid(raid);
 
-		const results = await this.mergeQueue.processAll();
+		const results = await this.elevator.processAll();
 
 		for (const result of results) {
 			if (result.status === "complete") {
@@ -911,7 +911,7 @@ export class RaidOrchestrator {
 		raid?: Raid;
 		waypoints: Waypoint[];
 		squad: SquadMember[];
-		mergeQueue: ReturnType<MergeQueue["getQueue"]>;
+		elevator: ReturnType<Elevator["getQueue"]>;
 		maxParallel: number;
 		fileTracking: {
 			activeAgents: number;
@@ -926,7 +926,7 @@ export class RaidOrchestrator {
 			raid: this.getCurrentRaid(),
 			waypoints: this.persistence.getTasks(),
 			squad: this.persistence.getSquad(),
-			mergeQueue: this.mergeQueue.getQueue(),
+			elevator: this.elevator.getQueue(),
 			maxParallel: this.maxParallel,
 			fileTracking: {
 				...trackingSummary,

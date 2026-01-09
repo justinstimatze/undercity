@@ -1,25 +1,25 @@
 /**
  * Git Operations Module
  *
- * Handles git operations for the serial merge queue:
+ * Handles git operations for the serial elevator:
  * - Branch creation
  * - Rebasing
  * - Test running
  * - Merging
  *
- * The serial merge queue ensures clean merges by processing
+ * The serial elevator ensures clean merges by processing
  * one branch at a time: rebase → test → merge.
  */
 
 import { execSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { gitLogger } from "./logger.js";
-import type { CodebaseFingerprint, MergeQueueItem, MergeQueueRetryConfig } from "./types.js";
+import type { CodebaseFingerprint, ElevatorItem, ElevatorRetryConfig } from "./types.js";
 
 /**
  * Default retry configuration
  */
-export const DEFAULT_RETRY_CONFIG: MergeQueueRetryConfig = {
+export const DEFAULT_RETRY_CONFIG: ElevatorRetryConfig = {
 	enabled: true,
 	maxRetries: 3,
 	baseDelayMs: 1000,
@@ -477,7 +477,7 @@ export function isCacheableState(): boolean {
 }
 
 /**
- * Serial Merge Queue
+ * Serial Elevator
  *
  * Processes merge items one at a time to avoid conflicts:
  * 1. Checkout the branch
@@ -496,30 +496,30 @@ export function isCacheableState(): boolean {
  * - Uses exponential backoff to prevent system overload
  * - Conflicts may resolve after other branches are merged
  */
-export class MergeQueue {
-	private queue: MergeQueueItem[] = [];
+export class Elevator {
+	private queue: ElevatorItem[] = [];
 	private processing = false;
 	private mainBranch: string;
 	private mergeStrategy: MergeStrategy;
-	private retryConfig: MergeQueueRetryConfig;
+	private retryConfig: ElevatorRetryConfig;
 
 	/**
-	 * Create a new merge queue
+	 * Create a new elevator
 	 * @param mainBranch - The target branch for merges (defaults to main/master)
 	 * @param mergeStrategy - Strategy for auto-resolving conflicts (defaults to "theirs" for automatic resolution)
 	 * @param retryConfig - Configuration for retry behavior
 	 */
-	constructor(mainBranch?: string, mergeStrategy?: MergeStrategy, retryConfig?: Partial<MergeQueueRetryConfig>) {
+	constructor(mainBranch?: string, mergeStrategy?: MergeStrategy, retryConfig?: Partial<ElevatorRetryConfig>) {
 		this.mainBranch = mainBranch || getDefaultBranch();
 		this.mergeStrategy = mergeStrategy ?? "theirs";
 		this.retryConfig = { ...DEFAULT_RETRY_CONFIG, ...retryConfig };
 	}
 
 	/**
-	 * Add a branch to the merge queue
+	 * Add a branch to the elevator
 	 */
-	add(branch: string, waypointId: string, agentId: string): MergeQueueItem {
-		const item: MergeQueueItem = {
+	add(branch: string, waypointId: string, agentId: string): ElevatorItem {
+		const item: ElevatorItem = {
 			branch,
 			waypointId,
 			agentId,
@@ -530,14 +530,14 @@ export class MergeQueue {
 			isRetry: false,
 		};
 		this.queue.push(item);
-		gitLogger.debug({ branch, waypointId, agentId }, "Added to merge queue");
+		gitLogger.debug({ branch, waypointId, agentId }, "Added to elevator");
 		return item;
 	}
 
 	/**
 	 * Get the current queue
 	 */
-	getQueue(): MergeQueueItem[] {
+	getQueue(): ElevatorItem[] {
 		return [...this.queue];
 	}
 
@@ -560,14 +560,14 @@ export class MergeQueue {
 	/**
 	 * Get the current retry configuration
 	 */
-	getRetryConfig(): MergeQueueRetryConfig {
+	getRetryConfig(): ElevatorRetryConfig {
 		return { ...this.retryConfig };
 	}
 
 	/**
 	 * Update retry configuration
 	 */
-	setRetryConfig(config: Partial<MergeQueueRetryConfig>): void {
+	setRetryConfig(config: Partial<ElevatorRetryConfig>): void {
 		this.retryConfig = { ...this.retryConfig, ...config };
 		gitLogger.debug({ config: this.retryConfig }, "Retry config updated");
 	}
@@ -584,10 +584,10 @@ export class MergeQueue {
 
 	/**
 	 * Check if an item is eligible for retry
-	 * @param item - The merge queue item to check
+	 * @param item - The elevator item to check
 	 * @returns true if the item can be retried
 	 */
-	private canRetry(item: MergeQueueItem): boolean {
+	private canRetry(item: ElevatorItem): boolean {
 		if (!this.retryConfig.enabled) {
 			return false;
 		}
@@ -611,7 +611,7 @@ export class MergeQueue {
 	 * Mark an item for retry with updated retry tracking
 	 * @param item - The item to prepare for retry
 	 */
-	private prepareForRetry(item: MergeQueueItem): void {
+	private prepareForRetry(item: ElevatorItem): void {
 		const retryCount = (item.retryCount ?? 0) + 1;
 		const delay = this.calculateRetryDelay(retryCount);
 
@@ -642,7 +642,7 @@ export class MergeQueue {
 	/**
 	 * Process the next item in the queue
 	 */
-	async processNext(): Promise<MergeQueueItem | null> {
+	async processNext(): Promise<ElevatorItem | null> {
 		if (this.processing) {
 			return null;
 		}
@@ -736,8 +736,8 @@ export class MergeQueue {
 	 *
 	 * @returns Array of processed items with their final statuses
 	 */
-	async processAll(): Promise<MergeQueueItem[]> {
-		const results: MergeQueueItem[] = [];
+	async processAll(): Promise<ElevatorItem[]> {
+		const results: ElevatorItem[] = [];
 		let hadSuccess = false;
 
 		let item = await this.processNext();
@@ -789,8 +789,8 @@ export class MergeQueue {
 	 *
 	 * @returns Array of retry attempt results
 	 */
-	async retryFailed(): Promise<MergeQueueItem[]> {
-		const results: MergeQueueItem[] = [];
+	async retryFailed(): Promise<ElevatorItem[]> {
+		const results: ElevatorItem[] = [];
 		const failedItems = this.getFailed().filter((item) => this.canRetry(item));
 
 		if (failedItems.length === 0) {
@@ -846,21 +846,21 @@ export class MergeQueue {
 	/**
 	 * Get items that failed (conflict or test failure)
 	 */
-	getFailed(): MergeQueueItem[] {
+	getFailed(): ElevatorItem[] {
 		return this.queue.filter((i) => i.status === "conflict" || i.status === "test_failed");
 	}
 
 	/**
 	 * Get items that are eligible for retry
 	 */
-	getRetryable(): MergeQueueItem[] {
+	getRetryable(): ElevatorItem[] {
 		return this.getFailed().filter((item) => this.canRetry(item));
 	}
 
 	/**
 	 * Get items that have exhausted all retries
 	 */
-	getExhausted(): MergeQueueItem[] {
+	getExhausted(): ElevatorItem[] {
 		return this.getFailed().filter((item) => !this.canRetry(item));
 	}
 

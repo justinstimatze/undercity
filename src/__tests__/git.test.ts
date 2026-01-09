@@ -1,7 +1,7 @@
 /**
  * Git Module Tests
  *
- * Tests for git operations and merge queue retry functionality.
+ * Tests for git operations and elevator retry functionality.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,7 +14,7 @@ vi.mock("node:child_process", () => ({
 
 // Import after mocking
 import { execSync } from "node:child_process";
-import { DEFAULT_RETRY_CONFIG, GitError, getCurrentBranch, MergeQueue } from "../git.js";
+import { DEFAULT_RETRY_CONFIG, Elevator, GitError, getCurrentBranch } from "../git.js";
 
 describe("Git Module", () => {
 	beforeEach(() => {
@@ -56,7 +56,7 @@ describe("Git Module", () => {
 	});
 });
 
-describe("MergeQueue Retry Functionality", () => {
+describe("Elevator Retry Functionality", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		// Mock getDefaultBranch to return 'main'
@@ -72,16 +72,16 @@ describe("MergeQueue Retry Functionality", () => {
 		});
 	});
 
-	describe("MergeQueue constructor", () => {
+	describe("Elevator constructor", () => {
 		it("uses default retry config when none provided", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			const config = queue.getRetryConfig();
 			expect(config.enabled).toBe(true);
 			expect(config.maxRetries).toBe(3);
 		});
 
 		it("accepts custom retry config", () => {
-			const queue = new MergeQueue(undefined, undefined, {
+			const queue = new Elevator(undefined, undefined, {
 				enabled: false,
 				maxRetries: 5,
 			});
@@ -91,7 +91,7 @@ describe("MergeQueue Retry Functionality", () => {
 		});
 
 		it("merges partial config with defaults", () => {
-			const queue = new MergeQueue(undefined, undefined, {
+			const queue = new Elevator(undefined, undefined, {
 				maxRetries: 10,
 			});
 			const config = queue.getRetryConfig();
@@ -103,7 +103,7 @@ describe("MergeQueue Retry Functionality", () => {
 
 	describe("add()", () => {
 		it("initializes retry tracking fields", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			const item = queue.add("feature/test", "waypoint-1", "agent-1");
 
 			expect(item.retryCount).toBe(0);
@@ -112,7 +112,7 @@ describe("MergeQueue Retry Functionality", () => {
 		});
 
 		it("uses custom maxRetries from config", () => {
-			const queue = new MergeQueue(undefined, undefined, { maxRetries: 5 });
+			const queue = new Elevator(undefined, undefined, { maxRetries: 5 });
 			const item = queue.add("feature/test", "waypoint-1", "agent-1");
 
 			expect(item.maxRetries).toBe(5);
@@ -121,7 +121,7 @@ describe("MergeQueue Retry Functionality", () => {
 
 	describe("getRetryConfig() and setRetryConfig()", () => {
 		it("returns a copy of the config", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			const config1 = queue.getRetryConfig();
 			const config2 = queue.getRetryConfig();
 
@@ -130,7 +130,7 @@ describe("MergeQueue Retry Functionality", () => {
 		});
 
 		it("updates configuration", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			queue.setRetryConfig({ enabled: false, maxRetries: 10 });
 			const config = queue.getRetryConfig();
 
@@ -139,7 +139,7 @@ describe("MergeQueue Retry Functionality", () => {
 		});
 
 		it("preserves unmodified config values", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			queue.setRetryConfig({ maxRetries: 7 });
 			const config = queue.getRetryConfig();
 
@@ -151,12 +151,12 @@ describe("MergeQueue Retry Functionality", () => {
 
 	describe("getFailed()", () => {
 		it("returns empty array when no items", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			expect(queue.getFailed()).toEqual([]);
 		});
 
 		it("returns only failed items", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			const item1 = queue.add("feature/a", "t1", "a1");
 			const item2 = queue.add("feature/b", "t2", "a2");
 			const item3 = queue.add("feature/c", "t3", "a3");
@@ -174,7 +174,7 @@ describe("MergeQueue Retry Functionality", () => {
 
 	describe("getRetryable()", () => {
 		it("returns failed items that can be retried", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			const item1 = queue.add("feature/a", "t1", "a1");
 			const item2 = queue.add("feature/b", "t2", "a2");
 
@@ -190,7 +190,7 @@ describe("MergeQueue Retry Functionality", () => {
 		});
 
 		it("respects nextRetryAfter timing", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			const item = queue.add("feature/a", "t1", "a1");
 
 			item.status = "conflict";
@@ -202,7 +202,7 @@ describe("MergeQueue Retry Functionality", () => {
 		});
 
 		it("returns items whose nextRetryAfter has passed", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			const item = queue.add("feature/a", "t1", "a1");
 
 			item.status = "conflict";
@@ -216,7 +216,7 @@ describe("MergeQueue Retry Functionality", () => {
 
 	describe("getExhausted()", () => {
 		it("returns items that have exhausted all retries", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			const item1 = queue.add("feature/a", "t1", "a1");
 			const item2 = queue.add("feature/b", "t2", "a2");
 
@@ -234,7 +234,7 @@ describe("MergeQueue Retry Functionality", () => {
 
 	describe("clearExhausted()", () => {
 		it("removes only exhausted items", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			const item1 = queue.add("feature/a", "t1", "a1");
 			const item2 = queue.add("feature/b", "t2", "a2");
 			const item3 = queue.add("feature/c", "t3", "a3");
@@ -258,7 +258,7 @@ describe("MergeQueue Retry Functionality", () => {
 
 	describe("getQueueSummary()", () => {
 		it("returns accurate summary", () => {
-			const queue = new MergeQueue();
+			const queue = new Elevator();
 			const item1 = queue.add("feature/a", "t1", "a1");
 			const item2 = queue.add("feature/b", "t2", "a2");
 			const item3 = queue.add("feature/c", "t3", "a3");
@@ -284,7 +284,7 @@ describe("MergeQueue Retry Functionality", () => {
 
 	describe("retry behavior with disabled retries", () => {
 		it("getRetryable returns empty when retries disabled", () => {
-			const queue = new MergeQueue(undefined, undefined, { enabled: false });
+			const queue = new Elevator(undefined, undefined, { enabled: false });
 			const item = queue.add("feature/a", "t1", "a1");
 
 			item.status = "conflict";
@@ -296,7 +296,7 @@ describe("MergeQueue Retry Functionality", () => {
 
 	describe("exponential backoff calculation", () => {
 		it("calculates increasing delays for retries", () => {
-			const queue = new MergeQueue(undefined, undefined, {
+			const queue = new Elevator(undefined, undefined, {
 				baseDelayMs: 1000,
 				maxDelayMs: 30000,
 			});

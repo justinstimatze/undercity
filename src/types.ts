@@ -13,7 +13,7 @@ export type RaidStatus =
 	| "awaiting_approval" // Human needs to approve the plan
 	| "executing" // Gas Town phase: Fabricators working
 	| "reviewing" // Sheriff checking work
-	| "merging" // Serial merge queue processing
+	| "merging" // Serial elevator processing
 	| "extracting" // Final extraction in progress
 	| "complete" // Successfully extracted
 	| "failed"; // Something went wrong
@@ -128,7 +128,7 @@ export interface Stash {
 }
 
 /**
- * Git merge status for serial queue
+ * Git merge status for elevator
  */
 export type MergeStatus =
 	| "pending" // Waiting in queue
@@ -139,7 +139,7 @@ export type MergeStatus =
 	| "conflict" // Needs manual resolution
 	| "test_failed"; // Tests failed
 
-export interface MergeQueueItem {
+export interface ElevatorItem {
 	branch: string;
 	waypointId: string;
 	agentId: string;
@@ -166,9 +166,9 @@ export interface MergeQueueItem {
 }
 
 /**
- * Configuration options for merge queue retry behavior
+ * Configuration options for elevator retry behavior
  */
-export interface MergeQueueRetryConfig {
+export interface ElevatorRetryConfig {
 	/** Enable retry functionality (default: true) */
 	enabled: boolean;
 	/** Maximum number of retry attempts (default: 3) */

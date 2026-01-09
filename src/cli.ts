@@ -11,7 +11,7 @@
  *   approve           Approve the current plan
  *   squad             Show active squad members
  *   waypoints             Show pending/complete waypoints
- *   merges            Show merge queue status
+ *   elevator          Show elevator queue status
  *   extract           Complete the current raid
  *   surrender         Surrender the current raid
  *   clear             Clear all state
@@ -107,7 +107,7 @@ program
 	.option("-p, --parallel <n>", "Maximum concurrent raiders (1-5)", "3")
 	.option("-d, --dry-run", "Show the plan but don't execute (planning phase only)")
 	.option("--max-retries <n>", "Maximum merge retry attempts (default: 3)", "3")
-	.option("--no-retry", "Disable merge queue retry functionality")
+	.option("--no-retry", "Disable elevator retry functionality")
 	.action(
 		async (
 			goal: string | undefined,
@@ -272,10 +272,10 @@ program
 			}
 		}
 
-		if (status.mergeQueue.length > 0) {
+		if (status.elevator.length > 0) {
 			console.log();
-			console.log(chalk.bold("Merge Queue"));
-			for (const item of status.mergeQueue) {
+			console.log(chalk.bold("Elevator"));
+			for (const item of status.elevator) {
 				console.log(`  ${item.status}: ${item.branch}`);
 			}
 		}
@@ -389,23 +389,27 @@ program
 
 // Merges command
 program
-	.command("merges")
-	.description("Show merge queue status")
+	.command("elevator")
+	.description("Show elevator queue status")
 	.action(() => {
 		const orchestrator = new RaidOrchestrator({ verbose: false });
 		const status = orchestrator.getStatus();
 
-		if (status.mergeQueue.length === 0) {
+		if (status.elevator.length === 0) {
 			console.log(chalk.gray("Merge queue is empty"));
 			console.log("Branches are merged serially: rebase → test → merge");
-			console.log(chalk.dim("Failed merges are automatically retried after successful merges (conflicts may resolve)"));
+			console.log(
+				chalk.dim(
+					"Failed merges in the elevator are automatically retried after successful merges (conflicts may resolve)",
+				),
+			);
 			return;
 		}
 
-		console.log(chalk.bold("Merge Queue"));
+		console.log(chalk.bold("Elevator"));
 		console.log();
 
-		for (const item of status.mergeQueue) {
+		for (const item of status.elevator) {
 			const statusIcon =
 				item.status === "complete"
 					? chalk.green("✓")

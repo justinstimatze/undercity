@@ -51,14 +51,14 @@ vi.mock("node:fs", () => {
 // Mock the git module to avoid actual git operations
 vi.mock("../git.js", () => {
 	// Use a class for the mock to ensure it's constructable
-	class MockMergeQueue {
+	class MockElevator {
 		add = vi.fn();
 		processAll = vi.fn().mockResolvedValue([]);
 		getQueue = vi.fn().mockReturnValue([]);
 	}
 	return {
 		createAndCheckout: vi.fn(),
-		MergeQueue: MockMergeQueue,
+		Elevator: MockElevator,
 	};
 });
 
@@ -185,7 +185,7 @@ describe("RaidOrchestrator", () => {
 			expect(status.raid).toBeUndefined();
 			expect(status.waypoints).toEqual([]);
 			expect(status.squad).toEqual([]);
-			expect(status.mergeQueue).toEqual([]);
+			expect(status.elevator).toEqual([]);
 		});
 
 		it("returns full status when raid exists", () => {

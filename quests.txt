@@ -9,14 +9,14 @@ Parse agent output for "[NEW QUEST: ...]" markers and auto-add to quest board
 Have auditor generate follow-up quests for issues found during review
 
 # =============================================================================
-# CRITICAL: Merge Queue (blocks autonomous operation)
+# CRITICAL: Elevator (blocks autonomous operation)
 # =============================================================================
-Improve merge queue to auto-resolve conflicts using git merge -X theirs strategy
+Improve elevator to auto-resolve conflicts using git merge -X theirs strategy
 Add fallback merge strategies: try ours, then theirs, then report specific conflict files
-Make merge queue retry failed merges after other branches succeed (conflicts may resolve)
+Make elevator retry failed merges after other branches succeed (conflicts may resolve)
 Implement optimal merge strategy: rebase from fresh main first, then try clean merge, then -X ours (prefer main), only report conflicts if truly unresolvable
 Ensure fabricator always creates branch from latest main - fetch and checkout fresh main before branching to avoid stale code conflicts
-Fix merge queue auto-processing - branches should auto-merge to main after auditor approval, currently requires manual merge intervention
+Fix elevator auto-processing - branches should auto-merge to main after auditor approval, currently requires manual merge intervention
 
 # =============================================================================
 # HIGH: Parallelism (the big gap vs Gas Town)
