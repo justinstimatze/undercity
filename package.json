@@ -1,0 +1,51 @@
+{
+  "name": "undercity",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Multi-agent orchestrator for Claude Max - Gas Town for budget extraction",
+  "bin": {
+    "undercity": "./bin/undercity.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "start": "node ./bin/undercity.js"
+  },
+  "author": "Justin Stimatze",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justinstimatze/undercity.git"
+  },
+  "keywords": [
+    "claude",
+    "ai",
+    "agent",
+    "orchestrator",
+    "multi-agent"
+  ],
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.0",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.21.0"
+  }
+}
