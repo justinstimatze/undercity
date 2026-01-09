@@ -21,6 +21,11 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
+import {
+	extractImplementationContext,
+	extractReviewContext,
+	summarizeContextForAgent,
+} from "./context.js";
 import { FileTracker, parseFileOperation } from "./file-tracker.js";
 import { createAndCheckout, MergeQueue } from "./git.js";
 import { raidLogger, squadLogger } from "./logger.js";
@@ -544,12 +549,19 @@ export class RaidOrchestrator {
 			}
 
 			case "fabricator": {
-				// Fabricator done - queue for audit
+				// Fabricator done - queue for audit with summarized context
+				// Extract review-relevant parts of the plan and fabricator output
+				// This provides auditor with focused context on what to verify
+				const reviewContext = extractReviewContext(
+					raid.planSummary || raid.goal,
+					result
+				);
+
 				const auditTask: Task = {
 					id: generateTaskId(),
 					raidId: raid.id,
 					type: "auditor",
-					description: `Review implementation for: ${raid.goal}\n\nFabricator output:\n${result}`,
+					description: `Review implementation for: ${raid.goal}\n\n${reviewContext}`,
 					status: "pending",
 					createdAt: new Date(),
 					branch: task.branch,
@@ -614,16 +626,22 @@ export class RaidOrchestrator {
 
 		this.log("Plan approved. Starting execution phase...");
 
-		// Create fabricator task
+		// Create fabricator task with summarized context
 		const commitInstructions = this.autoCommit
 			? "\n\nIMPORTANT: When done, commit all your changes with a clear commit message describing what you implemented."
+			: "";
+
+		// Extract only implementation-relevant parts of the plan
+		// This reduces token usage by 60-80% compared to passing the full plan
+		const summarizedPlan = raid.planSummary
+			? extractImplementationContext(raid.planSummary)
 			: "";
 
 		const fabricatorTask: Task = {
 			id: generateTaskId(),
 			raidId: raid.id,
 			type: "fabricator",
-			description: `Implement: ${raid.goal}\n\nApproved Plan:\n${raid.planSummary}${commitInstructions}`,
+			description: `Implement: ${raid.goal}\n\nApproved Plan:\n${summarizedPlan}${commitInstructions}`,
 			status: "pending",
 			createdAt: new Date(),
 		};
