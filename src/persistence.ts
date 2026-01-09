@@ -13,17 +13,16 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { persistenceLogger } from "./logger.js";
-import { MetricsTracker } from "./metrics.js";
 import type {
 	AgentType,
-	EfficiencyAnalytics,
-	ExtendedStash,
 	FileTrackingState,
 	Inventory,
 	Loadout,
-	QuestMetrics,
+	LoadoutConfiguration,
+	LoadoutPerformance,
+	LoadoutRecommendation,
+	LoadoutScore,
 	Raid,
-	RateLimitState,
 	SafePocket,
 	ScoutCache,
 	ScoutCacheEntry,
@@ -37,10 +36,6 @@ const SCOUT_CACHE_FILE = "scout-cache.json";
 const SCOUT_CACHE_VERSION = "1.0";
 const SCOUT_CACHE_MAX_ENTRIES = 100;
 const SCOUT_CACHE_TTL_DAYS = 30;
-
-/** Metrics configuration */
-const METRICS_VERSION = "1.0";
-const EXTENDED_STASH_FILE = "extended-stash.json";
 
 const DEFAULT_STATE_DIR = ".undercity";
 
@@ -224,6 +219,10 @@ export class Persistence {
 	getStash(): Stash {
 		return this.readJson<Stash>("stash.json", {
 			completedRaids: [],
+			loadoutConfigurations: [],
+			loadoutPerformances: [],
+			loadoutScores: [],
+			loadoutRecommendations: [],
 			lastUpdated: new Date(),
 		});
 	}
@@ -244,107 +243,156 @@ export class Persistence {
 		this.saveStash(stash);
 	}
 
-	// ============== Extended Stash with Metrics ==============
-	// Enhanced stash with quest efficiency metrics
+	// ============== Loadout Configuration Management ==============
 
-	/**
-	 * Get the extended stash with metrics (creates empty one if doesn't exist)
-	 */
-	getExtendedStash(): ExtendedStash {
-		const extendedStash = this.readJson<ExtendedStash>(EXTENDED_STASH_FILE, {
-			completedRaids: [],
-			questMetrics: [],
-			metricsVersion: METRICS_VERSION,
-			metricsStartedAt: new Date(),
-			lastUpdated: new Date(),
-		});
-
-		// Migration: if metrics fields don't exist, initialize them
-		if (!extendedStash.questMetrics) {
-			extendedStash.questMetrics = [];
-			extendedStash.metricsVersion = METRICS_VERSION;
-			extendedStash.metricsStartedAt = new Date();
-		}
-
-		return extendedStash;
+	getLoadoutConfigurations(): LoadoutConfiguration[] {
+		return this.getStash().loadoutConfigurations;
 	}
 
-	/**
-	 * Save the extended stash with metrics
-	 */
-	saveExtendedStash(extendedStash: ExtendedStash): void {
-		extendedStash.lastUpdated = new Date();
-		this.writeJson(EXTENDED_STASH_FILE, extendedStash);
-	}
+	saveLoadoutConfiguration(config: LoadoutConfiguration): void {
+		const stash = this.getStash();
+		const existingIndex = stash.loadoutConfigurations.findIndex(l => l.id === config.id);
 
-	/**
-	 * Save quest metrics to the extended stash
-	 */
-	saveQuestMetrics(questMetrics: QuestMetrics): void {
-		const extendedStash = this.getExtendedStash();
-		extendedStash.questMetrics.push(questMetrics);
+		config.lastUpdated = new Date();
 
-		// Keep metrics for last 1000 quests to avoid unbounded growth
-		if (extendedStash.questMetrics.length > 1000) {
-			extendedStash.questMetrics = extendedStash.questMetrics.slice(-1000);
+		if (existingIndex >= 0) {
+			stash.loadoutConfigurations[existingIndex] = config;
+		} else {
+			stash.loadoutConfigurations.push(config);
 		}
 
-		this.saveExtendedStash(extendedStash);
+		this.saveStash(stash);
+		persistenceLogger.debug({ loadoutId: config.id, name: config.name }, "Saved loadout configuration");
+	}
 
-		persistenceLogger.debug(
-			{
-				questId: questMetrics.questId,
-				tokens: questMetrics.tokenUsage.totalTokens,
-				success: questMetrics.success,
-				totalMetrics: extendedStash.questMetrics.length
-			},
-			"Saved quest metrics"
+	removeLoadoutConfiguration(configId: string): void {
+		const stash = this.getStash();
+		stash.loadoutConfigurations = stash.loadoutConfigurations.filter(l => l.id !== configId);
+		this.saveStash(stash);
+		persistenceLogger.debug({ loadoutId: configId }, "Removed loadout configuration");
+	}
+
+	// ============== Loadout Performance Tracking ==============
+
+	getLoadoutPerformances(): LoadoutPerformance[] {
+		return this.getStash().loadoutPerformances;
+	}
+
+	addLoadoutPerformance(performance: LoadoutPerformance): void {
+		const stash = this.getStash();
+		stash.loadoutPerformances.push(performance);
+		this.saveStash(stash);
+		persistenceLogger.info({
+			performanceId: performance.id,
+			loadoutId: performance.loadoutConfigId,
+			questType: performance.questType
+		}, "Added loadout performance data");
+	}
+
+	getLoadoutPerformancesForConfig(configId: string): LoadoutPerformance[] {
+		return this.getLoadoutPerformances().filter(p => p.loadoutConfigId === configId);
+	}
+
+	getLoadoutPerformancesForQuestType(questType: string): LoadoutPerformance[] {
+		return this.getLoadoutPerformances().filter(p => p.questType === questType);
+	}
+
+	// ============== Loadout Scoring ==============
+
+	getLoadoutScores(): LoadoutScore[] {
+		return this.getStash().loadoutScores;
+	}
+
+	saveLoadoutScore(score: LoadoutScore): void {
+		const stash = this.getStash();
+		const existingIndex = stash.loadoutScores.findIndex(s => s.loadoutConfigId === score.loadoutConfigId);
+
+		score.lastUpdated = new Date();
+
+		if (existingIndex >= 0) {
+			stash.loadoutScores[existingIndex] = score;
+		} else {
+			stash.loadoutScores.push(score);
+		}
+
+		this.saveStash(stash);
+		persistenceLogger.debug({ loadoutId: score.loadoutConfigId, score: score.overallScore }, "Saved loadout score");
+	}
+
+	getLoadoutScore(configId: string): LoadoutScore | undefined {
+		return this.getLoadoutScores().find(s => s.loadoutConfigId === configId);
+	}
+
+	// ============== Loadout Recommendations ==============
+
+	getLoadoutRecommendations(): LoadoutRecommendation[] {
+		return this.getStash().loadoutRecommendations;
+	}
+
+	saveLoadoutRecommendation(recommendation: LoadoutRecommendation): void {
+		const stash = this.getStash();
+		const existingIndex = stash.loadoutRecommendations.findIndex(r => r.questType === recommendation.questType);
+
+		recommendation.lastUpdated = new Date();
+
+		if (existingIndex >= 0) {
+			stash.loadoutRecommendations[existingIndex] = recommendation;
+		} else {
+			stash.loadoutRecommendations.push(recommendation);
+		}
+
+		this.saveStash(stash);
+		persistenceLogger.debug({ questType: recommendation.questType, confidence: recommendation.confidence }, "Saved loadout recommendation");
+	}
+
+	getLoadoutRecommendationForQuestType(questType: string): LoadoutRecommendation | undefined {
+		return this.getLoadoutRecommendations().find(r => r.questType === questType);
+	}
+
+	// ============== Loadout Analytics ==============
+
+	cleanupOldPerformanceData(retentionDays: number = 90): void {
+		const cutoffDate = new Date();
+		cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+		const stash = this.getStash();
+		const before = stash.loadoutPerformances.length;
+		stash.loadoutPerformances = stash.loadoutPerformances.filter(
+			p => new Date(p.timestamp) > cutoffDate
 		);
+		const after = stash.loadoutPerformances.length;
+
+		if (before !== after) {
+			this.saveStash(stash);
+			persistenceLogger.info({ removed: before - after, retentionDays }, "Cleaned up old performance data");
+		}
 	}
 
-	/**
-	 * Get quest metrics for analysis
-	 */
-	getQuestMetrics(): QuestMetrics[] {
-		return this.getExtendedStash().questMetrics;
-	}
+	getLoadoutAnalytics(): {
+		totalConfigs: number;
+		totalPerformances: number;
+		topPerformingLoadout: string | null;
+		questTypeStats: Record<string, number>;
+	} {
+		const stash = this.getStash();
 
-	/**
-	 * Get quest metrics within a date range
-	 */
-	getQuestMetricsInRange(startDate: Date, endDate: Date): QuestMetrics[] {
-		const allMetrics = this.getQuestMetrics();
-		return allMetrics.filter(m => {
-			const completedAt = new Date(m.completedAt);
-			return completedAt >= startDate && completedAt <= endDate;
-		});
-	}
+		const questTypeStats: Record<string, number> = {};
+		for (const perf of stash.loadoutPerformances) {
+			questTypeStats[perf.questType] = (questTypeStats[perf.questType] || 0) + 1;
+		}
 
-	/**
-	 * Clear all quest metrics (keep raid history)
-	 */
-	clearQuestMetrics(): void {
-		const extendedStash = this.getExtendedStash();
-		extendedStash.questMetrics = [];
-		extendedStash.metricsStartedAt = new Date();
-		this.saveExtendedStash(extendedStash);
-		persistenceLogger.info("Cleared all quest metrics");
-	}
+		const topPerformingLoadout = stash.loadoutScores.length > 0
+			? stash.loadoutScores.reduce((best, score) =>
+				score.overallScore > best.overallScore ? score : best
+			).loadoutConfigId
+			: null;
 
-	/**
-	 * Get efficiency analytics from all quest metrics
-	 */
-	getEfficiencyAnalytics(): EfficiencyAnalytics {
-		const questMetrics = this.getQuestMetrics();
-		return MetricsTracker.calculateAnalytics(questMetrics);
-	}
-
-	/**
-	 * Get efficiency analytics for a date range
-	 */
-	getEfficiencyAnalyticsInRange(startDate: Date, endDate: Date): EfficiencyAnalytics {
-		const questMetrics = this.getQuestMetricsInRange(startDate, endDate);
-		return MetricsTracker.calculateAnalytics(questMetrics);
+		return {
+			totalConfigs: stash.loadoutConfigurations.length,
+			totalPerformances: stash.loadoutPerformances.length,
+			topPerformingLoadout,
+			questTypeStats,
+		};
 	}
 
 	// ============== Squad Member Sessions ==============
@@ -582,112 +630,5 @@ export class Persistence {
 			oldestEntry: new Date(Math.min(...dates)),
 			newestEntry: new Date(Math.max(...dates)),
 		};
-	}
-
-	// ============== Rate Limiting ==============
-	// Track API usage and rate limit events
-
-	/**
-	 * Get rate limit state
-	 */
-	getRateLimitState(): RateLimitState {
-		return this.readJson<RateLimitState>("rate-limits.json", {
-			quests: [],
-			rateLimitHits: [],
-			config: {
-				maxTokensPer5Hours: 1_000_000,
-				maxTokensPerWeek: 5_000_000,
-				warningThreshold: 0.8,
-				tokenMultipliers: {
-					haiku: 0.25,
-					sonnet: 1.0,
-					opus: 12.0,
-				},
-			},
-			lastUpdated: new Date(),
-		});
-	}
-
-	/**
-	 * Save rate limit state
-	 */
-	saveRateLimitState(state: RateLimitState): void {
-		state.lastUpdated = new Date();
-		this.writeJson("rate-limits.json", state);
-	}
-
-	/**
-	 * Clear rate limit state
-	 */
-	clearRateLimitState(): void {
-		this.writeJson<RateLimitState>("rate-limits.json", {
-			quests: [],
-			rateLimitHits: [],
-			config: {
-				maxTokensPer5Hours: 1_000_000,
-				maxTokensPerWeek: 5_000_000,
-				warningThreshold: 0.8,
-				tokenMultipliers: {
-					haiku: 0.25,
-					sonnet: 1.0,
-					opus: 12.0,
-				},
-			},
-			lastUpdated: new Date(),
-		});
-	}
-
-	// ============== Quest Metrics ==============
-	// Track efficiency metrics for completed quests
-
-	/**
-	 * Get all quest metrics
-	 */
-	getQuestMetrics(): QuestMetrics[] {
-		return this.readJson<QuestMetrics[]>("quest-metrics.json", []);
-	}
-
-	/**
-	 * Save quest metrics
-	 */
-	saveQuestMetrics(metrics: QuestMetrics[]): void {
-		this.writeJson("quest-metrics.json", metrics);
-	}
-
-	/**
-	 * Add a new quest metric
-	 */
-	addQuestMetric(metric: QuestMetrics): void {
-		const metrics = this.getQuestMetrics();
-		metrics.push(metric);
-
-		// Keep only last 1000 metrics to prevent unbounded growth
-		if (metrics.length > 1000) {
-			metrics.splice(0, metrics.length - 1000);
-		}
-
-		this.saveQuestMetrics(metrics);
-	}
-
-	/**
-	 * Clear quest metrics
-	 */
-	clearQuestMetrics(): void {
-		this.saveQuestMetrics([]);
-	}
-
-	/**
-	 * Get quest metrics for a specific raid
-	 */
-	getQuestMetricsForRaid(raidId: string): QuestMetrics[] {
-		return this.getQuestMetrics().filter(m => m.raidId === raidId);
-	}
-
-	/**
-	 * Get recent quest metrics (last N days)
-	 */
-	getRecentQuestMetrics(days = 30): QuestMetrics[] {
-		const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-		return this.getQuestMetrics().filter(m => new Date(m.startedAt) >= cutoff);
 	}
 }

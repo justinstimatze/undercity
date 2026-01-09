@@ -235,6 +235,12 @@ program
 		console.log(`  Status: ${statusColor(status.raid.status)}`);
 		console.log(`  Started: ${status.raid.startedAt}`);
 
+		// Show current loadout if available
+		const currentLoadout = orchestrator.getCurrentLoadout();
+		if (currentLoadout) {
+			console.log(`  Loadout: ${chalk.cyan(currentLoadout.name)} (${currentLoadout.id})`);
+		}
+
 		// Calculate and display progress percentage
 		if (status.tasks.length > 0) {
 			const completedTasks = status.tasks.filter((t) => t.status === "complete").length;
@@ -883,21 +889,15 @@ program
 	.description("Process the backlog continuously (run in separate terminal)")
 	.option("-n, --count <n>", "Process only N goals then stop", "0")
 	.option("-s, --stream", "Stream agent activity")
-	.option("--reload-every <n>", "Re-exec CLI after every N completed quests (0=disabled)", "0")
-	.action(async (options: { count?: string; stream?: boolean; reloadEvery?: string }) => {
+	.action(async (options: { count?: string; stream?: boolean }) => {
 		const maxCount = Number.parseInt(options.count || "0", 10);
-		const reloadEvery = Math.max(0, Number.parseInt(options.reloadEvery || "0", 10));
 		let processed = 0;
-		let completedQuests = 0;
 
 		console.log(chalk.cyan("Starting backlog worker..."));
 		if (maxCount > 0) {
 			console.log(chalk.dim(`  Will process ${maxCount} quest(s) then stop`));
 		} else {
 			console.log(chalk.dim("  Will process all pending goals"));
-		}
-		if (reloadEvery > 0) {
-			console.log(chalk.dim(`  Will reload after every ${reloadEvery} completed quest(s)`));
 		}
 		console.log();
 
@@ -934,41 +934,6 @@ program
 				if (finalRaid?.status === "complete") {
 					markComplete(nextGoal.id);
 					console.log(chalk.green(`✓ Quest complete: ${nextGoal.objective.substring(0, 40)}...`));
-					completedQuests++;
-
-					// Check for reload after successful quest completion
-					if (reloadEvery > 0 && completedQuests >= reloadEvery) {
-						console.log(chalk.yellow(`\n🔄 Reloading CLI after ${completedQuests} completed quest(s)...`));
-
-						// Build arguments for re-exec
-						const execArgs = ['work'];
-						if (options.stream) execArgs.push('--stream');
-
-						// Adjust count to reflect remaining work
-						const remainingCount = maxCount > 0 ? maxCount - processed - 1 : 0;
-						if (remainingCount > 0) {
-							execArgs.push('--count', remainingCount.toString());
-						}
-
-						// Preserve reload-every setting
-						execArgs.push('--reload-every', reloadEvery.toString());
-
-						// Clear state before re-exec
-						orchestrator.surrender();
-						const persistence = new Persistence();
-						persistence.clearAll();
-
-						// Re-exec the CLI process
-						const { spawn } = await import('node:child_process');
-						const child = spawn(process.execPath, [process.argv[1], ...execArgs], {
-							stdio: 'inherit',
-							detached: false
-						});
-
-						// Exit this process
-						child.on('exit', (code) => process.exit(code || 0));
-						return;
-					}
 				} else if (finalRaid?.status === "failed") {
 					markFailed(nextGoal.id, "Raid failed");
 					console.log(chalk.red(`✗ Quest failed: ${nextGoal.objective.substring(0, 40)}...`));
@@ -976,41 +941,6 @@ program
 					// Raid didn't fully complete (maybe awaiting something)
 					markComplete(nextGoal.id); // Consider it done for now
 					console.log(chalk.yellow(`⚠ Quest processed: ${nextGoal.objective.substring(0, 40)}...`));
-					completedQuests++;
-
-					// Check for reload after quest completion
-					if (reloadEvery > 0 && completedQuests >= reloadEvery) {
-						console.log(chalk.yellow(`\n🔄 Reloading CLI after ${completedQuests} completed quest(s)...`));
-
-						// Build arguments for re-exec
-						const execArgs = ['work'];
-						if (options.stream) execArgs.push('--stream');
-
-						// Adjust count to reflect remaining work
-						const remainingCount = maxCount > 0 ? maxCount - processed - 1 : 0;
-						if (remainingCount > 0) {
-							execArgs.push('--count', remainingCount.toString());
-						}
-
-						// Preserve reload-every setting
-						execArgs.push('--reload-every', reloadEvery.toString());
-
-						// Clear state before re-exec
-						orchestrator.surrender();
-						const persistence = new Persistence();
-						persistence.clearAll();
-
-						// Re-exec the CLI process
-						const { spawn } = await import('node:child_process');
-						const child = spawn(process.execPath, [process.argv[1], ...execArgs], {
-							stdio: 'inherit',
-							detached: false
-						});
-
-						// Exit this process
-						child.on('exit', (code) => process.exit(code || 0));
-						return;
-					}
 				}
 
 				// Clear raid state for next goal
@@ -1035,161 +965,165 @@ program
 		);
 	});
 
-// ============== Analytics Commands ==============
-
-// Analytics command - show efficiency metrics
+// Loadout management commands
 program
-	.command("analytics")
-	.description("Show efficiency metrics and analytics")
-	.option("--days <n>", "Show analytics for last N days", "30")
-	.option("--export", "Export metrics to JSON file")
-	.option("--json", "Output in JSON format")
-	.action((options: { days?: string; export?: boolean; json?: boolean }) => {
-		const persistence = new Persistence();
-		const days = Number.parseInt(options.days || "30", 10);
+	.command("loadouts")
+	.description("Manage loadout configurations")
+	.option("-v, --verbose", "Show detailed information")
+	.action((options) => {
+		try {
+			const orchestrator = new RaidOrchestrator();
+			const loadoutManager = orchestrator.getLoadoutManager();
+			const loadouts = loadoutManager.getAllLoadouts();
+			const rankings = loadoutManager.getLoadoutRankings();
 
-		// Calculate date range
-		const endDate = new Date();
-		const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
+			console.log(chalk.bold("Loadout Configurations"));
+			console.log("");
 
-		const analytics = days === 0 || days > 365
-			? persistence.getEfficiencyAnalytics() // All time
-			: persistence.getEfficiencyAnalyticsInRange(startDate, endDate);
-
-		if (options.export) {
-			const filename = `analytics-${new Date().toISOString().split('T')[0]}.json`;
-			const exportData = {
-				exportDate: new Date(),
-				dateRange: days === 0 ? "all-time" : `${days} days`,
-				startDate: days === 0 ? null : startDate,
-				endDate,
-				analytics,
-				questMetrics: days === 0
-					? persistence.getQuestMetrics()
-					: persistence.getQuestMetricsInRange(startDate, endDate)
-			};
-			require('fs').writeFileSync(filename, JSON.stringify(exportData, null, 2));
-			console.log(chalk.green(`✓ Analytics exported to ${filename}`));
-			return;
-		}
-
-		if (options.json) {
-			console.log(JSON.stringify(analytics, null, 2));
-			return;
-		}
-
-		// Display analytics in human-readable format
-		const dateRangeStr = days === 0 ? "All Time" : `Last ${days} Days`;
-		console.log(chalk.bold(`Efficiency Analytics - ${dateRangeStr}`));
-		console.log(chalk.gray("─".repeat(50)));
-		console.log();
-
-		// Overall stats
-		console.log(chalk.bold("📊 Overall Statistics"));
-		console.log(`  Total Quests: ${analytics.totalQuests}`);
-		console.log(`  Success Rate: ${chalk.green(analytics.successRate.toFixed(1) + "%")} (${analytics.successfulQuests}/${analytics.totalQuests})`);
-		if (analytics.failedQuests > 0) {
-			console.log(`  Failed Quests: ${chalk.red(analytics.failedQuests.toString())}`);
-		}
-		console.log();
-
-		// Token efficiency
-		console.log(chalk.bold("🪙 Token Efficiency"));
-		console.log(`  Avg Tokens per Quest: ${chalk.cyan(Math.round(analytics.avgTokensPerQuest).toLocaleString())}`);
-		if (analytics.successfulQuests > 0) {
-			console.log(`  Avg Tokens per Success: ${chalk.green(Math.round(analytics.avgTokensPerCompletion).toLocaleString())}`);
-		}
-		console.log(`  Token Efficiency: ${chalk.yellow(Math.round(analytics.tokenEfficiency).toLocaleString())} tokens/min`);
-		console.log(`  Avg Execution Time: ${chalk.magenta(analytics.avgExecutionTimeMinutes.toFixed(1))} minutes`);
-		console.log();
-
-		// Extremes
-		if (analytics.mostExpensiveQuest) {
-			console.log(chalk.bold("💸 Most Expensive Quest"));
-			console.log(`  ${analytics.mostExpensiveQuest.objective.substring(0, 50)}${analytics.mostExpensiveQuest.objective.length > 50 ? "..." : ""}`);
-			console.log(`  Tokens: ${chalk.red(analytics.mostExpensiveQuest.tokens.toLocaleString())}`);
-			console.log(`  Time: ${analytics.mostExpensiveQuest.timeMinutes.toFixed(1)} min`);
-			console.log();
-		}
-
-		if (analytics.mostEfficientQuest) {
-			console.log(chalk.bold("⚡ Most Efficient Quest"));
-			console.log(`  ${analytics.mostEfficientQuest.objective.substring(0, 50)}${analytics.mostEfficientQuest.objective.length > 50 ? "..." : ""}`);
-			console.log(`  Efficiency: ${chalk.green(Math.round(analytics.mostEfficientQuest.tokensPerMinute).toLocaleString())} tokens/min`);
-			console.log();
-		}
-
-		// Agent utilization
-		console.log(chalk.bold("🤖 Agent Utilization"));
-		for (const [agentType, stats] of Object.entries(analytics.agentUtilization)) {
-			if (stats.timesUsed > 0) {
-				console.log(`  ${agentType.padEnd(10)}: ${stats.timesUsed.toString().padStart(3)} uses, ${Math.round(stats.avgTokens).toLocaleString().padStart(6)} avg tokens, ${stats.successRate.toFixed(1).padStart(5)}% success`);
+			if (loadouts.length === 0) {
+				console.log(chalk.gray("No loadout configurations found"));
+				return;
 			}
-		}
 
-		console.log();
-		console.log(chalk.dim(`Run with --export to save detailed metrics to JSON`));
-		console.log(chalk.dim(`Run with --days 0 to see all-time analytics`));
+			for (const { loadout, score } of rankings) {
+				console.log(`${chalk.cyan(loadout.name)} (${loadout.id})`);
+				if (loadout.description) {
+					console.log(`  Description: ${chalk.gray(loadout.description)}`);
+				}
+				console.log(`  Score: ${score.overallScore.toFixed(1)}/100`);
+				console.log(`  Squad Size: ${loadout.maxSquadSize}, Context: ${loadout.contextSize}, Parallelism: ${loadout.parallelismLevel}`);
+				console.log(`  Auto-approve: ${loadout.autoApprove ? chalk.green("Yes") : chalk.red("No")}`);
+
+				if (options.verbose) {
+					console.log(`  Models: ${Object.entries(loadout.modelChoices).map(([type, model]) => `${type}=${model}`).join(", ")}`);
+					console.log(`  Performance Records: ${score.recentPerformance.length}`);
+				}
+				console.log("");
+			}
+
+			// Show analytics
+			const analytics = loadoutManager.getAnalytics();
+			console.log(chalk.bold("Analytics"));
+			console.log(`  Total Loadouts: ${analytics.totalLoadouts}`);
+			console.log(`  Performance Records: ${analytics.totalPerformanceRecords}`);
+			console.log(`  Success Rate: ${analytics.averageSuccessRate.toFixed(1)}%`);
+
+			if (analytics.topPerformer) {
+				console.log(`  Top Performer: ${chalk.green(analytics.topPerformer.loadout.name)} (${analytics.topPerformer.score.toFixed(1)})`);
+			}
+
+			if (analytics.speedLeader) {
+				console.log(`  Speed Leader: ${chalk.blue(analytics.speedLeader.loadout.name)} (${Math.round(analytics.speedLeader.avgTime / 1000)}s avg)`);
+			}
+
+			if (analytics.costEfficiencyLeader) {
+				console.log(`  Cost Leader: ${chalk.yellow(analytics.costEfficiencyLeader.loadout.name)} ($${(analytics.costEfficiencyLeader.avgCost / 100).toFixed(3)} avg)`);
+			}
+
+		} catch (error) {
+			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+			process.exit(1);
+		}
 	});
 
-// Metrics command - manage metrics collection
+// Loadout recommendations
 program
-	.command("metrics")
-	.description("Manage efficiency metrics")
-	.option("--clear", "Clear all quest metrics (keep raid history)")
-	.option("--stats", "Show metrics collection statistics")
-	.action((options: { clear?: boolean; stats?: boolean }) => {
-		const persistence = new Persistence();
+	.command("recommendations")
+	.description("Show loadout recommendations by quest type")
+	.option("-t, --type <questType>", "Show recommendation for specific quest type")
+	.action((options) => {
+		try {
+			const orchestrator = new RaidOrchestrator();
+			const loadoutManager = orchestrator.getLoadoutManager();
 
-		if (options.clear) {
-			persistence.clearQuestMetrics();
-			console.log(chalk.yellow("✓ Cleared all quest metrics"));
-			return;
-		}
+			if (options.type) {
+				const recommendation = loadoutManager.getQuestTypeRecommendation(options.type);
+				if (recommendation) {
+					console.log(chalk.bold(`Recommendation for ${options.type} quests:`));
+					console.log(`  ${chalk.green(recommendation.recommendedLoadout.name)}`);
+					console.log(`  Confidence: ${recommendation.confidence.toFixed(1)}%`);
+					console.log(`  Reasoning: ${recommendation.reasoning}`);
 
-		if (options.stats) {
-			const extendedStash = persistence.getExtendedStash();
-			const questMetrics = persistence.getQuestMetrics();
+					if (recommendation.alternativeLoadouts.length > 0) {
+						console.log("\n  Alternatives:");
+						for (const alt of recommendation.alternativeLoadouts) {
+							console.log(`    ${chalk.cyan(alt.loadout.name)} (score: ${alt.score.toFixed(1)}) - ${alt.reasoning}`);
+						}
+					}
+				} else {
+					console.log(chalk.yellow(`No recommendation available for ${options.type} quests yet`));
+				}
+			} else {
+				// Show all recommendations
+				const recommendations = loadoutManager.getAllRecommendations();
 
-			console.log(chalk.bold("Metrics Collection Statistics"));
-			console.log(`  Metrics Version: ${extendedStash.metricsVersion}`);
-			console.log(`  Collection Started: ${chalk.gray(new Date(extendedStash.metricsStartedAt).toLocaleString())}`);
-			console.log(`  Total Quest Metrics: ${questMetrics.length}`);
+				if (recommendations.length === 0) {
+					console.log(chalk.gray("No recommendations available yet - complete some quests to build performance data"));
+					return;
+				}
 
-			if (questMetrics.length > 0) {
-				const oldest = new Date(Math.min(...questMetrics.map(m => new Date(m.startedAt).getTime())));
-				const newest = new Date(Math.max(...questMetrics.map(m => new Date(m.completedAt).getTime())));
-				console.log(`  Date Range: ${chalk.gray(oldest.toLocaleDateString())} to ${chalk.gray(newest.toLocaleDateString())}`);
+				console.log(chalk.bold("Quest Type Recommendations"));
+				console.log("");
 
-				const totalTokens = questMetrics.reduce((sum, m) => sum + m.tokenUsage.totalTokens, 0);
-				const successful = questMetrics.filter(m => m.success).length;
-				console.log(`  Total Tokens Tracked: ${chalk.cyan(totalTokens.toLocaleString())}`);
-				console.log(`  Success Rate: ${chalk.green((successful / questMetrics.length * 100).toFixed(1) + "%")}`);
+				for (const rec of recommendations) {
+					console.log(`${chalk.bold(rec.questType)}: ${chalk.green(rec.recommendedLoadout.name)}`);
+					console.log(`  Confidence: ${rec.confidence.toFixed(1)}%`);
+					console.log(`  ${rec.reasoning}`);
+					console.log("");
+				}
 			}
 
-			console.log(`  Last Updated: ${chalk.gray(new Date(extendedStash.lastUpdated).toLocaleString())}`);
-			return;
+		} catch (error) {
+			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+			process.exit(1);
 		}
+	});
 
-		// Default: show brief stats and usage
-		const questMetrics = persistence.getQuestMetrics();
-		console.log(chalk.bold("Efficiency Metrics"));
-		console.log(`  Quest metrics tracked: ${questMetrics.length}`);
+// Performance analytics
+program
+	.command("analytics")
+	.description("Show detailed loadout performance analytics")
+	.action(() => {
+		try {
+			const orchestrator = new RaidOrchestrator();
+			const loadoutManager = orchestrator.getLoadoutManager();
+			const analytics = loadoutManager.getAnalytics();
 
-		if (questMetrics.length > 0) {
-			const recentMetrics = questMetrics.filter(m => {
-				const completedAt = new Date(m.completedAt);
-				const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-				return completedAt >= dayAgo;
-			});
-			console.log(`  Quests in last 24h: ${recentMetrics.length}`);
+			console.log(chalk.bold("Loadout Performance Analytics"));
+			console.log("");
+
+			console.log("Overview:");
+			console.log(`  Total Configurations: ${analytics.totalLoadouts}`);
+			console.log(`  Performance Records: ${analytics.totalPerformanceRecords}`);
+			console.log(`  Overall Success Rate: ${analytics.averageSuccessRate.toFixed(1)}%`);
+			console.log("");
+
+			if (analytics.topPerformer) {
+				console.log(`Best Overall: ${chalk.green(analytics.topPerformer.loadout.name)} (${analytics.topPerformer.score.toFixed(1)} score)`);
+			}
+
+			if (analytics.speedLeader) {
+				console.log(`Fastest: ${chalk.blue(analytics.speedLeader.loadout.name)} (${Math.round(analytics.speedLeader.avgTime / 1000)}s average)`);
+			}
+
+			if (analytics.costEfficiencyLeader) {
+				console.log(`Most Cost Efficient: ${chalk.yellow(analytics.costEfficiencyLeader.loadout.name)} ($${(analytics.costEfficiencyLeader.avgCost / 100).toFixed(3)} average)`);
+			}
+			console.log("");
+
+			// Quest type breakdown
+			if (Object.keys(analytics.questTypeBreakdown).length > 0) {
+				console.log("Quest Type Distribution:");
+				for (const [type, count] of Object.entries(analytics.questTypeBreakdown)) {
+					const percentage = ((count / analytics.totalPerformanceRecords) * 100).toFixed(1);
+					console.log(`  ${type}: ${count} (${percentage}%)`);
+				}
+			}
+
+		} catch (error) {
+			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+			process.exit(1);
 		}
-
-		console.log();
-		console.log("Commands:");
-		console.log(`  ${chalk.cyan("undercity analytics")}       Show efficiency analytics`);
-		console.log(`  ${chalk.cyan("undercity metrics --stats")} Show collection statistics`);
-		console.log(`  ${chalk.cyan("undercity metrics --clear")} Clear all metrics`);
 	});
 
 // Parse and run

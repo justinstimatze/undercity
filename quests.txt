@@ -2,11 +2,21 @@
 # Run: undercity load quests.txt && undercity work -y
 
 # =============================================================================
+# CRITICAL: Self-Improvement Loop (agents can't add new quests)
+# =============================================================================
+Add ability for agents to add new quests - when fabricator/auditor discovers work, they should be able to queue it
+Parse agent output for "[NEW QUEST: ...]" markers and auto-add to quest board
+Have auditor generate follow-up quests for issues found during review
+
+# =============================================================================
 # CRITICAL: Merge Queue (blocks autonomous operation)
 # =============================================================================
 Improve merge queue to auto-resolve conflicts using git merge -X theirs strategy
 Add fallback merge strategies: try ours, then theirs, then report specific conflict files
 Make merge queue retry failed merges after other branches succeed (conflicts may resolve)
+Implement optimal merge strategy: rebase from fresh main first, then try clean merge, then -X ours (prefer main), only report conflicts if truly unresolvable
+Ensure fabricator always creates branch from latest main - fetch and checkout fresh main before branching to avoid stale code conflicts
+Fix merge queue auto-processing - branches should auto-merge to main after auditor approval, currently requires manual merge intervention
 
 # =============================================================================
 # HIGH: Parallelism (the big gap vs Gas Town)
@@ -30,6 +40,9 @@ Add timeout handling - if an agent takes >10 minutes, log warning and consider i
 Parse plan files into discrete goals/tasks upfront instead of re-reading whole plan each iteration
 Track which plan steps are complete in backlog so we don't re-check via codebase analysis
 Add plan progress tracking - show "Step 3/7: Adding authentication" not just "executing"
+Add "undercity import-plan <plan.md>" command to auto-extract quests from Claude plan files
+Add context field to Quest interface - allow storing relevant plan snippets per quest
+Implement context sharding - pass only relevant context to each raider type (scout gets less, fabricator gets more)
 
 # =============================================================================
 # MEDIUM: Visibility & Streaming
@@ -46,6 +59,9 @@ Add retry logic for failed agents - if fabricator fails, retry once before givin
 Implement graceful degradation - if auditor fails, still allow manual review option
 Add health checks - detect stuck agents (no activity for 5+ minutes)
 Save partial work on agent failure - don't lose progress if one agent crashes
+Handle rate limits gracefully - detect 429 errors, pause squad, show countdown to resume
+Add "undercity abort" command for emergency stop of runaway raids (kill all raiders, save state)
+Implement conversation compaction - summarize long raider contexts to avoid token limits
 
 # =============================================================================
 # LOW: Quality of Life
@@ -54,6 +70,7 @@ Add "undercity pause" command to pause a raid without surrendering
 Add "undercity resume" command to continue a paused raid
 Add "undercity logs <agent-id>" to see full output from a specific agent
 Add config file support (.undercityrc) for default options like --stream, model choices
+Add per-quest model selection - allow overriding raider models (e.g., use Opus for complex quests, Sonnet for simple)
 
 # =============================================================================
 # LOW: Advanced Features (future)
@@ -64,11 +81,36 @@ Add "rival raider" mode - spawn a review agent that tries to break the fabricato
 Implement Rule of Five verification - actually check that 5 review passes happened
 
 # =============================================================================
+# MEDIUM: ARC Raiders Culture Integration
+# =============================================================================
+Rename auditor to "sheriff" - the vigilante who hunts bugs and enforces quality (from r/ArcRaiders sheriff archetype)
+Add "rat check" phase before extraction - dedicated review for hidden bugs that look harmless but will betray later
+Add --light flag for "free loadout" mode - Haiku-only quick runs for small tasks, minimal context, minimal loss
+Add "flute" read-only mode for scouts - like the flute player peace signal, indicates they're just looking, won't modify anything
+Add pre-raid "extraction camper" check - detect potential merge conflicts before starting work, not at the end
+
+# =============================================================================
 # LOW: Vocabulary/Theme Consistency
 # =============================================================================
 Update "Raid extracted successfully" to "Extraction complete" or "Squad extracted" - squads extract FROM raids
 Rewrite quest.test.ts tests for the new Quest/QuestBoard API (old backlog tests removed)
 Review all log messages for ARC Raiders theme consistency
+Rename "agents" to "raiders" throughout codebase and CLI output - squad members are raiders going topside, not generic agents
+Use ARC Raiders CLI phrases: "Going topside...", "Sheriff on patrol", "Rat spotted", "Contact! ARCs detected"
+
+# =============================================================================
+# MEDIUM: Verbose/Debug Output
+# =============================================================================
+Add --verbose flag to show detailed raider activity during raids (tool calls, file reads, decisions)
+Add more streaming output for raiders - show what they're reading, writing, and deciding in real-time
+Create debug mode that logs full raider context/prompts for troubleshooting slow or stuck raiders
+
+# =============================================================================
+# MEDIUM: TUI Dashboard
+# =============================================================================
+Build a TUI (terminal UI) dashboard to monitor parallel raiders and squads in real-time
+Show raider status, current task, progress bars, and live activity in a split-pane layout
+Support for multiple concurrent squads with clear visual separation
 
 # =============================================================================
 # COMPLETED (for reference)
