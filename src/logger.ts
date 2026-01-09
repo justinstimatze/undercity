@@ -27,3 +27,4 @@ export const raidLogger = logger.child({ module: "raid" });
 export const squadLogger = logger.child({ module: "squad" });
 export const gitLogger = logger.child({ module: "git" });
 export const persistenceLogger = logger.child({ module: "persistence" });
+export const cacheLogger = logger.child({ module: "cache" });

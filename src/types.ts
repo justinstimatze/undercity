@@ -222,6 +222,22 @@ export interface FileTouch {
 	timestamp: Date;
 }
 
+// ============== Scout Cache Types ==============
+
+/**
+ * Fingerprint of the codebase state for cache validation
+ */
+export interface CodebaseFingerprint {
+	/** Git commit hash (HEAD) */
+	commitHash: string;
+	/** Git working tree status (empty if clean) */
+	workingTreeStatus: string;
+	/** Current branch name */
+	branch: string;
+	/** Timestamp when fingerprint was calculated */
+	timestamp: Date;
+}
+
 /**
  * File tracking state for an agent/task
  */
@@ -262,5 +278,35 @@ export interface FileTrackingState {
 	/** Active tracking entries by agent ID */
 	entries: Record<string, FileTrackingEntry>;
 	/** Last updated timestamp */
+	lastUpdated: Date;
+}
+
+/**
+ * A cached scout result entry
+ */
+export interface ScoutCacheEntry {
+	/** SHA-256 hash of CodebaseFingerprint for quick lookup */
+	fingerprintHash: string;
+	/** The cached scout intel result */
+	scoutResult: string;
+	/** Hash of the scout goal for per-goal caching */
+	goalHash: string;
+	/** When this cache entry was created */
+	createdAt: Date;
+	/** When this cache entry was last used */
+	lastUsedAt: Date;
+	/** Original goal text (for debugging/inspection) */
+	goalText: string;
+}
+
+/**
+ * Scout cache storage structure
+ */
+export interface ScoutCache {
+	/** Cache entries keyed by combined fingerprintHash + goalHash */
+	entries: Record<string, ScoutCacheEntry>;
+	/** Cache format version for future migrations */
+	version: string;
+	/** When cache was last modified */
 	lastUpdated: Date;
 }

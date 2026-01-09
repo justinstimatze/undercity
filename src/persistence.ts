@@ -12,6 +12,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { persistenceLogger } from "./logger.js";
 import type {
 	AgentType,
 	FileTrackingState,
@@ -19,10 +20,18 @@ import type {
 	Loadout,
 	Raid,
 	SafePocket,
+	ScoutCache,
+	ScoutCacheEntry,
 	SquadMember,
 	Stash,
 	Task,
 } from "./types.js";
+
+/** Scout cache configuration */
+const SCOUT_CACHE_FILE = "scout-cache.json";
+const SCOUT_CACHE_VERSION = "1.0";
+const SCOUT_CACHE_MAX_ENTRIES = 100;
+const SCOUT_CACHE_TTL_DAYS = 30;
 
 const DEFAULT_STATE_DIR = ".undercity";
 
@@ -290,5 +299,176 @@ export class Persistence {
 			squad: [],
 			lastUpdated: new Date(),
 		});
+	}
+
+	// ============== Scout Cache ==============
+	// Caches scout results to avoid redundant codebase analysis
+
+	/**
+	 * Get the scout cache (creates empty cache if doesn't exist)
+	 */
+	getScoutCache(): ScoutCache {
+		return this.readJson<ScoutCache>(SCOUT_CACHE_FILE, {
+			entries: {},
+			version: SCOUT_CACHE_VERSION,
+			lastUpdated: new Date(),
+		});
+	}
+
+	/**
+	 * Save the scout cache
+	 */
+	saveScoutCache(cache: ScoutCache): void {
+		cache.lastUpdated = new Date();
+		this.writeJson(SCOUT_CACHE_FILE, cache);
+	}
+
+	/**
+	 * Get a scout cache entry by fingerprint and goal hash
+	 *
+	 * @param fingerprintHash Hash of the codebase fingerprint
+	 * @param goalHash Hash of the scout goal
+	 * @returns The cache entry if found and valid, null otherwise
+	 */
+	getScoutCacheEntry(fingerprintHash: string, goalHash: string): ScoutCacheEntry | null {
+		try {
+			const cache = this.getScoutCache();
+			const key = `${fingerprintHash}:${goalHash}`;
+			const entry = cache.entries[key];
+
+			if (!entry) {
+				return null;
+			}
+
+			// Check TTL
+			const createdAt = new Date(entry.createdAt);
+			const ageMs = Date.now() - createdAt.getTime();
+			const ttlMs = SCOUT_CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
+
+			if (ageMs > ttlMs) {
+				persistenceLogger.debug({ key, ageMs, ttlMs }, "Scout cache entry expired");
+				return null;
+			}
+
+			// Update last used timestamp
+			entry.lastUsedAt = new Date();
+			cache.entries[key] = entry;
+			this.saveScoutCache(cache);
+
+			persistenceLogger.debug({ key, goalText: entry.goalText }, "Scout cache hit");
+			return entry;
+		} catch (error) {
+			persistenceLogger.warn({ error }, "Error reading scout cache entry");
+			return null;
+		}
+	}
+
+	/**
+	 * Save a scout result to the cache
+	 *
+	 * @param fingerprintHash Hash of the codebase fingerprint
+	 * @param goalHash Hash of the scout goal
+	 * @param scoutResult The scout intel result to cache
+	 * @param goalText Original goal text (for debugging)
+	 */
+	saveScoutCacheEntry(fingerprintHash: string, goalHash: string, scoutResult: string, goalText: string): void {
+		try {
+			const cache = this.getScoutCache();
+			const key = `${fingerprintHash}:${goalHash}`;
+
+			const entry: ScoutCacheEntry = {
+				fingerprintHash,
+				goalHash,
+				scoutResult,
+				goalText,
+				createdAt: new Date(),
+				lastUsedAt: new Date(),
+			};
+
+			cache.entries[key] = entry;
+
+			// Cleanup if over max entries (LRU eviction)
+			const entries = Object.entries(cache.entries);
+			if (entries.length > SCOUT_CACHE_MAX_ENTRIES) {
+				// Sort by lastUsedAt ascending (oldest first)
+				entries.sort((a, b) => {
+					const aTime = new Date(a[1].lastUsedAt).getTime();
+					const bTime = new Date(b[1].lastUsedAt).getTime();
+					return aTime - bTime;
+				});
+
+				// Remove oldest entries to get under limit
+				const toRemove = entries.length - SCOUT_CACHE_MAX_ENTRIES;
+				for (let i = 0; i < toRemove; i++) {
+					delete cache.entries[entries[i][0]];
+				}
+
+				persistenceLogger.debug({ removed: toRemove }, "Evicted old scout cache entries (LRU)");
+			}
+
+			this.saveScoutCache(cache);
+			persistenceLogger.debug({ key, goalText }, "Saved scout result to cache");
+		} catch (error) {
+			persistenceLogger.warn({ error }, "Error saving scout cache entry");
+			// Silent failure - caching is optional
+		}
+	}
+
+	/**
+	 * Clean up expired cache entries
+	 */
+	cleanupScoutCache(): void {
+		try {
+			const cache = this.getScoutCache();
+			const now = Date.now();
+			const ttlMs = SCOUT_CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
+			let removed = 0;
+
+			for (const [key, entry] of Object.entries(cache.entries)) {
+				const createdAt = new Date(entry.createdAt).getTime();
+				if (now - createdAt > ttlMs) {
+					delete cache.entries[key];
+					removed++;
+				}
+			}
+
+			if (removed > 0) {
+				this.saveScoutCache(cache);
+				persistenceLogger.info({ removed }, "Cleaned up expired scout cache entries");
+			}
+		} catch (error) {
+			persistenceLogger.warn({ error }, "Error cleaning up scout cache");
+		}
+	}
+
+	/**
+	 * Clear the entire scout cache
+	 */
+	clearScoutCache(): void {
+		this.saveScoutCache({
+			entries: {},
+			version: SCOUT_CACHE_VERSION,
+			lastUpdated: new Date(),
+		});
+		persistenceLogger.info("Cleared scout cache");
+	}
+
+	/**
+	 * Get scout cache statistics
+	 */
+	getScoutCacheStats(): { entryCount: number; oldestEntry: Date | null; newestEntry: Date | null } {
+		const cache = this.getScoutCache();
+		const entries = Object.values(cache.entries);
+
+		if (entries.length === 0) {
+			return { entryCount: 0, oldestEntry: null, newestEntry: null };
+		}
+
+		const dates = entries.map((e) => new Date(e.createdAt).getTime());
+		return {
+			entryCount: entries.length,
+			oldestEntry: new Date(Math.min(...dates)),
+			newestEntry: new Date(Math.max(...dates)),
+		};
 	}
 }

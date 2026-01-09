@@ -11,9 +11,20 @@
  * one branch at a time: rebase → test → merge.
  */
 
+import { createHash } from "node:crypto";
 import { execSync, spawn } from "node:child_process";
 import { gitLogger } from "./logger.js";
-import type { MergeQueueItem } from "./types.js";
+import type { CodebaseFingerprint, MergeQueueItem, MergeQueueRetryConfig } from "./types.js";
+
+/**
+ * Default retry configuration
+ */
+export const DEFAULT_RETRY_CONFIG: MergeQueueRetryConfig = {
+	enabled: true,
+	maxRetries: 3,
+	baseDelayMs: 1000,
+	maxDelayMs: 30000,
+};
 
 /**
  * Git operation error
@@ -359,6 +370,112 @@ export function generateBranchName(raidId: string, taskId: string): string {
 	return `undercity/${raidId}/${taskId}-${timestamp}`;
 }
 
+// ============== Codebase Fingerprinting ==============
+
+/**
+ * Get the current commit hash (HEAD)
+ * @returns The full SHA-1 hash of HEAD, or empty string if not in a git repo
+ */
+export function getHeadCommitHash(): string {
+	try {
+		return execGit(["rev-parse", "HEAD"]);
+	} catch {
+		return "";
+	}
+}
+
+/**
+ * Get the git status in porcelain format (for fingerprinting)
+ * @returns Git status output, empty string if clean
+ */
+export function getWorkingTreeStatus(): string {
+	try {
+		return execGit(["status", "--porcelain"]);
+	} catch {
+		return "";
+	}
+}
+
+/**
+ * Calculate a fingerprint of the current codebase state.
+ *
+ * The fingerprint includes:
+ * - Current commit hash (captures committed state)
+ * - Working tree status (captures uncommitted changes)
+ * - Current branch (for context)
+ *
+ * @returns CodebaseFingerprint or null if not in a git repository
+ */
+export function calculateCodebaseFingerprint(): CodebaseFingerprint | null {
+	try {
+		const commitHash = getHeadCommitHash();
+		if (!commitHash) {
+			gitLogger.debug("Not in a git repository, cannot calculate fingerprint");
+			return null;
+		}
+
+		const workingTreeStatus = getWorkingTreeStatus();
+		const branch = getCurrentBranch();
+
+		return {
+			commitHash,
+			workingTreeStatus,
+			branch,
+			timestamp: new Date(),
+		};
+	} catch (error) {
+		gitLogger.warn({ error }, "Failed to calculate codebase fingerprint");
+		return null;
+	}
+}
+
+/**
+ * Create a stable hash from a fingerprint for cache key lookup.
+ *
+ * Only hashes the commit and working tree status (not timestamp or branch)
+ * since those are what actually affect the codebase content.
+ *
+ * @param fingerprint The codebase fingerprint to hash
+ * @returns SHA-256 hash string
+ */
+export function hashFingerprint(fingerprint: CodebaseFingerprint): string {
+	const content = `${fingerprint.commitHash}:${fingerprint.workingTreeStatus}`;
+	return createHash("sha256").update(content).digest("hex");
+}
+
+/**
+ * Create a hash from a goal string for per-goal caching.
+ *
+ * @param goal The scout goal text
+ * @returns SHA-256 hash string
+ */
+export function hashGoal(goal: string): string {
+	// Normalize whitespace for consistent hashing
+	const normalized = goal.trim().replace(/\s+/g, " ");
+	return createHash("sha256").update(normalized).digest("hex");
+}
+
+/**
+ * Check if the codebase is in a cacheable state.
+ *
+ * For conservative caching, we require:
+ * - Clean working tree (no uncommitted changes)
+ * - Valid git repository
+ *
+ * @returns true if caching is safe, false otherwise
+ */
+export function isCacheableState(): boolean {
+	try {
+		const commitHash = getHeadCommitHash();
+		if (!commitHash) {
+			return false;
+		}
+		return isWorkingTreeClean();
+	} catch {
+		return false;
+	}
+}
+
 /**
  * Serial Merge Queue
  *
@@ -373,21 +490,29 @@ export function generateBranchName(raidId: string, taskId: string): string {
  * - "theirs": Auto-resolve conflicts by accepting incoming changes
  * - "ours": Auto-resolve conflicts by keeping current changes
  * - "default": No auto-resolution, conflicts require manual intervention
+ *
+ * Retry functionality:
+ * - Failed merges are retried after successful merges complete
+ * - Uses exponential backoff to prevent system overload
+ * - Conflicts may resolve after other branches are merged
  */
 export class MergeQueue {
 	private queue: MergeQueueItem[] = [];
 	private processing = false;
 	private mainBranch: string;
 	private mergeStrategy: MergeStrategy;
+	private retryConfig: MergeQueueRetryConfig;
 
 	/**
 	 * Create a new merge queue
 	 * @param mainBranch - The target branch for merges (defaults to main/master)
 	 * @param mergeStrategy - Strategy for auto-resolving conflicts (defaults to "theirs" for automatic resolution)
+	 * @param retryConfig - Configuration for retry behavior
 	 */
-	constructor(mainBranch?: string, mergeStrategy?: MergeStrategy) {
+	constructor(mainBranch?: string, mergeStrategy?: MergeStrategy, retryConfig?: Partial<MergeQueueRetryConfig>) {
 		this.mainBranch = mainBranch || getDefaultBranch();
 		this.mergeStrategy = mergeStrategy ?? "theirs";
+		this.retryConfig = { ...DEFAULT_RETRY_CONFIG, ...retryConfig };
 	}
 
 	/**
@@ -400,6 +525,9 @@ export class MergeQueue {
 			agentId,
 			status: "pending",
 			queuedAt: new Date(),
+			retryCount: 0,
+			maxRetries: this.retryConfig.maxRetries,
+			isRetry: false,
 		};
 		this.queue.push(item);
 		gitLogger.debug({ branch, taskId, agentId }, "Added to merge queue");
@@ -427,6 +555,88 @@ export class MergeQueue {
 	setMergeStrategy(strategy: MergeStrategy): void {
 		this.mergeStrategy = strategy;
 		gitLogger.debug({ strategy }, "Merge strategy updated");
+	}
+
+	/**
+	 * Get the current retry configuration
+	 */
+	getRetryConfig(): MergeQueueRetryConfig {
+		return { ...this.retryConfig };
+	}
+
+	/**
+	 * Update retry configuration
+	 */
+	setRetryConfig(config: Partial<MergeQueueRetryConfig>): void {
+		this.retryConfig = { ...this.retryConfig, ...config };
+		gitLogger.debug({ config: this.retryConfig }, "Retry config updated");
+	}
+
+	/**
+	 * Calculate the next retry delay using exponential backoff
+	 * @param retryCount - Current retry count
+	 * @returns Delay in milliseconds
+	 */
+	private calculateRetryDelay(retryCount: number): number {
+		const delay = this.retryConfig.baseDelayMs * 2 ** retryCount;
+		return Math.min(delay, this.retryConfig.maxDelayMs);
+	}
+
+	/**
+	 * Check if an item is eligible for retry
+	 * @param item - The merge queue item to check
+	 * @returns true if the item can be retried
+	 */
+	private canRetry(item: MergeQueueItem): boolean {
+		if (!this.retryConfig.enabled) {
+			return false;
+		}
+
+		const maxRetries = item.maxRetries ?? this.retryConfig.maxRetries;
+		const retryCount = item.retryCount ?? 0;
+
+		if (retryCount >= maxRetries) {
+			return false;
+		}
+
+		// Check if we've waited long enough (exponential backoff)
+		if (item.nextRetryAfter && new Date() < item.nextRetryAfter) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Mark an item for retry with updated retry tracking
+	 * @param item - The item to prepare for retry
+	 */
+	private prepareForRetry(item: MergeQueueItem): void {
+		const retryCount = (item.retryCount ?? 0) + 1;
+		const delay = this.calculateRetryDelay(retryCount);
+
+		// Preserve original error on first failure
+		if (!item.originalError && item.error) {
+			item.originalError = item.error;
+		}
+
+		item.retryCount = retryCount;
+		item.lastFailedAt = new Date();
+		item.nextRetryAfter = new Date(Date.now() + delay);
+		item.status = "pending";
+		item.isRetry = true;
+		item.completedAt = undefined;
+		item.error = undefined;
+
+		gitLogger.info(
+			{
+				branch: item.branch,
+				retryCount,
+				nextRetryAfter: item.nextRetryAfter,
+				delay,
+			},
+			"Item prepared for retry",
+		);
 	}
 
 	/**
@@ -482,11 +692,7 @@ export class MergeQueue {
 				"Merging with strategy",
 			);
 
-			const mergeSuccess = merge(
-				item.branch,
-				`Merge ${item.branch} via undercity`,
-				this.mergeStrategy,
-			);
+			const mergeSuccess = merge(item.branch, `Merge ${item.branch} via undercity`, this.mergeStrategy);
 
 			if (!mergeSuccess) {
 				item.status = "conflict";
@@ -522,18 +728,50 @@ export class MergeQueue {
 	}
 
 	/**
-	 * Process all items in the queue sequentially
+	 * Process all items in the queue sequentially.
+	 *
+	 * This method continues processing even when items fail, rather than
+	 * stopping at the first failure. After each successful merge, it will
+	 * retry any eligible failed items (conflicts may have resolved).
+	 *
+	 * @returns Array of processed items with their final statuses
 	 */
 	async processAll(): Promise<MergeQueueItem[]> {
 		const results: MergeQueueItem[] = [];
+		let hadSuccess = false;
 
 		let item = await this.processNext();
 		while (item) {
 			results.push(item);
-			if (item.status !== "complete") {
-				// Stop on first failure
-				break;
+
+			if (item.status === "complete") {
+				hadSuccess = true;
+				gitLogger.info({ branch: item.branch }, "Merge succeeded");
+
+				// After a successful merge, retry failed items
+				// (conflicts may now be resolvable)
+				if (this.retryConfig.enabled) {
+					const retryResults = await this.retryFailed();
+					if (retryResults.length > 0) {
+						results.push(...retryResults);
+						// Check if any retries succeeded
+						hadSuccess = hadSuccess || retryResults.some((r) => r.status === "complete");
+					}
+				}
+			} else {
+				gitLogger.warn(
+					{
+						branch: item.branch,
+						status: item.status,
+						error: item.error,
+						retryCount: item.retryCount,
+						isRetry: item.isRetry,
+					},
+					"Merge failed, continuing with next item",
+				);
 			}
+
+			// Continue processing remaining pending items
 			item = await this.processNext();
 		}
 
@@ -541,10 +779,89 @@ export class MergeQueue {
 	}
 
 	/**
-	 * Get items that failed
+	 * Retry failed merge items that are eligible for retry.
+	 *
+	 * This is called automatically after successful merges in processAll(),
+	 * but can also be called manually. Failed merges may succeed after
+	 * other branches are merged (conflicts may resolve).
+	 *
+	 * Uses the mergeWithFallback() function for better conflict resolution.
+	 *
+	 * @returns Array of retry attempt results
+	 */
+	async retryFailed(): Promise<MergeQueueItem[]> {
+		const results: MergeQueueItem[] = [];
+		const failedItems = this.getFailed().filter((item) => this.canRetry(item));
+
+		if (failedItems.length === 0) {
+			return results;
+		}
+
+		gitLogger.info({ eligibleCount: failedItems.length }, "Retrying eligible failed items after successful merge");
+
+		for (const item of failedItems) {
+			// Prepare the item for retry
+			this.prepareForRetry(item);
+
+			gitLogger.info(
+				{
+					branch: item.branch,
+					retryCount: item.retryCount,
+					originalError: item.originalError,
+				},
+				"Retrying failed merge",
+			);
+
+			// Process this item
+			const result = await this.processNext();
+			if (result) {
+				results.push(result);
+
+				if (result.status === "complete") {
+					gitLogger.info(
+						{
+							branch: result.branch,
+							retryCount: result.retryCount,
+						},
+						"Retry succeeded - conflict resolved after other merges",
+					);
+				} else {
+					gitLogger.warn(
+						{
+							branch: result.branch,
+							status: result.status,
+							retryCount: result.retryCount,
+							maxRetries: result.maxRetries,
+							error: result.error,
+						},
+						"Retry failed",
+					);
+				}
+			}
+		}
+
+		return results;
+	}
+
+	/**
+	 * Get items that failed (conflict or test failure)
 	 */
 	getFailed(): MergeQueueItem[] {
 		return this.queue.filter((i) => i.status === "conflict" || i.status === "test_failed");
+	}
+
+	/**
+	 * Get items that are eligible for retry
+	 */
+	getRetryable(): MergeQueueItem[] {
+		return this.getFailed().filter((item) => this.canRetry(item));
+	}
+
+	/**
+	 * Get items that have exhausted all retries
+	 */
+	getExhausted(): MergeQueueItem[] {
+		return this.getFailed().filter((item) => !this.canRetry(item));
 	}
 
 	/**
@@ -552,5 +869,39 @@ export class MergeQueue {
 	 */
 	clearFailed(): void {
 		this.queue = this.queue.filter((i) => i.status !== "conflict" && i.status !== "test_failed");
+	}
+
+	/**
+	 * Clear only exhausted items (those that have used all retries)
+	 */
+	clearExhausted(): void {
+		const exhausted = this.getExhausted();
+		this.queue = this.queue.filter((i) => !exhausted.includes(i));
+	}
+
+	/**
+	 * Get a summary of queue status including retry information
+	 */
+	getQueueSummary(): {
+		total: number;
+		pending: number;
+		failed: number;
+		retryable: number;
+		exhausted: number;
+		complete: number;
+	} {
+		const pending = this.queue.filter((i) => i.status === "pending").length;
+		const failed = this.getFailed().length;
+		const retryable = this.getRetryable().length;
+		const exhausted = this.getExhausted().length;
+
+		return {
+			total: this.queue.length,
+			pending,
+			failed,
+			retryable,
+			exhausted,
+			complete: 0, // Complete items are removed from queue
+		};
 	}
 }

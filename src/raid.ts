@@ -27,7 +27,7 @@ import {
 	summarizeContextForAgent,
 } from "./context.js";
 import { FileTracker, parseFileOperation } from "./file-tracker.js";
-import { createAndCheckout, MergeQueue } from "./git.js";
+import { calculateCodebaseFingerprint, createAndCheckout, hashFingerprint, hashGoal, isCacheableState, MergeQueue } from "./git.js";
 import { raidLogger, squadLogger } from "./logger.js";
 import { Persistence } from "./persistence.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
@@ -317,7 +317,7 @@ export class RaidOrchestrator {
 	/**
 	 * Planning Phase (BMAD-style)
 	 *
-	 * 1. Scout analyzes the codebase
+	 * 1. Scout analyzes the codebase (or uses cached results)
 	 * 2. Planner creates detailed spec
 	 */
 	private async startPlanningPhase(raid: Raid): Promise<void> {
@@ -345,8 +345,94 @@ export class RaidOrchestrator {
 		};
 		this.persistence.addTask(plannerTask);
 
-		// Spawn scout
+		// Check scout cache before spawning agent
+		const cachedResult = this.checkScoutCache(raid.goal);
+		if (cachedResult) {
+			this.log("Using cached scout intel", { goal: raid.goal });
+			console.log(chalk.green("✓") + chalk.dim(" Scout cache hit - reusing previous analysis"));
+
+			// Mark scout task complete with cached result
+			this.persistence.updateTask(scoutTask.id, {
+				status: "complete",
+				result: cachedResult,
+				completedAt: new Date(),
+			});
+
+			// Proceed directly to planner with cached intel
+			await this.handleTaskCompletion(scoutTask, cachedResult);
+			return;
+		}
+
+		// Cache miss - spawn scout agent
+		this.log("Scout cache miss, spawning agent", { goal: raid.goal });
 		await this.spawnAgent("scout", scoutTask);
+	}
+
+	/**
+	 * Check the scout cache for a matching result
+	 *
+	 * @param goal The raid goal to check
+	 * @returns Cached scout result if found, null otherwise
+	 */
+	private checkScoutCache(goal: string): string | null {
+		try {
+			// Only use cache if codebase is in a clean state
+			if (!isCacheableState()) {
+				this.log("Codebase has uncommitted changes, skipping cache");
+				return null;
+			}
+
+			// Calculate fingerprint
+			const fingerprint = calculateCodebaseFingerprint();
+			if (!fingerprint) {
+				this.log("Could not calculate codebase fingerprint");
+				return null;
+			}
+
+			const fingerprintHash = hashFingerprint(fingerprint);
+			const goalHash = hashGoal(goal);
+
+			// Look up in cache
+			const entry = this.persistence.getScoutCacheEntry(fingerprintHash, goalHash);
+			if (entry) {
+				return entry.scoutResult;
+			}
+
+			return null;
+		} catch (error) {
+			this.log("Error checking scout cache", { error: String(error) });
+			return null;
+		}
+	}
+
+	/**
+	 * Store scout result in cache
+	 *
+	 * @param goal The raid goal
+	 * @param result The scout intel result
+	 */
+	private storeScoutResult(goal: string, result: string): void {
+		try {
+			// Only cache if codebase is in a clean state
+			if (!isCacheableState()) {
+				this.log("Codebase has uncommitted changes, not caching scout result");
+				return;
+			}
+
+			const fingerprint = calculateCodebaseFingerprint();
+			if (!fingerprint) {
+				return;
+			}
+
+			const fingerprintHash = hashFingerprint(fingerprint);
+			const goalHash = hashGoal(goal);
+
+			this.persistence.saveScoutCacheEntry(fingerprintHash, goalHash, result, goal);
+			this.log("Stored scout result in cache", { goal });
+		} catch (error) {
+			this.log("Error storing scout result in cache", { error: String(error) });
+			// Silent failure - caching is optional
+		}
 	}
 
 	/**
@@ -518,6 +604,9 @@ export class RaidOrchestrator {
 
 		switch (task.type) {
 			case "scout": {
+				// Store scout result in cache for future raids
+				this.storeScoutResult(raid.goal, result);
+
 				// Scout done - spawn planner
 				const plannerTask = this.persistence
 					.getTasks()
