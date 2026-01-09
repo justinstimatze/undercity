@@ -1,0 +1,12 @@
+# Undercity dogfood goals - extracted from plan
+# Run: undercity load goals.txt && undercity work
+
+# Testing - more modules need coverage
+Add vitest tests for the raid module - test the start, approvePlan, and extract methods
+Add vitest tests for the cli module - test command parsing and options handling
+Add vitest tests for the backlog module - test addGoal, getNextGoal, markComplete
+
+# Features from plan that may be missing
+Add a --dry-run flag to slingshot that shows the plan but doesn't execute
+Add a "history" command to show completed raids from the stash
+Add progress percentage to status command based on completed vs total tasks

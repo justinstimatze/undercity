@@ -22,6 +22,17 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { Command } from "commander";
+import {
+	addGoal,
+	addGoals,
+	clearCompleted,
+	getAllItems,
+	getBacklogSummary,
+	getNextGoal,
+	markComplete,
+	markFailed,
+	markInProgress,
+} from "./backlog.js";
 import { Persistence } from "./persistence.js";
 import { RaidOrchestrator } from "./raid.js";
 import type { RaidStatus } from "./types.js";
@@ -388,6 +399,243 @@ program
 			console.log("Or for API tokens (costs money):");
 			console.log('  Set: export ANTHROPIC_API_KEY="your-key"');
 		}
+	});
+
+// ============== Backlog Commands ==============
+
+// Backlog command - show/manage the goal queue
+program
+	.command("backlog")
+	.description("Show the goal backlog")
+	.action(() => {
+		const items = getAllItems();
+		const summary = getBacklogSummary();
+
+		console.log(chalk.bold("Goal Backlog"));
+		console.log(
+			`  ${chalk.yellow(summary.pending)} pending, ${chalk.cyan(summary.inProgress)} in progress, ${chalk.green(summary.complete)} complete, ${chalk.red(summary.failed)} failed`,
+		);
+		console.log();
+
+		if (items.length === 0) {
+			console.log(chalk.gray("No goals in backlog"));
+			console.log("Add goals with: undercity add <goal>");
+			return;
+		}
+
+		const pending = items.filter((i) => i.status === "pending");
+		const inProgress = items.filter((i) => i.status === "in_progress");
+
+		if (inProgress.length > 0) {
+			console.log(chalk.bold("In Progress"));
+			for (const item of inProgress) {
+				console.log(`  ${chalk.cyan("⚡")} ${item.goal.substring(0, 60)}${item.goal.length > 60 ? "..." : ""}`);
+			}
+			console.log();
+		}
+
+		if (pending.length > 0) {
+			console.log(chalk.bold("Pending"));
+			for (const item of pending.slice(0, 10)) {
+				console.log(`  ${chalk.gray("○")} ${item.goal.substring(0, 60)}${item.goal.length > 60 ? "..." : ""}`);
+			}
+			if (pending.length > 10) {
+				console.log(chalk.gray(`  ... and ${pending.length - 10} more`));
+			}
+		}
+	});
+
+// Add command - add a goal to the backlog
+program
+	.command("add <goal>")
+	.description("Add a goal to the backlog")
+	.action((goal: string) => {
+		const item = addGoal(goal);
+		console.log(chalk.green(`Added: ${goal}`));
+		console.log(chalk.gray(`  ID: ${item.id}`));
+	});
+
+// Load command - load goals from a file (one per line)
+program
+	.command("load <file>")
+	.description("Load goals from a file (one per line)")
+	.action((file: string) => {
+		try {
+			const content = readFileSync(file, "utf-8");
+			const goals = content
+				.split("\n")
+				.map((line) => line.trim())
+				.filter((line) => line && !line.startsWith("#"));
+
+			if (goals.length === 0) {
+				console.log(chalk.yellow("No goals found in file"));
+				return;
+			}
+
+			const items = addGoals(goals);
+			console.log(chalk.green(`Loaded ${items.length} goals from ${file}`));
+		} catch (error) {
+			console.error(chalk.red(`Error loading file: ${error instanceof Error ? error.message : error}`));
+			process.exit(1);
+		}
+	});
+
+// Plan command - execute a plan file intelligently
+program
+	.command("plan <file>")
+	.description("Execute a plan file with good judgment (uses planner to determine next steps)")
+	.option("-s, --stream", "Stream agent activity")
+	.option("-c, --continuous", "Keep executing until plan is complete")
+	.option("-n, --steps <n>", "Max steps to execute (default: unlimited in continuous mode)")
+	.action(async (file: string, options: { stream?: boolean; continuous?: boolean; steps?: string }) => {
+		try {
+			const planContent = readFileSync(file, "utf-8");
+			const maxSteps = options.steps ? Number.parseInt(options.steps, 10) : options.continuous ? 100 : 1;
+
+			console.log(chalk.cyan("Loading plan file..."));
+			console.log(chalk.dim(`  File: ${file}`));
+			if (options.continuous) {
+				console.log(chalk.dim(`  Mode: Continuous (up to ${maxSteps} steps)`));
+			}
+			console.log();
+
+			let step = 0;
+			let lastResult = "";
+
+			while (step < maxSteps) {
+				step++;
+
+				// Create fresh orchestrator for each step
+				const orchestrator = new RaidOrchestrator({
+					autoApprove: true,
+					autoCommit: true,
+					verbose: true,
+					streamOutput: options.stream,
+				});
+
+				// Build context-aware goal
+				const progressContext =
+					step > 1
+						? `\n\nPREVIOUS STEP RESULT:\n${lastResult.substring(0, 2000)}\n\nContinue with the next logical step.`
+						: "";
+
+				const goal = `Execute this implementation plan with good judgment. Read the plan, determine the next logical step that hasn't been done yet, and implement it. If something is already complete, skip it. If the plan is fully complete, respond with "PLAN COMPLETE".
+
+PLAN FILE CONTENTS:
+${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan truncated]" : ""}${progressContext}`;
+
+				console.log(chalk.cyan(`\n━━━ Step ${step} ━━━`));
+
+				const raid = await orchestrator.start(goal);
+				const finalRaid = orchestrator.getCurrentRaid();
+
+				// Get the result for context
+				const tasks = orchestrator.getStatus().tasks;
+				const fabricatorTask = tasks.find((t) => t.type === "fabricator");
+				lastResult = fabricatorTask?.result || "";
+
+				// Check if plan is complete
+				if (lastResult.toLowerCase().includes("plan complete")) {
+					console.log(chalk.green("\n✓ Plan execution complete!"));
+					break;
+				}
+
+				// Clear state for next step
+				orchestrator.surrender();
+				const persistence = new Persistence();
+				persistence.clearAll();
+
+				if (!options.continuous) {
+					console.log(chalk.dim("\nRun with -c to continue automatically"));
+					break;
+				}
+			}
+		} catch (error) {
+			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+			process.exit(1);
+		}
+	});
+
+// Work command - process the backlog continuously
+program
+	.command("work")
+	.description("Process the backlog continuously (run in separate terminal)")
+	.option("-n, --count <n>", "Process only N goals then stop", "0")
+	.option("-s, --stream", "Stream agent activity")
+	.action(async (options: { count?: string; stream?: boolean }) => {
+		const maxCount = Number.parseInt(options.count || "0", 10);
+		let processed = 0;
+
+		console.log(chalk.cyan("Starting backlog worker..."));
+		if (maxCount > 0) {
+			console.log(chalk.dim(`  Will process ${maxCount} goal(s) then stop`));
+		} else {
+			console.log(chalk.dim("  Will process all pending goals"));
+		}
+		console.log();
+
+		while (true) {
+			const nextGoal = getNextGoal();
+
+			if (!nextGoal) {
+				console.log(chalk.green("\n✓ Backlog empty - all goals processed"));
+				break;
+			}
+
+			if (maxCount > 0 && processed >= maxCount) {
+				console.log(chalk.yellow(`\n✓ Processed ${maxCount} goal(s) - stopping`));
+				break;
+			}
+
+			console.log(chalk.cyan(`\n━━━ Goal ${processed + 1}: ${nextGoal.goal.substring(0, 50)}... ━━━`));
+
+			const orchestrator = new RaidOrchestrator({
+				autoApprove: true,
+				autoCommit: true,
+				verbose: true,
+				streamOutput: options.stream,
+			});
+
+			markInProgress(nextGoal.id, "");
+
+			try {
+				const raid = await orchestrator.start(nextGoal.goal);
+				markInProgress(nextGoal.id, raid.id);
+
+				const finalRaid = orchestrator.getCurrentRaid();
+
+				if (finalRaid?.status === "complete") {
+					markComplete(nextGoal.id);
+					console.log(chalk.green(`✓ Goal complete: ${nextGoal.goal.substring(0, 40)}...`));
+				} else if (finalRaid?.status === "failed") {
+					markFailed(nextGoal.id, "Raid failed");
+					console.log(chalk.red(`✗ Goal failed: ${nextGoal.goal.substring(0, 40)}...`));
+				} else {
+					// Raid didn't fully complete (maybe awaiting something)
+					markComplete(nextGoal.id); // Consider it done for now
+					console.log(chalk.yellow(`⚠ Goal processed: ${nextGoal.goal.substring(0, 40)}...`));
+				}
+
+				// Clear raid state for next goal
+				orchestrator.surrender();
+				const persistence = new Persistence();
+				persistence.clearAll();
+
+				processed++;
+			} catch (error) {
+				markFailed(nextGoal.id, error instanceof Error ? error.message : String(error));
+				console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+
+				// Clear state and continue with next goal
+				const persistence = new Persistence();
+				persistence.clearAll();
+			}
+		}
+
+		const summary = getBacklogSummary();
+		console.log(
+			`\nFinal: ${chalk.green(summary.complete)} complete, ${chalk.red(summary.failed)} failed, ${chalk.yellow(summary.pending)} pending`,
+		);
 	});
 
 // Parse and run
