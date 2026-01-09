@@ -26,6 +26,7 @@ import { Persistence } from "./persistence.js";
 import {
 	addGoal,
 	addGoals,
+	addQuests,
 	clearCompleted,
 	getAllItems,
 	getBacklogSummary,
@@ -34,6 +35,16 @@ import {
 	markFailed,
 	markInProgress,
 } from "./quest.js";
+import {
+	parsePlanFile,
+	getPlanProgress,
+	getTasksByPriority,
+	generateTaskContext,
+	markTaskCompleted,
+	planToQuests,
+	type ParsedPlan,
+} from "./plan-parser.js";
+import { Persistence } from "./persistence.js";
 import { RaidOrchestrator } from "./raid.js";
 import type { RaidStatus } from "./types.js";
 
@@ -622,6 +633,77 @@ program
 		}
 	});
 
+// Import-plan command - parse plan files into discrete quests
+program
+	.command("import-plan <file>")
+	.description("Import a plan file as discrete quests (extracts tasks from markdown plans)")
+	.option("--dry-run", "Show what would be imported without adding to quest board")
+	.option("--by-priority", "Sort tasks by section priority (default: by file order)")
+	.action((file: string, options: { dryRun?: boolean; byPriority?: boolean }) => {
+		try {
+			const content = readFileSync(file, "utf-8");
+			const plan = parsePlanFile(content, file);
+			const progress = getPlanProgress(plan);
+
+			console.log(chalk.cyan("Parsing plan file..."));
+			console.log(chalk.dim(`  File: ${file}`));
+			if (plan.title) {
+				console.log(chalk.dim(`  Title: ${plan.title}`));
+			}
+			console.log(chalk.dim(`  Sections: ${plan.sections.length}`));
+			console.log(chalk.dim(`  Tasks: ${progress.total} (${progress.pending} pending, ${progress.completed} marked complete)`));
+			console.log();
+
+			// Show section breakdown
+			if (progress.bySections.length > 0) {
+				console.log(chalk.cyan("Section breakdown:"));
+				for (const section of progress.bySections) {
+					const status = section.completed === section.total ? chalk.green("✓") : chalk.yellow("○");
+					console.log(`  ${status} ${section.section}: ${section.completed}/${section.total}`);
+				}
+				console.log();
+			}
+
+			// Get tasks to import
+			const quests = planToQuests(plan);
+
+			if (quests.length === 0) {
+				console.log(chalk.yellow("No pending tasks found in plan"));
+				return;
+			}
+
+			// Sort by priority if requested
+			if (options.byPriority) {
+				// quests are already sorted by priority from planToQuests
+				console.log(chalk.dim("Tasks sorted by section priority"));
+			}
+
+			if (options.dryRun) {
+				console.log(chalk.cyan(`Would import ${quests.length} tasks:`));
+				for (let i = 0; i < Math.min(quests.length, 20); i++) {
+					const quest = quests[i];
+					const sectionTag = quest.section ? chalk.dim(` [${quest.section}]`) : "";
+					console.log(`  ${i + 1}. ${quest.objective.substring(0, 70)}${quest.objective.length > 70 ? "..." : ""}${sectionTag}`);
+				}
+				if (quests.length > 20) {
+					console.log(chalk.dim(`  ... and ${quests.length - 20} more`));
+				}
+			} else {
+				// Import as quests
+				const objectives = quests.map((q) => q.objective);
+				const imported = addQuests(objectives);
+				console.log(chalk.green(`✓ Imported ${imported.length} tasks as quests`));
+				if (imported.length < quests.length) {
+					console.log(chalk.yellow(`  (${quests.length - imported.length} duplicates skipped)`));
+				}
+				console.log(chalk.dim(`\nRun "undercity work" to start processing quests`));
+			}
+		} catch (error) {
+			console.error(chalk.red(`Error parsing plan: ${error instanceof Error ? error.message : error}`));
+			process.exit(1);
+		}
+	});
+
 // Plan command - execute a plan file intelligently
 program
 	.command("plan <file>")
@@ -629,17 +711,57 @@ program
 	.option("-s, --stream", "Stream agent activity")
 	.option("-c, --continuous", "Keep executing until plan is complete")
 	.option("-n, --steps <n>", "Max steps to execute (default: unlimited in continuous mode)")
-	.action(async (file: string, options: { stream?: boolean; continuous?: boolean; steps?: string }) => {
+	.option("--legacy", "Use legacy mode (re-read whole plan each iteration)")
+	.action(async (file: string, options: { stream?: boolean; continuous?: boolean; steps?: string; legacy?: boolean }) => {
 		try {
 			const planContent = readFileSync(file, "utf-8");
 			const maxSteps = options.steps ? Number.parseInt(options.steps, 10) : options.continuous ? 100 : 1;
 
-			console.log(chalk.cyan("Loading plan file..."));
-			console.log(chalk.dim(`  File: ${file}`));
-			if (options.continuous) {
-				console.log(chalk.dim(`  Mode: Continuous (up to ${maxSteps} steps)`));
+			// Parse plan upfront into discrete tasks (unless legacy mode)
+			let parsedPlan: ParsedPlan | null = null;
+			if (!options.legacy) {
+				parsedPlan = parsePlanFile(planContent, file);
+				const progress = getPlanProgress(parsedPlan);
+
+				console.log(chalk.cyan("Parsing plan file..."));
+				console.log(chalk.dim(`  File: ${file}`));
+				if (parsedPlan.title) {
+					console.log(chalk.dim(`  Title: ${parsedPlan.title}`));
+				}
+				console.log(chalk.dim(`  Sections: ${parsedPlan.sections.length}`));
+				console.log(chalk.dim(`  Tasks: ${progress.total} (${progress.pending} pending)`));
+				if (options.continuous) {
+					console.log(chalk.dim(`  Mode: Continuous (up to ${maxSteps} steps)`));
+				}
+				console.log();
+
+				// Get tasks sorted by priority
+				const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
+
+				if (tasksByPriority.length === 0) {
+					console.log(chalk.green("✓ All tasks already marked complete in plan!"));
+					return;
+				}
+
+				// Show upcoming tasks
+				console.log(chalk.cyan("Queued tasks (by priority):"));
+				for (let i = 0; i < Math.min(tasksByPriority.length, 5); i++) {
+					const task = tasksByPriority[i];
+					const sectionTag = task.section ? chalk.dim(` [${task.section}]`) : "";
+					console.log(`  ${i + 1}. ${task.content.substring(0, 60)}${task.content.length > 60 ? "..." : ""}${sectionTag}`);
+				}
+				if (tasksByPriority.length > 5) {
+					console.log(chalk.dim(`  ... and ${tasksByPriority.length - 5} more`));
+				}
+				console.log();
+			} else {
+				console.log(chalk.cyan("Loading plan file (legacy mode)..."));
+				console.log(chalk.dim(`  File: ${file}`));
+				if (options.continuous) {
+					console.log(chalk.dim(`  Mode: Continuous (up to ${maxSteps} steps)`));
+				}
+				console.log();
 			}
-			console.log();
 
 			let step = 0;
 			let lastResult = "";
@@ -655,18 +777,54 @@ program
 					streamOutput: options.stream,
 				});
 
-				// Build context-aware goal
-				const progressContext =
-					step > 1
-						? `\n\nPREVIOUS STEP RESULT:\n${lastResult.substring(0, 2000)}\n\nContinue with the next logical step.`
-						: "";
+				let goal: string;
 
-				const goal = `Execute this implementation plan with good judgment. Read the plan, determine the next logical step that hasn't been done yet, and implement it. If something is already complete, skip it. If the plan is fully complete, respond with "PLAN COMPLETE".
+				if (parsedPlan && !options.legacy) {
+					// New mode: use parsed tasks with focused context
+					const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
+					const currentTask = tasksByPriority[0];
+
+					if (!currentTask) {
+						console.log(chalk.green("\n✓ All plan tasks complete!"));
+						break;
+					}
+
+					// Generate focused context for the current task
+					const taskContext = generateTaskContext(parsedPlan, currentTask.id);
+					const progress = getPlanProgress(parsedPlan);
+
+					// Build progress context from previous result
+					const progressNote =
+						step > 1
+							? `\n\nPREVIOUS STEP RESULT:\n${lastResult.substring(0, 1500)}`
+							: "";
+
+					goal = `Implement this specific task:
+
+${currentTask.content}
+
+${taskContext}${progressNote}
+
+After completing this task, summarize what you did. If this task is impossible or already done, explain why and say "TASK SKIPPED".`;
+
+					console.log(chalk.cyan(`\n━━━ Task ${step}/${progress.total}: ${currentTask.content.substring(0, 50)}... ━━━`));
+					if (currentTask.section) {
+						console.log(chalk.dim(`    Section: ${currentTask.section}`));
+					}
+				} else {
+					// Legacy mode: pass whole plan each iteration
+					const progressContext =
+						step > 1
+							? `\n\nPREVIOUS STEP RESULT:\n${lastResult.substring(0, 2000)}\n\nContinue with the next logical step.`
+							: "";
+
+					goal = `Execute this implementation plan with good judgment. Read the plan, determine the next logical step that hasn't been done yet, and implement it. If something is already complete, skip it. If the plan is fully complete, respond with "PLAN COMPLETE".
 
 PLAN FILE CONTENTS:
 ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan truncated]" : ""}${progressContext}`;
 
-				console.log(chalk.cyan(`\n━━━ Step ${step} ━━━`));
+					console.log(chalk.cyan(`\n━━━ Step ${step} ━━━`));
+				}
 
 				const raid = await orchestrator.start(goal);
 				const finalRaid = orchestrator.getCurrentRaid();
@@ -676,10 +834,26 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 				const fabricatorTask = tasks.find((t) => t.type === "fabricator");
 				lastResult = fabricatorTask?.result || "";
 
-				// Check if plan is complete
+				// Check for completion markers
 				if (lastResult.toLowerCase().includes("plan complete")) {
 					console.log(chalk.green("\n✓ Plan execution complete!"));
 					break;
+				}
+
+				// Mark current task as completed in parsed plan (for new mode)
+				if (parsedPlan && !options.legacy) {
+					const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
+					const currentTask = tasksByPriority[0];
+
+					if (currentTask && !lastResult.toLowerCase().includes("task skipped")) {
+						parsedPlan = markTaskCompleted(parsedPlan, currentTask.id);
+						const progress = getPlanProgress(parsedPlan);
+						console.log(chalk.green(`  ✓ Task complete (${progress.completed}/${progress.total})`));
+					} else if (currentTask && lastResult.toLowerCase().includes("task skipped")) {
+						// Also mark skipped tasks as completed so we move on
+						parsedPlan = markTaskCompleted(parsedPlan, currentTask.id);
+						console.log(chalk.yellow("  ⊘ Task skipped"));
+					}
 				}
 
 				// Clear state for next step
@@ -691,6 +865,12 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 					console.log(chalk.dim("\nRun with -c to continue automatically"));
 					break;
 				}
+			}
+
+			// Show final progress for new mode
+			if (parsedPlan && !options.legacy) {
+				const progress = getPlanProgress(parsedPlan);
+				console.log(chalk.cyan(`\nFinal progress: ${progress.completed}/${progress.total} tasks (${progress.percentComplete}%)`));
 			}
 		} catch (error) {
 			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
