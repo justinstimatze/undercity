@@ -34,6 +34,12 @@ import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
 import type { AgentType, FileConflict, MergeQueueRetryConfig, Raid, SquadMember, Task } from "./types.js";
 
 /**
+ * Timeout configuration for agent monitoring
+ */
+const AGENT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const TIMEOUT_CHECK_INTERVAL_MS = 30 * 1000; // Check every 30 seconds
+
+/**
  * Generate a unique raid ID
  */
 function generateRaidId(): string {
@@ -99,6 +105,48 @@ export class RaidOrchestrator {
 		if (this.verbose) {
 			raidLogger.info(data ?? {}, message);
 		}
+	}
+
+	/**
+	 * Check if an agent has exceeded the timeout threshold
+	 *
+	 * Uses lastActivityAt to detect true idle/stuck state rather than
+	 * just long-running tasks. A task that's actively processing will
+	 * have its lastActivityAt updated frequently.
+	 *
+	 * @returns true if the agent is stuck and a warning was logged
+	 */
+	private checkAgentTimeout(member: SquadMember, task: Task): boolean {
+		const now = new Date();
+		const lastActivity = new Date(member.lastActivityAt);
+		const elapsedMs = now.getTime() - lastActivity.getTime();
+
+		if (elapsedMs >= AGENT_TIMEOUT_MS) {
+			const elapsedMinutes = Math.floor(elapsedMs / 60000);
+
+			squadLogger.warn(
+				{
+					agentId: member.id,
+					agentType: member.type,
+					taskId: task.id,
+					taskType: task.type,
+					elapsedMinutes,
+					lastActivityAt: lastActivity.toISOString(),
+					status: member.status,
+					intervention: "warning_only",
+				},
+				`Agent timeout: ${member.type} agent ${member.id} has been inactive for ${elapsedMinutes} minutes. Consider intervention.`
+			);
+
+			// Mark as stuck for visibility in status (but don't interrupt)
+			if (member.status !== "stuck") {
+				this.persistence.updateSquadMember(member.id, { status: "stuck" });
+			}
+
+			return true;
+		}
+
+		return false;
 	}
 
 	/**
@@ -475,6 +523,18 @@ export class RaidOrchestrator {
 			lastActivityAt: new Date(),
 		});
 
+		// Start timeout monitoring interval
+		// We need to keep a mutable reference to the member's lastActivityAt
+		let currentMember = { ...member, lastActivityAt: new Date() };
+		const timeoutCheckInterval = setInterval(() => {
+			// Refresh member state from persistence for accurate lastActivityAt
+			const freshMember = this.persistence.getSquad().find((m) => m.id === member.id);
+			if (freshMember) {
+				currentMember = freshMember;
+				this.checkAgentTimeout(freshMember, task);
+			}
+		}, TIMEOUT_CHECK_INTERVAL_MS);
+
 		try {
 			let result = "";
 			let sessionId: string | undefined;
@@ -513,6 +573,25 @@ export class RaidOrchestrator {
 					this.trackFileOperationsFromMessage(member.id, message);
 				}
 
+				// Update lastActivityAt on meaningful activity
+				// This keeps the timeout from triggering for actively working agents
+				const msg = message as Record<string, unknown>;
+				const isActivity =
+					msg.type === "assistant" ||
+					msg.type === "tool_result" ||
+					msg.type === "content_block_start" ||
+					(msg.type === "result" && msg.subtype === "success");
+
+				if (isActivity) {
+					const now = new Date();
+					this.persistence.updateSquadMember(member.id, {
+						lastActivityAt: now,
+						// If agent was marked stuck but is now active, restore working status
+						...(currentMember.status === "stuck" ? { status: "working" } : {}),
+					});
+					currentMember.lastActivityAt = now;
+				}
+
 				// Capture session ID for resumption
 				if (message.type === "system" && message.subtype === "init") {
 					sessionId = message.session_id;
@@ -526,6 +605,9 @@ export class RaidOrchestrator {
 					result = message.result;
 				}
 			}
+
+			// Clear timeout monitoring
+			clearInterval(timeoutCheckInterval);
 
 			// Task completed successfully
 			this.persistence.updateTask(task.id, {
@@ -558,6 +640,9 @@ export class RaidOrchestrator {
 			// Handle next steps based on task type
 			await this.handleTaskCompletion(task, result);
 		} catch (error) {
+			// Clear timeout monitoring on error
+			clearInterval(timeoutCheckInterval);
+
 			const errorMessage = error instanceof Error ? error.message : String(error);
 
 			this.persistence.updateTask(task.id, {

@@ -73,7 +73,7 @@ export interface Task {
 /**
  * Squad member status
  */
-export type SquadMemberStatus = "idle" | "working" | "done" | "error";
+export type SquadMemberStatus = "idle" | "working" | "done" | "error" | "stuck";
 
 /**
  * A SquadMember is an active agent working on the raid
