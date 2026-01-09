@@ -29,7 +29,9 @@ import {
 import { FileTracker, parseFileOperation } from "./file-tracker.js";
 import { calculateCodebaseFingerprint, createAndCheckout, hashFingerprint, hashGoal, isCacheableState, MergeQueue } from "./git.js";
 import { raidLogger, squadLogger } from "./logger.js";
+import { MetricsTracker } from "./metrics.js";
 import { Persistence } from "./persistence.js";
+import { RateLimitTracker } from "./rate-limit.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
 import type { AgentType, FileConflict, MergeQueueRetryConfig, Raid, SquadMember, Task } from "./types.js";
 
@@ -66,6 +68,7 @@ export class RaidOrchestrator {
 	private persistence: Persistence;
 	private mergeQueue: MergeQueue;
 	private fileTracker: FileTracker;
+	private metricsTracker: MetricsTracker;
 	private maxSquadSize: number;
 	private maxParallel: number;
 	private autoApprove: boolean;
@@ -92,6 +95,9 @@ export class RaidOrchestrator {
 		// Initialize file tracker from persisted state
 		const trackingState = this.persistence.getFileTracking();
 		this.fileTracker = new FileTracker(trackingState);
+		// Initialize metrics tracker with rate limit tracking
+		const rateLimitState = this.persistence.getRateLimitState();
+		this.metricsTracker = new MetricsTracker(new RateLimitTracker(rateLimitState));
 		this.maxSquadSize = options.maxSquadSize || 5;
 		// Clamp maxParallel to valid range: 1-5, default 3
 		this.maxParallel = Math.min(5, Math.max(1, options.maxParallel ?? 3));
@@ -356,6 +362,9 @@ export class RaidOrchestrator {
 		this.persistence.saveRaid(raid);
 		this.log("Started raid", { raidId: raid.id, goal });
 
+		// Start tracking this quest for rate limiting
+		this.metricsTracker.startQuest(raid.id, goal, raid.id);
+
 		// Start planning phase
 		await this.startPlanningPhase(raid);
 
@@ -538,6 +547,8 @@ export class RaidOrchestrator {
 		try {
 			let result = "";
 			let sessionId: string | undefined;
+			let questStartTime = Date.now();
+			let totalTokensUsed = 0;
 
 			// Check for existing session to resume
 			const existingSession = this.persistence.getSquadMemberSession(member.id);
@@ -571,6 +582,13 @@ export class RaidOrchestrator {
 				// Track file operations for fabricators
 				if (member.type === "fabricator") {
 					this.trackFileOperationsFromMessage(member.id, message);
+				}
+
+				// Track token usage for rate limiting
+				this.metricsTracker.recordTokenUsage(message, agentDef.model);
+				const tokenUsage = this.metricsTracker.extractTokenUsage(message);
+				if (tokenUsage) {
+					totalTokensUsed += tokenUsage.totalTokens;
 				}
 
 				// Update lastActivityAt on meaningful activity
@@ -609,6 +627,15 @@ export class RaidOrchestrator {
 			// Clear timeout monitoring
 			clearInterval(timeoutCheckInterval);
 
+			// Record quest completion metrics
+			const questMetrics = this.metricsTracker.completeQuest(true);
+			if (questMetrics) {
+				this.persistence.addQuestMetric(questMetrics);
+			}
+
+			// Save rate limit state
+			this.persistence.saveRateLimitState(this.metricsTracker.getRateLimitTracker().getState());
+
 			// Task completed successfully
 			this.persistence.updateTask(task.id, {
 				status: "complete",
@@ -644,6 +671,30 @@ export class RaidOrchestrator {
 			clearInterval(timeoutCheckInterval);
 
 			const errorMessage = error instanceof Error ? error.message : String(error);
+
+			// Check for 429 rate limit error and record it
+			const is429Error = errorMessage.toLowerCase().includes("429") ||
+				errorMessage.toLowerCase().includes("rate limit") ||
+				errorMessage.toLowerCase().includes("too many requests");
+
+			if (is429Error) {
+				// Extract response headers if available
+				const responseHeaders = (error as any).response?.headers || {};
+				this.metricsTracker.recordRateLimitHit(agentDef.model, error, responseHeaders);
+
+				console.error(`🚨 Rate limit hit for ${agentDef.model} model during ${task.type} task`);
+				console.error(`Current usage: ${JSON.stringify(this.metricsTracker.getRateLimitSummary().current, null, 2)}`);
+			}
+
+			// Record quest failure metrics
+			this.metricsTracker.recordQuestFailure(errorMessage);
+			const questMetrics = this.metricsTracker.completeQuest(false);
+			if (questMetrics) {
+				this.persistence.addQuestMetric(questMetrics);
+			}
+
+			// Save rate limit state even on errors
+			this.persistence.saveRateLimitState(this.metricsTracker.getRateLimitTracker().getState());
 
 			this.persistence.updateTask(task.id, {
 				status: "failed",
@@ -894,6 +945,27 @@ export class RaidOrchestrator {
 	 */
 	getMaxParallel(): number {
 		return this.maxParallel;
+	}
+
+	/**
+	 * Get rate limit usage summary
+	 */
+	getRateLimitSummary(): ReturnType<MetricsTracker["getRateLimitSummary"]> {
+		return this.metricsTracker.getRateLimitSummary();
+	}
+
+	/**
+	 * Generate rate limit usage report
+	 */
+	generateRateLimitReport(): string {
+		return this.metricsTracker.generateRateLimitReport();
+	}
+
+	/**
+	 * Get quest metrics
+	 */
+	getQuestMetrics(days = 30): ReturnType<typeof this.persistence.getRecentQuestMetrics> {
+		return this.persistence.getRecentQuestMetrics(days);
 	}
 
 	/**

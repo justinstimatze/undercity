@@ -310,3 +310,156 @@ export interface ScoutCache {
 	/** When cache was last modified */
 	lastUpdated: Date;
 }
+
+// ============== Rate Limiting Types ==============
+
+/**
+ * Token usage for a quest/request
+ */
+export interface TokenUsage {
+	/** Input tokens consumed */
+	inputTokens: number;
+	/** Output tokens generated */
+	outputTokens: number;
+	/** Total tokens (input + output) */
+	totalTokens: number;
+	/** Tokens normalized to Sonnet equivalent (Opus ~12x, Haiku ~0.25x) */
+	sonnetEquivalentTokens: number;
+}
+
+/**
+ * A quest represents a single request/task tracked for rate limiting
+ */
+export interface QuestUsage {
+	/** Unique quest identifier */
+	questId: string;
+	/** Model used for the quest */
+	model: "haiku" | "sonnet" | "opus";
+	/** Token usage for this quest */
+	tokens: TokenUsage;
+	/** When this quest started */
+	timestamp: Date;
+	/** Duration of the quest in milliseconds */
+	durationMs?: number;
+	/** Associated raid ID if applicable */
+	raidId?: string;
+	/** Associated agent ID if applicable */
+	agentId?: string;
+}
+
+/**
+ * Rate limit hit event (429 response)
+ */
+export interface RateLimitHit {
+	/** When the 429 occurred */
+	timestamp: Date;
+	/** Model that hit the limit */
+	model: "haiku" | "sonnet" | "opus";
+	/** Current usage state when limit hit */
+	currentUsage: {
+		/** Tokens used in last 5 hours */
+		last5Hours: number;
+		/** Tokens used in current week */
+		currentWeek: number;
+		/** Sonnet equivalent tokens in last 5 hours */
+		last5HoursSonnet: number;
+		/** Sonnet equivalent tokens in current week */
+		currentWeekSonnet: number;
+	};
+	/** Response headers from 429 (if available) */
+	responseHeaders?: Record<string, string>;
+	/** Error message from 429 */
+	errorMessage?: string;
+}
+
+/**
+ * Time window for rate limit calculations
+ */
+export type TimeWindow = "5hour" | "week";
+
+/**
+ * Rate limit configuration
+ */
+export interface RateLimitConfig {
+	/** Maximum tokens per 5-hour window (in Sonnet equivalents) */
+	maxTokensPer5Hours: number;
+	/** Maximum tokens per week (in Sonnet equivalents) */
+	maxTokensPerWeek: number;
+	/** Warning threshold as percentage (0.8 = 80%) */
+	warningThreshold: number;
+	/** Token multipliers for Sonnet equivalence */
+	tokenMultipliers: {
+		haiku: number;
+		sonnet: number;
+		opus: number;
+	};
+}
+
+/**
+ * Current rate limit state
+ */
+export interface RateLimitState {
+	/** All quest usage records */
+	quests: QuestUsage[];
+	/** All rate limit hit events */
+	rateLimitHits: RateLimitHit[];
+	/** Configuration */
+	config: RateLimitConfig;
+	/** Last updated timestamp */
+	lastUpdated: Date;
+}
+
+// ============== Metrics Types ==============
+
+/**
+ * Quest completion metrics for efficiency tracking
+ */
+export interface QuestMetrics {
+	/** Quest identifier */
+	questId: string;
+	/** Raid identifier */
+	raidId: string;
+	/** Quest objective/goal */
+	objective: string;
+	/** Whether quest completed successfully */
+	success: boolean;
+	/** Total execution time in milliseconds */
+	durationMs: number;
+	/** Total tokens consumed */
+	totalTokens: number;
+	/** Number of agents spawned */
+	agentsSpawned: number;
+	/** Agent types used */
+	agentTypes: AgentType[];
+	/** When quest started */
+	startedAt: Date;
+	/** When quest completed */
+	completedAt: Date;
+	/** Error message if failed */
+	error?: string;
+}
+
+/**
+ * Efficiency analytics calculated from historical metrics
+ */
+export interface EfficiencyAnalytics {
+	/** Total quests tracked */
+	totalQuests: number;
+	/** Success rate as percentage */
+	successRate: number;
+	/** Average tokens per completed quest */
+	avgTokensPerCompletion: number;
+	/** Average execution time per quest */
+	avgDurationMs: number;
+	/** Average agents spawned per quest */
+	avgAgentsSpawned: number;
+	/** Most efficient agent type (lowest tokens/completion) */
+	mostEfficientAgentType: AgentType | null;
+	/** Token usage by agent type */
+	tokensByAgentType: Record<AgentType, { total: number; avgPerQuest: number }>;
+	/** Time period of analysis */
+	analysisPeriod: {
+		from: Date;
+		to: Date;
+	};
+}
