@@ -35,6 +35,14 @@ pnpm syncpack:lint  # Check dependency version consistency
 pnpm syncpack:fix   # Fix version mismatches
 ```
 
+## Code Quality (CodeScene)
+
+```bash
+pnpm quality:check   # Fast local check (staged files)
+pnpm codescene:pr    # PR analysis vs main branch
+cs check <file>      # Check specific file health
+```
+
 ## Running
 
 ```bash

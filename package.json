@@ -32,7 +32,9 @@
     "check": "biome check ./src",
     "check:fix": "biome check --write ./src",
     "syncpack:lint": "syncpack lint",
-    "syncpack:fix": "syncpack fix-mismatches"
+    "syncpack:fix": "syncpack fix-mismatches",
+    "quality:check": "cs check --staged",
+    "codescene:pr": "cs review --base-branch main"
   },
   "author": "Justin Stimatze",
   "license": "MIT",
