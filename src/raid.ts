@@ -29,6 +29,7 @@ import {
 import { FileTracker, parseFileOperation } from "./file-tracker.js";
 import { calculateCodebaseFingerprint, createAndCheckout, hashFingerprint, hashGoal, isCacheableState, MergeQueue } from "./git.js";
 import { raidLogger, squadLogger } from "./logger.js";
+import { MetricsTracker } from "./metrics.js";
 import { Persistence } from "./persistence.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
 import type { AgentType, FileConflict, MergeQueueRetryConfig, Raid, SquadMember, Task } from "./types.js";
@@ -66,6 +67,7 @@ export class RaidOrchestrator {
 	private persistence: Persistence;
 	private mergeQueue: MergeQueue;
 	private fileTracker: FileTracker;
+	private metricsTracker: MetricsTracker;
 	private maxSquadSize: number;
 	private maxParallel: number;
 	private autoApprove: boolean;
@@ -92,6 +94,8 @@ export class RaidOrchestrator {
 		// Initialize file tracker from persisted state
 		const trackingState = this.persistence.getFileTracking();
 		this.fileTracker = new FileTracker(trackingState);
+		// Initialize metrics tracker
+		this.metricsTracker = new MetricsTracker();
 		this.maxSquadSize = options.maxSquadSize || 5;
 		// Clamp maxParallel to valid range: 1-5, default 3
 		this.maxParallel = Math.min(5, Math.max(1, options.maxParallel ?? 3));
@@ -356,6 +360,9 @@ export class RaidOrchestrator {
 		this.persistence.saveRaid(raid);
 		this.log("Started raid", { raidId: raid.id, goal });
 
+		// Start metrics tracking for this quest
+		this.metricsTracker.startQuest(raid.id, goal, raid.id);
+
 		// Start planning phase
 		await this.startPlanningPhase(raid);
 
@@ -503,6 +510,9 @@ export class RaidOrchestrator {
 			this.persistence.saveFileTracking(this.fileTracker.getState());
 		}
 
+		// Record agent spawn for metrics
+		this.metricsTracker.recordAgentSpawn(type);
+
 		squadLogger.info({ agentType: type, agentId: member.id }, "Spawned agent");
 
 		// Run the agent
@@ -567,6 +577,9 @@ export class RaidOrchestrator {
 			})) {
 				// Stream activity to console
 				this.streamAgentActivity(member, message);
+
+				// Track token usage for metrics
+				this.metricsTracker.recordTokenUsage(message);
 
 				// Track file operations for fabricators
 				if (member.type === "fabricator") {
@@ -644,6 +657,9 @@ export class RaidOrchestrator {
 			clearInterval(timeoutCheckInterval);
 
 			const errorMessage = error instanceof Error ? error.message : String(error);
+
+			// Record quest failure for metrics
+			this.metricsTracker.recordQuestFailure(errorMessage);
 
 			this.persistence.updateTask(task.id, {
 				status: "failed",
@@ -876,6 +892,13 @@ export class RaidOrchestrator {
 		raid.completedAt = new Date();
 		this.persistence.saveRaid(raid);
 
+		// Complete quest metrics tracking
+		const questMetrics = this.metricsTracker.completeQuest(true);
+		if (questMetrics) {
+			// Save quest metrics to extended stash
+			this.persistence.saveQuestMetrics(questMetrics);
+		}
+
 		// Add to stash history
 		this.persistence.addCompletedRaid(raid, true);
 
@@ -936,6 +959,14 @@ export class RaidOrchestrator {
 			raid.status = "failed";
 			raid.completedAt = new Date();
 			this.persistence.saveRaid(raid);
+
+			// Complete quest metrics tracking as failed
+			const questMetrics = this.metricsTracker.completeQuest(false);
+			if (questMetrics) {
+				// Save quest metrics to extended stash
+				this.persistence.saveQuestMetrics(questMetrics);
+			}
+
 			this.persistence.addCompletedRaid(raid, false);
 
 			// Clear file tracking for this raid

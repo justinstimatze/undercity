@@ -310,3 +310,103 @@ export interface ScoutCache {
 	/** When cache was last modified */
 	lastUpdated: Date;
 }
+
+// ============== Efficiency Metrics Types ==============
+
+/**
+ * Token usage information extracted from Claude SDK responses
+ */
+export interface TokenUsage {
+	/** Input tokens consumed */
+	inputTokens: number;
+	/** Output tokens generated */
+	outputTokens: number;
+	/** Cache creation tokens (if applicable) */
+	cacheCreationTokens?: number;
+	/** Cache read tokens (if applicable) */
+	cacheReadTokens?: number;
+	/** Total tokens (sum of all) */
+	totalTokens: number;
+}
+
+/**
+ * Efficiency metrics for a single quest execution
+ */
+export interface QuestMetrics {
+	/** Quest ID */
+	questId: string;
+	/** Quest objective */
+	objective: string;
+	/** Raid ID associated with this quest */
+	raidId: string;
+	/** Quest completion status */
+	success: boolean;
+	/** When quest started */
+	startedAt: Date;
+	/** When quest completed/failed */
+	completedAt: Date;
+	/** Total execution time in milliseconds */
+	executionTimeMs: number;
+	/** Token usage across all agent interactions */
+	tokenUsage: TokenUsage;
+	/** Number of agents spawned during execution */
+	agentsSpawned: number;
+	/** Agent type breakdown */
+	agentTypes: Record<AgentType, number>;
+	/** Error message if quest failed */
+	error?: string;
+}
+
+/**
+ * Aggregated efficiency analytics
+ */
+export interface EfficiencyAnalytics {
+	/** Total quests tracked */
+	totalQuests: number;
+	/** Successful quest completions */
+	successfulQuests: number;
+	/** Failed quest attempts */
+	failedQuests: number;
+	/** Success rate percentage */
+	successRate: number;
+	/** Average tokens per quest */
+	avgTokensPerQuest: number;
+	/** Average tokens per successful completion */
+	avgTokensPerCompletion: number;
+	/** Average execution time in minutes */
+	avgExecutionTimeMinutes: number;
+	/** Token efficiency trend (tokens per minute) */
+	tokenEfficiency: number;
+	/** Most token-intensive quest */
+	mostExpensiveQuest?: {
+		questId: string;
+		objective: string;
+		tokens: number;
+		timeMinutes: number;
+	};
+	/** Most efficient quest */
+	mostEfficientQuest?: {
+		questId: string;
+		objective: string;
+		tokensPerMinute: number;
+		success: boolean;
+	};
+	/** Agent utilization statistics */
+	agentUtilization: Record<AgentType, {
+		timesUsed: number;
+		avgTokens: number;
+		successRate: number;
+	}>;
+}
+
+/**
+ * Extended stash with efficiency metrics
+ */
+export interface ExtendedStash extends Stash {
+	/** Efficiency metrics for completed quests */
+	questMetrics: QuestMetrics[];
+	/** Metadata about metrics collection */
+	metricsVersion: string;
+	/** When metrics collection started */
+	metricsStartedAt: Date;
+}
