@@ -2,7 +2,7 @@
   "name": "undercity",
   "version": "0.1.0",
   "type": "module",
-  "description": "Multi-agent orchestrator for Claude Max - Gas Town for budget extraction",
+  "description": "Multi-agent orchestrator for Claude Max - Gas Town for normal people",
   "bin": {
     "undercity": "./bin/undercity.js"
   },

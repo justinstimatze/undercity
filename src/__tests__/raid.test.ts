@@ -6,29 +6,47 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock state - must be defined before vi.mock
-const mockFiles = new Map<string, string>();
-const mockDirs = new Set<string>();
+// Use vi.hoisted to ensure mock state is available when vi.mock runs
+const { mockFiles, mockDirs } = vi.hoisted(() => ({
+	mockFiles: new Map<string, string>(),
+	mockDirs: new Set<string>(),
+}));
 
 // Mock the fs module
-vi.mock("node:fs", () => ({
-	existsSync: vi.fn((path: string): boolean => {
-		return mockFiles.has(path) || mockDirs.has(path);
-	}),
-	readFileSync: vi.fn((path: string, _encoding: string): string => {
-		const content = mockFiles.get(path);
-		if (content === undefined) {
-			throw new Error(`ENOENT: no such file or directory, open '${path}'`);
-		}
-		return content;
-	}),
-	writeFileSync: vi.fn((path: string, data: string): void => {
-		mockFiles.set(path, data);
-	}),
-	mkdirSync: vi.fn((path: string, _options?: { recursive?: boolean }): void => {
-		mockDirs.add(path);
-	}),
-}));
+vi.mock("node:fs", () => {
+	// Create a mock WriteStream
+	const createMockWriteStream = () => ({
+		write: vi.fn((_data: string, _encoding?: string, callback?: () => void) => {
+			if (callback) callback();
+			return true;
+		}),
+		end: vi.fn((callback?: () => void) => {
+			if (callback) callback();
+		}),
+		on: vi.fn(),
+	});
+
+	return {
+		existsSync: vi.fn((path: string): boolean => {
+			return mockFiles.has(path) || mockDirs.has(path);
+		}),
+		readFileSync: vi.fn((path: string, _encoding: string): string => {
+			const content = mockFiles.get(path);
+			if (content === undefined) {
+				throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+			}
+			return content;
+		}),
+		writeFileSync: vi.fn((path: string, data: string): void => {
+			mockFiles.set(path, data);
+		}),
+		mkdirSync: vi.fn((path: string, _options?: { recursive?: boolean }): void => {
+			mockDirs.add(path);
+		}),
+		createWriteStream: vi.fn(() => createMockWriteStream()),
+		renameSync: vi.fn(),
+	};
+});
 
 // Mock the git module to avoid actual git operations
 vi.mock("../git.js", () => {

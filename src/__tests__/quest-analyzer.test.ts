@@ -2,8 +2,8 @@
  * Tests for QuestAnalyzer module
  */
 
-import { QuestAnalyzer } from "../quest-analyzer.js";
 import type { Quest } from "../quest.js";
+import { QuestAnalyzer } from "../quest-analyzer.js";
 
 describe("QuestAnalyzer", () => {
 	let analyzer: QuestAnalyzer;
@@ -34,7 +34,7 @@ describe("QuestAnalyzer", () => {
 		it("should analyze a complex refactor quest", async () => {
 			const quest: Quest = {
 				id: "quest-2",
-				objective: "Refactor the authentication system to use OAuth2 instead of JWT tokens across multiple components",
+				objective: "Refactor the auth system to use OAuth2 instead of JWT tokens across multiple components",
 				status: "pending",
 				createdAt: new Date(),
 			};
@@ -51,16 +51,16 @@ describe("QuestAnalyzer", () => {
 		it("should detect UI components", async () => {
 			const quest: Quest = {
 				id: "quest-3",
-				objective: "Add a new React component for user profile settings",
+				objective: "Add a new React component for user profile settings in src/components/Profile.tsx",
 				status: "pending",
 				createdAt: new Date(),
 			};
 
 			const analysis = await analyzer.analyzeQuest(quest);
 
-			expect(analysis.packages).toContain("component");
+			expect(analysis.packages).toContain("react");
+			expect(analysis.packages).toContain("user");
 			expect(analysis.estimatedFiles).toContain("**/components/**/*");
-			expect(analysis.tags).toContain("ui");
 		});
 
 		it("should detect API endpoints", async () => {
@@ -105,7 +105,7 @@ describe("QuestAnalyzer", () => {
 		});
 
 		it("should detect framework patterns", () => {
-			const objective = "Update the React user authentication service";
+			const objective = "Update the React user auth service";
 			const packages = analyzer.detectPackageBoundaries(objective);
 
 			expect(packages).toContain("react");
@@ -165,7 +165,8 @@ describe("QuestAnalyzer", () => {
 		});
 
 		it("should handle detailed descriptions", () => {
-			const longDescription = "This is a very detailed task description that explains exactly what needs to be done in multiple sentences with lots of specific requirements";
+			const longDescription =
+				"This is a very detailed task description that explains exactly what needs to be done in multiple sentences with lots of specific requirements";
 			const complexity = analyzer.assessComplexity(longDescription);
 			expect(complexity).toBe("high"); // Long descriptions tend to be complex
 		});

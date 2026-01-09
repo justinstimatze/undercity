@@ -1,7 +1,7 @@
 /**
  * Undercity
  *
- * Multi-agent orchestrator for Claude Max - Gas Town for budget extraction.
+ * Multi-agent orchestrator for Claude Max - Gas Town for normal people.
  *
  * Inspired by:
  * - Gas Town (Steve Yegge) - Multi-agent orchestration

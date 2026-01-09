@@ -1,6 +1,6 @@
 # Undercity
 
-Multi-agent orchestrator for budget extraction. Use undercity for continuous implementation - start a raid, walk away.
+Multi-agent orchestrator for Claude Max. Use undercity for continuous implementation - start a raid, walk away.
 
 ## When to Use Undercity
 

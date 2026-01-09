@@ -3,7 +3,7 @@
 /**
  * Undercity CLI
  *
- * Multi-agent orchestrator for Claude Max - Gas Town for budget extraction.
+ * Multi-agent orchestrator for Claude Max - Gas Town for normal people.
  *
  * Commands:
  *   slingshot <goal>  Launch a new raid via the Tubes (or resume existing)
@@ -24,6 +24,15 @@ import chalk from "chalk";
 import { Command } from "commander";
 import { Persistence } from "./persistence.js";
 import {
+	generateTaskContext,
+	getPlanProgress,
+	getTasksByPriority,
+	markTaskCompleted,
+	type ParsedPlan,
+	parsePlanFile,
+	planToQuests,
+} from "./plan-parser.js";
+import {
 	addGoal,
 	addGoals,
 	addQuests,
@@ -31,24 +40,15 @@ import {
 	getAllItems,
 	getBacklogSummary,
 	getNextGoal,
+	getQuestBoardAnalytics,
+	getReadyQuestsForBatch,
 	markComplete,
 	markFailed,
 	markInProgress,
-	getReadyQuestsForBatch,
-	getQuestBoardAnalytics,
 } from "./quest.js";
-import {
-	parsePlanFile,
-	getPlanProgress,
-	getTasksByPriority,
-	generateTaskContext,
-	markTaskCompleted,
-	planToQuests,
-	type ParsedPlan,
-} from "./plan-parser.js";
-import { RaidOrchestrator } from "./raid.js";
 import { QuestBatchOrchestrator } from "./quest-batch-orchestrator.js";
 import { QuestBoardAnalyzer } from "./quest-board-analyzer.js";
+import { RaidOrchestrator } from "./raid.js";
 import type { RaidStatus } from "./types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -654,7 +654,9 @@ program
 				console.log(chalk.dim(`  Title: ${plan.title}`));
 			}
 			console.log(chalk.dim(`  Sections: ${plan.sections.length}`));
-			console.log(chalk.dim(`  Tasks: ${progress.total} (${progress.pending} pending, ${progress.completed} marked complete)`));
+			console.log(
+				chalk.dim(`  Tasks: ${progress.total} (${progress.pending} pending, ${progress.completed} marked complete)`),
+			);
 			console.log();
 
 			// Show section breakdown
@@ -686,7 +688,9 @@ program
 				for (let i = 0; i < Math.min(quests.length, 20); i++) {
 					const quest = quests[i];
 					const sectionTag = quest.section ? chalk.dim(` [${quest.section}]`) : "";
-					console.log(`  ${i + 1}. ${quest.objective.substring(0, 70)}${quest.objective.length > 70 ? "..." : ""}${sectionTag}`);
+					console.log(
+						`  ${i + 1}. ${quest.objective.substring(0, 70)}${quest.objective.length > 70 ? "..." : ""}${sectionTag}`,
+					);
 				}
 				if (quests.length > 20) {
 					console.log(chalk.dim(`  ... and ${quests.length - 20} more`));
@@ -715,94 +719,94 @@ program
 	.option("-c, --continuous", "Keep executing until plan is complete")
 	.option("-n, --steps <n>", "Max steps to execute (default: unlimited in continuous mode)")
 	.option("--legacy", "Use legacy mode (re-read whole plan each iteration)")
-	.action(async (file: string, options: { stream?: boolean; continuous?: boolean; steps?: string; legacy?: boolean }) => {
-		try {
-			const planContent = readFileSync(file, "utf-8");
-			const maxSteps = options.steps ? Number.parseInt(options.steps, 10) : options.continuous ? 100 : 1;
+	.action(
+		async (file: string, options: { stream?: boolean; continuous?: boolean; steps?: string; legacy?: boolean }) => {
+			try {
+				const planContent = readFileSync(file, "utf-8");
+				const maxSteps = options.steps ? Number.parseInt(options.steps, 10) : options.continuous ? 100 : 1;
 
-			// Parse plan upfront into discrete tasks (unless legacy mode)
-			let parsedPlan: ParsedPlan | null = null;
-			if (!options.legacy) {
-				parsedPlan = parsePlanFile(planContent, file);
-				const progress = getPlanProgress(parsedPlan);
-
-				console.log(chalk.cyan("Parsing plan file..."));
-				console.log(chalk.dim(`  File: ${file}`));
-				if (parsedPlan.title) {
-					console.log(chalk.dim(`  Title: ${parsedPlan.title}`));
-				}
-				console.log(chalk.dim(`  Sections: ${parsedPlan.sections.length}`));
-				console.log(chalk.dim(`  Tasks: ${progress.total} (${progress.pending} pending)`));
-				if (options.continuous) {
-					console.log(chalk.dim(`  Mode: Continuous (up to ${maxSteps} steps)`));
-				}
-				console.log();
-
-				// Get tasks sorted by priority
-				const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
-
-				if (tasksByPriority.length === 0) {
-					console.log(chalk.green("✓ All tasks already marked complete in plan!"));
-					return;
-				}
-
-				// Show upcoming tasks
-				console.log(chalk.cyan("Queued tasks (by priority):"));
-				for (let i = 0; i < Math.min(tasksByPriority.length, 5); i++) {
-					const task = tasksByPriority[i];
-					const sectionTag = task.section ? chalk.dim(` [${task.section}]`) : "";
-					console.log(`  ${i + 1}. ${task.content.substring(0, 60)}${task.content.length > 60 ? "..." : ""}${sectionTag}`);
-				}
-				if (tasksByPriority.length > 5) {
-					console.log(chalk.dim(`  ... and ${tasksByPriority.length - 5} more`));
-				}
-				console.log();
-			} else {
-				console.log(chalk.cyan("Loading plan file (legacy mode)..."));
-				console.log(chalk.dim(`  File: ${file}`));
-				if (options.continuous) {
-					console.log(chalk.dim(`  Mode: Continuous (up to ${maxSteps} steps)`));
-				}
-				console.log();
-			}
-
-			let step = 0;
-			let lastResult = "";
-
-			while (step < maxSteps) {
-				step++;
-
-				// Create fresh orchestrator for each step
-				const orchestrator = new RaidOrchestrator({
-					autoApprove: true,
-					autoCommit: true,
-					verbose: true,
-					streamOutput: options.stream,
-				});
-
-				let goal: string;
-
-				if (parsedPlan && !options.legacy) {
-					// New mode: use parsed tasks with focused context
-					const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
-					const currentTask = tasksByPriority[0];
-
-					if (!currentTask) {
-						console.log(chalk.green("\n✓ All plan tasks complete!"));
-						break;
-					}
-
-					// Generate focused context for the current task
-					const taskContext = generateTaskContext(parsedPlan, currentTask.id);
+				// Parse plan upfront into discrete tasks (unless legacy mode)
+				let parsedPlan: ParsedPlan | null = null;
+				if (!options.legacy) {
+					parsedPlan = parsePlanFile(planContent, file);
 					const progress = getPlanProgress(parsedPlan);
 
-					// Build progress context from previous result
-					const progressNote =
-						step > 1
-							? `\n\nPREVIOUS STEP RESULT:\n${lastResult.substring(0, 1500)}`
-							: "";
+					console.log(chalk.cyan("Parsing plan file..."));
+					console.log(chalk.dim(`  File: ${file}`));
+					if (parsedPlan.title) {
+						console.log(chalk.dim(`  Title: ${parsedPlan.title}`));
+					}
+					console.log(chalk.dim(`  Sections: ${parsedPlan.sections.length}`));
+					console.log(chalk.dim(`  Tasks: ${progress.total} (${progress.pending} pending)`));
+					if (options.continuous) {
+						console.log(chalk.dim(`  Mode: Continuous (up to ${maxSteps} steps)`));
+					}
+					console.log();
 
-					goal = `Implement this specific task:
+					// Get tasks sorted by priority
+					const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
+
+					if (tasksByPriority.length === 0) {
+						console.log(chalk.green("✓ All tasks already marked complete in plan!"));
+						return;
+					}
+
+					// Show upcoming tasks
+					console.log(chalk.cyan("Queued tasks (by priority):"));
+					for (let i = 0; i < Math.min(tasksByPriority.length, 5); i++) {
+						const task = tasksByPriority[i];
+						const sectionTag = task.section ? chalk.dim(` [${task.section}]`) : "";
+						console.log(
+							`  ${i + 1}. ${task.content.substring(0, 60)}${task.content.length > 60 ? "..." : ""}${sectionTag}`,
+						);
+					}
+					if (tasksByPriority.length > 5) {
+						console.log(chalk.dim(`  ... and ${tasksByPriority.length - 5} more`));
+					}
+					console.log();
+				} else {
+					console.log(chalk.cyan("Loading plan file (legacy mode)..."));
+					console.log(chalk.dim(`  File: ${file}`));
+					if (options.continuous) {
+						console.log(chalk.dim(`  Mode: Continuous (up to ${maxSteps} steps)`));
+					}
+					console.log();
+				}
+
+				let step = 0;
+				let lastResult = "";
+
+				while (step < maxSteps) {
+					step++;
+
+					// Create fresh orchestrator for each step
+					const orchestrator = new RaidOrchestrator({
+						autoApprove: true,
+						autoCommit: true,
+						verbose: true,
+						streamOutput: options.stream,
+					});
+
+					let goal: string;
+
+					if (parsedPlan && !options.legacy) {
+						// New mode: use parsed tasks with focused context
+						const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
+						const currentTask = tasksByPriority[0];
+
+						if (!currentTask) {
+							console.log(chalk.green("\n✓ All plan tasks complete!"));
+							break;
+						}
+
+						// Generate focused context for the current task
+						const taskContext = generateTaskContext(parsedPlan, currentTask.id);
+						const progress = getPlanProgress(parsedPlan);
+
+						// Build progress context from previous result
+						const progressNote = step > 1 ? `\n\nPREVIOUS STEP RESULT:\n${lastResult.substring(0, 1500)}` : "";
+
+						goal = `Implement this specific task:
 
 ${currentTask.content}
 
@@ -810,76 +814,83 @@ ${taskContext}${progressNote}
 
 After completing this task, summarize what you did. If this task is impossible or already done, explain why and say "TASK SKIPPED".`;
 
-					console.log(chalk.cyan(`\n━━━ Task ${step}/${progress.total}: ${currentTask.content.substring(0, 50)}... ━━━`));
-					if (currentTask.section) {
-						console.log(chalk.dim(`    Section: ${currentTask.section}`));
-					}
-				} else {
-					// Legacy mode: pass whole plan each iteration
-					const progressContext =
-						step > 1
-							? `\n\nPREVIOUS STEP RESULT:\n${lastResult.substring(0, 2000)}\n\nContinue with the next logical step.`
-							: "";
+						console.log(
+							chalk.cyan(`\n━━━ Task ${step}/${progress.total}: ${currentTask.content.substring(0, 50)}... ━━━`),
+						);
+						if (currentTask.section) {
+							console.log(chalk.dim(`    Section: ${currentTask.section}`));
+						}
+					} else {
+						// Legacy mode: pass whole plan each iteration
+						const progressContext =
+							step > 1
+								? `\n\nPREVIOUS STEP RESULT:\n${lastResult.substring(0, 2000)}\n\nContinue with the next logical step.`
+								: "";
 
-					goal = `Execute this implementation plan with good judgment. Read the plan, determine the next logical step that hasn't been done yet, and implement it. If something is already complete, skip it. If the plan is fully complete, respond with "PLAN COMPLETE".
+						goal = `Execute this implementation plan with good judgment. Read the plan, determine the next logical step that hasn't been done yet, and implement it. If something is already complete, skip it. If the plan is fully complete, respond with "PLAN COMPLETE".
 
 PLAN FILE CONTENTS:
 ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan truncated]" : ""}${progressContext}`;
 
-					console.log(chalk.cyan(`\n━━━ Step ${step} ━━━`));
-				}
+						console.log(chalk.cyan(`\n━━━ Step ${step} ━━━`));
+					}
 
-				const raid = await orchestrator.start(goal);
-				const finalRaid = orchestrator.getCurrentRaid();
+					const raid = await orchestrator.start(goal);
+					const finalRaid = orchestrator.getCurrentRaid();
 
-				// Get the result for context
-				const tasks = orchestrator.getStatus().tasks;
-				const fabricatorTask = tasks.find((t) => t.type === "fabricator");
-				lastResult = fabricatorTask?.result || "";
+					// Get the result for context
+					const tasks = orchestrator.getStatus().tasks;
+					const fabricatorTask = tasks.find((t) => t.type === "fabricator");
+					lastResult = fabricatorTask?.result || "";
 
-				// Check for completion markers
-				if (lastResult.toLowerCase().includes("plan complete")) {
-					console.log(chalk.green("\n✓ Plan execution complete!"));
-					break;
-				}
+					// Check for completion markers
+					if (lastResult.toLowerCase().includes("plan complete")) {
+						console.log(chalk.green("\n✓ Plan execution complete!"));
+						break;
+					}
 
-				// Mark current task as completed in parsed plan (for new mode)
-				if (parsedPlan && !options.legacy) {
-					const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
-					const currentTask = tasksByPriority[0];
+					// Mark current task as completed in parsed plan (for new mode)
+					if (parsedPlan && !options.legacy) {
+						const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
+						const currentTask = tasksByPriority[0];
 
-					if (currentTask && !lastResult.toLowerCase().includes("task skipped")) {
-						parsedPlan = markTaskCompleted(parsedPlan, currentTask.id);
-						const progress = getPlanProgress(parsedPlan);
-						console.log(chalk.green(`  ✓ Task complete (${progress.completed}/${progress.total})`));
-					} else if (currentTask && lastResult.toLowerCase().includes("task skipped")) {
-						// Also mark skipped tasks as completed so we move on
-						parsedPlan = markTaskCompleted(parsedPlan, currentTask.id);
-						console.log(chalk.yellow("  ⊘ Task skipped"));
+						if (currentTask && !lastResult.toLowerCase().includes("task skipped")) {
+							parsedPlan = markTaskCompleted(parsedPlan, currentTask.id);
+							const progress = getPlanProgress(parsedPlan);
+							console.log(chalk.green(`  ✓ Task complete (${progress.completed}/${progress.total})`));
+						} else if (currentTask && lastResult.toLowerCase().includes("task skipped")) {
+							// Also mark skipped tasks as completed so we move on
+							parsedPlan = markTaskCompleted(parsedPlan, currentTask.id);
+							console.log(chalk.yellow("  ⊘ Task skipped"));
+						}
+					}
+
+					// Clear state for next step
+					orchestrator.surrender();
+					const persistence = new Persistence();
+					persistence.clearAll();
+
+					if (!options.continuous) {
+						console.log(chalk.dim("\nRun with -c to continue automatically"));
+						break;
 					}
 				}
 
-				// Clear state for next step
-				orchestrator.surrender();
-				const persistence = new Persistence();
-				persistence.clearAll();
-
-				if (!options.continuous) {
-					console.log(chalk.dim("\nRun with -c to continue automatically"));
-					break;
+				// Show final progress for new mode
+				if (parsedPlan && !options.legacy) {
+					const progress = getPlanProgress(parsedPlan);
+					console.log(
+						chalk.cyan(
+							`\nFinal progress: ${progress.completed}/${progress.total} tasks (${progress.percentComplete}%)`,
+						),
+					);
 				}
+			} catch (error) {
+				console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+				process.exit(1);
 			}
-
-			// Show final progress for new mode
-			if (parsedPlan && !options.legacy) {
-				const progress = getPlanProgress(parsedPlan);
-				console.log(chalk.cyan(`\nFinal progress: ${progress.completed}/${progress.total} tasks (${progress.percentComplete}%)`));
-			}
-		} catch (error) {
-			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
-			process.exit(1);
-		}
-	});
+		},
+	);
 
 // Work command - process the backlog continuously
 program
@@ -976,97 +987,101 @@ program
 	.option("-v, --verbose", "Verbose logging")
 	.option("--risk-threshold <n>", "Risk threshold for parallel execution (0-1)", "0.7")
 	.option("--conflict-resolution <strategy>", "Conflict resolution strategy", "balanced")
-	.action(async (options: {
-		maxQuests?: string;
-		dryRun?: boolean;
-		analyzeOnly?: boolean;
-		autoApprove?: boolean;
-		yes?: boolean;
-		stream?: boolean;
-		verbose?: boolean;
-		riskThreshold?: string;
-		conflictResolution?: string;
-	}) => {
-		const maxQuests = Math.min(5, Math.max(1, Number.parseInt(options.maxQuests || "3", 10)));
-		const riskThreshold = Math.min(1, Math.max(0, Number.parseFloat(options.riskThreshold || "0.7")));
-		const conflictResolution = (options.conflictResolution || "balanced") as "conservative" | "aggressive" | "balanced";
+	.action(
+		async (options: {
+			maxQuests?: string;
+			dryRun?: boolean;
+			analyzeOnly?: boolean;
+			autoApprove?: boolean;
+			yes?: boolean;
+			stream?: boolean;
+			verbose?: boolean;
+			riskThreshold?: string;
+			conflictResolution?: string;
+		}) => {
+			const maxQuests = Math.min(5, Math.max(1, Number.parseInt(options.maxQuests || "3", 10)));
+			const riskThreshold = Math.min(1, Math.max(0, Number.parseFloat(options.riskThreshold || "0.7")));
+			const conflictResolution = (options.conflictResolution || "balanced") as
+				| "conservative"
+				| "aggressive"
+				| "balanced";
 
-		console.log(chalk.bold("Quest Batch Processing"));
-		console.log();
+			console.log(chalk.bold("Quest Batch Processing"));
+			console.log();
 
-		const orchestrator = new QuestBatchOrchestrator({
-			maxParallelQuests: maxQuests,
-			autoApprove: options.autoApprove || options.yes,
-			autoCommit: options.yes,
-			verbose: options.verbose,
-			streamOutput: options.stream,
-			riskThreshold,
-			conflictResolution,
-		});
+			const orchestrator = new QuestBatchOrchestrator({
+				maxParallelQuests: maxQuests,
+				autoApprove: options.autoApprove || options.yes,
+				autoCommit: options.yes,
+				verbose: options.verbose,
+				streamOutput: options.stream,
+				riskThreshold,
+				conflictResolution,
+			});
 
-		try {
-			if (options.analyzeOnly) {
-				// Just show compatibility analysis
-				const analysis = await orchestrator.analyzeBatch(maxQuests);
+			try {
+				if (options.analyzeOnly) {
+					// Just show compatibility analysis
+					const analysis = await orchestrator.analyzeBatch(maxQuests);
 
-				console.log(chalk.cyan(`Available quests: ${analysis.availableQuests.length}`));
-				console.log(chalk.cyan(`Quest sets found: ${analysis.questSets.length}`));
-				console.log();
-
-				if (analysis.optimalSet) {
-					console.log(chalk.bold("Optimal Quest Set:"));
-					for (const quest of analysis.optimalSet.quests) {
-						console.log(`  • ${quest.objective.substring(0, 60)}${quest.objective.length > 60 ? "..." : ""}`);
-					}
+					console.log(chalk.cyan(`Available quests: ${analysis.availableQuests.length}`));
+					console.log(chalk.cyan(`Quest sets found: ${analysis.questSets.length}`));
 					console.log();
-					console.log(`Risk Level: ${analysis.optimalSet.riskLevel}`);
-					console.log(`Parallelism Score: ${analysis.optimalSet.parallelismScore.toFixed(2)}`);
-					console.log(`Estimated Duration: ${Math.round(analysis.optimalSet.estimatedDuration / 60000)} minutes`);
+
+					if (analysis.optimalSet) {
+						console.log(chalk.bold("Optimal Quest Set:"));
+						for (const quest of analysis.optimalSet.quests) {
+							console.log(`  • ${quest.objective.substring(0, 60)}${quest.objective.length > 60 ? "..." : ""}`);
+						}
+						console.log();
+						console.log(`Risk Level: ${analysis.optimalSet.riskLevel}`);
+						console.log(`Parallelism Score: ${analysis.optimalSet.parallelismScore.toFixed(2)}`);
+						console.log(`Estimated Duration: ${Math.round(analysis.optimalSet.estimatedDuration / 60000)} minutes`);
+					}
+
+					console.log();
+					console.log(chalk.green(analysis.recommendedAction));
+					return;
 				}
 
-				console.log();
-				console.log(chalk.green(analysis.recommendedAction));
-				return;
-			}
-
-			if (options.dryRun) {
-				// Show what would be executed
-				const analysis = await orchestrator.analyzeBatch(maxQuests);
-				console.log(chalk.cyan("Dry run - no quests will be executed"));
-				console.log();
-				console.log(chalk.green(analysis.recommendedAction));
-				return;
-			}
-
-			// Execute the batch
-			console.log(chalk.cyan(`Starting parallel quest processing (max: ${maxQuests})`));
-			console.log(chalk.dim(`Risk threshold: ${riskThreshold}, Conflict resolution: ${conflictResolution}`));
-			console.log();
-
-			const result = await orchestrator.processBatch(maxQuests);
-
-			console.log();
-			console.log(chalk.bold("Batch Results:"));
-			console.log(`${chalk.green("✓")} Completed: ${result.completedQuests.length}`);
-			console.log(`${chalk.red("✗")} Failed: ${result.failedQuests.length}`);
-			console.log(`${chalk.yellow("⚡")} Conflicts: ${result.conflicts.length}`);
-			console.log(`${chalk.cyan("⏱")} Duration: ${Math.round(result.totalDuration / 60000)} minutes`);
-
-			if (result.conflicts.length > 0) {
-				console.log();
-				console.log(chalk.yellow("Conflicts detected:"));
-				for (const conflict of result.conflicts) {
-					console.log(`  • ${conflict.conflictingFiles.join(", ")} (${conflict.severity})`);
+				if (options.dryRun) {
+					// Show what would be executed
+					const analysis = await orchestrator.analyzeBatch(maxQuests);
+					console.log(chalk.cyan("Dry run - no quests will be executed"));
+					console.log();
+					console.log(chalk.green(analysis.recommendedAction));
+					return;
 				}
-			}
 
-		} catch (error) {
-			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
-			process.exit(1);
-		} finally {
-			await orchestrator.shutdown();
-		}
-	});
+				// Execute the batch
+				console.log(chalk.cyan(`Starting parallel quest processing (max: ${maxQuests})`));
+				console.log(chalk.dim(`Risk threshold: ${riskThreshold}, Conflict resolution: ${conflictResolution}`));
+				console.log();
+
+				const result = await orchestrator.processBatch(maxQuests);
+
+				console.log();
+				console.log(chalk.bold("Batch Results:"));
+				console.log(`${chalk.green("✓")} Completed: ${result.completedQuests.length}`);
+				console.log(`${chalk.red("✗")} Failed: ${result.failedQuests.length}`);
+				console.log(`${chalk.yellow("⚡")} Conflicts: ${result.conflicts.length}`);
+				console.log(`${chalk.cyan("⏱")} Duration: ${Math.round(result.totalDuration / 60000)} minutes`);
+
+				if (result.conflicts.length > 0) {
+					console.log();
+					console.log(chalk.yellow("Conflicts detected:"));
+					for (const conflict of result.conflicts) {
+						console.log(`  • ${conflict.conflictingFiles.join(", ")} (${conflict.severity})`);
+					}
+				}
+			} catch (error) {
+				console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+				process.exit(1);
+			} finally {
+				await orchestrator.shutdown();
+			}
+		},
+	);
 
 // Quest analyze command - analyze quest board for parallelization opportunities
 program
@@ -1095,8 +1110,8 @@ program
 			if (insights.parallelizationOpportunities.length > 0) {
 				console.log(chalk.bold("Parallelization Opportunities:"));
 				for (const opp of insights.parallelizationOpportunities.slice(0, 3)) {
-					const benefitColor = opp.benefit === "high" ? chalk.green :
-										opp.benefit === "medium" ? chalk.yellow : chalk.gray;
+					const benefitColor =
+						opp.benefit === "high" ? chalk.green : opp.benefit === "medium" ? chalk.yellow : chalk.gray;
 					console.log(`  ${benefitColor("●")} ${opp.description}`);
 					console.log(`    Benefit: ${benefitColor(opp.benefit)}, Time savings: ${opp.estimatedTimesSaving}%`);
 				}
@@ -1170,7 +1185,6 @@ program
 				}
 				console.log();
 			}
-
 		} catch (error) {
 			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
 			process.exit(1);
