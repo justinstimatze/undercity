@@ -5,7 +5,7 @@
 
 Multi-agent orchestrator for Claude Max. Inspired by [Gas Town](https://github.com/steveyegge/gastown) but built for normal people with a Claude Max subscription.
 
-Undercity uses extraction shooter metaphors, ARC Raiders lore, and unconventional terminology. None of it needs to be explained or justified. If scouts, fabricators, and serial merge queues help you ship code, that's all that matters.
+Undercity uses extraction shooter metaphors, ARC Raiders lore, and unconventional terminology. None of it needs to be explained or justified. If flutes, questers, and serial merge queues help you ship code, that's all that matters.
 
 ## Overview
 
@@ -122,6 +122,22 @@ Every output is reviewed 5 times with different lenses:
 3. **Security** - Any OWASP top 10 issues?
 4. **Performance** - Any concerning patterns?
 5. **Maintainability** - Will future developers understand this?
+
+## Philosophy
+
+Gas Town runs 20-30 parallel agents across multiple Claude accounts. Undercity is built for budget extraction - same core ideas, Claude Max constraints.
+
+| Constraint | Undercity Approach |
+|------------|-------------------|
+| Rate limits | Smaller squad (5-10 agents max) |
+| Single account | Sequential phases, not swarm |
+| Context limits | On-demand loading, not everything upfront |
+| Session crashes | Persistence hierarchy for recovery |
+
+**What we stole:**
+- **Gas Town**: GUPP principle, session persistence, agent identities
+- **Beads**: Git-backed state, crash recovery philosophy
+- **BMAD**: Planning before execution, spec approval gates
 
 ## Configuration
 
