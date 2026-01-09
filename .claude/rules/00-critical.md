@@ -16,6 +16,19 @@ These rules are non-negotiable.
 
 ## Git Rules
 
+### Never Push Automatically
+
+**NEVER push to remote without explicit user request.** Always stop after committing and let the user verify the repo state locally before pushing.
+
+```bash
+# BAD - pushing without user verification
+git commit -m "Add feature" && git push
+
+# GOOD - commit, then wait for user to push
+git commit -m "Add feature"
+# Stop here - user will push when ready
+```
+
 ### No Bulk Staging
 
 **NEVER use `git add -A` or `git add .`** - Stage specific files instead.
