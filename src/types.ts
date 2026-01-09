@@ -36,8 +36,8 @@ export interface Raid {
 /**
  * Agent types in the squad
  * - Scout: Fast recon (Haiku)
- * - Planner: BMAD-style spec writer (Opus)
- * - Fabricator: Code builder (Opus)
+ * - Planner: BMAD-style spec writer (Sonnet)
+ * - Fabricator: Code builder (Sonnet)
  * - Auditor: Quality reviewer (Opus)
  */
 export type AgentType = "scout" | "planner" | "fabricator" | "auditor";

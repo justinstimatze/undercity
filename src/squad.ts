@@ -6,7 +6,7 @@
  * Agent Types:
  * - Scout: Fast codebase reconnaissance (Haiku, read-only)
  * - Planner: BMAD-style spec writer (Sonnet, read-only, fast iteration)
- * - Fabricator: Code builder (Opus, full access)
+ * - Fabricator: Code builder (Sonnet, full access, fast + quality)
  * - Auditor: Quality reviewer with Rule of Five (Opus, read + tests)
  *
  * Based on Claude Agent SDK's AgentDefinition type.
@@ -65,7 +65,7 @@ Don't write code - write specs. The fabricators will implement.`,
 		model: "sonnet",
 	},
 
-	// Fabricator - Builds things, full access, Opus for best implementation
+	// Fabricator - Builds things, full access, Sonnet for speed + quality
 	// Follows the approved plan, doesn't improvise
 	fabricator: {
 		description:
@@ -96,7 +96,7 @@ If you hit a blocker not covered by the spec:
 
 When done, summarize what you changed.`,
 		tools: ["Read", "Edit", "Write", "Bash", "Grep", "Glob"],
-		model: "opus",
+		model: "sonnet",
 	},
 
 	// Auditor - Quality check, read-only + bash for tests, Opus for best judgment
