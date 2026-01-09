@@ -26,14 +26,13 @@ import {
 	extractReviewContext,
 	summarizeContextForAgent,
 } from "./context.js";
+import { dualLogger } from "./dual-logger.js";
 import { FileTracker, parseFileOperation } from "./file-tracker.js";
 import { calculateCodebaseFingerprint, createAndCheckout, hashFingerprint, hashGoal, isCacheableState, MergeQueue } from "./git.js";
-import { LoadoutManager } from "./loadout-manager.js";
-import { classifyQuestType, estimateCost } from "./loadout-scoring.js";
 import { raidLogger, squadLogger } from "./logger.js";
 import { Persistence } from "./persistence.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
-import type { AgentType, EfficiencyMetrics, FileConflict, LoadoutConfiguration, MergeQueueRetryConfig, Raid, SquadMember, Task } from "./types.js";
+import type { AgentType, FileConflict, MergeQueueRetryConfig, Raid, SquadMember, Task } from "./types.js";
 
 /**
  * Timeout configuration for agent monitoring
@@ -68,16 +67,12 @@ export class RaidOrchestrator {
 	private persistence: Persistence;
 	private mergeQueue: MergeQueue;
 	private fileTracker: FileTracker;
-	private loadoutManager: LoadoutManager;
 	private maxSquadSize: number;
 	private maxParallel: number;
 	private autoApprove: boolean;
 	private autoCommit: boolean;
 	private verbose: boolean;
 	private streamOutput: boolean;
-	private raidStartTime?: Date;
-	private currentLoadout?: LoadoutConfiguration;
-	private agentMetrics: Record<string, { tokensUsed: number; timeSpent: number; taskSuccess: boolean }> = {};
 
 	constructor(
 		options: {
@@ -98,8 +93,6 @@ export class RaidOrchestrator {
 		// Initialize file tracker from persisted state
 		const trackingState = this.persistence.getFileTracking();
 		this.fileTracker = new FileTracker(trackingState);
-		// Initialize loadout manager for performance tracking
-		this.loadoutManager = new LoadoutManager(this.persistence);
 		this.maxSquadSize = options.maxSquadSize || 5;
 		// Clamp maxParallel to valid range: 1-5, default 3
 		this.maxParallel = Math.min(5, Math.max(1, options.maxParallel ?? 3));
@@ -158,7 +151,7 @@ export class RaidOrchestrator {
 	}
 
 	/**
-	 * Stream agent activity to console for visibility
+	 * Stream agent activity to console and log file for visibility
 	 *
 	 * Handles multiple SDK message formats:
 	 * - "assistant" messages with content blocks (tool_use, text)
@@ -176,7 +169,7 @@ export class RaidOrchestrator {
 		if (msg.type === "content_block_start") {
 			const contentBlock = msg.content_block as { type?: string; name?: string } | undefined;
 			if (contentBlock?.type === "tool_use" && contentBlock.name) {
-				console.log(`${prefix} ${chalk.yellow(contentBlock.name)} ${chalk.dim("...")}`);
+				dualLogger.writeLine(`${prefix} ${chalk.yellow(contentBlock.name)} ${chalk.dim("...")}`);
 			}
 		}
 
@@ -186,7 +179,7 @@ export class RaidOrchestrator {
 			if (delta?.type === "text_delta" && delta.text) {
 				const text = delta.text.trim();
 				if (text && text.length < 100) {
-					process.stdout.write(chalk.gray(text.substring(0, 50)));
+					dualLogger.write(chalk.gray(text.substring(0, 50)));
 				}
 			}
 		}
@@ -217,11 +210,11 @@ export class RaidOrchestrator {
 							inputSummary = chalk.cyan(String(input.prompt).substring(0, 40) + "...");
 						}
 
-						console.log(`${prefix} ${chalk.yellow(block.name)} ${inputSummary}`);
+						dualLogger.writeLine(`${prefix} ${chalk.yellow(block.name)} ${inputSummary}`);
 					} else if (block.type === "text" && block.text) {
 						const firstLine = block.text.split("\n")[0].substring(0, 80);
 						if (firstLine.trim()) {
-							console.log(`${prefix} ${chalk.gray(firstLine)}${block.text.length > 80 ? "..." : ""}`);
+							dualLogger.writeLine(`${prefix} ${chalk.gray(firstLine)}${block.text.length > 80 ? "..." : ""}`);
 						}
 					}
 				}
@@ -232,7 +225,7 @@ export class RaidOrchestrator {
 		if (msg.type === "tool_result") {
 			const toolName = (msg as { tool_name?: string; name?: string }).tool_name || (msg as { name?: string }).name;
 			if (toolName) {
-				console.log(`${prefix} ${chalk.green("✓")} ${toolName}`);
+				dualLogger.writeLine(`${prefix} ${chalk.green("✓")} ${toolName}`);
 			}
 		}
 
@@ -240,7 +233,7 @@ export class RaidOrchestrator {
 		if (msg.type === "message_start") {
 			const msgData = msg.message as { role?: string } | undefined;
 			if (msgData?.role === "assistant") {
-				console.log(`${prefix} ${chalk.dim("thinking...")}`);
+				dualLogger.writeLine(`${prefix} ${chalk.dim("thinking...")}`);
 			}
 		}
 
@@ -248,9 +241,9 @@ export class RaidOrchestrator {
 		if (msg.type === "result") {
 			const subtype = msg.subtype as string | undefined;
 			if (subtype === "success") {
-				console.log(`${prefix} ${chalk.green("✓")} Task complete`);
+				dualLogger.writeLine(`${prefix} ${chalk.green("✓")} Task complete`);
 			} else if (subtype === "error") {
-				console.log(`${prefix} ${chalk.red("✗")} Error: ${msg.error || "unknown"}`);
+				dualLogger.writeLine(`${prefix} ${chalk.red("✗")} Error: ${msg.error || "unknown"}`);
 			}
 		}
 	}
@@ -348,21 +341,15 @@ export class RaidOrchestrator {
 			const existing = this.getCurrentRaid();
 			if (existing) {
 				this.log("Resuming existing raid", { raidId: existing.id });
+
+				// Start dual logging for resumed raid if not already active
+				if (!dualLogger.isActive()) {
+					dualLogger.start(existing.id);
+				}
+
 				return existing;
 			}
 		}
-
-		// Select optimal loadout for this quest
-		const questType = classifyQuestType(goal);
-		const questData = { id: generateRaidId(), objective: goal } as any; // Simplified quest for loadout selection
-		this.currentLoadout = this.loadoutManager.getBestLoadoutForQuest(questData);
-		this.raidStartTime = new Date();
-
-		this.log("Selected loadout for quest", {
-			questType,
-			loadoutId: this.currentLoadout.id,
-			loadoutName: this.currentLoadout.name
-		});
 
 		// Create new raid
 		const raid: Raid = {
@@ -374,7 +361,10 @@ export class RaidOrchestrator {
 		};
 
 		this.persistence.saveRaid(raid);
-		this.log("Started raid", { raidId: raid.id, goal, loadout: this.currentLoadout.name });
+		this.log("Started raid", { raidId: raid.id, goal });
+
+		// Start dual logging for this raid
+		dualLogger.start(raid.id);
 
 		// Start planning phase
 		await this.startPlanningPhase(raid);
@@ -892,18 +882,12 @@ export class RaidOrchestrator {
 			throw new Error("No active raid to extract");
 		}
 
-		const success = true; // Successful extraction
 		raid.status = "complete";
 		raid.completedAt = new Date();
 		this.persistence.saveRaid(raid);
 
-		// Record loadout performance if we have the necessary data
-		if (this.currentLoadout && this.raidStartTime) {
-			await this.recordRaidPerformance(raid, success);
-		}
-
 		// Add to stash history
-		this.persistence.addCompletedRaid(raid, success);
+		this.persistence.addCompletedRaid(raid, true);
 
 		// Clear file tracking for this raid
 		this.fileTracker.clearRaid(raid.id);
@@ -912,125 +896,10 @@ export class RaidOrchestrator {
 		// Clear pocket for next raid
 		this.persistence.clearPocket();
 
-		// Reset raid-specific state
-		this.currentLoadout = undefined;
-		this.raidStartTime = undefined;
-		this.agentMetrics = {};
+		// Stop dual logging and rotate log
+		dualLogger.stop(raid.id);
 
 		this.log("Raid extracted successfully", { raidId: raid.id });
-	}
-
-	/**
-	 * Record performance metrics for the completed raid
-	 */
-	private async recordRaidPerformance(raid: Raid, success: boolean): Promise<void> {
-		if (!this.currentLoadout || !this.raidStartTime) {
-			return;
-		}
-
-		try {
-			const timeToComplete = new Date().getTime() - this.raidStartTime.getTime();
-
-			// Calculate total tokens and cost from agent metrics
-			let totalTokens = 0;
-			let totalCost = 0;
-
-			for (const [agentId, metrics] of Object.entries(this.agentMetrics)) {
-				totalTokens += metrics.tokensUsed;
-				// Estimate cost based on the loadout's model choice for this agent type
-				const agentType = this.persistence.getSquad().find(m => m.id === agentId)?.type;
-				if (agentType && this.currentLoadout.modelChoices[agentType]) {
-					const modelCost = estimateCost(metrics.tokensUsed, this.currentLoadout.modelChoices[agentType]);
-					totalCost += modelCost;
-				}
-			}
-
-			// Calculate quality score based on success and completion metrics
-			let qualityScore = success ? 80 : 20; // Base score
-
-			// Bonus for successful task completion
-			const tasks = this.persistence.getTasks().filter(t => t.raidId === raid.id);
-			const successfulTasks = tasks.filter(t => t.status === "complete").length;
-			const taskSuccessRate = tasks.length > 0 ? successfulTasks / tasks.length : 0;
-			qualityScore += taskSuccessRate * 20; // Up to 20 bonus points
-
-			// Get retry count from task failures
-			const retryCount = tasks.filter(t => t.status === "failed").length;
-
-			const metrics: EfficiencyMetrics = {
-				timeToComplete,
-				totalTokens,
-				costInCents: totalCost,
-				qualityScore: Math.min(100, qualityScore),
-				retryCount,
-				success,
-			};
-
-			// Create a simplified quest object for recording
-			const quest = {
-				id: raid.id,
-				objective: raid.goal,
-			} as any;
-
-			// Record the performance
-			this.loadoutManager.recordQuestPerformance(
-				this.currentLoadout,
-				quest,
-				raid,
-				metrics,
-				this.agentMetrics
-			);
-
-			this.log("Recorded loadout performance", {
-				loadoutId: this.currentLoadout.id,
-				timeToComplete: Math.round(timeToComplete / 1000), // seconds
-				totalTokens,
-				totalCost: Math.round(totalCost * 100) / 100, // cents
-				qualityScore,
-				success
-			});
-
-		} catch (error) {
-			raidLogger.warn({ error }, "Failed to record loadout performance");
-		}
-	}
-
-	/**
-	 * Update agent performance metrics during execution
-	 */
-	private updateAgentMetrics(agentId: string, tokensUsed: number, timeSpent: number, taskSuccess: boolean): void {
-		if (!this.agentMetrics[agentId]) {
-			this.agentMetrics[agentId] = { tokensUsed: 0, timeSpent: 0, taskSuccess: true };
-		}
-
-		this.agentMetrics[agentId].tokensUsed += tokensUsed;
-		this.agentMetrics[agentId].timeSpent += timeSpent;
-		this.agentMetrics[agentId].taskSuccess = this.agentMetrics[agentId].taskSuccess && taskSuccess;
-	}
-
-	/**
-	 * Handle raid failure and record performance data
-	 */
-	private async handleRaidFailure(raid: Raid, error: string): Promise<void> {
-		const success = false;
-		raid.status = "failed";
-		raid.completedAt = new Date();
-		this.persistence.saveRaid(raid);
-
-		// Record performance even for failed raids
-		if (this.currentLoadout && this.raidStartTime) {
-			await this.recordRaidPerformance(raid, success);
-		}
-
-		// Add to stash history
-		this.persistence.addCompletedRaid(raid, success);
-
-		// Reset state
-		this.currentLoadout = undefined;
-		this.raidStartTime = undefined;
-		this.agentMetrics = {};
-
-		this.log("Raid failed", { raidId: raid.id, error });
 	}
 
 	/**
@@ -1038,20 +907,6 @@ export class RaidOrchestrator {
 	 */
 	getMaxParallel(): number {
 		return this.maxParallel;
-	}
-
-	/**
-	 * Get the loadout manager for CLI access
-	 */
-	getLoadoutManager(): LoadoutManager {
-		return this.loadoutManager;
-	}
-
-	/**
-	 * Get the current loadout being used for the active raid
-	 */
-	getCurrentLoadout(): LoadoutConfiguration | undefined {
-		return this.currentLoadout;
 	}
 
 	/**
@@ -1101,6 +956,10 @@ export class RaidOrchestrator {
 			this.persistence.saveFileTracking(this.fileTracker.getState());
 
 			this.persistence.clearPocket();
+
+			// Stop dual logging and rotate log
+			dualLogger.stop(raid.id);
+
 			this.log("Raid surrendered", { raidId: raid.id });
 		}
 	}
