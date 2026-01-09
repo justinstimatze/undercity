@@ -13,11 +13,15 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { persistenceLogger } from "./logger.js";
+import { MetricsTracker } from "./metrics.js";
 import type {
 	AgentType,
+	EfficiencyAnalytics,
+	ExtendedStash,
 	FileTrackingState,
 	Inventory,
 	Loadout,
+	QuestMetrics,
 	Raid,
 	SafePocket,
 	ScoutCache,
@@ -32,6 +36,10 @@ const SCOUT_CACHE_FILE = "scout-cache.json";
 const SCOUT_CACHE_VERSION = "1.0";
 const SCOUT_CACHE_MAX_ENTRIES = 100;
 const SCOUT_CACHE_TTL_DAYS = 30;
+
+/** Metrics configuration */
+const METRICS_VERSION = "1.0";
+const EXTENDED_STASH_FILE = "extended-stash.json";
 
 const DEFAULT_STATE_DIR = ".undercity";
 
@@ -233,6 +241,109 @@ export class Persistence {
 			success,
 		});
 		this.saveStash(stash);
+	}
+
+	// ============== Extended Stash with Metrics ==============
+	// Enhanced stash with quest efficiency metrics
+
+	/**
+	 * Get the extended stash with metrics (creates empty one if doesn't exist)
+	 */
+	getExtendedStash(): ExtendedStash {
+		const extendedStash = this.readJson<ExtendedStash>(EXTENDED_STASH_FILE, {
+			completedRaids: [],
+			questMetrics: [],
+			metricsVersion: METRICS_VERSION,
+			metricsStartedAt: new Date(),
+			lastUpdated: new Date(),
+		});
+
+		// Migration: if metrics fields don't exist, initialize them
+		if (!extendedStash.questMetrics) {
+			extendedStash.questMetrics = [];
+			extendedStash.metricsVersion = METRICS_VERSION;
+			extendedStash.metricsStartedAt = new Date();
+		}
+
+		return extendedStash;
+	}
+
+	/**
+	 * Save the extended stash with metrics
+	 */
+	saveExtendedStash(extendedStash: ExtendedStash): void {
+		extendedStash.lastUpdated = new Date();
+		this.writeJson(EXTENDED_STASH_FILE, extendedStash);
+	}
+
+	/**
+	 * Save quest metrics to the extended stash
+	 */
+	saveQuestMetrics(questMetrics: QuestMetrics): void {
+		const extendedStash = this.getExtendedStash();
+		extendedStash.questMetrics.push(questMetrics);
+
+		// Keep metrics for last 1000 quests to avoid unbounded growth
+		if (extendedStash.questMetrics.length > 1000) {
+			extendedStash.questMetrics = extendedStash.questMetrics.slice(-1000);
+		}
+
+		this.saveExtendedStash(extendedStash);
+
+		persistenceLogger.debug(
+			{
+				questId: questMetrics.questId,
+				tokens: questMetrics.tokenUsage.totalTokens,
+				success: questMetrics.success,
+				totalMetrics: extendedStash.questMetrics.length
+			},
+			"Saved quest metrics"
+		);
+	}
+
+	/**
+	 * Get quest metrics for analysis
+	 */
+	getQuestMetrics(): QuestMetrics[] {
+		return this.getExtendedStash().questMetrics;
+	}
+
+	/**
+	 * Get quest metrics within a date range
+	 */
+	getQuestMetricsInRange(startDate: Date, endDate: Date): QuestMetrics[] {
+		const allMetrics = this.getQuestMetrics();
+		return allMetrics.filter(m => {
+			const completedAt = new Date(m.completedAt);
+			return completedAt >= startDate && completedAt <= endDate;
+		});
+	}
+
+	/**
+	 * Clear all quest metrics (keep raid history)
+	 */
+	clearQuestMetrics(): void {
+		const extendedStash = this.getExtendedStash();
+		extendedStash.questMetrics = [];
+		extendedStash.metricsStartedAt = new Date();
+		this.saveExtendedStash(extendedStash);
+		persistenceLogger.info("Cleared all quest metrics");
+	}
+
+	/**
+	 * Get efficiency analytics from all quest metrics
+	 */
+	getEfficiencyAnalytics(): EfficiencyAnalytics {
+		const questMetrics = this.getQuestMetrics();
+		return MetricsTracker.calculateAnalytics(questMetrics);
+	}
+
+	/**
+	 * Get efficiency analytics for a date range
+	 */
+	getEfficiencyAnalyticsInRange(startDate: Date, endDate: Date): EfficiencyAnalytics {
+		const questMetrics = this.getQuestMetricsInRange(startDate, endDate);
+		return MetricsTracker.calculateAnalytics(questMetrics);
 	}
 
 	// ============== Squad Member Sessions ==============

@@ -44,7 +44,6 @@ import {
 	planToQuests,
 	type ParsedPlan,
 } from "./plan-parser.js";
-import { Persistence } from "./persistence.js";
 import { RaidOrchestrator } from "./raid.js";
 import type { RaidStatus } from "./types.js";
 
@@ -958,6 +957,163 @@ program
 		console.log(
 			`\nFinal: ${chalk.green(summary.complete)} complete, ${chalk.red(summary.failed)} failed, ${chalk.yellow(summary.pending)} pending`,
 		);
+	});
+
+// ============== Analytics Commands ==============
+
+// Analytics command - show efficiency metrics
+program
+	.command("analytics")
+	.description("Show efficiency metrics and analytics")
+	.option("--days <n>", "Show analytics for last N days", "30")
+	.option("--export", "Export metrics to JSON file")
+	.option("--json", "Output in JSON format")
+	.action((options: { days?: string; export?: boolean; json?: boolean }) => {
+		const persistence = new Persistence();
+		const days = Number.parseInt(options.days || "30", 10);
+
+		// Calculate date range
+		const endDate = new Date();
+		const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
+
+		const analytics = days === 0 || days > 365
+			? persistence.getEfficiencyAnalytics() // All time
+			: persistence.getEfficiencyAnalyticsInRange(startDate, endDate);
+
+		if (options.export) {
+			const filename = `analytics-${new Date().toISOString().split('T')[0]}.json`;
+			const exportData = {
+				exportDate: new Date(),
+				dateRange: days === 0 ? "all-time" : `${days} days`,
+				startDate: days === 0 ? null : startDate,
+				endDate,
+				analytics,
+				questMetrics: days === 0
+					? persistence.getQuestMetrics()
+					: persistence.getQuestMetricsInRange(startDate, endDate)
+			};
+			require('fs').writeFileSync(filename, JSON.stringify(exportData, null, 2));
+			console.log(chalk.green(`✓ Analytics exported to ${filename}`));
+			return;
+		}
+
+		if (options.json) {
+			console.log(JSON.stringify(analytics, null, 2));
+			return;
+		}
+
+		// Display analytics in human-readable format
+		const dateRangeStr = days === 0 ? "All Time" : `Last ${days} Days`;
+		console.log(chalk.bold(`Efficiency Analytics - ${dateRangeStr}`));
+		console.log(chalk.gray("─".repeat(50)));
+		console.log();
+
+		// Overall stats
+		console.log(chalk.bold("📊 Overall Statistics"));
+		console.log(`  Total Quests: ${analytics.totalQuests}`);
+		console.log(`  Success Rate: ${chalk.green(analytics.successRate.toFixed(1) + "%")} (${analytics.successfulQuests}/${analytics.totalQuests})`);
+		if (analytics.failedQuests > 0) {
+			console.log(`  Failed Quests: ${chalk.red(analytics.failedQuests.toString())}`);
+		}
+		console.log();
+
+		// Token efficiency
+		console.log(chalk.bold("🪙 Token Efficiency"));
+		console.log(`  Avg Tokens per Quest: ${chalk.cyan(Math.round(analytics.avgTokensPerQuest).toLocaleString())}`);
+		if (analytics.successfulQuests > 0) {
+			console.log(`  Avg Tokens per Success: ${chalk.green(Math.round(analytics.avgTokensPerCompletion).toLocaleString())}`);
+		}
+		console.log(`  Token Efficiency: ${chalk.yellow(Math.round(analytics.tokenEfficiency).toLocaleString())} tokens/min`);
+		console.log(`  Avg Execution Time: ${chalk.magenta(analytics.avgExecutionTimeMinutes.toFixed(1))} minutes`);
+		console.log();
+
+		// Extremes
+		if (analytics.mostExpensiveQuest) {
+			console.log(chalk.bold("💸 Most Expensive Quest"));
+			console.log(`  ${analytics.mostExpensiveQuest.objective.substring(0, 50)}${analytics.mostExpensiveQuest.objective.length > 50 ? "..." : ""}`);
+			console.log(`  Tokens: ${chalk.red(analytics.mostExpensiveQuest.tokens.toLocaleString())}`);
+			console.log(`  Time: ${analytics.mostExpensiveQuest.timeMinutes.toFixed(1)} min`);
+			console.log();
+		}
+
+		if (analytics.mostEfficientQuest) {
+			console.log(chalk.bold("⚡ Most Efficient Quest"));
+			console.log(`  ${analytics.mostEfficientQuest.objective.substring(0, 50)}${analytics.mostEfficientQuest.objective.length > 50 ? "..." : ""}`);
+			console.log(`  Efficiency: ${chalk.green(Math.round(analytics.mostEfficientQuest.tokensPerMinute).toLocaleString())} tokens/min`);
+			console.log();
+		}
+
+		// Agent utilization
+		console.log(chalk.bold("🤖 Agent Utilization"));
+		for (const [agentType, stats] of Object.entries(analytics.agentUtilization)) {
+			if (stats.timesUsed > 0) {
+				console.log(`  ${agentType.padEnd(10)}: ${stats.timesUsed.toString().padStart(3)} uses, ${Math.round(stats.avgTokens).toLocaleString().padStart(6)} avg tokens, ${stats.successRate.toFixed(1).padStart(5)}% success`);
+			}
+		}
+
+		console.log();
+		console.log(chalk.dim(`Run with --export to save detailed metrics to JSON`));
+		console.log(chalk.dim(`Run with --days 0 to see all-time analytics`));
+	});
+
+// Metrics command - manage metrics collection
+program
+	.command("metrics")
+	.description("Manage efficiency metrics")
+	.option("--clear", "Clear all quest metrics (keep raid history)")
+	.option("--stats", "Show metrics collection statistics")
+	.action((options: { clear?: boolean; stats?: boolean }) => {
+		const persistence = new Persistence();
+
+		if (options.clear) {
+			persistence.clearQuestMetrics();
+			console.log(chalk.yellow("✓ Cleared all quest metrics"));
+			return;
+		}
+
+		if (options.stats) {
+			const extendedStash = persistence.getExtendedStash();
+			const questMetrics = persistence.getQuestMetrics();
+
+			console.log(chalk.bold("Metrics Collection Statistics"));
+			console.log(`  Metrics Version: ${extendedStash.metricsVersion}`);
+			console.log(`  Collection Started: ${chalk.gray(new Date(extendedStash.metricsStartedAt).toLocaleString())}`);
+			console.log(`  Total Quest Metrics: ${questMetrics.length}`);
+
+			if (questMetrics.length > 0) {
+				const oldest = new Date(Math.min(...questMetrics.map(m => new Date(m.startedAt).getTime())));
+				const newest = new Date(Math.max(...questMetrics.map(m => new Date(m.completedAt).getTime())));
+				console.log(`  Date Range: ${chalk.gray(oldest.toLocaleDateString())} to ${chalk.gray(newest.toLocaleDateString())}`);
+
+				const totalTokens = questMetrics.reduce((sum, m) => sum + m.tokenUsage.totalTokens, 0);
+				const successful = questMetrics.filter(m => m.success).length;
+				console.log(`  Total Tokens Tracked: ${chalk.cyan(totalTokens.toLocaleString())}`);
+				console.log(`  Success Rate: ${chalk.green((successful / questMetrics.length * 100).toFixed(1) + "%")}`);
+			}
+
+			console.log(`  Last Updated: ${chalk.gray(new Date(extendedStash.lastUpdated).toLocaleString())}`);
+			return;
+		}
+
+		// Default: show brief stats and usage
+		const questMetrics = persistence.getQuestMetrics();
+		console.log(chalk.bold("Efficiency Metrics"));
+		console.log(`  Quest metrics tracked: ${questMetrics.length}`);
+
+		if (questMetrics.length > 0) {
+			const recentMetrics = questMetrics.filter(m => {
+				const completedAt = new Date(m.completedAt);
+				const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+				return completedAt >= dayAgo;
+			});
+			console.log(`  Quests in last 24h: ${recentMetrics.length}`);
+		}
+
+		console.log();
+		console.log("Commands:");
+		console.log(`  ${chalk.cyan("undercity analytics")}       Show efficiency analytics`);
+		console.log(`  ${chalk.cyan("undercity metrics --stats")} Show collection statistics`);
+		console.log(`  ${chalk.cyan("undercity metrics --clear")} Clear all metrics`);
 	});
 
 // Parse and run
