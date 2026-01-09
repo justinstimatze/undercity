@@ -4,7 +4,25 @@
  * Type-safe mock factories for testing Undercity persistence.
  */
 
-import type { Inventory, Raid, RaidStatus, SafePocket } from "../types.js";
+import type { AgentType, Inventory, Raid, RaidStatus, SafePocket, Task, TaskStatus } from "../types.js";
+
+/**
+ * All agent types for parametrized testing
+ */
+export const ALL_AGENT_TYPES: AgentType[] = ["scout", "planner", "fabricator", "auditor"];
+
+/**
+ * Create a mock Task with sensible defaults
+ */
+export const createMockTask = (overrides: Partial<Task> = {}): Task => ({
+	id: "task-1",
+	raidId: "raid-1",
+	type: "fabricator",
+	description: "Test task",
+	status: "pending" as TaskStatus,
+	createdAt: new Date("2024-01-01T00:00:00.000Z"),
+	...overrides,
+});
 
 /**
  * Create a mock SafePocket with sensible defaults
