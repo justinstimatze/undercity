@@ -156,11 +156,24 @@ export function rebase(targetBranch: string): boolean {
 }
 
 /**
- * Merge a branch into the current branch
+ * Merge strategy options for conflict resolution
  */
-export function merge(branch: string, message?: string): boolean {
+export type MergeStrategy = "theirs" | "ours" | "default";
+
+/**
+ * Merge a branch into the current branch
+ * @param branch - The branch to merge
+ * @param message - Optional commit message
+ * @param strategy - Conflict resolution strategy: "theirs" (auto-resolve favoring incoming), "ours" (auto-resolve favoring current), or "default" (no auto-resolution)
+ */
+export function merge(branch: string, message?: string, strategy?: MergeStrategy): boolean {
 	try {
-		const args = ["merge", "--no-ff", branch];
+		const args = ["merge", "--no-ff"];
+		// Add strategy flag for auto-conflict resolution
+		if (strategy && strategy !== "default") {
+			args.push("-X", strategy);
+		}
+		args.push(branch);
 		if (message) {
 			args.push("-m", message);
 		}
@@ -239,14 +252,26 @@ export function generateBranchName(raidId: string, taskId: string): string {
  * 3. Run tests
  * 4. Merge if tests pass
  * 5. Delete the branch
+ *
+ * Supports auto-conflict resolution using git merge strategies:
+ * - "theirs": Auto-resolve conflicts by accepting incoming changes
+ * - "ours": Auto-resolve conflicts by keeping current changes
+ * - "default": No auto-resolution, conflicts require manual intervention
  */
 export class MergeQueue {
 	private queue: MergeQueueItem[] = [];
 	private processing = false;
 	private mainBranch: string;
+	private mergeStrategy: MergeStrategy;
 
-	constructor(mainBranch?: string) {
+	/**
+	 * Create a new merge queue
+	 * @param mainBranch - The target branch for merges (defaults to main/master)
+	 * @param mergeStrategy - Strategy for auto-resolving conflicts (defaults to "theirs" for automatic resolution)
+	 */
+	constructor(mainBranch?: string, mergeStrategy?: MergeStrategy) {
 		this.mainBranch = mainBranch || getDefaultBranch();
+		this.mergeStrategy = mergeStrategy ?? "theirs";
 	}
 
 	/**
@@ -270,6 +295,22 @@ export class MergeQueue {
 	 */
 	getQueue(): MergeQueueItem[] {
 		return [...this.queue];
+	}
+
+	/**
+	 * Get the current merge strategy
+	 */
+	getMergeStrategy(): MergeStrategy {
+		return this.mergeStrategy;
+	}
+
+	/**
+	 * Set the merge strategy for conflict resolution
+	 * @param strategy - The strategy to use: "theirs", "ours", or "default"
+	 */
+	setMergeStrategy(strategy: MergeStrategy): void {
+		this.mergeStrategy = strategy;
+		gitLogger.debug({ strategy }, "Merge strategy updated");
 	}
 
 	/**
@@ -317,12 +358,19 @@ export class MergeQueue {
 				return item;
 			}
 
-			// Step 4: Merge into main
+			// Step 4: Merge into main (using configured strategy for auto-conflict resolution)
 			checkoutBranch(this.mainBranch);
 			item.status = "merging";
-			gitLogger.debug({ branch: item.branch, into: this.mainBranch }, "Merging");
+			gitLogger.debug(
+				{ branch: item.branch, into: this.mainBranch, strategy: this.mergeStrategy },
+				"Merging with strategy",
+			);
 
-			const mergeSuccess = merge(item.branch, `Merge ${item.branch} via undercity`);
+			const mergeSuccess = merge(
+				item.branch,
+				`Merge ${item.branch} via undercity`,
+				this.mergeStrategy,
+			);
 
 			if (!mergeSuccess) {
 				item.status = "conflict";
