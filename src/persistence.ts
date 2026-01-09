@@ -18,6 +18,10 @@ import type {
 	FileTrackingState,
 	Inventory,
 	Loadout,
+	LoadoutConfiguration,
+	LoadoutPerformanceRecord,
+	LoadoutScore,
+	LoadoutStorage,
 	Raid,
 	SafePocket,
 	ScoutCache,
@@ -233,6 +237,64 @@ export class Persistence {
 			success,
 		});
 		this.saveStash(stash);
+	}
+
+	// ============== Loadout Configurations ==============
+	// Configurable loadouts for different quest types
+
+	getLoadoutStorage(): LoadoutStorage {
+		return this.readJson<LoadoutStorage>("loadout-storage.json", {
+			configurations: [],
+			performanceRecords: [],
+			scores: {},
+			lastUpdated: new Date(),
+		});
+	}
+
+	saveLoadoutStorage(storage: LoadoutStorage): void {
+		storage.lastUpdated = new Date();
+		this.writeJson("loadout-storage.json", storage);
+	}
+
+	getLoadoutConfigurations(): LoadoutConfiguration[] {
+		return this.getLoadoutStorage().configurations;
+	}
+
+	saveLoadoutConfiguration(config: LoadoutConfiguration): void {
+		const storage = this.getLoadoutStorage();
+		const index = storage.configurations.findIndex((c) => c.id === config.id);
+		if (index !== -1) {
+			storage.configurations[index] = config;
+		} else {
+			storage.configurations.push(config);
+		}
+		this.saveLoadoutStorage(storage);
+	}
+
+	removeLoadoutConfiguration(id: string): void {
+		const storage = this.getLoadoutStorage();
+		storage.configurations = storage.configurations.filter((c) => c.id !== id);
+		this.saveLoadoutStorage(storage);
+	}
+
+	getLoadoutPerformanceRecords(): LoadoutPerformanceRecord[] {
+		return this.getLoadoutStorage().performanceRecords;
+	}
+
+	addLoadoutPerformanceRecord(record: LoadoutPerformanceRecord): void {
+		const storage = this.getLoadoutStorage();
+		storage.performanceRecords.push(record);
+		this.saveLoadoutStorage(storage);
+	}
+
+	getLoadoutScores(): Record<string, LoadoutScore> {
+		return this.getLoadoutStorage().scores;
+	}
+
+	saveLoadoutScore(score: LoadoutScore): void {
+		const storage = this.getLoadoutStorage();
+		storage.scores[score.loadoutId] = score;
+		this.saveLoadoutStorage(storage);
 	}
 
 	// ============== Squad Member Sessions ==============

@@ -19,6 +19,7 @@ import type {
 	FileTouch,
 	FileTrackingEntry,
 	FileTrackingState,
+	CrossQuestConflict,
 } from "./types.js";
 
 const trackerLogger = logger.child({ module: "file-tracker" });
@@ -81,6 +82,23 @@ export class FileTracker {
 	}
 
 	/**
+	 * Start tracking files for an agent with quest context
+	 * NEW: Support for quest-level tracking
+	 */
+	startQuestTracking(questId: string, raidId: string): void {
+		// Use questId as agentId for quest-level tracking
+		this.startTracking(questId, questId, raidId);
+	}
+
+	/**
+	 * Stop tracking files for a quest
+	 * NEW: Support for quest-level tracking
+	 */
+	stopQuestTracking(questId: string): void {
+		this.stopTracking(questId);
+	}
+
+	/**
 	 * Stop tracking files for an agent (when task completes)
 	 */
 	stopTracking(agentId: string): void {
@@ -106,6 +124,7 @@ export class FileTracker {
 		agentId: string,
 		filePath: string,
 		operation: FileOperation,
+		questId?: string,
 	): void {
 		const entry = this.state.entries[agentId];
 		if (!entry) {
@@ -128,9 +147,17 @@ export class FileTracker {
 		this.state.lastUpdated = new Date();
 
 		trackerLogger.debug(
-			{ agentId, path: normalizedPath, operation },
+			{ agentId, path: normalizedPath, operation, questId },
 			"Recorded file access",
 		);
+
+		// Also track at quest level if questId provided
+		if (questId && questId !== agentId) {
+			const questEntry = this.state.entries[questId];
+			if (questEntry) {
+				questEntry.files.push({ ...touch });
+			}
+		}
 	}
 
 	/**
@@ -341,6 +368,115 @@ export class FileTracker {
 	}
 
 	/**
+	 * Detect conflicts between quests running in parallel
+	 * NEW: Cross-quest conflict detection
+	 */
+	detectCrossQuestConflicts(): CrossQuestConflict[] {
+		const conflicts: CrossQuestConflict[] = [];
+		const writeOps: FileOperation[] = ["write", "edit", "delete"];
+
+		// Group entries by quest (raid) - active quests only
+		const questEntries = new Map<string, FileTrackingEntry[]>();
+		for (const entry of Object.values(this.state.entries)) {
+			if (!entry.endedAt) { // Only active entries
+				const quest = entry.raidId; // Use raidId as quest identifier
+				const existing = questEntries.get(quest) || [];
+				existing.push(entry);
+				questEntries.set(quest, existing);
+			}
+		}
+
+		// Check for file conflicts between different quests
+		const fileQuestMap = new Map<string, string[]>(); // file -> quest[]
+
+		for (const [questId, entries] of questEntries) {
+			const questFiles = new Set<string>();
+
+			// Collect all files touched by this quest
+			for (const entry of entries) {
+				for (const touch of entry.files) {
+					if (writeOps.includes(touch.operation)) {
+						questFiles.add(touch.path);
+					}
+				}
+			}
+
+			// Track which quests touch which files
+			for (const file of questFiles) {
+				const existing = fileQuestMap.get(file) || [];
+				existing.push(questId);
+				fileQuestMap.set(file, existing);
+			}
+		}
+
+		// Find files touched by multiple quests
+		for (const [file, quests] of fileQuestMap) {
+			if (quests.length > 1) {
+				conflicts.push({
+					questIds: quests,
+					conflictingFiles: [file],
+					severity: "error",
+				});
+			}
+		}
+
+		return conflicts;
+	}
+
+	/**
+	 * Check if adding a quest would cause conflicts
+	 * NEW: Pre-flight conflict check for quest scheduling
+	 */
+	wouldQuestConflict(questId: string, estimatedFiles: string[]): boolean {
+		const writeOps: FileOperation[] = ["write", "edit", "delete"];
+		const normalizedFiles = estimatedFiles.map(f => this.normalizePath(f));
+
+		for (const [agentId, entry] of Object.entries(this.state.entries)) {
+			// Skip completed entries and the quest we're checking
+			if (entry.endedAt || agentId === questId) {
+				continue;
+			}
+
+			// Check if any estimated files conflict with active work
+			for (const touch of entry.files) {
+				if (writeOps.includes(touch.operation)) {
+					// Simple exact match for now - could be enhanced with glob pattern matching
+					if (normalizedFiles.includes(touch.path)) {
+						return true;
+					}
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Get files currently being modified by active quests
+	 * NEW: Query active file modifications across all quests
+	 */
+	getActiveQuestFiles(): Map<string, string[]> {
+		const fileQuestMap = new Map<string, string[]>();
+		const writeOps: FileOperation[] = ["write", "edit", "delete"];
+
+		for (const [agentId, entry] of Object.entries(this.state.entries)) {
+			if (entry.endedAt) continue; // Skip completed entries
+
+			for (const touch of entry.files) {
+				if (writeOps.includes(touch.operation)) {
+					const existing = fileQuestMap.get(touch.path) || [];
+					if (!existing.includes(entry.raidId)) {
+						existing.push(entry.raidId);
+						fileQuestMap.set(touch.path, existing);
+					}
+				}
+			}
+		}
+
+		return fileQuestMap;
+	}
+
+	/**
 	 * Get a summary of current tracking status
 	 */
 	getSummary(): {
@@ -371,6 +507,23 @@ export class FileTracker {
 			totalFilesTouched: allFiles.size,
 			filesWithConflicts: conflicts.length,
 		};
+	}
+
+	/**
+	 * Clear tracking for all quests except specified ones
+	 * NEW: Support for selective quest cleanup
+	 */
+	clearInactiveQuests(activeQuestIds: string[]): void {
+		const activeRaidIds = new Set(activeQuestIds);
+
+		for (const [agentId, entry] of Object.entries(this.state.entries)) {
+			if (!activeRaidIds.has(entry.raidId) && entry.endedAt) {
+				delete this.state.entries[agentId];
+			}
+		}
+
+		this.state.lastUpdated = new Date();
+		trackerLogger.debug({ activeQuests: activeQuestIds.length }, "Cleared inactive quest tracking");
 	}
 }
 

@@ -17,6 +17,17 @@ export interface Quest {
 	completedAt?: Date;
 	raidId?: string;
 	error?: string;
+
+	// NEW: Quest Matchmaking Fields
+	packageHints?: string[];           // Manual package hints
+	dependsOn?: string[];              // Quest IDs this quest depends on
+	conflicts?: string[];              // Quest IDs that conflict with this one
+	estimatedFiles?: string[];         // Expected files to be modified
+	tags?: string[];                   // Categorization tags (feature, bugfix, refactor)
+
+	// Computed during matchmaking
+	computedPackages?: string[];       // Auto-detected package boundaries
+	riskScore?: number;                // File overlap risk (0-1)
 }
 
 export interface QuestBoard {
@@ -172,6 +183,128 @@ export function clearCompletedQuests(): number {
  */
 export function getAllQuests(): Quest[] {
 	return loadQuestBoard().quests;
+}
+
+/**
+ * Get ready quests for parallel execution
+ * Returns pending quests sorted by priority, limited to the specified count
+ */
+export function getReadyQuestsForBatch(count: number = 3): Quest[] {
+	const board = loadQuestBoard();
+	return board.quests
+		.filter((quest) => quest.status === "pending")
+		.sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
+		.slice(0, count);
+}
+
+/**
+ * Mark multiple quests as in progress
+ */
+export function markQuestSetInProgress(questIds: string[], raidIds: string[]): void {
+	const board = loadQuestBoard();
+	for (let i = 0; i < questIds.length; i++) {
+		const questId = questIds[i];
+		const raidId = raidIds[i];
+		const quest = board.quests.find((q) => q.id === questId);
+		if (quest) {
+			quest.status = "in_progress";
+			quest.startedAt = new Date();
+			quest.raidId = raidId;
+		}
+	}
+	saveQuestBoard(board);
+}
+
+/**
+ * Get status of a set of quests
+ */
+export function getQuestSetStatus(questIds: string[]): {
+	pending: number;
+	inProgress: number;
+	complete: number;
+	failed: number;
+	blocked: number;
+} {
+	const board = loadQuestBoard();
+	const quests = board.quests.filter(q => questIds.includes(q.id));
+
+	return {
+		pending: quests.filter(q => q.status === "pending").length,
+		inProgress: quests.filter(q => q.status === "in_progress").length,
+		complete: quests.filter(q => q.status === "complete").length,
+		failed: quests.filter(q => q.status === "failed").length,
+		blocked: 0, // Will be computed by dependency analysis
+	};
+}
+
+/**
+ * Get quest board analytics for optimization insights
+ */
+export function getQuestBoardAnalytics(): {
+	totalQuests: number;
+	averageCompletionTime: number;
+	parallelizationOpportunities: number;
+	topConflictingPackages: string[];
+} {
+	const board = loadQuestBoard();
+	const completedQuests = board.quests.filter(q => q.status === "complete");
+
+	// Calculate average completion time
+	let totalTime = 0;
+	let validTimes = 0;
+	for (const quest of completedQuests) {
+		if (quest.startedAt && quest.completedAt) {
+			const duration = new Date(quest.completedAt).getTime() - new Date(quest.startedAt).getTime();
+			totalTime += duration;
+			validTimes++;
+		}
+	}
+	const averageCompletionTime = validTimes > 0 ? totalTime / validTimes : 0;
+
+	// Count pending quests as parallelization opportunities
+	const pendingQuests = board.quests.filter(q => q.status === "pending").length;
+
+	// Collect package hints for conflict analysis
+	const packageCounts = new Map<string, number>();
+	for (const quest of board.quests) {
+		const packages = quest.computedPackages || quest.packageHints || [];
+		for (const pkg of packages) {
+			packageCounts.set(pkg, (packageCounts.get(pkg) || 0) + 1);
+		}
+	}
+
+	// Get top conflicting packages (most frequently touched)
+	const topConflictingPackages = Array.from(packageCounts.entries())
+		.sort((a, b) => b[1] - a[1])
+		.slice(0, 5)
+		.map(([pkg]) => pkg);
+
+	return {
+		totalQuests: board.quests.length,
+		averageCompletionTime,
+		parallelizationOpportunities: pendingQuests,
+		topConflictingPackages,
+	};
+}
+
+/**
+ * Update quest with computed analysis results
+ */
+export function updateQuestAnalysis(questId: string, analysis: {
+	computedPackages?: string[];
+	riskScore?: number;
+	estimatedFiles?: string[];
+	tags?: string[];
+}): void {
+	const board = loadQuestBoard();
+	const quest = board.quests.find(q => q.id === questId);
+	if (quest) {
+		if (analysis.computedPackages) quest.computedPackages = analysis.computedPackages;
+		if (analysis.riskScore !== undefined) quest.riskScore = analysis.riskScore;
+		if (analysis.estimatedFiles) quest.estimatedFiles = analysis.estimatedFiles;
+		if (analysis.tags) quest.tags = analysis.tags;
+		saveQuestBoard(board);
+	}
 }
 
 // Legacy aliases for backwards compatibility during migration

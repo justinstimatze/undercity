@@ -310,3 +310,144 @@ export interface ScoutCache {
 	/** When cache was last modified */
 	lastUpdated: Date;
 }
+
+// ============== Loadout Configuration Types ==============
+
+/**
+ * Model choices for each agent type in a loadout
+ */
+export interface LoadoutModelChoices {
+	scout: "haiku" | "sonnet" | "opus";
+	planner: "haiku" | "sonnet" | "opus";
+	fabricator: "haiku" | "sonnet" | "opus";
+	auditor: "haiku" | "sonnet" | "opus";
+}
+
+/**
+ * Context size configuration
+ */
+export type ContextSize = "small" | "medium" | "large";
+
+/**
+ * Parallelism level configuration
+ */
+export type ParallelismLevel = "sequential" | "limited" | "maximum";
+
+/**
+ * A loadout configuration - defines how agents are configured for a run
+ */
+export interface LoadoutConfiguration {
+	/** Unique identifier for the loadout */
+	id: string;
+	/** Human-readable name */
+	name: string;
+	/** Description of when to use this loadout */
+	description: string;
+	/** Maximum number of agents in the squad */
+	maxSquadSize: number;
+	/** Which agent types are enabled */
+	enabledAgentTypes: AgentType[];
+	/** Model choice for each agent type */
+	modelChoices: LoadoutModelChoices;
+	/** How much context to provide to agents */
+	contextSize: ContextSize;
+	/** How much parallelism to use */
+	parallelismLevel: ParallelismLevel;
+	/** Skip human approval for plans */
+	autoApprove: boolean;
+	/** When this configuration was last updated */
+	lastUpdated: Date;
+}
+
+/**
+ * Performance record for a loadout on a specific quest
+ */
+export interface LoadoutPerformanceRecord {
+	/** The loadout ID used */
+	loadoutId: string;
+	/** The quest ID */
+	questId: string;
+	/** Quest type/category if known */
+	questType?: string;
+	/** Whether the quest succeeded */
+	success: boolean;
+	/** Total tokens used */
+	tokensUsed: number;
+	/** Execution time in milliseconds */
+	executionTimeMs: number;
+	/** Number of rework attempts */
+	reworkCount: number;
+	/** When this was recorded */
+	recordedAt: Date;
+}
+
+/**
+ * Aggregated score for a loadout
+ */
+export interface LoadoutScore {
+	/** The loadout ID */
+	loadoutId: string;
+	/** Number of quests completed with this loadout */
+	questCount: number;
+	/** Success rate (0-1) */
+	successRate: number;
+	/** Average tokens per quest */
+	avgTokensPerQuest: number;
+	/** Average execution time in ms */
+	avgExecutionTimeMs: number;
+	/** Average rework count */
+	avgReworkCount: number;
+	/** Composite efficiency score (higher is better) */
+	efficiencyScore: number;
+	/** When this score was last calculated */
+	lastCalculated: Date;
+}
+
+/**
+ * Storage for loadout configurations and performance data
+ */
+export interface LoadoutStorage {
+	/** All loadout configurations */
+	configurations: LoadoutConfiguration[];
+	/** Performance records */
+	performanceRecords: LoadoutPerformanceRecord[];
+	/** Calculated scores per loadout */
+	scores: Record<string, LoadoutScore>;
+	/** When storage was last updated */
+	lastUpdated: Date;
+}
+
+// ============== Quest Matchmaking Types ==============
+
+/**
+ * Cross-quest conflict detection
+ * NEW: Types for parallel quest execution
+ */
+export interface CrossQuestConflict {
+	questIds: string[];
+	conflictingFiles: string[];
+	severity: "warning" | "error" | "critical";
+}
+
+/**
+ * Quest batch execution result
+ * NEW: Result tracking for parallel quest execution
+ */
+export interface QuestBatchResult {
+	completedQuests: string[];
+	failedQuests: string[];
+	totalDuration: number;
+	conflicts: CrossQuestConflict[];
+}
+
+/**
+ * Quest set metadata
+ * NEW: Metadata for quest batching
+ */
+export interface QuestSetMetadata {
+	questIds: string[];
+	raidIds: string[];
+	startedAt: Date;
+	estimatedDuration: number;
+	riskLevel: "low" | "medium" | "high";
+}
