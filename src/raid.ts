@@ -26,6 +26,7 @@ import {
 	extractReviewContext,
 	summarizeContextForAgent,
 } from "./context.js";
+import { dualLogger } from "./dual-logger.js";
 import { FileTracker, parseFileOperation } from "./file-tracker.js";
 import { calculateCodebaseFingerprint, createAndCheckout, hashFingerprint, hashGoal, isCacheableState, MergeQueue } from "./git.js";
 import { raidLogger, squadLogger } from "./logger.js";
@@ -150,7 +151,7 @@ export class RaidOrchestrator {
 	}
 
 	/**
-	 * Stream agent activity to console for visibility
+	 * Stream agent activity to console and log file for visibility
 	 *
 	 * Handles multiple SDK message formats:
 	 * - "assistant" messages with content blocks (tool_use, text)
@@ -168,7 +169,7 @@ export class RaidOrchestrator {
 		if (msg.type === "content_block_start") {
 			const contentBlock = msg.content_block as { type?: string; name?: string } | undefined;
 			if (contentBlock?.type === "tool_use" && contentBlock.name) {
-				console.log(`${prefix} ${chalk.yellow(contentBlock.name)} ${chalk.dim("...")}`);
+				dualLogger.writeLine(`${prefix} ${chalk.yellow(contentBlock.name)} ${chalk.dim("...")}`);
 			}
 		}
 
@@ -178,7 +179,7 @@ export class RaidOrchestrator {
 			if (delta?.type === "text_delta" && delta.text) {
 				const text = delta.text.trim();
 				if (text && text.length < 100) {
-					process.stdout.write(chalk.gray(text.substring(0, 50)));
+					dualLogger.write(chalk.gray(text.substring(0, 50)));
 				}
 			}
 		}
@@ -209,11 +210,11 @@ export class RaidOrchestrator {
 							inputSummary = chalk.cyan(String(input.prompt).substring(0, 40) + "...");
 						}
 
-						console.log(`${prefix} ${chalk.yellow(block.name)} ${inputSummary}`);
+						dualLogger.writeLine(`${prefix} ${chalk.yellow(block.name)} ${inputSummary}`);
 					} else if (block.type === "text" && block.text) {
 						const firstLine = block.text.split("\n")[0].substring(0, 80);
 						if (firstLine.trim()) {
-							console.log(`${prefix} ${chalk.gray(firstLine)}${block.text.length > 80 ? "..." : ""}`);
+							dualLogger.writeLine(`${prefix} ${chalk.gray(firstLine)}${block.text.length > 80 ? "..." : ""}`);
 						}
 					}
 				}
@@ -224,7 +225,7 @@ export class RaidOrchestrator {
 		if (msg.type === "tool_result") {
 			const toolName = (msg as { tool_name?: string; name?: string }).tool_name || (msg as { name?: string }).name;
 			if (toolName) {
-				console.log(`${prefix} ${chalk.green("✓")} ${toolName}`);
+				dualLogger.writeLine(`${prefix} ${chalk.green("✓")} ${toolName}`);
 			}
 		}
 
@@ -232,7 +233,7 @@ export class RaidOrchestrator {
 		if (msg.type === "message_start") {
 			const msgData = msg.message as { role?: string } | undefined;
 			if (msgData?.role === "assistant") {
-				console.log(`${prefix} ${chalk.dim("thinking...")}`);
+				dualLogger.writeLine(`${prefix} ${chalk.dim("thinking...")}`);
 			}
 		}
 
@@ -240,9 +241,9 @@ export class RaidOrchestrator {
 		if (msg.type === "result") {
 			const subtype = msg.subtype as string | undefined;
 			if (subtype === "success") {
-				console.log(`${prefix} ${chalk.green("✓")} Task complete`);
+				dualLogger.writeLine(`${prefix} ${chalk.green("✓")} Task complete`);
 			} else if (subtype === "error") {
-				console.log(`${prefix} ${chalk.red("✗")} Error: ${msg.error || "unknown"}`);
+				dualLogger.writeLine(`${prefix} ${chalk.red("✗")} Error: ${msg.error || "unknown"}`);
 			}
 		}
 	}
@@ -340,6 +341,12 @@ export class RaidOrchestrator {
 			const existing = this.getCurrentRaid();
 			if (existing) {
 				this.log("Resuming existing raid", { raidId: existing.id });
+
+				// Start dual logging for resumed raid if not already active
+				if (!dualLogger.isActive()) {
+					dualLogger.start(existing.id);
+				}
+
 				return existing;
 			}
 		}
@@ -355,6 +362,9 @@ export class RaidOrchestrator {
 
 		this.persistence.saveRaid(raid);
 		this.log("Started raid", { raidId: raid.id, goal });
+
+		// Start dual logging for this raid
+		dualLogger.start(raid.id);
 
 		// Start planning phase
 		await this.startPlanningPhase(raid);
@@ -886,6 +896,9 @@ export class RaidOrchestrator {
 		// Clear pocket for next raid
 		this.persistence.clearPocket();
 
+		// Stop dual logging and rotate log
+		dualLogger.stop(raid.id);
+
 		this.log("Raid extracted successfully", { raidId: raid.id });
 	}
 
@@ -943,6 +956,10 @@ export class RaidOrchestrator {
 			this.persistence.saveFileTracking(this.fileTracker.getState());
 
 			this.persistence.clearPocket();
+
+			// Stop dual logging and rotate log
+			dualLogger.stop(raid.id);
+
 			this.log("Raid surrendered", { raidId: raid.id });
 		}
 	}
