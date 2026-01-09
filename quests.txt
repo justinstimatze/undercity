@@ -1,122 +1,78 @@
-# Undercity quest board - the space pencil roadmap
-# Run: undercity load quests.txt && undercity work -y
+# Quest Board
 
-# =============================================================================
-# CRITICAL: Self-Improvement Loop (agents can't add new quests)
-# =============================================================================
-Add ability for agents to add new quests - when fabricator/auditor discovers work, they should be able to queue it
-Parse agent output for "[NEW QUEST: ...]" markers and auto-add to quest board
-Have auditor generate follow-up quests for issues found during review
+## Available
 
-# =============================================================================
-# CRITICAL: Elevator (blocks autonomous operation)
-# =============================================================================
-Improve elevator to auto-resolve conflicts using git merge -X theirs strategy
-Add fallback merge strategies: try ours, then theirs, then report specific conflict files
-Make elevator retry failed merges after other branches succeed (conflicts may resolve)
-Implement optimal merge strategy: rebase from fresh main first, then try clean merge, then -X ours (prefer main), only report conflicts if truly unresolvable
-Ensure fabricator always creates branch from latest main - fetch and checkout fresh main before branching to avoid stale code conflicts
-Fix elevator auto-processing - branches should auto-merge to main after auditor approval, currently requires manual merge intervention
+### Critical
+[self-improvement] Add ability for agents to add new quests - when quester/sheriff discovers work, they should be able to queue it
+[self-improvement] Parse agent output for "[NEW QUEST: ...]" markers and auto-add to quest board
+[self-improvement] Have sheriff generate follow-up quests for issues found during review
+[elevator] Improve elevator to auto-resolve conflicts using git merge -X theirs strategy
+[elevator] Add fallback merge strategies: try ours, then theirs, then report specific conflict files
+[elevator] Make elevator retry failed merges after other branches succeed (conflicts may resolve)
+[elevator] Implement optimal merge strategy: rebase from fresh main first, then try clean merge, then -X ours (prefer main), only report conflicts if truly unresolvable
+[elevator] Ensure quester always creates branch from latest main - fetch and checkout fresh main before branching to avoid stale code conflicts
+[elevator] Fix elevator auto-processing - branches should auto-merge to main after sheriff approval, currently requires manual merge intervention
 
-# =============================================================================
-# HIGH: Parallelism (the big gap vs Gas Town)
-# =============================================================================
-Add parallel fabricator support - spawn multiple fabricators working on different tasks simultaneously
-Implement task splitting in planner - break large tasks into independent subtasks for parallel execution
-Add a --parallel flag to control max concurrent agents (default 3, max 5)
-Track which files each fabricator is touching to avoid conflicts between parallel agents
+### High
+[parallelism] Add parallel quester support - spawn multiple questers working on different waypoints simultaneously
+[parallelism] Implement waypoint splitting in logistics - break large tasks into independent subtasks for parallel execution
+[parallelism] Add a --parallel flag to control max concurrent agents (default 3, max 5)
+[parallelism] Track which files each quester is touching to avoid conflicts between parallel agents
+[speed] Add context summarization - don't pass entire plan file to every agent, summarize relevant parts
+[speed] Add timeout handling - if an agent takes >10 minutes, log warning and consider intervention
 
-# =============================================================================
-# HIGH: Speed Improvements
-# =============================================================================
-Consider using Sonnet instead of Opus for fabricator (faster, still good quality)
-Add context summarization - don't pass entire plan file to every agent, summarize relevant parts
-Cache scout results - if codebase hasn't changed, reuse previous scout intel
-Add timeout handling - if an agent takes >10 minutes, log warning and consider intervention
+### Medium
+[planning] Parse plan files into discrete goals/waypoints upfront instead of re-reading whole plan each iteration
+[planning] Track which plan steps are complete in backlog so we don't re-check via codebase analysis
+[planning] Add plan progress tracking - show "Step 3/7: Adding authentication" not just "executing"
+[planning] Add "undercity import-plan <plan.md>" command to auto-extract quests from Claude plan files
+[planning] Add context field to Quest interface - allow storing relevant plan snippets per quest
+[planning] Implement context sharding - pass only relevant context to each raider type (flute gets less, quester gets more)
+[visibility] Fix streamAgentActivity to properly show tool calls from SDK message format
+[visibility] Add progress bar to plan command output (not just status command)
+[visibility] Show estimated time remaining based on historical raid durations
+[visibility] Add a --quiet flag for minimal output (just errors and completion)
+[robustness] Add retry logic for failed agents - if quester fails, retry once before giving up
+[robustness] Implement graceful degradation - if sheriff fails, still allow manual review option
+[robustness] Add health checks - detect stuck agents (no activity for 5+ minutes)
+[robustness] Save partial work on agent failure - don't lose progress if one agent crashes
+[robustness] Handle rate limits gracefully - detect 429 errors, pause squad, show countdown to resume
+[robustness] Add "undercity abort" command for emergency stop of runaway raids (kill all raiders, save state)
+[robustness] Implement conversation compaction - summarize long raider contexts to avoid token limits
+[theme] Add "rat check" phase before extraction - dedicated review for hidden bugs that look harmless but will betray later
+[theme] Add --light flag for "free loadout" mode - Haiku-only quick runs for small tasks, minimal context, minimal loss
+[theme] Add pre-raid "extraction camper" check - detect potential merge conflicts before starting work, not at the end
+[verbose] Add --verbose flag to show detailed raider activity during raids (tool calls, file reads, decisions)
+[verbose] Add more streaming output for raiders - show what they're reading, writing, and deciding in real-time
+[verbose] Create debug mode that logs full raider context/prompts for troubleshooting slow or stuck raiders
+[tui] Build a TUI (terminal UI) dashboard to monitor parallel raiders and squads in real-time
+[tui] Show raider status, current waypoint, progress bars, and live activity in a split-pane layout
+[tui] Support for multiple concurrent squads with clear visual separation
 
-# =============================================================================
-# MEDIUM: Plan Decomposition
-# =============================================================================
-Parse plan files into discrete goals/tasks upfront instead of re-reading whole plan each iteration
-Track which plan steps are complete in backlog so we don't re-check via codebase analysis
-Add plan progress tracking - show "Step 3/7: Adding authentication" not just "executing"
-Add "undercity import-plan <plan.md>" command to auto-extract quests from Claude plan files
-Add context field to Quest interface - allow storing relevant plan snippets per quest
-Implement context sharding - pass only relevant context to each raider type (scout gets less, fabricator gets more)
+### Low
+[qol] Add "undercity pause" command to pause a raid without surrendering
+[qol] Add "undercity resume" command to continue a paused raid
+[qol] Add "undercity logs <agent-id>" to see full output from a specific agent
+[qol] Add config file support (.undercityrc) for default options like --stream, model choices
+[qol] Add per-quest model selection - allow overriding raider models for specific quests
+[future] Add cross-raid memory in stash - remember patterns/decisions from previous raids
+[future] Add "rival raider" mode - spawn a review agent that tries to break the quester's code
+[future] Implement Rule of Five verification - actually check that 5 review passes happened
+[theme] Update "Raid extracted successfully" to "Extraction complete" or "Squad extracted"
+[theme] Review all log messages for ARC Raiders theme consistency
+[theme] Use ARC Raiders CLI phrases: "Going topside...", "Sheriff on patrol", "Rat spotted", "Contact!"
 
-# =============================================================================
-# MEDIUM: Visibility & Streaming
-# =============================================================================
-Fix streamAgentActivity to properly show tool calls from SDK message format
-Add progress bar to plan command output (not just status command)
-Show estimated time remaining based on historical raid durations
-Add a --quiet flag for minimal output (just errors and completion)
+## Extracted
+2026-01-09: Standardize agent terminology (flute/logistics/quester/sheriff)
+2026-01-09: Rename MergeQueue to Elevator
+2026-01-09: Add Philosophy section to README
+2026-01-09: Fix quester model (Opus → Sonnet) in docs
+2026-01-09: Add cspell dictionary
+2026-01-xx: Add vitest tests for raid, cli, backlog modules (120 tests total)
+2026-01-xx: Add --dry-run flag to slingshot
+2026-01-xx: Add history command for completed raids
+2026-01-xx: Add progress percentage to status command
+2026-01-xx: Switch quester from Opus to Sonnet for speed
+2026-01-xx: Cache flute results - if codebase hasn't changed, reuse previous flute intel
 
-# =============================================================================
-# MEDIUM: Robustness
-# =============================================================================
-Add retry logic for failed agents - if fabricator fails, retry once before giving up
-Implement graceful degradation - if auditor fails, still allow manual review option
-Add health checks - detect stuck agents (no activity for 5+ minutes)
-Save partial work on agent failure - don't lose progress if one agent crashes
-Handle rate limits gracefully - detect 429 errors, pause squad, show countdown to resume
-Add "undercity abort" command for emergency stop of runaway raids (kill all raiders, save state)
-Implement conversation compaction - summarize long raider contexts to avoid token limits
-
-# =============================================================================
-# LOW: Quality of Life
-# =============================================================================
-Add "undercity pause" command to pause a raid without surrendering
-Add "undercity resume" command to continue a paused raid
-Add "undercity logs <agent-id>" to see full output from a specific agent
-Add config file support (.undercityrc) for default options like --stream, model choices
-Add per-quest model selection - allow overriding raider models (e.g., use Opus for complex quests, Sonnet for simple)
-
-# =============================================================================
-# LOW: Advanced Features (future)
-# =============================================================================
-Add loadout system - pre-raid configuration for different task types
-Add cross-raid memory in stash - remember patterns/decisions from previous raids
-Add "rival raider" mode - spawn a review agent that tries to break the fabricator's code
-Implement Rule of Five verification - actually check that 5 review passes happened
-
-# =============================================================================
-# MEDIUM: ARC Raiders Culture Integration
-# =============================================================================
-Rename auditor to "sheriff" - the vigilante who hunts bugs and enforces quality (from r/ArcRaiders sheriff archetype)
-Add "rat check" phase before extraction - dedicated review for hidden bugs that look harmless but will betray later
-Add --light flag for "free loadout" mode - Haiku-only quick runs for small tasks, minimal context, minimal loss
-Add "flute" read-only mode for scouts - like the flute player peace signal, indicates they're just looking, won't modify anything
-Add pre-raid "extraction camper" check - detect potential merge conflicts before starting work, not at the end
-
-# =============================================================================
-# LOW: Vocabulary/Theme Consistency
-# =============================================================================
-Update "Raid extracted successfully" to "Extraction complete" or "Squad extracted" - squads extract FROM raids
-Rewrite quest.test.ts tests for the new Quest/QuestBoard API (old backlog tests removed)
-Review all log messages for ARC Raiders theme consistency
-Rename "agents" to "raiders" throughout codebase and CLI output - squad members are raiders going topside, not generic agents
-Use ARC Raiders CLI phrases: "Going topside...", "Sheriff on patrol", "Rat spotted", "Contact! ARCs detected"
-
-# =============================================================================
-# MEDIUM: Verbose/Debug Output
-# =============================================================================
-Add --verbose flag to show detailed raider activity during raids (tool calls, file reads, decisions)
-Add more streaming output for raiders - show what they're reading, writing, and deciding in real-time
-Create debug mode that logs full raider context/prompts for troubleshooting slow or stuck raiders
-
-# =============================================================================
-# MEDIUM: TUI Dashboard
-# =============================================================================
-Build a TUI (terminal UI) dashboard to monitor parallel raiders and squads in real-time
-Show raider status, current task, progress bars, and live activity in a split-pane layout
-Support for multiple concurrent squads with clear visual separation
-
-# =============================================================================
-# COMPLETED (for reference)
-# =============================================================================
-# [DONE] Add vitest tests for raid, cli, backlog modules (120 tests total)
-# [DONE] Add --dry-run flag to slingshot
-# [DONE] Add history command for completed raids
-# [DONE] Add progress percentage to status command
-# [DONE] Switch planner from Opus to Sonnet for speed
+## Abandoned
