@@ -2,7 +2,7 @@
  * Tests for the loadout scoring system
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
 	calculateCompositeScore,
 	classifyQuestType,
@@ -15,12 +15,7 @@ import {
 	updateLoadoutScores,
 } from "../loadout-scoring.js";
 import type { Quest } from "../quest.js";
-import type {
-	EfficiencyMetrics,
-	LoadoutConfiguration,
-	LoadoutScore,
-	Raid,
-} from "../types.js";
+import type { EfficiencyMetrics, LoadoutConfiguration, LoadoutScore, Raid } from "../types.js";
 
 // Mock data for testing
 const mockLoadoutConfig: LoadoutConfiguration = {
@@ -121,19 +116,21 @@ describe("Quest Type Classification", () => {
 });
 
 describe("Quest Complexity Estimation", () => {
-	it("should estimate high complexity for complex tasks", () => {
-		expect(estimateQuestComplexity("Refactor entire authentication and authorization system with database migration")).toBeGreaterThan(7);
+	it("should estimate high complexity for complex waypoints", () => {
+		expect(
+			estimateQuestComplexity("Refactor entire authentication and authorization system with database migration"),
+		).toBeGreaterThan(7);
 		expect(estimateQuestComplexity("Security audit of API with performance optimization")).toBeGreaterThan(6);
 		expect(estimateQuestComplexity("Integration with multiple external APIs and services")).toBeGreaterThan(5);
 	});
 
-	it("should estimate medium complexity for moderate tasks", () => {
+	it("should estimate medium complexity for moderate waypoints", () => {
 		const complexity = estimateQuestComplexity("Add user profile editing feature");
 		expect(complexity).toBeGreaterThanOrEqual(4);
 		expect(complexity).toBeLessThanOrEqual(6);
 	});
 
-	it("should estimate low complexity for simple tasks", () => {
+	it("should estimate low complexity for simple waypoints", () => {
 		expect(estimateQuestComplexity("Fix typo in error message")).toBeLessThan(4);
 		expect(estimateQuestComplexity("Add simple comment to function")).toBeLessThan(4);
 		expect(estimateQuestComplexity("Quick one line change")).toBeLessThan(4);
@@ -234,12 +231,7 @@ describe("Performance Recording", () => {
 			success: true,
 		};
 
-		const performance = recordLoadoutPerformance(
-			mockLoadoutConfig,
-			mockQuest,
-			mockRaid,
-			metrics
-		);
+		const performance = recordLoadoutPerformance(mockLoadoutConfig, mockQuest, mockRaid, metrics);
 
 		expect(performance).toBeDefined();
 		expect(performance.loadoutConfigId).toBe(mockLoadoutConfig.id);
@@ -265,13 +257,7 @@ describe("Performance Recording", () => {
 			"fabricator-1": { tokensUsed: 30000, timeSpent: 20000, taskSuccess: true },
 		};
 
-		const performance = recordLoadoutPerformance(
-			mockLoadoutConfig,
-			mockQuest,
-			mockRaid,
-			metrics,
-			agentMetrics
-		);
+		const performance = recordLoadoutPerformance(mockLoadoutConfig, mockQuest, mockRaid, metrics, agentMetrics);
 
 		expect(performance.agentMetrics).toBeDefined();
 		expect(performance.agentMetrics!["scout-1"]).toEqual(agentMetrics["scout-1"]);
@@ -319,11 +305,7 @@ describe("Loadout Recommendations", () => {
 
 	it("should generate recommendations when performance data is available", () => {
 		const scores = updateLoadoutScores(mockPerformances, []);
-		const recommendation = generateLoadoutRecommendations(
-			"debug",
-			DEFAULT_LOADOUTS,
-			scores
-		);
+		const recommendation = generateLoadoutRecommendations("debug", DEFAULT_LOADOUTS, scores);
 
 		expect(recommendation).toBeDefined();
 		expect(recommendation!.questType).toBe("debug");
@@ -333,22 +315,14 @@ describe("Loadout Recommendations", () => {
 	});
 
 	it("should return null when no performance data is available", () => {
-		const recommendation = generateLoadoutRecommendations(
-			"documentation",
-			DEFAULT_LOADOUTS,
-			[]
-		);
+		const recommendation = generateLoadoutRecommendations("documentation", DEFAULT_LOADOUTS, []);
 
 		expect(recommendation).toBeNull();
 	});
 
 	it("should rank loadouts by composite score", () => {
 		const scores = updateLoadoutScores(mockPerformances, []);
-		const recommendation = generateLoadoutRecommendations(
-			"debug",
-			DEFAULT_LOADOUTS,
-			scores
-		);
+		const recommendation = generateLoadoutRecommendations("debug", DEFAULT_LOADOUTS, scores);
 
 		expect(recommendation).toBeDefined();
 
@@ -397,7 +371,7 @@ describe("Best Loadout Selection", () => {
 	});
 
 	it("should use balanced performer as ultimate fallback", () => {
-		const quest = { id: "new-quest", objective: "Some unknown task type" } as Quest;
+		const quest = { id: "new-quest", objective: "Some unknown waypoint type" } as Quest;
 
 		const bestLoadout = getBestLoadoutForQuest(quest, DEFAULT_LOADOUTS, []);
 		expect(bestLoadout).toBeDefined();
@@ -407,7 +381,7 @@ describe("Best Loadout Selection", () => {
 
 describe("Default Loadouts", () => {
 	it("should include all required default loadouts", () => {
-		const loadoutIds = DEFAULT_LOADOUTS.map(l => l.id);
+		const loadoutIds = DEFAULT_LOADOUTS.map((l) => l.id);
 		expect(loadoutIds).toContain("speed-demon");
 		expect(loadoutIds).toContain("balanced-performer");
 		expect(loadoutIds).toContain("quality-focused");
@@ -428,13 +402,13 @@ describe("Default Loadouts", () => {
 	});
 
 	it("should have appropriate model choices for different loadout types", () => {
-		const speedDemon = DEFAULT_LOADOUTS.find(l => l.id === "speed-demon")!;
+		const speedDemon = DEFAULT_LOADOUTS.find((l) => l.id === "speed-demon")!;
 		expect(speedDemon.modelChoices.scout).toBe("haiku"); // Speed focus
 
-		const qualityFocused = DEFAULT_LOADOUTS.find(l => l.id === "quality-focused")!;
+		const qualityFocused = DEFAULT_LOADOUTS.find((l) => l.id === "quality-focused")!;
 		expect(qualityFocused.modelChoices.auditor).toBe("opus"); // Quality focus
 
-		const debugSpecialist = DEFAULT_LOADOUTS.find(l => l.id === "debug-specialist")!;
+		const debugSpecialist = DEFAULT_LOADOUTS.find((l) => l.id === "debug-specialist")!;
 		expect(debugSpecialist.modelChoices.auditor).toBe("opus"); // Thorough review for bugs
 	});
 });

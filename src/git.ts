@@ -11,8 +11,8 @@
  * one branch at a time: rebase → test → merge.
  */
 
-import { createHash } from "node:crypto";
 import { execSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { gitLogger } from "./logger.js";
 import type { CodebaseFingerprint, MergeQueueItem, MergeQueueRetryConfig } from "./types.js";
 
@@ -363,11 +363,11 @@ export async function runTests(cwd?: string): Promise<{ success: boolean; output
 }
 
 /**
- * Generate a branch name for a raid task
+ * Generate a branch name for a raid waypoint
  */
-export function generateBranchName(raidId: string, taskId: string): string {
+export function generateBranchName(raidId: string, waypointId: string): string {
 	const timestamp = Date.now().toString(36);
-	return `undercity/${raidId}/${taskId}-${timestamp}`;
+	return `undercity/${raidId}/${waypointId}-${timestamp}`;
 }
 
 // ============== Codebase Fingerprinting ==============
@@ -518,10 +518,10 @@ export class MergeQueue {
 	/**
 	 * Add a branch to the merge queue
 	 */
-	add(branch: string, taskId: string, agentId: string): MergeQueueItem {
+	add(branch: string, waypointId: string, agentId: string): MergeQueueItem {
 		const item: MergeQueueItem = {
 			branch,
-			taskId,
+			waypointId,
 			agentId,
 			status: "pending",
 			queuedAt: new Date(),
@@ -530,7 +530,7 @@ export class MergeQueue {
 			isRetry: false,
 		};
 		this.queue.push(item);
-		gitLogger.debug({ branch, taskId, agentId }, "Added to merge queue");
+		gitLogger.debug({ branch, waypointId, agentId }, "Added to merge queue");
 		return item;
 	}
 
@@ -709,7 +709,7 @@ export class MergeQueue {
 			// Remove from queue
 			this.queue = this.queue.filter((i) => i !== item);
 
-			gitLogger.info({ branch: item.branch, taskId: item.taskId }, "Merge complete");
+			gitLogger.info({ branch: item.branch, waypointId: item.waypointId }, "Merge complete");
 			return item;
 		} catch (error) {
 			item.status = "conflict";

@@ -5,9 +5,9 @@
  * Analyzes dependencies, conflicts, and resource requirements to optimize parallel execution.
  */
 
+import type { FileTracker } from "./file-tracker.js";
 import type { Quest } from "./quest.js";
-import { QuestAnalyzer, type QuestAnalysis } from "./quest-analyzer.js";
-import { FileTracker } from "./file-tracker.js";
+import type { QuestAnalyzer } from "./quest-analyzer.js";
 
 export interface QuestSet {
 	quests: Quest[];
@@ -43,11 +43,7 @@ export class QuestScheduler {
 	private fileTracker: FileTracker;
 	private maxParallelQuests: number;
 
-	constructor(
-		analyzer: QuestAnalyzer,
-		fileTracker: FileTracker,
-		maxParallelQuests: number = 3
-	) {
+	constructor(analyzer: QuestAnalyzer, fileTracker: FileTracker, maxParallelQuests: number = 3) {
 		this.analyzer = analyzer;
 		this.fileTracker = fileTracker;
 		this.maxParallelQuests = maxParallelQuests;
@@ -66,10 +62,7 @@ export class QuestScheduler {
 		const dependencyGraph = this.buildDependencyGraph(analyzedQuests);
 
 		// Find all possible quest combinations
-		const questSets = this.generateQuestCombinations(
-			dependencyGraph.readyQuests,
-			this.maxParallelQuests
-		);
+		const questSets = this.generateQuestCombinations(dependencyGraph.readyQuests, this.maxParallelQuests);
 
 		// Evaluate each set for compatibility and performance
 		const evaluatedSets: QuestSet[] = [];
@@ -156,7 +149,7 @@ export class QuestScheduler {
 				const conflicts = this.detectImplicitConflicts(quest1, quest2);
 				edges.push(...conflicts);
 
-				if (conflicts.some(c => c.severity === "blocking")) {
+				if (conflicts.some((c) => c.severity === "blocking")) {
 					// Mark both quests as potentially conflicting
 					// (actual blocking will be resolved in compatibility check)
 				}
@@ -164,7 +157,7 @@ export class QuestScheduler {
 		}
 
 		// Identify ready quests (no blocking dependencies)
-		const readyQuests = quests.filter(quest => !blockedQuests.has(quest.id));
+		const readyQuests = quests.filter((quest) => !blockedQuests.has(quest.id));
 
 		return {
 			nodes: quests,
@@ -233,7 +226,7 @@ export class QuestScheduler {
 	 */
 	private getCombinations<T>(items: T[], size: number): T[][] {
 		if (size === 1) {
-			return items.map(item => [item]);
+			return items.map((item) => [item]);
 		}
 
 		const combinations: T[][] = [];
@@ -258,20 +251,20 @@ export class QuestScheduler {
 		const compatibilityMatrix = this.buildCompatibilityMatrix(questSet);
 
 		// Check if all quests in the set are compatible
-		let allCompatible = true;
+		let _allCompatible = true;
 		const allConflicts: QuestDependency[] = [];
 
 		for (const row of compatibilityMatrix) {
 			for (const result of row) {
 				if (!result.compatible) {
-					allCompatible = false;
+					_allCompatible = false;
 				}
 				allConflicts.push(...result.conflicts);
 			}
 		}
 
 		// If any blocking conflicts exist, this set is invalid
-		const blockingConflicts = allConflicts.filter(c => c.severity === "blocking");
+		const blockingConflicts = allConflicts.filter((c) => c.severity === "blocking");
 		if (blockingConflicts.length > 0) {
 			return null;
 		}
@@ -381,7 +374,7 @@ export class QuestScheduler {
 			score -= 0.4; // Heavy penalty for double high-risk
 		}
 
-		const compatible = score > 0 && !conflicts.some(c => c.severity === "blocking");
+		const compatible = score > 0 && !conflicts.some((c) => c.severity === "blocking");
 
 		return {
 			quest1Id: quest1.id,
@@ -397,7 +390,7 @@ export class QuestScheduler {
 	 */
 	private hasPackageOverlap(packages1: string[], packages2: string[]): boolean {
 		const set1 = new Set(packages1);
-		return packages2.some(pkg => set1.has(pkg));
+		return packages2.some((pkg) => set1.has(pkg));
 	}
 
 	/**
@@ -407,7 +400,7 @@ export class QuestScheduler {
 		// Simple exact match check for now
 		// In a more sophisticated implementation, this could handle glob patterns
 		const set1 = new Set(files1);
-		return files2.some(file => set1.has(file));
+		return files2.some((file) => set1.has(file));
 	}
 
 	/**
@@ -416,14 +409,17 @@ export class QuestScheduler {
 	private estimateSetDuration(questSet: Quest[]): number {
 		// For parallel execution, duration is the maximum of individual quest durations
 		// Base estimate: complexity maps to duration
-		const durations = questSet.map(quest => {
-			const complexity = quest.tags?.includes("high") ? "high" :
-							 quest.tags?.includes("medium") ? "medium" : "low";
+		const durations = questSet.map((quest) => {
+			const complexity = quest.tags?.includes("high") ? "high" : quest.tags?.includes("medium") ? "medium" : "low";
 			switch (complexity) {
-				case "high": return 45 * 60 * 1000; // 45 minutes
-				case "medium": return 25 * 60 * 1000; // 25 minutes
-				case "low": return 15 * 60 * 1000; // 15 minutes
-				default: return 20 * 60 * 1000; // 20 minutes default
+				case "high":
+					return 45 * 60 * 1000; // 45 minutes
+				case "medium":
+					return 25 * 60 * 1000; // 25 minutes
+				case "low":
+					return 15 * 60 * 1000; // 15 minutes
+				default:
+					return 20 * 60 * 1000; // 20 minutes default
 			}
 		});
 
@@ -434,7 +430,7 @@ export class QuestScheduler {
 	 * Calculate overall risk level for a quest set
 	 */
 	private calculateSetRiskLevel(questSet: Quest[]): "low" | "medium" | "high" {
-		const maxRisk = Math.max(...questSet.map(q => q.riskScore || 0));
+		const maxRisk = Math.max(...questSet.map((q) => q.riskScore || 0));
 		const avgRisk = questSet.reduce((sum, q) => sum + (q.riskScore || 0), 0) / questSet.length;
 
 		if (maxRisk > 0.8 || avgRisk > 0.6) return "high";
@@ -445,10 +441,7 @@ export class QuestScheduler {
 	/**
 	 * Calculate parallelism score (higher is better for parallel execution)
 	 */
-	private calculateParallelismScore(
-		questSet: Quest[],
-		compatibilityMatrix: CompatibilityResult[][]
-	): number {
+	private calculateParallelismScore(questSet: Quest[], compatibilityMatrix: CompatibilityResult[][]): number {
 		if (questSet.length === 1) {
 			// Single quest gets base score
 			return 0.5;
@@ -474,14 +467,16 @@ export class QuestScheduler {
 		}
 
 		// Penalty for risk concentration
-		const highRiskCount = questSet.filter(q => (q.riskScore || 0) > 0.7).length;
+		const highRiskCount = questSet.filter((q) => (q.riskScore || 0) > 0.7).length;
 		score -= highRiskCount * 0.2;
 
 		// Bonus for diverse quest types
 		const uniqueTags = new Set<string>();
 		for (const quest of questSet) {
 			if (quest.tags) {
-				quest.tags.forEach(tag => uniqueTags.add(tag));
+				for (const tag of quest.tags) {
+					uniqueTags.add(tag);
+				}
 			}
 		}
 		score += Math.min(uniqueTags.size * 0.1, 0.3); // Up to 0.3 bonus for diversity
@@ -496,7 +491,7 @@ export class QuestScheduler {
 		if (questSets.length === 0) return null;
 
 		// Filter by size constraint
-		const validSets = questSets.filter(set => set.quests.length <= maxCount);
+		const validSets = questSets.filter((set) => set.quests.length <= maxCount);
 		if (validSets.length === 0) return null;
 
 		// Sort by parallelism score and return the best

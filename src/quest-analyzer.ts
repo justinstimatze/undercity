@@ -23,58 +23,58 @@ export class QuestAnalyzer {
 	constructor() {
 		// Package boundary detection patterns
 		this.packagePatterns = [
-			/\b(?:src\/)?([a-zA-Z0-9-]+)\//g,          // src/package-name/
-			/\b(?:packages\/)?([a-zA-Z0-9-]+)\//g,    // packages/package-name/
-			/\b(?:libs?\/)?([a-zA-Z0-9-]+)\//g,       // lib/package-name/
-			/\b(?:components\/)?([a-zA-Z0-9-]+)\//g,  // components/package-name/
-			/\b(?:modules\/)?([a-zA-Z0-9-]+)\//g,     // modules/package-name/
+			/\b(?:src\/)?([a-zA-Z0-9-]+)\//g, // src/package-name/
+			/\b(?:packages\/)?([a-zA-Z0-9-]+)\//g, // packages/package-name/
+			/\b(?:libs?\/)?([a-zA-Z0-9-]+)\//g, // lib/package-name/
+			/\b(?:components\/)?([a-zA-Z0-9-]+)\//g, // components/package-name/
+			/\b(?:modules\/)?([a-zA-Z0-9-]+)\//g, // modules/package-name/
 		];
 
 		// File modification patterns
 		this.filePatterns = [
-			/\b[\w\/-]+\.(?:ts|js|tsx|jsx|py|java|go|rs|cpp|c|h)\b/g, // Source files
-			/\b[\w\/-]+\.(?:json|yaml|yml|toml|xml)\b/g,             // Config files
-			/\b[\w\/-]+\.(?:md|txt|rst)\b/g,                         // Documentation files
-			/\b[\w\/-]+\.(?:css|scss|less|styl)\b/g,                 // Style files
+			/\b[\w/-]+\.(?:ts|js|tsx|jsx|py|java|go|rs|cpp|c|h)\b/g, // Source files
+			/\b[\w/-]+\.(?:json|yaml|yml|toml|xml)\b/g, // Config files
+			/\b[\w/-]+\.(?:md|txt|rst)\b/g, // Documentation files
+			/\b[\w/-]+\.(?:css|scss|less|styl)\b/g, // Style files
 		];
 
 		// Complexity keywords mapping
 		this.complexityKeywords = {
 			// High complexity indicators
-			"refactor": "high",
-			"migrate": "high",
-			"rewrite": "high",
-			"overhaul": "high",
-			"redesign": "high",
-			"architecture": "high",
-			"database": "high",
-			"security": "high",
-			"authentication": "high",
-			"authorization": "high",
+			refactor: "high",
+			migrate: "high",
+			rewrite: "high",
+			overhaul: "high",
+			redesign: "high",
+			architecture: "high",
+			database: "high",
+			security: "high",
+			authentication: "high",
+			authorization: "high",
 
 			// Medium complexity indicators
-			"implement": "medium",
-			"feature": "medium",
-			"integration": "medium",
-			"optimize": "medium",
-			"performance": "medium",
-			"enhance": "medium",
-			"extend": "medium",
-			"improve": "medium",
-			"update": "medium",
-			"upgrade": "medium",
+			implement: "medium",
+			feature: "medium",
+			integration: "medium",
+			optimize: "medium",
+			performance: "medium",
+			enhance: "medium",
+			extend: "medium",
+			improve: "medium",
+			update: "medium",
+			upgrade: "medium",
 
 			// Low complexity indicators
-			"fix": "low",
-			"bug": "low",
-			"typo": "low",
-			"text": "low",
-			"style": "low",
-			"format": "low",
-			"documentation": "low",
-			"comment": "low",
-			"log": "low",
-			"debug": "low",
+			fix: "low",
+			bug: "low",
+			typo: "low",
+			text: "low",
+			style: "low",
+			format: "low",
+			documentation: "low",
+			comment: "low",
+			log: "low",
+			debug: "low",
 		};
 	}
 
@@ -158,7 +158,7 @@ export class QuestAnalyzer {
 			}
 		}
 
-		// Infer file types based on task type
+		// Infer file types based on waypoint type
 		const lowerObjective = objective.toLowerCase();
 
 		if (lowerObjective.includes("test") || lowerObjective.includes("spec")) {
@@ -227,7 +227,7 @@ export class QuestAnalyzer {
 		}
 
 		// Additional complexity heuristics
-		if (words.length > 15) highCount++; // Very detailed tasks tend to be complex
+		if (words.length > 15) highCount++; // Very detailed waypoints tend to be complex
 		if (lowerObjective.includes("across") || lowerObjective.includes("multiple")) mediumCount++;
 		if (lowerObjective.includes("breaking change")) highCount++;
 		if (lowerObjective.includes("backward compatible")) mediumCount++;
@@ -245,7 +245,7 @@ export class QuestAnalyzer {
 		quest: Quest,
 		packages: string[],
 		estimatedFiles: string[],
-		complexity: "low" | "medium" | "high"
+		complexity: "low" | "medium" | "high",
 	): number {
 		let score = 0;
 
@@ -273,9 +273,20 @@ export class QuestAnalyzer {
 		// Special keywords that increase risk
 		const objective = quest.objective.toLowerCase();
 		const riskKeywords = [
-			"delete", "remove", "drop", "migration", "schema",
-			"authentication", "security", "permission", "encryption",
-			"payment", "billing", "transaction", "critical", "production"
+			"delete",
+			"remove",
+			"drop",
+			"migration",
+			"schema",
+			"authentication",
+			"security",
+			"permission",
+			"encryption",
+			"payment",
+			"billing",
+			"transaction",
+			"critical",
+			"production",
 		];
 
 		for (const keyword of riskKeywords) {
@@ -345,12 +356,53 @@ export class QuestAnalyzer {
 	 */
 	private isCommonWord(word: string): boolean {
 		const commonWords = new Set([
-			"the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
-			"by", "from", "up", "about", "into", "through", "during", "before",
-			"after", "above", "below", "over", "under", "between", "among",
-			"test", "tests", "spec", "specs", "example", "examples", "sample",
-			"demo", "docs", "doc", "documentation", "readme", "license",
-			"src", "lib", "libs", "build", "dist", "public", "assets", "static",
+			"the",
+			"and",
+			"or",
+			"but",
+			"in",
+			"on",
+			"at",
+			"to",
+			"for",
+			"of",
+			"with",
+			"by",
+			"from",
+			"up",
+			"about",
+			"into",
+			"through",
+			"during",
+			"before",
+			"after",
+			"above",
+			"below",
+			"over",
+			"under",
+			"between",
+			"among",
+			"test",
+			"tests",
+			"spec",
+			"specs",
+			"example",
+			"examples",
+			"sample",
+			"demo",
+			"docs",
+			"doc",
+			"documentation",
+			"readme",
+			"license",
+			"src",
+			"lib",
+			"libs",
+			"build",
+			"dist",
+			"public",
+			"assets",
+			"static",
 		]);
 		return commonWords.has(word.toLowerCase());
 	}

@@ -221,11 +221,11 @@ describe("Persistence", () => {
 		});
 
 		it("preserves existing inventory data", () => {
-			// Set up inventory with existing tasks and squad
+			// Set up inventory with existing waypoints and squad
 			const existingInventory = createMockInventory({
-				tasks: [
+				waypoints: [
 					{
-						id: "task-1",
+						id: "waypoint-1",
 						raidId: "old-raid",
 						type: "scout",
 						description: "Explore codebase",
@@ -249,8 +249,8 @@ describe("Persistence", () => {
 			persistence.saveRaid(raid);
 
 			const inventory = JSON.parse(mockFiles.get(".undercity/inventory.json") ?? "{}");
-			expect(inventory.tasks).toHaveLength(1);
-			expect(inventory.tasks[0].id).toBe("task-1");
+			expect(inventory.waypoints).toHaveLength(1);
+			expect(inventory.waypoints[0].id).toBe("waypoint-1");
 			expect(inventory.squad).toHaveLength(1);
 			expect(inventory.squad[0].id).toBe("agent-1");
 		});

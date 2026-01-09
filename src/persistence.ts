@@ -28,7 +28,7 @@ import type {
 	ScoutCacheEntry,
 	SquadMember,
 	Stash,
-	Task,
+	Waypoint,
 } from "./types.js";
 
 /** Scout cache configuration */
@@ -107,11 +107,11 @@ export class Persistence {
 	}
 
 	// ============== Inventory ==============
-	// Active raid state (tasks, squad)
+	// Active raid state (waypoints, squad)
 
 	getInventory(): Inventory {
 		return this.readJson<Inventory>("inventory.json", {
-			tasks: [],
+			waypoints: [],
 			squad: [],
 			lastUpdated: new Date(),
 		});
@@ -141,28 +141,28 @@ export class Persistence {
 		});
 	}
 
-	getTasks(): Task[] {
-		return this.getInventory().tasks;
+	getTasks(): Waypoint[] {
+		return this.getInventory().waypoints;
 	}
 
-	saveTasks(tasks: Task[]): void {
+	saveTasks(waypoints: Waypoint[]): void {
 		const inventory = this.getInventory();
-		inventory.tasks = tasks;
+		inventory.waypoints = waypoints;
 		this.saveInventory(inventory);
 	}
 
-	addTask(task: Task): void {
-		const tasks = this.getTasks();
-		tasks.push(task);
-		this.saveTasks(tasks);
+	addTask(waypoint: Waypoint): void {
+		const waypoints = this.getTasks();
+		waypoints.push(waypoint);
+		this.saveTasks(waypoints);
 	}
 
-	updateTask(taskId: string, updates: Partial<Task>): void {
-		const tasks = this.getTasks();
-		const index = tasks.findIndex((t) => t.id === taskId);
+	updateTask(waypointId: string, updates: Partial<Waypoint>): void {
+		const waypoints = this.getTasks();
+		const index = waypoints.findIndex((t) => t.id === waypointId);
 		if (index !== -1) {
-			tasks[index] = { ...tasks[index], ...updates };
-			this.saveTasks(tasks);
+			waypoints[index] = { ...waypoints[index], ...updates };
+			this.saveTasks(waypoints);
 		}
 	}
 
@@ -357,7 +357,7 @@ export class Persistence {
 	clearAll(): void {
 		this.clearPocket();
 		this.saveInventory({
-			tasks: [],
+			waypoints: [],
 			squad: [],
 			lastUpdated: new Date(),
 		});

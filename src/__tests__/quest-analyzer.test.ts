@@ -149,24 +149,24 @@ describe("QuestAnalyzer", () => {
 	});
 
 	describe("assessComplexity", () => {
-		it("should identify low complexity tasks", () => {
+		it("should identify low complexity waypoints", () => {
 			const complexity = analyzer.assessComplexity("Fix typo in README");
 			expect(complexity).toBe("low");
 		});
 
-		it("should identify medium complexity tasks", () => {
+		it("should identify medium complexity waypoints", () => {
 			const complexity = analyzer.assessComplexity("Implement new user feature");
 			expect(complexity).toBe("medium");
 		});
 
-		it("should identify high complexity tasks", () => {
+		it("should identify high complexity waypoints", () => {
 			const complexity = analyzer.assessComplexity("Refactor the entire authentication architecture");
 			expect(complexity).toBe("high");
 		});
 
 		it("should handle detailed descriptions", () => {
 			const longDescription =
-				"This is a very detailed task description that explains exactly what needs to be done in multiple sentences with lots of specific requirements";
+				"This is a very detailed waypoint description that explains exactly what needs to be done in multiple sentences with lots of specific requirements";
 			const complexity = analyzer.assessComplexity(longDescription);
 			expect(complexity).toBe("high"); // Long descriptions tend to be complex
 		});

@@ -1,7 +1,7 @@
 /**
  * File Tracker Module
  *
- * Tracks which files each agent (quester/raider) is touching during a raid.
+ * Tracks which files each agent is touching during a raid.
  * This enables conflict detection when running parallel fabricators.
  *
  * Key features:
@@ -14,12 +14,12 @@
 import { relative } from "node:path";
 import { logger } from "./logger.js";
 import type {
+	CrossQuestConflict,
 	FileConflict,
 	FileOperation,
 	FileTouch,
 	FileTrackingEntry,
 	FileTrackingState,
-	CrossQuestConflict,
 } from "./types.js";
 
 const trackerLogger = logger.child({ module: "file-tracker" });
@@ -32,7 +32,7 @@ const trackerLogger = logger.child({ module: "file-tracker" });
  *
  * 1. Records every file operation per agent
  * 2. Detects potential conflicts before they happen
- * 3. Enables smart task assignment to avoid overlapping file access
+ * 3. Enables smart waypoint assignment to avoid overlapping file access
  */
 export class FileTracker {
 	private state: FileTrackingState;
@@ -61,24 +61,21 @@ export class FileTracker {
 	/**
 	 * Start tracking files for an agent
 	 */
-	startTracking(agentId: string, taskId: string, raidId: string): void {
+	startTracking(agentId: string, waypointId: string, raidId: string): void {
 		if (this.state.entries[agentId]) {
-			trackerLogger.warn(
-				{ agentId, taskId },
-				"Agent already being tracked, overwriting",
-			);
+			trackerLogger.warn({ agentId, waypointId }, "Agent already being tracked, overwriting");
 		}
 
 		this.state.entries[agentId] = {
 			agentId,
-			taskId,
+			waypointId,
 			raidId,
 			files: [],
 			startedAt: new Date(),
 		};
 		this.state.lastUpdated = new Date();
 
-		trackerLogger.debug({ agentId, taskId, raidId }, "Started file tracking");
+		trackerLogger.debug({ agentId, waypointId, raidId }, "Started file tracking");
 	}
 
 	/**
@@ -99,7 +96,7 @@ export class FileTracker {
 	}
 
 	/**
-	 * Stop tracking files for an agent (when task completes)
+	 * Stop tracking files for an agent (when waypoint completes)
 	 */
 	stopTracking(agentId: string): void {
 		const entry = this.state.entries[agentId];
@@ -120,18 +117,10 @@ export class FileTracker {
 	/**
 	 * Record a file operation by an agent
 	 */
-	recordFileAccess(
-		agentId: string,
-		filePath: string,
-		operation: FileOperation,
-		questId?: string,
-	): void {
+	recordFileAccess(agentId: string, filePath: string, operation: FileOperation, questId?: string): void {
 		const entry = this.state.entries[agentId];
 		if (!entry) {
-			trackerLogger.warn(
-				{ agentId, filePath, operation },
-				"Attempted to record file access for untracked agent",
-			);
+			trackerLogger.warn({ agentId, filePath, operation }, "Attempted to record file access for untracked agent");
 			return;
 		}
 
@@ -146,10 +135,7 @@ export class FileTracker {
 		entry.files.push(touch);
 		this.state.lastUpdated = new Date();
 
-		trackerLogger.debug(
-			{ agentId, path: normalizedPath, operation, questId },
-			"Recorded file access",
-		);
+		trackerLogger.debug({ agentId, path: normalizedPath, operation, questId }, "Recorded file access");
 
 		// Also track at quest level if questId provided
 		if (questId && questId !== agentId) {
@@ -218,7 +204,7 @@ export class FileTracker {
 			string,
 			Array<{
 				agentId: string;
-				taskId: string;
+				waypointId: string;
 				operation: FileOperation;
 				timestamp: Date;
 			}>
@@ -240,7 +226,7 @@ export class FileTracker {
 					const existing = fileModifiers.get(touch.path) ?? [];
 					existing.push({
 						agentId,
-						taskId: entry.taskId,
+						waypointId: entry.waypointId,
 						operation: touch.operation,
 						timestamp: touch.timestamp,
 					});
@@ -272,10 +258,7 @@ export class FileTracker {
 	 * @param agentId - Optional: the agent ID to exclude from check
 	 * @returns Conflicting files and which agents are working on them
 	 */
-	wouldConflict(
-		filePaths: string[],
-		agentId?: string,
-	): Map<string, string[]> {
+	wouldConflict(filePaths: string[], agentId?: string): Map<string, string[]> {
 		const result = new Map<string, string[]>();
 		const writeOps: FileOperation[] = ["write", "edit", "delete"];
 
@@ -294,10 +277,7 @@ export class FileTracker {
 
 			// Check if any of the files overlap
 			for (const touch of entry.files) {
-				if (
-					writeOps.includes(touch.operation) &&
-					normalizedPaths.includes(touch.path)
-				) {
+				if (writeOps.includes(touch.operation) && normalizedPaths.includes(touch.path)) {
 					const existing = result.get(touch.path) ?? [];
 					if (!existing.includes(currentAgentId)) {
 						existing.push(currentAgentId);
@@ -314,9 +294,7 @@ export class FileTracker {
 	 * Get active (non-completed) tracking entries
 	 */
 	getActiveEntries(): FileTrackingEntry[] {
-		return Object.values(this.state.entries).filter(
-			(entry) => !entry.endedAt,
-		);
+		return Object.values(this.state.entries).filter((entry) => !entry.endedAt);
 	}
 
 	/**
@@ -354,10 +332,7 @@ export class FileTracker {
 		const after = Object.keys(this.state.entries).length;
 		this.state.lastUpdated = new Date();
 
-		trackerLogger.debug(
-			{ clearedCount: before - after, remaining: after },
-			"Cleared completed tracking entries",
-		);
+		trackerLogger.debug({ clearedCount: before - after, remaining: after }, "Cleared completed tracking entries");
 	}
 
 	/**
@@ -378,7 +353,8 @@ export class FileTracker {
 		// Group entries by quest (raid) - active quests only
 		const questEntries = new Map<string, FileTrackingEntry[]>();
 		for (const entry of Object.values(this.state.entries)) {
-			if (!entry.endedAt) { // Only active entries
+			if (!entry.endedAt) {
+				// Only active entries
 				const quest = entry.raidId; // Use raidId as quest identifier
 				const existing = questEntries.get(quest) || [];
 				existing.push(entry);
@@ -429,7 +405,7 @@ export class FileTracker {
 	 */
 	wouldQuestConflict(questId: string, estimatedFiles: string[]): boolean {
 		const writeOps: FileOperation[] = ["write", "edit", "delete"];
-		const normalizedFiles = estimatedFiles.map(f => this.normalizePath(f));
+		const normalizedFiles = estimatedFiles.map((f) => this.normalizePath(f));
 
 		for (const [agentId, entry] of Object.entries(this.state.entries)) {
 			// Skip completed entries and the quest we're checking
@@ -486,8 +462,7 @@ export class FileTracker {
 		filesWithConflicts: number;
 	} {
 		const activeAgents = this.getActiveEntries().length;
-		const completedAgents =
-			Object.keys(this.state.entries).length - activeAgents;
+		const completedAgents = Object.keys(this.state.entries).length - activeAgents;
 
 		let totalFilesTouched = 0;
 		const allFiles = new Set<string>();

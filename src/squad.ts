@@ -12,7 +12,7 @@
  * Based on Claude Agent SDK's AgentDefinition type.
  */
 
-import type { AgentDefinition, AgentType, SquadMember, Task } from "./types.js";
+import type { AgentDefinition, AgentType, SquadMember, Waypoint } from "./types.js";
 
 /**
  * Squad agent definitions for the Claude SDK
@@ -100,7 +100,7 @@ After making significant code changes (implementing features, adding files, majo
    - Undefined variables/functions
    - Syntax errors
    - Missing dependencies
-4. Do NOT complete your task while build failures exist
+4. Do NOT complete your waypoint while build failures exist
 5. Report build status in your summary
 
 If you hit a blocker not covered by the spec:
@@ -164,13 +164,13 @@ export function generateSquadMemberId(type: AgentType): string {
 /**
  * Create a new squad member
  */
-export function createSquadMember(type: AgentType, task?: Task): SquadMember {
+export function createSquadMember(type: AgentType, waypoint?: Waypoint): SquadMember {
 	const now = new Date();
 	return {
 		id: generateSquadMemberId(type),
 		type,
-		task,
-		status: task ? "working" : "idle",
+		waypoint,
+		status: waypoint ? "working" : "idle",
 		spawnedAt: now,
 		lastActivityAt: now,
 	};
@@ -191,7 +191,7 @@ export function getAllAgentDefinitions(): Record<string, AgentDefinition> {
 }
 
 /**
- * Determine which agent type should handle a task based on description
+ * Determine which agent type should handle a waypoint based on description
  */
 export function determineAgentType(taskDescription: string): AgentType {
 	const desc = taskDescription.toLowerCase();
@@ -233,6 +233,6 @@ export function determineAgentType(taskDescription: string): AgentType {
 		return "auditor";
 	}
 
-	// Default to fabricator for implementation tasks
+	// Default to fabricator for implementation waypoints
 	return "fabricator";
 }

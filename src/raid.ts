@@ -21,18 +21,21 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
-import {
-	extractImplementationContext,
-	extractReviewContext,
-	summarizeContextForAgent,
-} from "./context.js";
+import { extractImplementationContext, extractReviewContext, summarizeContextForAgent } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
 import { FileTracker, parseFileOperation } from "./file-tracker.js";
-import { calculateCodebaseFingerprint, createAndCheckout, hashFingerprint, hashGoal, isCacheableState, MergeQueue } from "./git.js";
+import {
+	calculateCodebaseFingerprint,
+	createAndCheckout,
+	hashFingerprint,
+	hashGoal,
+	isCacheableState,
+	MergeQueue,
+} from "./git.js";
 import { raidLogger, squadLogger } from "./logger.js";
 import { Persistence } from "./persistence.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
-import type { AgentType, FileConflict, MergeQueueRetryConfig, Raid, SquadMember, Task } from "./types.js";
+import type { AgentType, FileConflict, MergeQueueRetryConfig, Raid, SquadMember, Waypoint } from "./types.js";
 
 /**
  * Timeout configuration for agent monitoring
@@ -50,12 +53,12 @@ function generateRaidId(): string {
 }
 
 /**
- * Generate a unique task ID
+ * Generate a unique waypoint ID
  */
 function generateTaskId(): string {
 	const timestamp = Date.now().toString(36);
 	const random = Math.random().toString(36).substring(2, 6);
-	return `task-${timestamp}-${random}`;
+	return `waypoint-${timestamp}-${random}`;
 }
 
 /**
@@ -112,12 +115,12 @@ export class RaidOrchestrator {
 	 * Check if an agent has exceeded the timeout threshold
 	 *
 	 * Uses lastActivityAt to detect true idle/stuck state rather than
-	 * just long-running tasks. A task that's actively processing will
+	 * just long-running waypoints. A waypoint that's actively processing will
 	 * have its lastActivityAt updated frequently.
 	 *
 	 * @returns true if the agent is stuck and a warning was logged
 	 */
-	private checkAgentTimeout(member: SquadMember, task: Task): boolean {
+	private checkAgentTimeout(member: SquadMember, waypoint: Waypoint): boolean {
 		const now = new Date();
 		const lastActivity = new Date(member.lastActivityAt);
 		const elapsedMs = now.getTime() - lastActivity.getTime();
@@ -129,14 +132,14 @@ export class RaidOrchestrator {
 				{
 					agentId: member.id,
 					agentType: member.type,
-					taskId: task.id,
-					taskType: task.type,
+					waypointId: waypoint.id,
+					taskType: waypoint.type,
 					elapsedMinutes,
 					lastActivityAt: lastActivity.toISOString(),
 					status: member.status,
 					intervention: "warning_only",
 				},
-				`Agent timeout: ${member.type} agent ${member.id} has been inactive for ${elapsedMinutes} minutes. Consider intervention.`
+				`Agent timeout: ${member.type} agent ${member.id} has been inactive for ${elapsedMinutes} minutes. Consider intervention.`,
 			);
 
 			// Mark as stuck for visibility in status (but don't interrupt)
@@ -241,7 +244,7 @@ export class RaidOrchestrator {
 		if (msg.type === "result") {
 			const subtype = msg.subtype as string | undefined;
 			if (subtype === "success") {
-				dualLogger.writeLine(`${prefix} ${chalk.green("✓")} Task complete`);
+				dualLogger.writeLine(`${prefix} ${chalk.green("✓")} Waypoint complete`);
 			} else if (subtype === "error") {
 				dualLogger.writeLine(`${prefix} ${chalk.red("✗")} Error: ${msg.error || "unknown"}`);
 			}
@@ -381,8 +384,8 @@ export class RaidOrchestrator {
 	private async startPlanningPhase(raid: Raid): Promise<void> {
 		this.log("Starting planning phase...");
 
-		// Create scout task
-		const scoutTask: Task = {
+		// Create scout waypoint
+		const scoutTask: Waypoint = {
 			id: generateTaskId(),
 			raidId: raid.id,
 			type: "scout",
@@ -392,8 +395,8 @@ export class RaidOrchestrator {
 		};
 		this.persistence.addTask(scoutTask);
 
-		// Create planner task (depends on scout)
-		const plannerTask: Task = {
+		// Create planner waypoint (depends on scout)
+		const plannerTask: Waypoint = {
 			id: generateTaskId(),
 			raidId: raid.id,
 			type: "planner",
@@ -409,7 +412,7 @@ export class RaidOrchestrator {
 			this.log("Using cached scout intel", { goal: raid.goal });
 			console.log(chalk.green("✓") + chalk.dim(" Scout cache hit - reusing previous analysis"));
 
-			// Mark scout task complete with cached result
+			// Mark scout waypoint complete with cached result
 			this.persistence.updateTask(scoutTask.id, {
 				status: "complete",
 				result: cachedResult,
@@ -494,29 +497,29 @@ export class RaidOrchestrator {
 	}
 
 	/**
-	 * Spawn an agent to work on a task
+	 * Spawn an agent to work on a waypoint
 	 */
-	private async spawnAgent(type: AgentType, task: Task): Promise<SquadMember> {
+	private async spawnAgent(type: AgentType, waypoint: Waypoint): Promise<SquadMember> {
 		const raid = this.getCurrentRaid();
-		const member = createSquadMember(type, task);
+		const member = createSquadMember(type, waypoint);
 		this.persistence.addSquadMember(member);
 
-		// Update task status
-		this.persistence.updateTask(task.id, {
+		// Update waypoint status
+		this.persistence.updateTask(waypoint.id, {
 			status: "assigned",
 			agentId: member.id,
 		});
 
 		// Start file tracking for fabricators (they're the ones that modify files)
 		if (type === "fabricator" && raid) {
-			this.fileTracker.startTracking(member.id, task.id, raid.id);
+			this.fileTracker.startTracking(member.id, waypoint.id, raid.id);
 			this.persistence.saveFileTracking(this.fileTracker.getState());
 		}
 
 		squadLogger.info({ agentType: type, agentId: member.id }, "Spawned agent");
 
 		// Run the agent
-		await this.runAgent(member, task);
+		await this.runAgent(member, waypoint);
 
 		return member;
 	}
@@ -524,10 +527,10 @@ export class RaidOrchestrator {
 	/**
 	 * Run an agent using the Claude SDK
 	 */
-	private async runAgent(member: SquadMember, task: Task): Promise<void> {
+	private async runAgent(member: SquadMember, waypoint: Waypoint): Promise<void> {
 		const agentDef = SQUAD_AGENTS[member.type];
 
-		this.persistence.updateTask(task.id, { status: "in_progress" });
+		this.persistence.updateTask(waypoint.id, { status: "in_progress" });
 		this.persistence.updateSquadMember(member.id, {
 			status: "working",
 			lastActivityAt: new Date(),
@@ -541,7 +544,7 @@ export class RaidOrchestrator {
 			const freshMember = this.persistence.getSquad().find((m) => m.id === member.id);
 			if (freshMember) {
 				currentMember = freshMember;
-				this.checkAgentTimeout(freshMember, task);
+				this.checkAgentTimeout(freshMember, waypoint);
 			}
 		}, TIMEOUT_CHECK_INTERVAL_MS);
 
@@ -572,7 +575,7 @@ export class RaidOrchestrator {
 			};
 
 			for await (const message of query({
-				prompt: task.description,
+				prompt: waypoint.description,
 				options: queryOptions,
 			})) {
 				// Stream activity to console
@@ -619,8 +622,8 @@ export class RaidOrchestrator {
 			// Clear timeout monitoring
 			clearInterval(timeoutCheckInterval);
 
-			// Task completed successfully
-			this.persistence.updateTask(task.id, {
+			// Waypoint completed successfully
+			this.persistence.updateTask(waypoint.id, {
 				status: "complete",
 				result,
 				completedAt: new Date(),
@@ -631,7 +634,7 @@ export class RaidOrchestrator {
 				lastActivityAt: new Date(),
 			});
 
-			squadLogger.info({ agentId: member.id, taskId: task.id }, "Agent completed task");
+			squadLogger.info({ agentId: member.id, waypointId: waypoint.id }, "Agent completed waypoint");
 
 			// Stop file tracking for fabricators
 			if (member.type === "fabricator") {
@@ -640,22 +643,19 @@ export class RaidOrchestrator {
 
 				const modifiedFiles = this.fileTracker.getModifiedFiles(member.id);
 				if (modifiedFiles.length > 0) {
-					squadLogger.info(
-						{ agentId: member.id, modifiedFiles: modifiedFiles.length },
-						"Agent modified files",
-					);
+					squadLogger.info({ agentId: member.id, modifiedFiles: modifiedFiles.length }, "Agent modified files");
 				}
 			}
 
-			// Handle next steps based on task type
-			await this.handleTaskCompletion(task, result);
+			// Handle next steps based on waypoint type
+			await this.handleTaskCompletion(waypoint, result);
 		} catch (error) {
 			// Clear timeout monitoring on error
 			clearInterval(timeoutCheckInterval);
 
 			const errorMessage = error instanceof Error ? error.message : String(error);
 
-			this.persistence.updateTask(task.id, {
+			this.persistence.updateTask(waypoint.id, {
 				status: "failed",
 				error: errorMessage,
 				completedAt: new Date(),
@@ -691,13 +691,13 @@ export class RaidOrchestrator {
 	}
 
 	/**
-	 * Handle task completion and trigger next steps
+	 * Handle waypoint completion and trigger next steps
 	 */
-	private async handleTaskCompletion(task: Task, result: string): Promise<void> {
+	private async handleTaskCompletion(waypoint: Waypoint, result: string): Promise<void> {
 		const raid = this.getCurrentRaid();
 		if (!raid) return;
 
-		switch (task.type) {
+		switch (waypoint.type) {
 			case "scout": {
 				// Store scout result in cache for future raids
 				this.storeScoutResult(raid.goal, result);
@@ -707,7 +707,7 @@ export class RaidOrchestrator {
 					.getTasks()
 					.find((t) => t.raidId === raid.id && t.type === "planner" && t.status === "pending");
 				if (plannerTask) {
-					// Update planner task with scout intel
+					// Update planner waypoint with scout intel
 					plannerTask.description = `${plannerTask.description}\n\nScout Intel:\n${result}`;
 					this.persistence.updateTask(plannerTask.id, {
 						description: plannerTask.description,
@@ -736,19 +736,16 @@ export class RaidOrchestrator {
 				// Fabricator done - queue for audit with summarized context
 				// Extract review-relevant parts of the plan and fabricator output
 				// This provides auditor with focused context on what to verify
-				const reviewContext = extractReviewContext(
-					raid.planSummary || raid.goal,
-					result
-				);
+				const reviewContext = extractReviewContext(raid.planSummary || raid.goal, result);
 
-				const auditTask: Task = {
+				const auditTask: Waypoint = {
 					id: generateTaskId(),
 					raidId: raid.id,
 					type: "auditor",
 					description: `Review implementation for: ${raid.goal}\n\n${reviewContext}`,
 					status: "pending",
 					createdAt: new Date(),
-					branch: task.branch,
+					branch: waypoint.branch,
 				};
 				this.persistence.addTask(auditTask);
 				await this.spawnAgent("auditor", auditTask);
@@ -779,10 +776,10 @@ export class RaidOrchestrator {
 
 				const approved = hasPositive && !hasNegative;
 
-				if (approved && task.branch) {
+				if (approved && waypoint.branch) {
 					// Add to merge queue
-					this.mergeQueue.add(task.branch, task.id, task.agentId || "unknown");
-					this.log("Branch added to merge queue", { branch: task.branch });
+					this.mergeQueue.add(waypoint.branch, waypoint.id, waypoint.agentId || "unknown");
+					this.log("Branch added to merge queue", { branch: waypoint.branch });
 
 					// Process merge queue
 					await this.processMergeQueue();
@@ -810,18 +807,16 @@ export class RaidOrchestrator {
 
 		this.log("Plan approved. Starting execution phase...");
 
-		// Create fabricator task with summarized context
+		// Create fabricator waypoint with summarized context
 		const commitInstructions = this.autoCommit
 			? "\n\nIMPORTANT: When done, commit all your changes with a clear commit message describing what you implemented."
 			: "";
 
 		// Extract only implementation-relevant parts of the plan
 		// This reduces token usage by 60-80% compared to passing the full plan
-		const summarizedPlan = raid.planSummary
-			? extractImplementationContext(raid.planSummary)
-			: "";
+		const summarizedPlan = raid.planSummary ? extractImplementationContext(raid.planSummary) : "";
 
-		const fabricatorTask: Task = {
+		const fabricatorTask: Waypoint = {
 			id: generateTaskId(),
 			raidId: raid.id,
 			type: "fabricator",
@@ -914,7 +909,7 @@ export class RaidOrchestrator {
 	 */
 	getStatus(): {
 		raid?: Raid;
-		tasks: Task[];
+		waypoints: Waypoint[];
 		squad: SquadMember[];
 		mergeQueue: ReturnType<MergeQueue["getQueue"]>;
 		maxParallel: number;
@@ -929,7 +924,7 @@ export class RaidOrchestrator {
 		const trackingSummary = this.fileTracker.getSummary();
 		return {
 			raid: this.getCurrentRaid(),
-			tasks: this.persistence.getTasks(),
+			waypoints: this.persistence.getTasks(),
 			squad: this.persistence.getSquad(),
 			mergeQueue: this.mergeQueue.getQueue(),
 			maxParallel: this.maxParallel,

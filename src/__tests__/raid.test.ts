@@ -183,7 +183,7 @@ describe("RaidOrchestrator", () => {
 			const status = orchestrator.getStatus();
 
 			expect(status.raid).toBeUndefined();
-			expect(status.tasks).toEqual([]);
+			expect(status.waypoints).toEqual([]);
 			expect(status.squad).toEqual([]);
 			expect(status.mergeQueue).toEqual([]);
 		});
@@ -196,12 +196,12 @@ describe("RaidOrchestrator", () => {
 			});
 			const inventory = createMockInventory({
 				raid,
-				tasks: [
+				waypoints: [
 					{
-						id: "task-1",
+						id: "waypoint-1",
 						raidId: "raid-status-test",
 						type: "scout",
-						description: "Scout task",
+						description: "Scout waypoint",
 						status: "complete",
 						createdAt: new Date(),
 					},
@@ -223,7 +223,7 @@ describe("RaidOrchestrator", () => {
 
 			expect(status.raid).toBeDefined();
 			expect(status.raid?.id).toBe("raid-status-test");
-			expect(status.tasks).toHaveLength(1);
+			expect(status.waypoints).toHaveLength(1);
 			expect(status.squad).toHaveLength(1);
 		});
 	});

@@ -25,8 +25,8 @@ undercity approve
 # View squad members
 undercity squad
 
-# View tasks
-undercity tasks
+# View waypoints
+undercity waypoints
 
 # Complete the raid
 undercity extract
@@ -55,7 +55,7 @@ undercity slingshot "goal"
 | Layer | Purpose | File |
 |-------|---------|------|
 | Safe Pocket | Critical state surviving crashes | `.undercity/pocket.json` |
-| Inventory | Active raid state (tasks, squad) | `.undercity/inventory.json` |
+| Inventory | Active raid state (waypoints, squad) | `.undercity/inventory.json` |
 | Loadout | Pre-raid configuration | `.undercity/loadout.json` |
 | Stash | Long-term storage between raids | `.undercity/stash.json` |
 

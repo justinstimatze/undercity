@@ -51,18 +51,9 @@ const RELEVANCE_KEYWORDS: Record<AgentType, string[]> = {
 		"class",
 		"module",
 		"step",
-		"task",
+		"waypoint",
 	],
-	auditor: [
-		"test",
-		"verify",
-		"check",
-		"review",
-		"requirement",
-		"edge case",
-		"security",
-		"validation",
-	],
+	auditor: ["test", "verify", "check", "review", "requirement", "edge case", "security", "validation"],
 };
 
 /**
@@ -119,10 +110,7 @@ export function parseMarkdownSections(content: string): PlanSection[] {
 /**
  * Calculate relevance score for a section based on agent type
  */
-function calculateRelevanceScore(
-	section: PlanSection,
-	agentType: AgentType
-): number {
+function calculateRelevanceScore(section: PlanSection, agentType: AgentType): number {
 	const keywords = RELEVANCE_KEYWORDS[agentType];
 	const textToSearch = `${section.heading} ${section.content}`.toLowerCase();
 
@@ -140,20 +128,14 @@ function calculateRelevanceScore(
 
 	// Bonus for implementation-specific sections for fabricator
 	if (agentType === "fabricator") {
-		if (
-			/files?\s+to\s+(modify|create|change)/i.test(textToSearch) ||
-			/implementation/i.test(section.heading)
-		) {
+		if (/files?\s+to\s+(modify|create|change)/i.test(textToSearch) || /implementation/i.test(section.heading)) {
 			score += 5;
 		}
 	}
 
 	// Bonus for test-related sections for auditor
 	if (agentType === "auditor") {
-		if (
-			/test/i.test(section.heading) ||
-			/verification|validation/i.test(section.heading)
-		) {
+		if (/test/i.test(section.heading) || /verification|validation/i.test(section.heading)) {
 			score += 5;
 		}
 	}
@@ -164,10 +146,7 @@ function calculateRelevanceScore(
 /**
  * Extract relevant sections for an agent type
  */
-export function extractRelevantSections(
-	sections: PlanSection[],
-	agentType: AgentType
-): PlanSection[] {
+export function extractRelevantSections(sections: PlanSection[], agentType: AgentType): PlanSection[] {
 	// Score each section
 	const scoredSections = sections.map((section) => ({
 		section,
@@ -188,8 +167,7 @@ export function extractRelevantSections(
 			continue;
 		}
 
-		const sectionLength =
-			section.heading.length + section.content.length + 10; // +10 for formatting
+		const sectionLength = section.heading.length + section.content.length + 10; // +10 for formatting
 
 		if (totalLength + sectionLength <= limit) {
 			relevantSections.push(section);
@@ -255,11 +233,7 @@ export function smartTruncate(content: string, maxLength: number): string {
  * It extracts only the relevant parts of a plan for each agent type,
  * significantly reducing token usage.
  */
-export function summarizeContextForAgent(
-	fullContext: string,
-	agentType: AgentType,
-	goal?: string
-): string {
+export function summarizeContextForAgent(fullContext: string, agentType: AgentType, goal?: string): string {
 	const limit = CONTEXT_LIMITS[agentType];
 
 	// For scout, just return the goal
@@ -312,17 +286,14 @@ export function extractImplementationContext(planContent: string): string {
 		/files?\s+to/i,
 		/changes?/i,
 		/steps?/i,
-		/tasks?/i,
+		/waypoints?/i,
 		/code/i,
 		/modify/i,
 		/create/i,
 	];
 
 	const implementationSections = sections.filter((section) =>
-		priorityPatterns.some(
-			(pattern) =>
-				pattern.test(section.heading) || pattern.test(section.content)
-		)
+		priorityPatterns.some((pattern) => pattern.test(section.heading) || pattern.test(section.content)),
 	);
 
 	if (implementationSections.length > 0) {
@@ -342,10 +313,7 @@ export function extractImplementationContext(planContent: string): string {
  * - Security considerations
  * - Expected behavior
  */
-export function extractReviewContext(
-	planContent: string,
-	fabricatorOutput: string
-): string {
+export function extractReviewContext(planContent: string, fabricatorOutput: string): string {
 	const planSections = parseMarkdownSections(planContent);
 
 	// Priority headings for review
@@ -361,10 +329,7 @@ export function extractReviewContext(
 	];
 
 	const reviewSections = planSections.filter((section) =>
-		reviewPatterns.some(
-			(pattern) =>
-				pattern.test(section.heading) || pattern.test(section.content)
-		)
+		reviewPatterns.some((pattern) => pattern.test(section.heading) || pattern.test(section.content)),
 	);
 
 	let result = "";

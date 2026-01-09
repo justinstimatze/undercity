@@ -59,7 +59,7 @@ export type {
 	SquadMember,
 	SquadMemberStatus,
 	Stash,
-	Task,
-	TaskStatus,
 	UndercityConfig,
+	Waypoint,
+	WaypointStatus,
 } from "./types.js";

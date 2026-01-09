@@ -5,11 +5,11 @@
  * provide insights, and support the quest matchmaking system.
  */
 
-import type { Quest } from "./quest.js";
-import { getAllQuests, getReadyQuestsForBatch, getQuestBoardAnalytics } from "./quest.js";
-import { QuestAnalyzer } from "./quest-analyzer.js";
-import { QuestScheduler, type QuestSet, type CompatibilityResult, type QuestDependency } from "./quest-scheduler.js";
 import { FileTracker } from "./file-tracker.js";
+import type { Quest } from "./quest.js";
+import { getAllQuests, getQuestBoardAnalytics, getReadyQuestsForBatch } from "./quest.js";
+import { QuestAnalyzer } from "./quest-analyzer.js";
+import { type CompatibilityResult, type QuestDependency, QuestScheduler, type QuestSet } from "./quest-scheduler.js";
 
 export interface QuestBoardInsights {
 	totalQuests: number;
@@ -55,7 +55,7 @@ export class QuestBoardAnalyzer {
 	 */
 	async analyzeQuestBoard(): Promise<QuestBoardInsights> {
 		const allQuests = getAllQuests();
-		const pendingQuests = allQuests.filter(q => q.status === "pending");
+		const pendingQuests = allQuests.filter((q) => q.status === "pending");
 
 		// Get basic analytics
 		const analytics = getQuestBoardAnalytics();
@@ -171,10 +171,7 @@ export class QuestBoardAnalyzer {
 						compatibilityScore: 1.0,
 					});
 				} else {
-					const compatibility = await this.checkQuestCompatibility(
-						analyzedQuests[i],
-						analyzedQuests[j]
-					);
+					const compatibility = await this.checkQuestCompatibility(analyzedQuests[i], analyzedQuests[j]);
 					row.push(compatibility);
 
 					// Update statistics (only count each pair once)
@@ -210,7 +207,10 @@ export class QuestBoardAnalyzer {
 	/**
 	 * Get insights about specific quest compatibility
 	 */
-	async analyzeQuestCompatibility(quest1Id: string, quest2Id: string): Promise<{
+	async analyzeQuestCompatibility(
+		quest1Id: string,
+		quest2Id: string,
+	): Promise<{
 		compatible: boolean;
 		conflicts: Array<{
 			type: string;
@@ -220,8 +220,8 @@ export class QuestBoardAnalyzer {
 		recommendedAction: string;
 	}> {
 		const allQuests = getAllQuests();
-		const quest1 = allQuests.find(q => q.id === quest1Id);
-		const quest2 = allQuests.find(q => q.id === quest2Id);
+		const quest1 = allQuests.find((q) => q.id === quest1Id);
+		const quest2 = allQuests.find((q) => q.id === quest2Id);
 
 		if (!quest1 || !quest2) {
 			return {
@@ -278,7 +278,7 @@ export class QuestBoardAnalyzer {
 
 		// Risk management suggestions
 		const highRiskOpportunities = insights.parallelizationOpportunities.filter(
-			opp => opp.questSet.riskLevel === "high"
+			(opp) => opp.questSet.riskLevel === "high",
 		);
 		if (highRiskOpportunities.length > 0) {
 			suggestions.push("Consider running high-risk quests sequentially or with extra monitoring");
@@ -286,13 +286,13 @@ export class QuestBoardAnalyzer {
 
 		// Conflict reduction suggestions
 		if (insights.topConflictingPackages.length > 0) {
-			suggestions.push(`Focus on parallelizing quests outside of frequently-modified packages: ${insights.topConflictingPackages.slice(0, 3).join(", ")}`);
+			suggestions.push(
+				`Focus on parallelizing quests outside of frequently-modified packages: ${insights.topConflictingPackages.slice(0, 3).join(", ")}`,
+			);
 		}
 
 		// Efficiency suggestions
-		const lowBenefitOpportunities = insights.parallelizationOpportunities.filter(
-			opp => opp.benefit === "low"
-		);
+		const lowBenefitOpportunities = insights.parallelizationOpportunities.filter((opp) => opp.benefit === "low");
 		if (lowBenefitOpportunities.length > 2) {
 			suggestions.push("Focus on high-benefit parallelization opportunities first");
 		}
@@ -342,7 +342,7 @@ export class QuestBoardAnalyzer {
 	private calculateAverageComplexity(complexities: string[]): "low" | "medium" | "high" {
 		if (complexities.length === 0) return "low";
 
-		const scores = complexities.map(c => ({ low: 1, medium: 2, high: 3 }[c] ?? 1));
+		const scores = complexities.map((c) => ({ low: 1, medium: 2, high: 3 })[c] ?? 1);
 		const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
 
 		if (average >= 2.5) return "high";
@@ -358,9 +358,8 @@ export class QuestBoardAnalyzer {
 
 		// Simple model: parallel execution takes max(individual_times) vs sum(individual_times)
 		// Assume each quest takes similar time based on complexity
-		const questTimes = questSet.quests.map(quest => {
-			const complexity = quest.tags?.includes("high") ? "high" :
-							 quest.tags?.includes("medium") ? "medium" : "low";
+		const questTimes = questSet.quests.map((quest) => {
+			const complexity = quest.tags?.includes("high") ? "high" : quest.tags?.includes("medium") ? "medium" : "low";
 			return { low: 15, medium: 30, high: 60 }[complexity]; // minutes
 		});
 
@@ -396,12 +395,14 @@ export class QuestBoardAnalyzer {
 
 		for (const quest of questSet.quests) {
 			if (quest.tags) {
-				quest.tags.forEach(tag => tags.add(tag));
+				for (const tag of quest.tags) {
+					tags.add(tag);
+				}
 			}
 		}
 
-		const mainTypes = Array.from(tags).filter(tag =>
-			["feature", "bugfix", "refactor", "testing", "documentation"].includes(tag)
+		const mainTypes = Array.from(tags).filter((tag) =>
+			["feature", "bugfix", "refactor", "testing", "documentation"].includes(tag),
 		);
 
 		if (mainTypes.length > 0) {
@@ -417,7 +418,7 @@ export class QuestBoardAnalyzer {
 	private generateRecommendations(
 		pendingQuests: Quest[],
 		opportunities: ParallelizationOpportunity[],
-		analytics: ReturnType<typeof getQuestBoardAnalytics>
+		analytics: ReturnType<typeof getQuestBoardAnalytics>,
 	): string[] {
 		const recommendations: string[] = [];
 
@@ -429,17 +430,18 @@ export class QuestBoardAnalyzer {
 		if (opportunities.length > 0) {
 			const bestOpportunity = opportunities[0];
 			recommendations.push(
-				`Best opportunity: ${bestOpportunity.description} (${bestOpportunity.estimatedTimesSaving}% time savings)`
+				`Best opportunity: ${bestOpportunity.description} (${bestOpportunity.estimatedTimesSaving}% time savings)`,
 			);
 		}
 
 		// Efficiency recommendations
-		if (analytics.averageCompletionTime > 30 * 60 * 1000) { // 30 minutes
+		if (analytics.averageCompletionTime > 30 * 60 * 1000) {
+			// 30 minutes
 			recommendations.push("Consider breaking down long-running quests for better parallelization");
 		}
 
 		// Risk management
-		const highRiskOpportunities = opportunities.filter(opp => opp.questSet.riskLevel === "high");
+		const highRiskOpportunities = opportunities.filter((opp) => opp.questSet.riskLevel === "high");
 		if (highRiskOpportunities.length > 0) {
 			recommendations.push("Monitor high-risk parallel executions carefully");
 		}

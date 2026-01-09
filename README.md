@@ -5,7 +5,7 @@
 
 Multi-agent orchestrator for Claude Max. Inspired by [Gas Town](https://github.com/steveyegge/gastown) but built for normal people with a Claude Max subscription.
 
-Undercity uses extraction shooter metaphors, ARC Raiders lore, and unconventional terminology. None of it needs to be explained or justified. If scouts with flutes and serial merge queues help you ship code, that's all that matters.
+Undercity uses extraction shooter metaphors, ARC Raiders lore, and unconventional terminology. None of it needs to be explained or justified. If scouts, fabricators, and serial merge queues help you ship code, that's all that matters.
 
 ## Overview
 

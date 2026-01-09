@@ -2,15 +2,11 @@
  * Tests for the LoadoutManager class
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoadoutManager } from "../loadout-manager.js";
 import { Persistence } from "../persistence.js";
 import type { Quest } from "../quest.js";
-import type {
-	EfficiencyMetrics,
-	LoadoutConfiguration,
-	Raid,
-} from "../types.js";
+import type { EfficiencyMetrics, LoadoutConfiguration, Raid } from "../types.js";
 
 // Mock Persistence
 vi.mock("../persistence.js", () => {
@@ -20,9 +16,11 @@ vi.mock("../persistence.js", () => {
 		private scores: any[] = [];
 		private recommendations: any[] = [];
 
-		getLoadoutConfigurations() { return this.loadoutConfigs; }
+		getLoadoutConfigurations() {
+			return this.loadoutConfigs;
+		}
 		saveLoadoutConfiguration(config: LoadoutConfiguration) {
-			const existing = this.loadoutConfigs.findIndex(l => l.id === config.id);
+			const existing = this.loadoutConfigs.findIndex((l) => l.id === config.id);
 			if (existing >= 0) {
 				this.loadoutConfigs[existing] = config;
 			} else {
@@ -30,19 +28,25 @@ vi.mock("../persistence.js", () => {
 			}
 		}
 		removeLoadoutConfiguration(id: string) {
-			this.loadoutConfigs = this.loadoutConfigs.filter(l => l.id !== id);
+			this.loadoutConfigs = this.loadoutConfigs.filter((l) => l.id !== id);
 		}
-		getLoadoutPerformances() { return this.performances; }
-		addLoadoutPerformance(performance: any) { this.performances.push(performance); }
+		getLoadoutPerformances() {
+			return this.performances;
+		}
+		addLoadoutPerformance(performance: any) {
+			this.performances.push(performance);
+		}
 		getLoadoutPerformancesForConfig(configId: string) {
-			return this.performances.filter(p => p.loadoutConfigId === configId);
+			return this.performances.filter((p) => p.loadoutConfigId === configId);
 		}
 		getLoadoutPerformancesForQuestType(questType: string) {
-			return this.performances.filter(p => p.questType === questType);
+			return this.performances.filter((p) => p.questType === questType);
 		}
-		getLoadoutScores() { return this.scores; }
+		getLoadoutScores() {
+			return this.scores;
+		}
 		saveLoadoutScore(score: any) {
-			const existing = this.scores.findIndex(s => s.loadoutConfigId === score.loadoutConfigId);
+			const existing = this.scores.findIndex((s) => s.loadoutConfigId === score.loadoutConfigId);
 			if (existing >= 0) {
 				this.scores[existing] = score;
 			} else {
@@ -50,11 +54,13 @@ vi.mock("../persistence.js", () => {
 			}
 		}
 		getLoadoutScore(configId: string) {
-			return this.scores.find(s => s.loadoutConfigId === configId);
+			return this.scores.find((s) => s.loadoutConfigId === configId);
 		}
-		getLoadoutRecommendations() { return this.recommendations; }
+		getLoadoutRecommendations() {
+			return this.recommendations;
+		}
 		saveLoadoutRecommendation(rec: any) {
-			const existing = this.recommendations.findIndex(r => r.questType === rec.questType);
+			const existing = this.recommendations.findIndex((r) => r.questType === rec.questType);
 			if (existing >= 0) {
 				this.recommendations[existing] = rec;
 			} else {
@@ -62,9 +68,11 @@ vi.mock("../persistence.js", () => {
 			}
 		}
 		getLoadoutRecommendationForQuestType(questType: string) {
-			return this.recommendations.find(r => r.questType === questType);
+			return this.recommendations.find((r) => r.questType === questType);
 		}
-		cleanupOldPerformanceData() { /* mock */ }
+		cleanupOldPerformanceData() {
+			/* mock */
+		}
 	}
 
 	return { Persistence: MockPersistence };
@@ -77,7 +85,7 @@ vi.mock("../logger.js", () => ({
 		info: vi.fn(),
 		warn: vi.fn(),
 		error: vi.fn(),
-	}
+	},
 }));
 
 describe("LoadoutManager", () => {
@@ -112,7 +120,7 @@ describe("LoadoutManager", () => {
 			const loadouts = loadoutManager.getAllLoadouts();
 			expect(loadouts.length).toBeGreaterThan(0);
 
-			const loadoutIds = loadouts.map(l => l.id);
+			const loadoutIds = loadouts.map((l) => l.id);
 			expect(loadoutIds).toContain("balanced-performer");
 			expect(loadoutIds).toContain("speed-demon");
 		});
@@ -195,12 +203,7 @@ describe("LoadoutManager", () => {
 		it("should record quest performance", () => {
 			loadoutManager.saveLoadout(mockLoadout);
 
-			const performance = loadoutManager.recordQuestPerformance(
-				mockLoadout,
-				mockQuest,
-				mockRaid,
-				mockMetrics
-			);
+			const performance = loadoutManager.recordQuestPerformance(mockLoadout, mockQuest, mockRaid, mockMetrics);
 
 			expect(performance).toBeDefined();
 			expect(performance.loadoutConfigId).toBe(mockLoadout.id);
@@ -272,7 +275,7 @@ describe("LoadoutManager", () => {
 			loadoutManager.saveLoadout(slowLoadout);
 
 			// Record better performance for fast loadout
-			const quest: Quest = { id: "q1", objective: "Test task", status: "complete", createdAt: new Date() };
+			const quest: Quest = { id: "q1", objective: "Test waypoint", status: "complete", createdAt: new Date() };
 			const raid: Raid = { id: "r1", goal: "Test", status: "complete", startedAt: new Date(), planApproved: true };
 
 			loadoutManager.recordQuestPerformance(fastLoadout, quest, raid, {
@@ -297,8 +300,8 @@ describe("LoadoutManager", () => {
 			expect(rankings.length).toBeGreaterThan(0);
 
 			// Fast loadout should rank higher
-			const fastRank = rankings.find(r => r.loadout.id === "fast-loadout");
-			const slowRank = rankings.find(r => r.loadout.id === "slow-loadout");
+			const fastRank = rankings.find((r) => r.loadout.id === "fast-loadout");
+			const slowRank = rankings.find((r) => r.loadout.id === "slow-loadout");
 
 			expect(fastRank?.score.overallScore).toBeGreaterThan(slowRank?.score.overallScore || 0);
 		});
@@ -309,7 +312,7 @@ describe("LoadoutManager", () => {
 			const debugLoadout = { ...mockLoadout, id: "debug-loadout", name: "Debug Loadout" };
 			loadoutManager.saveLoadout(debugLoadout);
 
-			// Record good performance for debug tasks
+			// Record good performance for debug waypoints
 			const debugQuest: Quest = {
 				id: "debug-quest",
 				objective: "Fix critical bug",
@@ -362,7 +365,7 @@ describe("LoadoutManager", () => {
 
 				const raid: Raid = {
 					id: `raid-${i}`,
-					goal: "Debug task",
+					goal: "Debug waypoint",
 					status: "complete",
 					startedAt: new Date(),
 					planApproved: true,

@@ -146,14 +146,17 @@ describe("QuestScheduler", () => {
 		it("should select the set with highest parallelism score", () => {
 			const questSets = [
 				{
-					quests: [createTestQuest("quest-1", "Task 1", ["pkg1"])],
+					quests: [createTestQuest("quest-1", "Waypoint 1", ["pkg1"])],
 					estimatedDuration: 10000,
 					riskLevel: "low" as const,
 					parallelismScore: 0.3,
 					compatibilityMatrix: [],
 				},
 				{
-					quests: [createTestQuest("quest-2", "Task 2", ["pkg2"]), createTestQuest("quest-3", "Task 3", ["pkg3"])],
+					quests: [
+						createTestQuest("quest-2", "Waypoint 2", ["pkg2"]),
+						createTestQuest("quest-3", "Waypoint 3", ["pkg3"]),
+					],
 					estimatedDuration: 12000,
 					riskLevel: "medium" as const,
 					parallelismScore: 0.8,
@@ -172,10 +175,10 @@ describe("QuestScheduler", () => {
 			const questSets = [
 				{
 					quests: [
-						createTestQuest("quest-1", "Task 1", ["pkg1"]),
-						createTestQuest("quest-2", "Task 2", ["pkg2"]),
-						createTestQuest("quest-3", "Task 3", ["pkg3"]),
-						createTestQuest("quest-4", "Task 4", ["pkg4"]),
+						createTestQuest("quest-1", "Waypoint 1", ["pkg1"]),
+						createTestQuest("quest-2", "Waypoint 2", ["pkg2"]),
+						createTestQuest("quest-3", "Waypoint 3", ["pkg3"]),
+						createTestQuest("quest-4", "Waypoint 4", ["pkg4"]),
 					],
 					estimatedDuration: 15000,
 					riskLevel: "high" as const,
@@ -183,7 +186,10 @@ describe("QuestScheduler", () => {
 					compatibilityMatrix: [],
 				},
 				{
-					quests: [createTestQuest("quest-5", "Task 5", ["pkg5"]), createTestQuest("quest-6", "Task 6", ["pkg6"])],
+					quests: [
+						createTestQuest("quest-5", "Waypoint 5", ["pkg5"]),
+						createTestQuest("quest-6", "Waypoint 6", ["pkg6"]),
+					],
 					estimatedDuration: 12000,
 					riskLevel: "medium" as const,
 					parallelismScore: 0.7,
@@ -205,8 +211,8 @@ describe("QuestScheduler", () => {
 
 	describe("compatibility checking", () => {
 		it("should mark explicit dependencies as incompatible", () => {
-			const quest1 = { ...createTestQuest("quest-1", "Task 1", ["pkg1"]), dependsOn: ["quest-2"] };
-			const quest2 = createTestQuest("quest-2", "Task 2", ["pkg2"]);
+			const quest1 = { ...createTestQuest("quest-1", "Waypoint 1", ["pkg1"]), dependsOn: ["quest-2"] };
+			const quest2 = createTestQuest("quest-2", "Waypoint 2", ["pkg2"]);
 
 			// We need to access private method for testing
 			const compatibility = (scheduler as any).checkQuestCompatibility(quest1, quest2);
@@ -218,8 +224,8 @@ describe("QuestScheduler", () => {
 		});
 
 		it("should allow package overlap with reduced score", () => {
-			const quest1 = createTestQuest("quest-1", "Task 1", ["auth", "utils"], []);
-			const quest2 = createTestQuest("quest-2", "Task 2", ["auth", "components"], []);
+			const quest1 = createTestQuest("quest-1", "Waypoint 1", ["auth", "utils"], []);
+			const quest2 = createTestQuest("quest-2", "Waypoint 2", ["auth", "components"], []);
 
 			const compatibility = (scheduler as any).checkQuestCompatibility(quest1, quest2);
 
@@ -231,8 +237,8 @@ describe("QuestScheduler", () => {
 		});
 
 		it("should block file conflicts", () => {
-			const quest1 = createTestQuest("quest-1", "Task 1", ["pkg1"], ["src/shared.ts"]);
-			const quest2 = createTestQuest("quest-2", "Task 2", ["pkg2"], ["src/shared.ts"]);
+			const quest1 = createTestQuest("quest-1", "Waypoint 1", ["pkg1"], ["src/shared.ts"]);
+			const quest2 = createTestQuest("quest-2", "Waypoint 2", ["pkg2"], ["src/shared.ts"]);
 
 			const compatibility = (scheduler as any).checkQuestCompatibility(quest1, quest2);
 
@@ -243,8 +249,8 @@ describe("QuestScheduler", () => {
 		});
 
 		it("should penalize high-risk quest combinations", () => {
-			const quest1 = { ...createTestQuest("quest-1", "Task 1", ["pkg1"]), riskScore: 0.8 };
-			const quest2 = { ...createTestQuest("quest-2", "Task 2", ["pkg2"]), riskScore: 0.9 };
+			const quest1 = { ...createTestQuest("quest-1", "Waypoint 1", ["pkg1"]), riskScore: 0.8 };
+			const quest2 = { ...createTestQuest("quest-2", "Waypoint 2", ["pkg2"]), riskScore: 0.9 };
 
 			const compatibility = (scheduler as any).checkQuestCompatibility(quest1, quest2);
 
@@ -254,13 +260,13 @@ describe("QuestScheduler", () => {
 		it("should handle quests with no computed data", () => {
 			const quest1: Quest = {
 				id: "quest-1",
-				objective: "Task without analysis",
+				objective: "Waypoint without analysis",
 				status: "pending",
 				createdAt: new Date(),
 			};
 			const quest2: Quest = {
 				id: "quest-2",
-				objective: "Another task",
+				objective: "Another waypoint",
 				status: "pending",
 				createdAt: new Date(),
 			};
@@ -277,9 +283,9 @@ describe("QuestScheduler", () => {
 		it("should calculate parallelism score correctly", () => {
 			// Test the parallelism score calculation
 			const questSet = [
-				createTestQuest("quest-1", "Independent task 1", ["pkg1"], ["file1.ts"]),
-				createTestQuest("quest-2", "Independent task 2", ["pkg2"], ["file2.ts"]),
-				createTestQuest("quest-3", "Independent task 3", ["pkg3"], ["file3.ts"]),
+				createTestQuest("quest-1", "Independent waypoint 1", ["pkg1"], ["file1.ts"]),
+				createTestQuest("quest-2", "Independent waypoint 2", ["pkg2"], ["file2.ts"]),
+				createTestQuest("quest-3", "Independent waypoint 3", ["pkg3"], ["file3.ts"]),
 			];
 
 			// Create a minimal compatibility matrix
@@ -313,13 +319,13 @@ describe("QuestScheduler", () => {
 
 		it("should calculate risk level correctly", () => {
 			const lowRiskSet = [
-				{ ...createTestQuest("quest-1", "Safe task", ["pkg1"]), riskScore: 0.2 },
-				{ ...createTestQuest("quest-2", "Another safe task", ["pkg2"]), riskScore: 0.3 },
+				{ ...createTestQuest("quest-1", "Safe waypoint", ["pkg1"]), riskScore: 0.2 },
+				{ ...createTestQuest("quest-2", "Another safe waypoint", ["pkg2"]), riskScore: 0.3 },
 			];
 
 			const highRiskSet = [
-				{ ...createTestQuest("quest-3", "Risky task", ["pkg3"]), riskScore: 0.9 },
-				{ ...createTestQuest("quest-4", "Another risky task", ["pkg4"]), riskScore: 0.8 },
+				{ ...createTestQuest("quest-3", "Risky waypoint", ["pkg3"]), riskScore: 0.9 },
+				{ ...createTestQuest("quest-4", "Another risky waypoint", ["pkg4"]), riskScore: 0.8 },
 			];
 
 			const lowRisk = (scheduler as any).calculateSetRiskLevel(lowRiskSet);

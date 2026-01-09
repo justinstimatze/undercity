@@ -4,7 +4,7 @@
  * Type-safe mock factories for testing Undercity persistence.
  */
 
-import type { AgentType, Inventory, Raid, RaidStatus, SafePocket, Task, TaskStatus } from "../types.js";
+import type { AgentType, Inventory, Raid, RaidStatus, SafePocket, Waypoint, WaypointStatus } from "../types.js";
 
 /**
  * All agent types for parametrized testing
@@ -12,14 +12,14 @@ import type { AgentType, Inventory, Raid, RaidStatus, SafePocket, Task, TaskStat
 export const ALL_AGENT_TYPES: AgentType[] = ["scout", "planner", "fabricator", "auditor"];
 
 /**
- * Create a mock Task with sensible defaults
+ * Create a mock Waypoint with sensible defaults
  */
-export const createMockTask = (overrides: Partial<Task> = {}): Task => ({
-	id: "task-1",
+export const createMockTask = (overrides: Partial<Waypoint> = {}): Waypoint => ({
+	id: "waypoint-1",
 	raidId: "raid-1",
 	type: "fabricator",
-	description: "Test task",
-	status: "pending" as TaskStatus,
+	description: "Test waypoint",
+	status: "pending" as WaypointStatus,
 	createdAt: new Date("2024-01-01T00:00:00.000Z"),
 	...overrides,
 });
@@ -48,7 +48,7 @@ export const createMockRaid = (overrides: Partial<Raid> = {}): Raid => ({
  * Create a mock Inventory with sensible defaults
  */
 export const createMockInventory = (overrides: Partial<Inventory> = {}): Inventory => ({
-	tasks: [],
+	waypoints: [],
 	squad: [],
 	lastUpdated: new Date("2024-01-01T00:00:00.000Z"),
 	...overrides,

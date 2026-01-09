@@ -10,7 +10,7 @@
  *   status            Show current raid status
  *   approve           Approve the current plan
  *   squad             Show active squad members
- *   tasks             Show pending/complete tasks
+ *   waypoints             Show pending/complete waypoints
  *   merges            Show merge queue status
  *   extract           Complete the current raid
  *   surrender         Surrender the current raid
@@ -240,13 +240,13 @@ program
 		console.log(`  Started: ${status.raid.startedAt}`);
 
 		// Calculate and display progress percentage
-		if (status.tasks.length > 0) {
-			const completedTasks = status.tasks.filter((t) => t.status === "complete").length;
-			const totalTasks = status.tasks.length;
+		if (status.waypoints.length > 0) {
+			const completedTasks = status.waypoints.filter((t) => t.status === "complete").length;
+			const totalTasks = status.waypoints.length;
 			const progressPercent = Math.round((completedTasks / totalTasks) * 100);
 			const progressBar =
 				"█".repeat(Math.floor(progressPercent / 5)) + "░".repeat(20 - Math.floor(progressPercent / 5));
-			console.log(`  Progress: [${progressBar}] ${progressPercent}% (${completedTasks}/${totalTasks} tasks)`);
+			console.log(`  Progress: [${progressBar}] ${progressPercent}% (${completedTasks}/${totalTasks} waypoints)`);
 		}
 
 		if (status.raid.planSummary && status.raid.status === "awaiting_approval") {
@@ -264,12 +264,12 @@ program
 			}
 		}
 
-		if (status.tasks.length > 0) {
+		if (status.waypoints.length > 0) {
 			console.log();
 			console.log(chalk.bold("Tasks"));
-			for (const task of status.tasks) {
-				const statusIcon = task.status === "complete" ? "✓" : task.status === "in_progress" ? "⚡" : "○";
-				console.log(`  ${statusIcon} [${task.type}] ${task.description.substring(0, 50)}...`);
+			for (const waypoint of status.waypoints) {
+				const statusIcon = waypoint.status === "complete" ? "✓" : waypoint.status === "in_progress" ? "⚡" : "○";
+				console.log(`  ${statusIcon} [${waypoint.type}] ${waypoint.description.substring(0, 50)}...`);
 			}
 		}
 
@@ -333,8 +333,8 @@ program
 			console.log(`  Status: ${member.status}`);
 			console.log(`  Spawned: ${member.spawnedAt}`);
 			console.log(`  Last Activity: ${member.lastActivityAt}`);
-			if (member.task) {
-				console.log(`  Task: ${member.task.description.substring(0, 50)}...`);
+			if (member.waypoint) {
+				console.log(`  Waypoint: ${member.waypoint.description.substring(0, 50)}...`);
 			}
 			console.log();
 		}
@@ -342,45 +342,47 @@ program
 
 // Tasks command
 program
-	.command("tasks")
-	.description("Show pending/complete tasks")
+	.command("waypoints")
+	.description("Show pending/complete waypoints")
 	.action(() => {
 		const persistence = new Persistence();
-		const tasks = persistence.getTasks();
+		const waypoints = persistence.getTasks();
 
-		if (tasks.length === 0) {
-			console.log(chalk.gray("No tasks"));
+		if (waypoints.length === 0) {
+			console.log(chalk.gray("No waypoints"));
 			return;
 		}
 
-		const pending = tasks.filter(
+		const pending = waypoints.filter(
 			(t) => t.status === "pending" || t.status === "assigned" || t.status === "in_progress",
 		);
-		const completed = tasks.filter((t) => t.status === "complete");
-		const failed = tasks.filter((t) => t.status === "failed" || t.status === "blocked");
+		const completed = waypoints.filter((t) => t.status === "complete");
+		const failed = waypoints.filter((t) => t.status === "failed" || t.status === "blocked");
 
 		if (pending.length > 0) {
 			console.log(chalk.bold("Pending Tasks"));
-			for (const task of pending) {
-				console.log(`  ○ [${task.type}] ${task.status}: ${task.description.substring(0, 50)}...`);
+			for (const waypoint of pending) {
+				console.log(`  ○ [${waypoint.type}] ${waypoint.status}: ${waypoint.description.substring(0, 50)}...`);
 			}
 			console.log();
 		}
 
 		if (completed.length > 0) {
 			console.log(chalk.bold("Completed Tasks"));
-			for (const task of completed) {
-				console.log(`  ${chalk.green("✓")} [${task.type}] ${task.description.substring(0, 50)}...`);
+			for (const waypoint of completed) {
+				console.log(`  ${chalk.green("✓")} [${waypoint.type}] ${waypoint.description.substring(0, 50)}...`);
 			}
 			console.log();
 		}
 
 		if (failed.length > 0) {
 			console.log(chalk.bold("Failed Tasks"));
-			for (const task of failed) {
-				console.log(`  ${chalk.red("✗")} [${task.type}] ${task.status}: ${task.description.substring(0, 50)}...`);
-				if (task.error) {
-					console.log(`    Error: ${task.error}`);
+			for (const waypoint of failed) {
+				console.log(
+					`  ${chalk.red("✗")} [${waypoint.type}] ${waypoint.status}: ${waypoint.description.substring(0, 50)}...`,
+				);
+				if (waypoint.error) {
+					console.log(`    Error: ${waypoint.error}`);
 				}
 			}
 		}
@@ -639,9 +641,9 @@ program
 // Import-plan command - parse plan files into discrete quests
 program
 	.command("import-plan <file>")
-	.description("Import a plan file as discrete quests (extracts tasks from markdown plans)")
+	.description("Import a plan file as discrete quests (extracts waypoints from markdown plans)")
 	.option("--dry-run", "Show what would be imported without adding to quest board")
-	.option("--by-priority", "Sort tasks by section priority (default: by file order)")
+	.option("--by-priority", "Sort waypoints by section priority (default: by file order)")
 	.action((file: string, options: { dryRun?: boolean; byPriority?: boolean }) => {
 		try {
 			const content = readFileSync(file, "utf-8");
@@ -669,11 +671,11 @@ program
 				console.log();
 			}
 
-			// Get tasks to import
+			// Get waypoints to import
 			const quests = planToQuests(plan);
 
 			if (quests.length === 0) {
-				console.log(chalk.yellow("No pending tasks found in plan"));
+				console.log(chalk.yellow("No pending waypoints found in plan"));
 				return;
 			}
 
@@ -684,7 +686,7 @@ program
 			}
 
 			if (options.dryRun) {
-				console.log(chalk.cyan(`Would import ${quests.length} tasks:`));
+				console.log(chalk.cyan(`Would import ${quests.length} waypoints:`));
 				for (let i = 0; i < Math.min(quests.length, 20); i++) {
 					const quest = quests[i];
 					const sectionTag = quest.section ? chalk.dim(` [${quest.section}]`) : "";
@@ -699,7 +701,7 @@ program
 				// Import as quests
 				const objectives = quests.map((q) => q.objective);
 				const imported = addQuests(objectives);
-				console.log(chalk.green(`✓ Imported ${imported.length} tasks as quests`));
+				console.log(chalk.green(`✓ Imported ${imported.length} waypoints as quests`));
 				if (imported.length < quests.length) {
 					console.log(chalk.yellow(`  (${quests.length - imported.length} duplicates skipped)`));
 				}
@@ -725,7 +727,7 @@ program
 				const planContent = readFileSync(file, "utf-8");
 				const maxSteps = options.steps ? Number.parseInt(options.steps, 10) : options.continuous ? 100 : 1;
 
-				// Parse plan upfront into discrete tasks (unless legacy mode)
+				// Parse plan upfront into discrete waypoints (unless legacy mode)
 				let parsedPlan: ParsedPlan | null = null;
 				if (!options.legacy) {
 					parsedPlan = parsePlanFile(planContent, file);
@@ -743,21 +745,21 @@ program
 					}
 					console.log();
 
-					// Get tasks sorted by priority
+					// Get waypoints sorted by priority
 					const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
 
 					if (tasksByPriority.length === 0) {
-						console.log(chalk.green("✓ All tasks already marked complete in plan!"));
+						console.log(chalk.green("✓ All waypoints already marked complete in plan!"));
 						return;
 					}
 
-					// Show upcoming tasks
-					console.log(chalk.cyan("Queued tasks (by priority):"));
+					// Show upcoming waypoints
+					console.log(chalk.cyan("Queued waypoints (by priority):"));
 					for (let i = 0; i < Math.min(tasksByPriority.length, 5); i++) {
-						const task = tasksByPriority[i];
-						const sectionTag = task.section ? chalk.dim(` [${task.section}]`) : "";
+						const waypoint = tasksByPriority[i];
+						const sectionTag = waypoint.section ? chalk.dim(` [${waypoint.section}]`) : "";
 						console.log(
-							`  ${i + 1}. ${task.content.substring(0, 60)}${task.content.length > 60 ? "..." : ""}${sectionTag}`,
+							`  ${i + 1}. ${waypoint.content.substring(0, 60)}${waypoint.content.length > 60 ? "..." : ""}${sectionTag}`,
 						);
 					}
 					if (tasksByPriority.length > 5) {
@@ -790,32 +792,32 @@ program
 					let goal: string;
 
 					if (parsedPlan && !options.legacy) {
-						// New mode: use parsed tasks with focused context
+						// New mode: use parsed waypoints with focused context
 						const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
 						const currentTask = tasksByPriority[0];
 
 						if (!currentTask) {
-							console.log(chalk.green("\n✓ All plan tasks complete!"));
+							console.log(chalk.green("\n✓ All plan waypoints complete!"));
 							break;
 						}
 
-						// Generate focused context for the current task
+						// Generate focused context for the current waypoint
 						const taskContext = generateTaskContext(parsedPlan, currentTask.id);
 						const progress = getPlanProgress(parsedPlan);
 
 						// Build progress context from previous result
 						const progressNote = step > 1 ? `\n\nPREVIOUS STEP RESULT:\n${lastResult.substring(0, 1500)}` : "";
 
-						goal = `Implement this specific task:
+						goal = `Implement this specific waypoint:
 
 ${currentTask.content}
 
 ${taskContext}${progressNote}
 
-After completing this task, summarize what you did. If this task is impossible or already done, explain why and say "TASK SKIPPED".`;
+After completing this waypoint, summarize what you did. If this waypoint is impossible or already done, explain why and say "TASK SKIPPED".`;
 
 						console.log(
-							chalk.cyan(`\n━━━ Task ${step}/${progress.total}: ${currentTask.content.substring(0, 50)}... ━━━`),
+							chalk.cyan(`\n━━━ Waypoint ${step}/${progress.total}: ${currentTask.content.substring(0, 50)}... ━━━`),
 						);
 						if (currentTask.section) {
 							console.log(chalk.dim(`    Section: ${currentTask.section}`));
@@ -839,8 +841,8 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 					const finalRaid = orchestrator.getCurrentRaid();
 
 					// Get the result for context
-					const tasks = orchestrator.getStatus().tasks;
-					const fabricatorTask = tasks.find((t) => t.type === "fabricator");
+					const waypoints = orchestrator.getStatus().waypoints;
+					const fabricatorTask = waypoints.find((t) => t.type === "fabricator");
 					lastResult = fabricatorTask?.result || "";
 
 					// Check for completion markers
@@ -849,19 +851,19 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 						break;
 					}
 
-					// Mark current task as completed in parsed plan (for new mode)
+					// Mark current waypoint as completed in parsed plan (for new mode)
 					if (parsedPlan && !options.legacy) {
 						const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
 						const currentTask = tasksByPriority[0];
 
-						if (currentTask && !lastResult.toLowerCase().includes("task skipped")) {
+						if (currentTask && !lastResult.toLowerCase().includes("waypoint skipped")) {
 							parsedPlan = markTaskCompleted(parsedPlan, currentTask.id);
 							const progress = getPlanProgress(parsedPlan);
-							console.log(chalk.green(`  ✓ Task complete (${progress.completed}/${progress.total})`));
-						} else if (currentTask && lastResult.toLowerCase().includes("task skipped")) {
-							// Also mark skipped tasks as completed so we move on
+							console.log(chalk.green(`  ✓ Waypoint complete (${progress.completed}/${progress.total})`));
+						} else if (currentTask && lastResult.toLowerCase().includes("waypoint skipped")) {
+							// Also mark skipped waypoints as completed so we move on
 							parsedPlan = markTaskCompleted(parsedPlan, currentTask.id);
-							console.log(chalk.yellow("  ⊘ Task skipped"));
+							console.log(chalk.yellow("  ⊘ Waypoint skipped"));
 						}
 					}
 
@@ -881,7 +883,7 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 					const progress = getPlanProgress(parsedPlan);
 					console.log(
 						chalk.cyan(
-							`\nFinal progress: ${progress.completed}/${progress.total} tasks (${progress.percentComplete}%)`,
+							`\nFinal progress: ${progress.completed}/${progress.total} waypoints (${progress.percentComplete}%)`,
 						),
 					);
 				}

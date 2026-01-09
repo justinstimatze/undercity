@@ -72,37 +72,37 @@ describe("createSquadMember", () => {
 		vi.restoreAllMocks();
 	});
 
-	describe("without task", () => {
+	describe("without waypoint", () => {
 		it("creates squad member with idle status", () => {
 			const member = createSquadMember("scout");
 
 			expect(member.status).toBe("idle");
 		});
 
-		it("creates squad member with undefined task", () => {
+		it("creates squad member with undefined waypoint", () => {
 			const member = createSquadMember("fabricator");
 
-			expect(member.task).toBeUndefined();
+			expect(member.waypoint).toBeUndefined();
 		});
 	});
 
-	describe("with task", () => {
+	describe("with waypoint", () => {
 		it("creates squad member with working status", () => {
-			const task = createMockTask({ description: "Build feature" });
-			const member = createSquadMember("fabricator", task);
+			const waypoint = createMockTask({ description: "Build feature" });
+			const member = createSquadMember("fabricator", waypoint);
 
 			expect(member.status).toBe("working");
 		});
 
-		it("assigns the task to the squad member", () => {
-			const task = createMockTask({
-				id: "task-abc",
+		it("assigns the waypoint to the squad member", () => {
+			const waypoint = createMockTask({
+				id: "waypoint-abc",
 				description: "Build feature",
 			});
-			const member = createSquadMember("fabricator", task);
+			const member = createSquadMember("fabricator", waypoint);
 
-			expect(member.task).toBe(task);
-			expect(member.task?.id).toBe("task-abc");
+			expect(member.waypoint).toBe(waypoint);
+			expect(member.waypoint?.id).toBe("waypoint-abc");
 		});
 	});
 

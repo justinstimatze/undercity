@@ -129,7 +129,7 @@ describe("QuestBoardAnalyzer", () => {
 		});
 
 		it("should handle single quest", async () => {
-			const mockQuests = [createTestQuest("quest-1", "Solo task", "pending", ["utils"], ["feature", "low"])];
+			const mockQuests = [createTestQuest("quest-1", "Solo waypoint", "pending", ["utils"], ["feature", "low"])];
 
 			const opportunities = await analyzer.findParallelizationOpportunities(mockQuests);
 
@@ -138,10 +138,10 @@ describe("QuestBoardAnalyzer", () => {
 
 		it("should rank opportunities by benefit", async () => {
 			const mockQuests = [
-				createTestQuest("quest-1", "Low risk task", "pending", ["pkg1"], ["feature", "low"]),
+				createTestQuest("quest-1", "Low risk waypoint", "pending", ["pkg1"], ["feature", "low"]),
 				createTestQuest("quest-2", "Another low risk", "pending", ["pkg2"], ["feature", "low"]),
 				createTestQuest("quest-3", "Third compatible", "pending", ["pkg3"], ["feature", "low"]),
-				createTestQuest("quest-4", "Fourth task", "pending", ["pkg4"], ["feature", "low"]),
+				createTestQuest("quest-4", "Fourth waypoint", "pending", ["pkg4"], ["feature", "low"]),
 			];
 
 			const opportunities = await analyzer.findParallelizationOpportunities(mockQuests);
@@ -161,8 +161,8 @@ describe("QuestBoardAnalyzer", () => {
 	describe("generateCompatibilityMatrix", () => {
 		it("should create compatibility matrix for quest set", async () => {
 			const mockQuests = [
-				createTestQuest("quest-1", "Task 1", "pending", ["pkg1"], ["feature"]),
-				createTestQuest("quest-2", "Task 2", "pending", ["pkg2"], ["bugfix"]),
+				createTestQuest("quest-1", "Waypoint 1", "pending", ["pkg1"], ["feature"]),
+				createTestQuest("quest-2", "Waypoint 2", "pending", ["pkg2"], ["bugfix"]),
 			];
 
 			mockedGetReadyQuestsForBatch.mockReturnValue(mockQuests);
@@ -188,7 +188,7 @@ describe("QuestBoardAnalyzer", () => {
 		});
 
 		it("should mark self-compatibility correctly", async () => {
-			const mockQuests = [createTestQuest("quest-1", "Solo task", "pending", ["pkg1"])];
+			const mockQuests = [createTestQuest("quest-1", "Solo waypoint", "pending", ["pkg1"])];
 
 			const matrix = await analyzer.generateCompatibilityMatrix(mockQuests);
 
@@ -202,8 +202,8 @@ describe("QuestBoardAnalyzer", () => {
 	describe("analyzeQuestCompatibility", () => {
 		beforeEach(() => {
 			mockedGetAllQuests.mockReturnValue([
-				createTestQuest("quest-1", "Task 1", "pending", ["auth"], ["feature"]),
-				createTestQuest("quest-2", "Task 2", "pending", ["ui"], ["bugfix"]),
+				createTestQuest("quest-1", "Waypoint 1", "pending", ["auth"], ["feature"]),
+				createTestQuest("quest-2", "Waypoint 2", "pending", ["ui"], ["bugfix"]),
 			]);
 		});
 
@@ -243,8 +243,8 @@ describe("QuestBoardAnalyzer", () => {
 	describe("getOptimizationSuggestions", () => {
 		it("should provide relevant suggestions based on quest board state", async () => {
 			mockedGetAllQuests.mockReturnValue([
-				createTestQuest("quest-1", "Task 1", "pending"),
-				createTestQuest("quest-2", "Task 2", "pending"),
+				createTestQuest("quest-1", "Waypoint 1", "pending"),
+				createTestQuest("quest-2", "Waypoint 2", "pending"),
 			]);
 
 			mockedGetQuestBoardAnalytics.mockReturnValue({
@@ -264,7 +264,9 @@ describe("QuestBoardAnalyzer", () => {
 		});
 
 		it("should handle quest board with many quests", async () => {
-			const manyQuests = Array.from({ length: 15 }, (_, i) => createTestQuest(`quest-${i}`, `Task ${i}`, "pending"));
+			const manyQuests = Array.from({ length: 15 }, (_, i) =>
+				createTestQuest(`quest-${i}`, `Waypoint ${i}`, "pending"),
+			);
 
 			mockedGetAllQuests.mockReturnValue(manyQuests);
 			mockedGetQuestBoardAnalytics.mockReturnValue({
@@ -287,7 +289,7 @@ describe("QuestBoardAnalyzer", () => {
 			const highBenefitSet = {
 				parallelismScore: 0.8,
 				riskLevel: "low" as const,
-				quests: [createTestQuest("q1", "task")],
+				quests: [createTestQuest("q1", "waypoint")],
 				estimatedDuration: 10000,
 				compatibilityMatrix: [],
 			};
@@ -300,7 +302,7 @@ describe("QuestBoardAnalyzer", () => {
 			const lowBenefitSet = {
 				parallelismScore: 0.3,
 				riskLevel: "high" as const,
-				quests: [createTestQuest("q1", "task")],
+				quests: [createTestQuest("q1", "waypoint")],
 				estimatedDuration: 10000,
 				compatibilityMatrix: [],
 			};
@@ -313,8 +315,8 @@ describe("QuestBoardAnalyzer", () => {
 		it("should estimate time savings correctly", () => {
 			const questSet = {
 				quests: [
-					{ ...createTestQuest("q1", "low task"), tags: ["low"] },
-					{ ...createTestQuest("q2", "high task"), tags: ["high"] },
+					{ ...createTestQuest("q1", "low waypoint"), tags: ["low"] },
+					{ ...createTestQuest("q2", "high waypoint"), tags: ["high"] },
 				],
 				parallelismScore: 0.7,
 				riskLevel: "medium" as const,
@@ -332,8 +334,8 @@ describe("QuestBoardAnalyzer", () => {
 		it("should generate appropriate opportunity descriptions", () => {
 			const questSet = {
 				quests: [
-					{ ...createTestQuest("q1", "feature task"), tags: ["feature"] },
-					{ ...createTestQuest("q2", "bugfix task"), tags: ["bugfix"] },
+					{ ...createTestQuest("q1", "feature waypoint"), tags: ["feature"] },
+					{ ...createTestQuest("q2", "bugfix waypoint"), tags: ["bugfix"] },
 				],
 				parallelismScore: 0.7,
 				riskLevel: "medium" as const,

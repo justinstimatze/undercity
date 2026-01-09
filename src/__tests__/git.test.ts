@@ -104,7 +104,7 @@ describe("MergeQueue Retry Functionality", () => {
 	describe("add()", () => {
 		it("initializes retry tracking fields", () => {
 			const queue = new MergeQueue();
-			const item = queue.add("feature/test", "task-1", "agent-1");
+			const item = queue.add("feature/test", "waypoint-1", "agent-1");
 
 			expect(item.retryCount).toBe(0);
 			expect(item.maxRetries).toBe(3);
@@ -113,7 +113,7 @@ describe("MergeQueue Retry Functionality", () => {
 
 		it("uses custom maxRetries from config", () => {
 			const queue = new MergeQueue(undefined, undefined, { maxRetries: 5 });
-			const item = queue.add("feature/test", "task-1", "agent-1");
+			const item = queue.add("feature/test", "waypoint-1", "agent-1");
 
 			expect(item.maxRetries).toBe(5);
 		});

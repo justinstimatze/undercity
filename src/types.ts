@@ -20,7 +20,7 @@ export type RaidStatus =
 
 /**
  * A Raid is a work session with a goal.
- * Raiders (agents) go topside (into the codebase) to complete tasks.
+ * Raiders (agents) go topside (into the codebase) to complete waypoints.
  */
 export interface Raid {
 	id: string;
@@ -43,9 +43,9 @@ export interface Raid {
 export type AgentType = "scout" | "planner" | "fabricator" | "auditor";
 
 /**
- * Task status within a raid
+ * Waypoint status within a raid
  */
-export type TaskStatus =
+export type WaypointStatus =
 	| "pending" // Not yet started
 	| "assigned" // Assigned to an agent
 	| "in_progress" // Agent is working
@@ -54,14 +54,14 @@ export type TaskStatus =
 	| "blocked"; // Waiting on something
 
 /**
- * A Task is a unit of work assigned to an agent
+ * A Waypoint is a unit of work assigned to an agent during a raid
  */
-export interface Task {
+export interface Waypoint {
 	id: string;
 	raidId: string;
 	type: AgentType;
 	description: string;
-	status: TaskStatus;
+	status: WaypointStatus;
 	agentId?: string;
 	branch?: string;
 	result?: string;
@@ -82,7 +82,7 @@ export interface SquadMember {
 	id: string;
 	type: AgentType;
 	sessionId?: string; // Claude SDK session ID for resumption
-	task?: Task;
+	waypoint?: Waypoint;
 	status: SquadMemberStatus;
 	spawnedAt: Date;
 	lastActivityAt: Date;
@@ -91,7 +91,7 @@ export interface SquadMember {
 /**
  * Persistence hierarchy (from ARC Raiders):
  * - Pocket: Critical state surviving crashes (raid ID, goal, status)
- * - Inventory: Active state during raid (agent sessions, tasks)
+ * - Inventory: Active state during raid (agent sessions, waypoints)
  * - Loadout: Pre-raid config (agent types, rules)
  * - Stash: Long-term storage between raids
  */
@@ -105,7 +105,7 @@ export interface SafePocket {
 
 export interface Inventory {
 	raid?: Raid;
-	tasks: Task[];
+	waypoints: Waypoint[];
 	squad: SquadMember[];
 	lastUpdated: Date;
 }
@@ -141,7 +141,7 @@ export type MergeStatus =
 
 export interface MergeQueueItem {
 	branch: string;
-	taskId: string;
+	waypointId: string;
 	agentId: string;
 	status: MergeStatus;
 	queuedAt: Date;
@@ -239,13 +239,13 @@ export interface CodebaseFingerprint {
 }
 
 /**
- * File tracking state for an agent/task
+ * File tracking state for an agent/waypoint
  */
 export interface FileTrackingEntry {
 	/** The agent ID that touched these files */
 	agentId: string;
-	/** The task ID associated with this agent */
-	taskId: string;
+	/** The waypoint ID associated with this agent */
+	waypointId: string;
 	/** The raid ID this belongs to */
 	raidId: string;
 	/** Files touched by this agent */
@@ -265,7 +265,7 @@ export interface FileConflict {
 	/** Agents that have touched this file */
 	touchedBy: Array<{
 		agentId: string;
-		taskId: string;
+		waypointId: string;
 		operation: FileOperation;
 		timestamp: Date;
 	}>;
