@@ -34,6 +34,8 @@ import {
 	markComplete,
 	markFailed,
 	markInProgress,
+	getReadyQuestsForBatch,
+	getQuestBoardAnalytics,
 } from "./quest.js";
 import {
 	parsePlanFile,
@@ -45,6 +47,8 @@ import {
 	type ParsedPlan,
 } from "./plan-parser.js";
 import { RaidOrchestrator } from "./raid.js";
+import { QuestBatchOrchestrator } from "./quest-batch-orchestrator.js";
+import { QuestBoardAnalyzer } from "./quest-board-analyzer.js";
 import type { RaidStatus } from "./types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -234,12 +238,6 @@ program
 		console.log(`  Goal: ${status.raid.goal}`);
 		console.log(`  Status: ${statusColor(status.raid.status)}`);
 		console.log(`  Started: ${status.raid.startedAt}`);
-
-		// Show current loadout if available
-		const currentLoadout = orchestrator.getCurrentLoadout();
-		if (currentLoadout) {
-			console.log(`  Loadout: ${chalk.cyan(currentLoadout.name)} (${currentLoadout.id})`);
-		}
 
 		// Calculate and display progress percentage
 		if (status.tasks.length > 0) {
@@ -965,112 +963,212 @@ program
 		);
 	});
 
-// Loadout management commands
+// Quest batch command - process multiple quests in parallel
 program
-	.command("loadouts")
-	.description("Manage loadout configurations")
-	.option("-v, --verbose", "Show detailed information")
-	.action((options) => {
+	.command("quest-batch")
+	.description("Process multiple quests in parallel batches")
+	.option("-n, --max-quests <n>", "Maximum concurrent quests (1-5)", "3")
+	.option("--dry-run", "Show quest matchmaking without executing")
+	.option("--analyze-only", "Analyze quests and show compatibility matrix")
+	.option("-a, --auto-approve", "Auto-approve plans without human review")
+	.option("-y, --yes", "Auto-approve and auto-commit")
+	.option("-s, --stream", "Stream agent activity")
+	.option("-v, --verbose", "Verbose logging")
+	.option("--risk-threshold <n>", "Risk threshold for parallel execution (0-1)", "0.7")
+	.option("--conflict-resolution <strategy>", "Conflict resolution strategy", "balanced")
+	.action(async (options: {
+		maxQuests?: string;
+		dryRun?: boolean;
+		analyzeOnly?: boolean;
+		autoApprove?: boolean;
+		yes?: boolean;
+		stream?: boolean;
+		verbose?: boolean;
+		riskThreshold?: string;
+		conflictResolution?: string;
+	}) => {
+		const maxQuests = Math.min(5, Math.max(1, Number.parseInt(options.maxQuests || "3", 10)));
+		const riskThreshold = Math.min(1, Math.max(0, Number.parseFloat(options.riskThreshold || "0.7")));
+		const conflictResolution = (options.conflictResolution || "balanced") as "conservative" | "aggressive" | "balanced";
+
+		console.log(chalk.bold("Quest Batch Processing"));
+		console.log();
+
+		const orchestrator = new QuestBatchOrchestrator({
+			maxParallelQuests: maxQuests,
+			autoApprove: options.autoApprove || options.yes,
+			autoCommit: options.yes,
+			verbose: options.verbose,
+			streamOutput: options.stream,
+			riskThreshold,
+			conflictResolution,
+		});
+
 		try {
-			const orchestrator = new RaidOrchestrator();
-			const loadoutManager = orchestrator.getLoadoutManager();
-			const loadouts = loadoutManager.getAllLoadouts();
-			const rankings = loadoutManager.getLoadoutRankings();
+			if (options.analyzeOnly) {
+				// Just show compatibility analysis
+				const analysis = await orchestrator.analyzeBatch(maxQuests);
 
-			console.log(chalk.bold("Loadout Configurations"));
-			console.log("");
+				console.log(chalk.cyan(`Available quests: ${analysis.availableQuests.length}`));
+				console.log(chalk.cyan(`Quest sets found: ${analysis.questSets.length}`));
+				console.log();
 
-			if (loadouts.length === 0) {
-				console.log(chalk.gray("No loadout configurations found"));
+				if (analysis.optimalSet) {
+					console.log(chalk.bold("Optimal Quest Set:"));
+					for (const quest of analysis.optimalSet.quests) {
+						console.log(`  • ${quest.objective.substring(0, 60)}${quest.objective.length > 60 ? "..." : ""}`);
+					}
+					console.log();
+					console.log(`Risk Level: ${analysis.optimalSet.riskLevel}`);
+					console.log(`Parallelism Score: ${analysis.optimalSet.parallelismScore.toFixed(2)}`);
+					console.log(`Estimated Duration: ${Math.round(analysis.optimalSet.estimatedDuration / 60000)} minutes`);
+				}
+
+				console.log();
+				console.log(chalk.green(analysis.recommendedAction));
 				return;
 			}
 
-			for (const { loadout, score } of rankings) {
-				console.log(`${chalk.cyan(loadout.name)} (${loadout.id})`);
-				if (loadout.description) {
-					console.log(`  Description: ${chalk.gray(loadout.description)}`);
+			if (options.dryRun) {
+				// Show what would be executed
+				const analysis = await orchestrator.analyzeBatch(maxQuests);
+				console.log(chalk.cyan("Dry run - no quests will be executed"));
+				console.log();
+				console.log(chalk.green(analysis.recommendedAction));
+				return;
+			}
+
+			// Execute the batch
+			console.log(chalk.cyan(`Starting parallel quest processing (max: ${maxQuests})`));
+			console.log(chalk.dim(`Risk threshold: ${riskThreshold}, Conflict resolution: ${conflictResolution}`));
+			console.log();
+
+			const result = await orchestrator.processBatch(maxQuests);
+
+			console.log();
+			console.log(chalk.bold("Batch Results:"));
+			console.log(`${chalk.green("✓")} Completed: ${result.completedQuests.length}`);
+			console.log(`${chalk.red("✗")} Failed: ${result.failedQuests.length}`);
+			console.log(`${chalk.yellow("⚡")} Conflicts: ${result.conflicts.length}`);
+			console.log(`${chalk.cyan("⏱")} Duration: ${Math.round(result.totalDuration / 60000)} minutes`);
+
+			if (result.conflicts.length > 0) {
+				console.log();
+				console.log(chalk.yellow("Conflicts detected:"));
+				for (const conflict of result.conflicts) {
+					console.log(`  • ${conflict.conflictingFiles.join(", ")} (${conflict.severity})`);
 				}
-				console.log(`  Score: ${score.overallScore.toFixed(1)}/100`);
-				console.log(`  Squad Size: ${loadout.maxSquadSize}, Context: ${loadout.contextSize}, Parallelism: ${loadout.parallelismLevel}`);
-				console.log(`  Auto-approve: ${loadout.autoApprove ? chalk.green("Yes") : chalk.red("No")}`);
-
-				if (options.verbose) {
-					console.log(`  Models: ${Object.entries(loadout.modelChoices).map(([type, model]) => `${type}=${model}`).join(", ")}`);
-					console.log(`  Performance Records: ${score.recentPerformance.length}`);
-				}
-				console.log("");
-			}
-
-			// Show analytics
-			const analytics = loadoutManager.getAnalytics();
-			console.log(chalk.bold("Analytics"));
-			console.log(`  Total Loadouts: ${analytics.totalLoadouts}`);
-			console.log(`  Performance Records: ${analytics.totalPerformanceRecords}`);
-			console.log(`  Success Rate: ${analytics.averageSuccessRate.toFixed(1)}%`);
-
-			if (analytics.topPerformer) {
-				console.log(`  Top Performer: ${chalk.green(analytics.topPerformer.loadout.name)} (${analytics.topPerformer.score.toFixed(1)})`);
-			}
-
-			if (analytics.speedLeader) {
-				console.log(`  Speed Leader: ${chalk.blue(analytics.speedLeader.loadout.name)} (${Math.round(analytics.speedLeader.avgTime / 1000)}s avg)`);
-			}
-
-			if (analytics.costEfficiencyLeader) {
-				console.log(`  Cost Leader: ${chalk.yellow(analytics.costEfficiencyLeader.loadout.name)} ($${(analytics.costEfficiencyLeader.avgCost / 100).toFixed(3)} avg)`);
 			}
 
 		} catch (error) {
 			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
 			process.exit(1);
+		} finally {
+			await orchestrator.shutdown();
 		}
 	});
 
-// Loadout recommendations
+// Quest analyze command - analyze quest board for parallelization opportunities
 program
-	.command("recommendations")
-	.description("Show loadout recommendations by quest type")
-	.option("-t, --type <questType>", "Show recommendation for specific quest type")
-	.action((options) => {
+	.command("quest-analyze")
+	.description("Analyze quest board for parallelization opportunities")
+	.option("--compatibility", "Show compatibility matrix")
+	.option("--suggestions", "Show optimization suggestions")
+	.action(async (options: { compatibility?: boolean; suggestions?: boolean }) => {
+		const analyzer = new QuestBoardAnalyzer();
+
+		console.log(chalk.bold("Quest Board Analysis"));
+		console.log();
+
 		try {
-			const orchestrator = new RaidOrchestrator();
-			const loadoutManager = orchestrator.getLoadoutManager();
+			const insights = await analyzer.analyzeQuestBoard();
 
-			if (options.type) {
-				const recommendation = loadoutManager.getQuestTypeRecommendation(options.type);
-				if (recommendation) {
-					console.log(chalk.bold(`Recommendation for ${options.type} quests:`));
-					console.log(`  ${chalk.green(recommendation.recommendedLoadout.name)}`);
-					console.log(`  Confidence: ${recommendation.confidence.toFixed(1)}%`);
-					console.log(`  Reasoning: ${recommendation.reasoning}`);
+			// Basic insights
+			console.log(chalk.cyan("Overview:"));
+			console.log(`  Total quests: ${insights.totalQuests}`);
+			console.log(`  Pending quests: ${insights.pendingQuests}`);
+			console.log(`  Ready for parallelization: ${insights.readyForParallelization}`);
+			console.log(`  Average complexity: ${insights.averageComplexity}`);
+			console.log();
 
-					if (recommendation.alternativeLoadouts.length > 0) {
-						console.log("\n  Alternatives:");
-						for (const alt of recommendation.alternativeLoadouts) {
-							console.log(`    ${chalk.cyan(alt.loadout.name)} (score: ${alt.score.toFixed(1)}) - ${alt.reasoning}`);
+			// Parallelization opportunities
+			if (insights.parallelizationOpportunities.length > 0) {
+				console.log(chalk.bold("Parallelization Opportunities:"));
+				for (const opp of insights.parallelizationOpportunities.slice(0, 3)) {
+					const benefitColor = opp.benefit === "high" ? chalk.green :
+										opp.benefit === "medium" ? chalk.yellow : chalk.gray;
+					console.log(`  ${benefitColor("●")} ${opp.description}`);
+					console.log(`    Benefit: ${benefitColor(opp.benefit)}, Time savings: ${opp.estimatedTimesSaving}%`);
+				}
+				console.log();
+			} else {
+				console.log(chalk.gray("No parallelization opportunities found"));
+				console.log();
+			}
+
+			// Top conflicting packages
+			if (insights.topConflictingPackages.length > 0) {
+				console.log(chalk.bold("Frequently Modified Packages:"));
+				for (const pkg of insights.topConflictingPackages.slice(0, 5)) {
+					console.log(`  • ${pkg}`);
+				}
+				console.log();
+			}
+
+			// Recommendations
+			if (insights.recommendations.length > 0) {
+				console.log(chalk.bold("Recommendations:"));
+				for (const rec of insights.recommendations) {
+					console.log(`  💡 ${rec}`);
+				}
+				console.log();
+			}
+
+			// Compatibility matrix
+			if (options.compatibility) {
+				console.log(chalk.bold("Compatibility Matrix:"));
+				const matrix = await analyzer.generateCompatibilityMatrix();
+
+				if (matrix.quests.length > 0) {
+					console.log(`  ${matrix.summary.compatiblePairs}/${matrix.summary.totalPairs} pairs are compatible`);
+					console.log(`  Average compatibility: ${(matrix.summary.averageCompatibilityScore * 100).toFixed(1)}%`);
+
+					// Show a simplified matrix for first few quests
+					const maxShow = Math.min(5, matrix.quests.length);
+					console.log();
+					console.log("  Quest compatibility (✓ = compatible, ✗ = conflict):");
+					for (let i = 0; i < maxShow; i++) {
+						const quest = matrix.quests[i];
+						const row = matrix.matrix[i];
+						let line = `  ${quest.id.substring(0, 8)}: `;
+						for (let j = 0; j < maxShow; j++) {
+							if (i === j) {
+								line += "  -";
+							} else {
+								const compat = row[j];
+								line += compat.compatible ? chalk.green("  ✓") : chalk.red("  ✗");
+							}
 						}
+						console.log(line);
+					}
+
+					if (matrix.quests.length > maxShow) {
+						console.log(chalk.dim(`  ... and ${matrix.quests.length - maxShow} more quests`));
 					}
 				} else {
-					console.log(chalk.yellow(`No recommendation available for ${options.type} quests yet`));
+					console.log("  No quests available for analysis");
 				}
-			} else {
-				// Show all recommendations
-				const recommendations = loadoutManager.getAllRecommendations();
+				console.log();
+			}
 
-				if (recommendations.length === 0) {
-					console.log(chalk.gray("No recommendations available yet - complete some quests to build performance data"));
-					return;
+			// Optimization suggestions
+			if (options.suggestions) {
+				console.log(chalk.bold("Optimization Suggestions:"));
+				const suggestions = await analyzer.getOptimizationSuggestions();
+				for (const suggestion of suggestions) {
+					console.log(`  🔧 ${suggestion}`);
 				}
-
-				console.log(chalk.bold("Quest Type Recommendations"));
-				console.log("");
-
-				for (const rec of recommendations) {
-					console.log(`${chalk.bold(rec.questType)}: ${chalk.green(rec.recommendedLoadout.name)}`);
-					console.log(`  Confidence: ${rec.confidence.toFixed(1)}%`);
-					console.log(`  ${rec.reasoning}`);
-					console.log("");
-				}
+				console.log();
 			}
 
 		} catch (error) {
@@ -1079,51 +1177,55 @@ program
 		}
 	});
 
-// Performance analytics
+// Quest status command - show detailed quest board status
 program
-	.command("analytics")
-	.description("Show detailed loadout performance analytics")
+	.command("quest-status")
+	.description("Show detailed quest board status and analytics")
 	.action(() => {
-		try {
-			const orchestrator = new RaidOrchestrator();
-			const loadoutManager = orchestrator.getLoadoutManager();
-			const analytics = loadoutManager.getAnalytics();
+		console.log(chalk.bold("Quest Board Status"));
+		console.log();
 
-			console.log(chalk.bold("Loadout Performance Analytics"));
-			console.log("");
+		// Basic quest board summary
+		const summary = getBacklogSummary();
+		const analytics = getQuestBoardAnalytics();
 
-			console.log("Overview:");
-			console.log(`  Total Configurations: ${analytics.totalLoadouts}`);
-			console.log(`  Performance Records: ${analytics.totalPerformanceRecords}`);
-			console.log(`  Overall Success Rate: ${analytics.averageSuccessRate.toFixed(1)}%`);
-			console.log("");
+		console.log(chalk.cyan("Current Status:"));
+		console.log(`  ${chalk.green("Complete:")} ${summary.complete}`);
+		console.log(`  ${chalk.yellow("Pending:")} ${summary.pending}`);
+		console.log(`  ${chalk.cyan("In Progress:")} ${summary.inProgress}`);
+		console.log(`  ${chalk.red("Failed:")} ${summary.failed}`);
+		console.log();
 
-			if (analytics.topPerformer) {
-				console.log(`Best Overall: ${chalk.green(analytics.topPerformer.loadout.name)} (${analytics.topPerformer.score.toFixed(1)} score)`);
+		console.log(chalk.cyan("Analytics:"));
+		console.log(`  Total quests: ${analytics.totalQuests}`);
+		console.log(`  Average completion time: ${Math.round(analytics.averageCompletionTime / 60000)} minutes`);
+		console.log(`  Parallelization opportunities: ${analytics.parallelizationOpportunities}`);
+		console.log();
+
+		if (analytics.topConflictingPackages.length > 0) {
+			console.log(chalk.cyan("Top Conflicting Packages:"));
+			for (const pkg of analytics.topConflictingPackages.slice(0, 3)) {
+				console.log(`  • ${pkg}`);
 			}
-
-			if (analytics.speedLeader) {
-				console.log(`Fastest: ${chalk.blue(analytics.speedLeader.loadout.name)} (${Math.round(analytics.speedLeader.avgTime / 1000)}s average)`);
-			}
-
-			if (analytics.costEfficiencyLeader) {
-				console.log(`Most Cost Efficient: ${chalk.yellow(analytics.costEfficiencyLeader.loadout.name)} ($${(analytics.costEfficiencyLeader.avgCost / 100).toFixed(3)} average)`);
-			}
-			console.log("");
-
-			// Quest type breakdown
-			if (Object.keys(analytics.questTypeBreakdown).length > 0) {
-				console.log("Quest Type Distribution:");
-				for (const [type, count] of Object.entries(analytics.questTypeBreakdown)) {
-					const percentage = ((count / analytics.totalPerformanceRecords) * 100).toFixed(1);
-					console.log(`  ${type}: ${count} (${percentage}%)`);
-				}
-			}
-
-		} catch (error) {
-			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
-			process.exit(1);
+			console.log();
 		}
+
+		// Show next few ready quests
+		const readyQuests = getReadyQuestsForBatch(5);
+		if (readyQuests.length > 0) {
+			console.log(chalk.cyan("Next Ready Quests:"));
+			for (let i = 0; i < Math.min(3, readyQuests.length); i++) {
+				const quest = readyQuests[i];
+				console.log(`  ${i + 1}. ${quest.objective.substring(0, 60)}${quest.objective.length > 60 ? "..." : ""}`);
+			}
+			if (readyQuests.length > 3) {
+				console.log(chalk.dim(`  ... and ${readyQuests.length - 3} more`));
+			}
+			console.log();
+		}
+
+		console.log(chalk.dim("Run 'undercity quest-analyze' for detailed parallelization analysis"));
+		console.log(chalk.dim("Run 'undercity quest-batch' to process quests in parallel"));
 	});
 
 // Parse and run

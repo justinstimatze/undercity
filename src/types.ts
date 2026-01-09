@@ -110,126 +110,6 @@ export interface Inventory {
 	lastUpdated: Date;
 }
 
-/**
- * Model configuration choices for different agent types
- */
-export type ModelChoice = "haiku" | "sonnet" | "opus";
-
-/**
- * Context size options for tasks
- */
-export type ContextSize = "small" | "medium" | "large";
-
-/**
- * Parallelism level for squad execution
- */
-export type ParallelismLevel = "sequential" | "limited" | "maximum";
-
-/**
- * Quest type categories for loadout optimization
- */
-export type QuestType =
-	| "debug" // Bug fixes, error investigation
-	| "feature" // New feature implementation
-	| "refactor" // Code restructuring
-	| "documentation" // Writing docs, comments
-	| "test" // Writing tests, coverage
-	| "performance" // Optimization work
-	| "security" // Security fixes, audits
-	| "research" // Analysis, exploration;
-
-/**
- * Efficiency metrics for measuring loadout performance
- */
-export interface EfficiencyMetrics {
-	/** Time to complete in milliseconds */
-	timeToComplete: number;
-	/** Number of tokens used across all agents */
-	totalTokens: number;
-	/** Cost in cents */
-	costInCents: number;
-	/** Quality score 0-100 based on success rate and review feedback */
-	qualityScore: number;
-	/** Number of retry attempts needed */
-	retryCount: number;
-	/** Whether the quest was completed successfully */
-	success: boolean;
-}
-
-/**
- * A specific loadout configuration
- */
-export interface LoadoutConfiguration {
-	id: string;
-	name: string;
-	description?: string;
-	maxSquadSize: number;
-	enabledAgentTypes: AgentType[];
-	modelChoices: Record<AgentType, ModelChoice>;
-	contextSize: ContextSize;
-	parallelismLevel: ParallelismLevel;
-	autoApprove: boolean;
-	/** Custom configurations per agent type */
-	agentConfigs?: Record<AgentType, Record<string, any>>;
-	lastUpdated: Date;
-}
-
-/**
- * Performance data for a loadout on a specific quest
- */
-export interface LoadoutPerformance {
-	id: string;
-	loadoutConfigId: string;
-	questId: string;
-	questType: QuestType;
-	questComplexity: number; // 1-10 scale
-	raidId: string;
-	metrics: EfficiencyMetrics;
-	timestamp: Date;
-	/** Additional context about the quest */
-	questObjective?: string;
-	/** Agent-specific performance data */
-	agentMetrics?: Record<string, {
-		tokensUsed: number;
-		timeSpent: number;
-		taskSuccess: boolean;
-	}>;
-}
-
-/**
- * Aggregated scoring data for a loadout
- */
-export interface LoadoutScore {
-	loadoutConfigId: string;
-	overallScore: number; // 0-100 composite score
-	performanceByQuestType: Record<QuestType, {
-		score: number;
-		sampleCount: number;
-		avgTimeToComplete: number;
-		avgCost: number;
-		avgQuality: number;
-		successRate: number;
-	}>;
-	recentPerformance: LoadoutPerformance[]; // Last 10 performances
-	lastUpdated: Date;
-}
-
-/**
- * Loadout recommendation for a quest type
- */
-export interface LoadoutRecommendation {
-	questType: QuestType;
-	recommendedLoadout: LoadoutConfiguration;
-	confidence: number; // 0-100, based on sample size and performance
-	alternativeLoadouts: Array<{
-		loadout: LoadoutConfiguration;
-		score: number;
-		reasoning: string;
-	}>;
-	reasoning: string;
-	lastUpdated: Date;
-}
-
 export interface Loadout {
 	maxSquadSize: number;
 	enabledAgentTypes: AgentType[];
@@ -244,14 +124,6 @@ export interface Stash {
 		completedAt: Date;
 		success: boolean;
 	}>;
-	/** Available loadout configurations */
-	loadoutConfigurations: LoadoutConfiguration[];
-	/** Performance history for loadouts */
-	loadoutPerformances: LoadoutPerformance[];
-	/** Aggregated scores for each loadout */
-	loadoutScores: LoadoutScore[];
-	/** Quest type recommendations */
-	loadoutRecommendations: LoadoutRecommendation[];
 	lastUpdated: Date;
 }
 
@@ -439,155 +311,143 @@ export interface ScoutCache {
 	lastUpdated: Date;
 }
 
-// ============== Rate Limiting Types ==============
+// ============== Loadout Configuration Types ==============
 
 /**
- * Token usage for a quest/request
+ * Model choices for each agent type in a loadout
  */
-export interface TokenUsage {
-	/** Input tokens consumed */
-	inputTokens: number;
-	/** Output tokens generated */
-	outputTokens: number;
-	/** Total tokens (input + output) */
-	totalTokens: number;
-	/** Tokens normalized to Sonnet equivalent (Opus ~12x, Haiku ~0.25x) */
-	sonnetEquivalentTokens: number;
+export interface LoadoutModelChoices {
+	scout: "haiku" | "sonnet" | "opus";
+	planner: "haiku" | "sonnet" | "opus";
+	fabricator: "haiku" | "sonnet" | "opus";
+	auditor: "haiku" | "sonnet" | "opus";
 }
 
 /**
- * A quest represents a single request/task tracked for rate limiting
+ * Context size configuration
  */
-export interface QuestUsage {
-	/** Unique quest identifier */
-	questId: string;
-	/** Model used for the quest */
-	model: "haiku" | "sonnet" | "opus";
-	/** Token usage for this quest */
-	tokens: TokenUsage;
-	/** When this quest started */
-	timestamp: Date;
-	/** Duration of the quest in milliseconds */
-	durationMs?: number;
-	/** Associated raid ID if applicable */
-	raidId?: string;
-	/** Associated agent ID if applicable */
-	agentId?: string;
-}
+export type ContextSize = "small" | "medium" | "large";
 
 /**
- * Rate limit hit event (429 response)
+ * Parallelism level configuration
  */
-export interface RateLimitHit {
-	/** When the 429 occurred */
-	timestamp: Date;
-	/** Model that hit the limit */
-	model: "haiku" | "sonnet" | "opus";
-	/** Current usage state when limit hit */
-	currentUsage: {
-		/** Tokens used in last 5 hours */
-		last5Hours: number;
-		/** Tokens used in current week */
-		currentWeek: number;
-		/** Sonnet equivalent tokens in last 5 hours */
-		last5HoursSonnet: number;
-		/** Sonnet equivalent tokens in current week */
-		currentWeekSonnet: number;
-	};
-	/** Response headers from 429 (if available) */
-	responseHeaders?: Record<string, string>;
-	/** Error message from 429 */
-	errorMessage?: string;
-}
+export type ParallelismLevel = "sequential" | "limited" | "maximum";
 
 /**
- * Time window for rate limit calculations
+ * A loadout configuration - defines how agents are configured for a run
  */
-export type TimeWindow = "5hour" | "week";
-
-/**
- * Rate limit configuration
- */
-export interface RateLimitConfig {
-	/** Maximum tokens per 5-hour window (in Sonnet equivalents) */
-	maxTokensPer5Hours: number;
-	/** Maximum tokens per week (in Sonnet equivalents) */
-	maxTokensPerWeek: number;
-	/** Warning threshold as percentage (0.8 = 80%) */
-	warningThreshold: number;
-	/** Token multipliers for Sonnet equivalence */
-	tokenMultipliers: {
-		haiku: number;
-		sonnet: number;
-		opus: number;
-	};
-}
-
-/**
- * Current rate limit state
- */
-export interface RateLimitState {
-	/** All quest usage records */
-	quests: QuestUsage[];
-	/** All rate limit hit events */
-	rateLimitHits: RateLimitHit[];
-	/** Configuration */
-	config: RateLimitConfig;
-	/** Last updated timestamp */
+export interface LoadoutConfiguration {
+	/** Unique identifier for the loadout */
+	id: string;
+	/** Human-readable name */
+	name: string;
+	/** Description of when to use this loadout */
+	description: string;
+	/** Maximum number of agents in the squad */
+	maxSquadSize: number;
+	/** Which agent types are enabled */
+	enabledAgentTypes: AgentType[];
+	/** Model choice for each agent type */
+	modelChoices: LoadoutModelChoices;
+	/** How much context to provide to agents */
+	contextSize: ContextSize;
+	/** How much parallelism to use */
+	parallelismLevel: ParallelismLevel;
+	/** Skip human approval for plans */
+	autoApprove: boolean;
+	/** When this configuration was last updated */
 	lastUpdated: Date;
 }
 
-// ============== Metrics Types ==============
-
 /**
- * Quest completion metrics for efficiency tracking
+ * Performance record for a loadout on a specific quest
  */
-export interface QuestMetrics {
-	/** Quest identifier */
+export interface LoadoutPerformanceRecord {
+	/** The loadout ID used */
+	loadoutId: string;
+	/** The quest ID */
 	questId: string;
-	/** Raid identifier */
-	raidId: string;
-	/** Quest objective/goal */
-	objective: string;
-	/** Whether quest completed successfully */
+	/** Quest type/category if known */
+	questType?: string;
+	/** Whether the quest succeeded */
 	success: boolean;
-	/** Total execution time in milliseconds */
-	durationMs: number;
-	/** Total tokens consumed */
-	totalTokens: number;
-	/** Number of agents spawned */
-	agentsSpawned: number;
-	/** Agent types used */
-	agentTypes: AgentType[];
-	/** When quest started */
-	startedAt: Date;
-	/** When quest completed */
-	completedAt: Date;
-	/** Error message if failed */
-	error?: string;
+	/** Total tokens used */
+	tokensUsed: number;
+	/** Execution time in milliseconds */
+	executionTimeMs: number;
+	/** Number of rework attempts */
+	reworkCount: number;
+	/** When this was recorded */
+	recordedAt: Date;
 }
 
 /**
- * Efficiency analytics calculated from historical metrics
+ * Aggregated score for a loadout
  */
-export interface EfficiencyAnalytics {
-	/** Total quests tracked */
-	totalQuests: number;
-	/** Success rate as percentage */
+export interface LoadoutScore {
+	/** The loadout ID */
+	loadoutId: string;
+	/** Number of quests completed with this loadout */
+	questCount: number;
+	/** Success rate (0-1) */
 	successRate: number;
-	/** Average tokens per completed quest */
-	avgTokensPerCompletion: number;
-	/** Average execution time per quest */
-	avgDurationMs: number;
-	/** Average agents spawned per quest */
-	avgAgentsSpawned: number;
-	/** Most efficient agent type (lowest tokens/completion) */
-	mostEfficientAgentType: AgentType | null;
-	/** Token usage by agent type */
-	tokensByAgentType: Record<AgentType, { total: number; avgPerQuest: number }>;
-	/** Time period of analysis */
-	analysisPeriod: {
-		from: Date;
-		to: Date;
-	};
+	/** Average tokens per quest */
+	avgTokensPerQuest: number;
+	/** Average execution time in ms */
+	avgExecutionTimeMs: number;
+	/** Average rework count */
+	avgReworkCount: number;
+	/** Composite efficiency score (higher is better) */
+	efficiencyScore: number;
+	/** When this score was last calculated */
+	lastCalculated: Date;
+}
+
+/**
+ * Storage for loadout configurations and performance data
+ */
+export interface LoadoutStorage {
+	/** All loadout configurations */
+	configurations: LoadoutConfiguration[];
+	/** Performance records */
+	performanceRecords: LoadoutPerformanceRecord[];
+	/** Calculated scores per loadout */
+	scores: Record<string, LoadoutScore>;
+	/** When storage was last updated */
+	lastUpdated: Date;
+}
+
+// ============== Quest Matchmaking Types ==============
+
+/**
+ * Cross-quest conflict detection
+ * NEW: Types for parallel quest execution
+ */
+export interface CrossQuestConflict {
+	questIds: string[];
+	conflictingFiles: string[];
+	severity: "warning" | "error" | "critical";
+}
+
+/**
+ * Quest batch execution result
+ * NEW: Result tracking for parallel quest execution
+ */
+export interface QuestBatchResult {
+	completedQuests: string[];
+	failedQuests: string[];
+	totalDuration: number;
+	conflicts: CrossQuestConflict[];
+}
+
+/**
+ * Quest set metadata
+ * NEW: Metadata for quest batching
+ */
+export interface QuestSetMetadata {
+	questIds: string[];
+	raidIds: string[];
+	startedAt: Date;
+	estimatedDuration: number;
+	riskLevel: "low" | "medium" | "high";
 }
