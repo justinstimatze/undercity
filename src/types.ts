@@ -471,8 +471,9 @@ export interface TokenUsage {
 	inputTokens: number;
 	outputTokens: number;
 	totalTokens: number;
-	model: ModelChoice;
-	timestamp: Date;
+	model?: ModelChoice;
+	timestamp?: Date;
+	sonnetEquivalentTokens: number;
 }
 
 /**
@@ -480,16 +481,12 @@ export interface TokenUsage {
  */
 export interface QuestUsage {
 	questId: string;
-	raidId: string;
-	objective: string;
-	startTime: Date;
-	endTime?: Date;
-	tokens: TokenUsage[];
-	totalInputTokens: number;
-	totalOutputTokens: number;
-	totalTokens: number;
-	success: boolean;
-	agentsUsed: AgentType[];
+	raidId?: string;
+	agentId?: string;
+	model: ModelChoice;
+	tokens: TokenUsage;
+	timestamp: Date;
+	durationMs?: number;
 }
 
 /**
@@ -497,21 +494,21 @@ export interface QuestUsage {
  */
 export interface RateLimitHit {
 	timestamp: Date;
-	endpoint: string;
 	model: ModelChoice;
-	retryAfter?: number;
-	tokenEstimate?: number;
+	currentUsage: {
+		last5Hours: number;
+		currentWeek: number;
+		last5HoursSonnet: number;
+		currentWeekSonnet: number;
+	};
+	responseHeaders?: Record<string, string>;
+	errorMessage?: string;
 }
 
 /**
  * Time window for rate limiting
  */
-export interface TimeWindow {
-	start: Date;
-	end: Date;
-	tokensUsed: number;
-	limit: number;
-}
+export type TimeWindow = "5hour" | "week";
 
 /**
  * Rate limit configuration
@@ -527,10 +524,8 @@ export interface RateLimitConfig {
  * Rate limit state
  */
 export interface RateLimitState {
-	hourlyWindow: TimeWindow;
-	weeklyWindow: TimeWindow;
-	recentHits: RateLimitHit[];
-	questUsage: QuestUsage[];
+	quests: QuestUsage[];
+	rateLimitHits: RateLimitHit[];
 	config: RateLimitConfig;
 	lastUpdated: Date;
 }
@@ -542,15 +537,14 @@ export interface QuestMetrics {
 	questId: string;
 	raidId: string;
 	objective: string;
-	questType: QuestType;
-	startTime: Date;
-	endTime?: Date;
-	durationMs?: number;
-	tokenUsage: TokenUsage[];
-	totalTokens: number;
 	success: boolean;
-	agentsUsed: AgentType[];
-	reworkCount: number;
+	durationMs: number;
+	totalTokens: number;
+	agentsSpawned: number;
+	agentTypes: AgentType[];
+	startedAt: Date;
+	completedAt: Date;
+	error?: string;
 }
 
 /**
@@ -570,15 +564,16 @@ export interface EfficiencyMetrics {
  */
 export interface EfficiencyAnalytics {
 	totalQuests: number;
-	successfulQuests: number;
-	failedQuests: number;
-	totalTokens: number;
-	avgTokensPerQuest: number;
-	avgTimePerQuest: number;
-	tokensByAgent: Record<AgentType, { total: number; avgPerQuest: number }>;
-	questsByType: Record<QuestType, number>;
-	successRateByType: Record<QuestType, number>;
-	efficiencyTrend: Array<{ date: string; tokensPerQuest: number; successRate: number }>;
+	successRate: number;
+	avgTokensPerCompletion: number;
+	avgDurationMs: number;
+	avgAgentsSpawned: number;
+	mostEfficientAgentType: AgentType | null;
+	tokensByAgentType: Record<AgentType, { total: number; avgPerQuest: number }>;
+	analysisPeriod: {
+		from: Date;
+		to: Date;
+	};
 }
 
 /**

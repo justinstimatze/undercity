@@ -251,9 +251,23 @@ export class RateLimitTracker {
 	 * Get usage summary across all models
 	 */
 	getUsageSummary(): {
-		current: ReturnType<typeof this.getCurrentUsage>;
+		current: {
+			last5Hours: number;
+			currentWeek: number;
+			last5HoursSonnet: number;
+			currentWeekSonnet: number;
+		};
 		percentages: { fiveHour: number; weekly: number };
-		modelBreakdown: Record<string, ReturnType<typeof this.getModelUsage>>;
+		modelBreakdown: Record<
+			string,
+			{
+				totalQuests: number;
+				totalTokens: number;
+				sonnetEquivalentTokens: number;
+				last24Hours: number;
+				rateLimitHits: number;
+			}
+		>;
 		totalRateLimitHits: number;
 	} {
 		const current = this.getCurrentUsage();

@@ -25,7 +25,9 @@ import type {
 	LoadoutPerformanceRecord,
 	LoadoutScore,
 	LoadoutStorage,
+	QuestMetrics,
 	Raid,
+	RateLimitState,
 	SafePocket,
 	SquadMember,
 	Stash,
@@ -649,5 +651,108 @@ export class Persistence {
 	 */
 	getEfficiencyOutcomesByParallelism(parallelismLevel: string): EfficiencyOutcome[] {
 		return this.getEfficiencyOutcomes().filter((o) => o.parallelismLevel === parallelismLevel);
+	}
+
+	// ============== Rate Limit Tracking ==============
+
+	/**
+	 * Get rate limit state
+	 */
+	getRateLimitState(): RateLimitState | null {
+		try {
+			return this.readJson<RateLimitState>("rate-limit-state.json", {
+				quests: [],
+				rateLimitHits: [],
+				config: {
+					maxTokensPer5Hours: 1_000_000,
+					maxTokensPerWeek: 5_000_000,
+					warningThreshold: 0.8,
+					tokenMultipliers: {
+						haiku: 0.25,
+						sonnet: 1.0,
+						opus: 12.0,
+					},
+				},
+				lastUpdated: new Date(),
+			});
+		} catch (error) {
+			persistenceLogger.error({ error: String(error) }, "Failed to load rate limit state");
+			return null;
+		}
+	}
+
+	/**
+	 * Save rate limit state
+	 */
+	saveRateLimitState(state: RateLimitState): void {
+		try {
+			state.lastUpdated = new Date();
+			this.writeJson("rate-limit-state.json", state);
+		} catch (error) {
+			persistenceLogger.error({ error: String(error) }, "Failed to save rate limit state");
+		}
+	}
+
+	// ============== Quest Metrics ==============
+
+	/**
+	 * Save quest metrics
+	 */
+	saveQuestMetrics(metrics: QuestMetrics): void {
+		try {
+			const metricsFile = this.getPath("quest-metrics.json");
+			let existingMetrics: QuestMetrics[] = [];
+
+			// Load existing metrics
+			if (existsSync(metricsFile)) {
+				const data = JSON.parse(readFileSync(metricsFile, "utf8"));
+				existingMetrics = data.metrics || [];
+			}
+
+			// Add new metrics
+			existingMetrics.push(metrics);
+
+			// Keep only the most recent 1000 metrics to prevent file size growth
+			if (existingMetrics.length > 1000) {
+				existingMetrics = existingMetrics.slice(-1000);
+			}
+
+			// Save back to file
+			const data = {
+				metrics: existingMetrics,
+				version: "1.0",
+				lastUpdated: new Date().toISOString(),
+			};
+
+			writeFileSync(metricsFile, JSON.stringify(data, null, 2));
+			persistenceLogger.debug({ questId: metrics.questId }, "Saved quest metrics");
+		} catch (error) {
+			persistenceLogger.error({ error: String(error) }, "Failed to save quest metrics");
+		}
+	}
+
+	/**
+	 * Load all quest metrics
+	 */
+	getQuestMetrics(): QuestMetrics[] {
+		try {
+			const metricsFile = this.getPath("quest-metrics.json");
+			if (!existsSync(metricsFile)) {
+				return [];
+			}
+
+			const data = JSON.parse(readFileSync(metricsFile, "utf8"));
+			return data.metrics || [];
+		} catch (error) {
+			persistenceLogger.error({ error: String(error) }, "Failed to load quest metrics");
+			return [];
+		}
+	}
+
+	/**
+	 * Get quest metrics filtered by raid ID
+	 */
+	getQuestMetricsByRaid(raidId: string): QuestMetrics[] {
+		return this.getQuestMetrics().filter((m) => m.raidId === raidId);
 	}
 }
