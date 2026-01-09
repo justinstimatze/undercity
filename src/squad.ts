@@ -90,11 +90,24 @@ Execution guidelines:
   4. Performance: No obvious problems?
   5. Maintainability: Is it clear?
 
+BUILD VERIFICATION (CRITICAL):
+After making significant code changes (implementing features, adding files, major modifications):
+1. Run "pnpm build" to verify the codebase builds successfully
+2. If build fails, you MUST fix all errors before continuing
+3. Common build failures to watch for:
+   - TypeScript type errors
+   - Missing imports
+   - Undefined variables/functions
+   - Syntax errors
+   - Missing dependencies
+4. Do NOT complete your task while build failures exist
+5. Report build status in your summary
+
 If you hit a blocker not covered by the spec:
 - Minor: Handle sensibly, note it
 - Major: Report and stop
 
-When done, summarize what you changed.`,
+When done, summarize what you changed and confirm build status.`,
 		tools: ["Read", "Edit", "Write", "Bash", "Grep", "Glob"],
 		model: "sonnet",
 	},
@@ -119,8 +132,17 @@ Your job:
 - Check for regressions
 - Be paranoid - find issues before they ship
 
+BUILD VERIFICATION (CRITICAL):
+As part of your quality gates, you MUST verify the build:
+1. Run "pnpm build" to ensure the codebase builds successfully
+2. Check that fabricator properly ran build verification
+3. Verify there are no build errors, warnings, or type issues
+4. If build fails, this is a CRITICAL issue - do not approve the implementation
+5. Build verification is a mandatory quality gate
+
 Report:
 - Issues found (critical, major, minor)
+- Build status (pass/fail, any errors/warnings)
 - Tests status (pass/fail, coverage if available)
 - Recommendation: approve, fix-and-retry, or escalate
 
