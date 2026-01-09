@@ -161,6 +161,57 @@ export function rebase(targetBranch: string): boolean {
 export type MergeStrategy = "theirs" | "ours" | "default";
 
 /**
+ * Get list of files with merge conflicts
+ * @returns Array of file paths that have conflicts
+ */
+export function getConflictFiles(): string[] {
+	try {
+		// git diff --name-only --diff-filter=U lists files with unmerged changes (conflicts)
+		const output = execGit(["diff", "--name-only", "--diff-filter=U"]);
+		if (!output) {
+			return [];
+		}
+		return output.split("\n").filter((f) => f.trim().length > 0);
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Check if there is a merge in progress
+ */
+export function isMergeInProgress(): boolean {
+	try {
+		// Check for MERGE_HEAD which exists during a merge
+		execGit(["rev-parse", "--verify", "MERGE_HEAD"]);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Abort an in-progress merge
+ */
+export function abortMerge(): void {
+	try {
+		execGit(["merge", "--abort"]);
+	} catch {
+		// Ignore abort errors
+	}
+}
+
+/**
+ * Result of a merge operation with fallback strategies
+ */
+export interface MergeResult {
+	success: boolean;
+	strategyUsed?: MergeStrategy;
+	conflictFiles?: string[];
+	error?: string;
+}
+
+/**
  * Merge a branch into the current branch
  * @param branch - The branch to merge
  * @param message - Optional commit message
@@ -181,12 +232,77 @@ export function merge(branch: string, message?: string, strategy?: MergeStrategy
 		return true;
 	} catch {
 		// Abort on conflict
-		try {
-			execGit(["merge", "--abort"]);
-		} catch {
-			// Ignore abort errors
-		}
+		abortMerge();
 		return false;
+	}
+}
+
+/**
+ * Try to merge a branch with fallback strategies
+ *
+ * Attempts merge strategies in order: ours → theirs → report conflicts
+ * This allows automatic resolution when possible, falling back to manual
+ * intervention only when both automatic strategies fail.
+ *
+ * @param branch - The branch to merge
+ * @param message - Optional commit message
+ * @returns MergeResult with success status, strategy used, and conflict details
+ */
+export function mergeWithFallback(branch: string, message?: string): MergeResult {
+	const strategies: MergeStrategy[] = ["ours", "theirs"];
+
+	for (const strategy of strategies) {
+		gitLogger.debug({ branch, strategy }, "Attempting merge with strategy");
+
+		try {
+			const args = ["merge", "--no-ff", "-X", strategy, branch];
+			if (message) {
+				args.push("-m", message);
+			}
+			execGit(args);
+
+			gitLogger.info({ branch, strategy }, "Merge succeeded with strategy");
+			return {
+				success: true,
+				strategyUsed: strategy,
+			};
+		} catch {
+			// Abort the failed merge before trying next strategy
+			abortMerge();
+			gitLogger.debug({ branch, strategy }, "Merge strategy failed, trying next");
+		}
+	}
+
+	// All automatic strategies failed - try default merge to get conflict info
+	gitLogger.debug({ branch }, "All auto-strategies failed, attempting default merge for conflict info");
+
+	try {
+		// Attempt merge without strategy to see conflict files
+		execGit(["merge", "--no-ff", "--no-commit", branch]);
+
+		// If we get here, merge succeeded (no conflicts after all)
+		execGit(["commit", "-m", message || `Merge ${branch}`]);
+		return {
+			success: true,
+			strategyUsed: "default",
+		};
+	} catch {
+		// Get list of conflicting files before aborting
+		const conflictFiles = getConflictFiles();
+
+		// Abort the merge
+		abortMerge();
+
+		gitLogger.warn(
+			{ branch, conflictFiles, conflictCount: conflictFiles.length },
+			"Merge failed - manual resolution required",
+		);
+
+		return {
+			success: false,
+			conflictFiles,
+			error: `Merge failed with conflicts in ${conflictFiles.length} file(s): ${conflictFiles.join(", ")}`,
+		};
 	}
 }
 

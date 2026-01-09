@@ -147,6 +147,10 @@ export interface MergeQueueItem {
 	queuedAt: Date;
 	completedAt?: Date;
 	error?: string;
+	/** Strategy that was used for successful merge */
+	strategyUsed?: "theirs" | "ours" | "default";
+	/** Files with unresolved conflicts (when status is 'conflict') */
+	conflictFiles?: string[];
 }
 
 /**
