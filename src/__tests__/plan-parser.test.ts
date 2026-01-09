@@ -482,20 +482,20 @@ Implement the second waypoint here
 # =============================================================================
 # CRITICAL: Self-Improvement Loop (agents can't add new quests)
 # =============================================================================
-Add ability for agents to add new quests - when fabricator/auditor discovers work, they should be able to queue it
+Add ability for agents to add new quests - when quester/sheriff discovers work, they should be able to queue it
 Parse agent output for "[NEW QUEST: ...]" markers and auto-add to quest board
 
 # =============================================================================
 # HIGH: Parallelism (the big gap vs Gas Town)
 # =============================================================================
-Add parallel fabricator support - spawn multiple fabricators working on different waypoints simultaneously
-Implement waypoint splitting in planner - break large waypoints into independent subtasks
+Add parallel quester support - spawn multiple questers working on different waypoints simultaneously
+Implement waypoint splitting in logistics - break large waypoints into independent subtasks
 
 # =============================================================================
 # COMPLETED (for reference)
 # =============================================================================
 # [DONE] Add vitest tests for raid, cli, backlog modules
-# [DONE] Switch planner from Opus to Sonnet for speed
+# [DONE] Switch logistics from Opus to Sonnet for speed
 `;
 			const plan = parsePlanFile(content, "quests.txt");
 

@@ -66,7 +66,7 @@ vi.mock("../git.js", () => {
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 	query: vi.fn().mockImplementation(async function* () {
 		yield { type: "system", subtype: "init", session_id: "mock-session-123" };
-		yield { type: "result", subtype: "success", result: "Mock scout report: Found 3 files to modify." };
+		yield { type: "result", subtype: "success", result: "Mock flute report: Found 3 files to modify." };
 	}),
 }));
 
@@ -200,16 +200,16 @@ describe("RaidOrchestrator", () => {
 					{
 						id: "waypoint-1",
 						raidId: "raid-status-test",
-						type: "scout",
-						description: "Scout waypoint",
+						type: "flute",
+						description: "Flute waypoint",
 						status: "complete",
 						createdAt: new Date(),
 					},
 				],
 				squad: [
 					{
-						id: "scout-1",
-						type: "scout",
+						id: "flute-1",
+						type: "flute",
 						status: "done",
 						spawnedAt: new Date(),
 						lastActivityAt: new Date(),

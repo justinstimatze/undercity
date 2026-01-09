@@ -16,6 +16,8 @@ import { persistenceLogger } from "./logger.js";
 import type {
 	AgentType,
 	FileTrackingState,
+	FluteCache,
+	FluteCacheEntry,
 	Inventory,
 	Loadout,
 	LoadoutConfiguration,
@@ -24,15 +26,13 @@ import type {
 	LoadoutStorage,
 	Raid,
 	SafePocket,
-	ScoutCache,
-	ScoutCacheEntry,
 	SquadMember,
 	Stash,
 	Waypoint,
 } from "./types.js";
 
-/** Scout cache configuration */
-const SCOUT_CACHE_FILE = "scout-cache.json";
+/** Flute cache configuration */
+const FLUTE_CACHE_FILE = "flute-cache.json";
 const SCOUT_CACHE_VERSION = "1.0";
 const SCOUT_CACHE_MAX_ENTRIES = 100;
 const SCOUT_CACHE_TTL_DAYS = 30;
@@ -202,7 +202,7 @@ export class Persistence {
 	getLoadout(): Loadout {
 		return this.readJson<Loadout>("loadout.json", {
 			maxSquadSize: 5,
-			enabledAgentTypes: ["scout", "planner", "fabricator", "auditor"] as AgentType[],
+			enabledAgentTypes: ["flute", "logistics", "quester", "sheriff"] as AgentType[],
 			autoApprove: false,
 			lastUpdated: new Date(),
 		});
@@ -363,14 +363,14 @@ export class Persistence {
 		});
 	}
 
-	// ============== Scout Cache ==============
-	// Caches scout results to avoid redundant codebase analysis
+	// ============== Flute Cache ==============
+	// Caches flute results to avoid redundant codebase analysis
 
 	/**
-	 * Get the scout cache (creates empty cache if doesn't exist)
+	 * Get the flute cache (creates empty cache if doesn't exist)
 	 */
-	getScoutCache(): ScoutCache {
-		return this.readJson<ScoutCache>(SCOUT_CACHE_FILE, {
+	getFluteCache(): FluteCache {
+		return this.readJson<FluteCache>(FLUTE_CACHE_FILE, {
 			entries: {},
 			version: SCOUT_CACHE_VERSION,
 			lastUpdated: new Date(),
@@ -378,23 +378,23 @@ export class Persistence {
 	}
 
 	/**
-	 * Save the scout cache
+	 * Save the flute cache
 	 */
-	saveScoutCache(cache: ScoutCache): void {
+	saveFluteCache(cache: FluteCache): void {
 		cache.lastUpdated = new Date();
-		this.writeJson(SCOUT_CACHE_FILE, cache);
+		this.writeJson(FLUTE_CACHE_FILE, cache);
 	}
 
 	/**
-	 * Get a scout cache entry by fingerprint and goal hash
+	 * Get a flute cache entry by fingerprint and goal hash
 	 *
 	 * @param fingerprintHash Hash of the codebase fingerprint
-	 * @param goalHash Hash of the scout goal
+	 * @param goalHash Hash of the flute goal
 	 * @returns The cache entry if found and valid, null otherwise
 	 */
-	getScoutCacheEntry(fingerprintHash: string, goalHash: string): ScoutCacheEntry | null {
+	getFluteCacheEntry(fingerprintHash: string, goalHash: string): FluteCacheEntry | null {
 		try {
-			const cache = this.getScoutCache();
+			const cache = this.getFluteCache();
 			const key = `${fingerprintHash}:${goalHash}`;
 			const entry = cache.entries[key];
 
@@ -408,40 +408,40 @@ export class Persistence {
 			const ttlMs = SCOUT_CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
 
 			if (ageMs > ttlMs) {
-				persistenceLogger.debug({ key, ageMs, ttlMs }, "Scout cache entry expired");
+				persistenceLogger.debug({ key, ageMs, ttlMs }, "Flute cache entry expired");
 				return null;
 			}
 
 			// Update last used timestamp
 			entry.lastUsedAt = new Date();
 			cache.entries[key] = entry;
-			this.saveScoutCache(cache);
+			this.saveFluteCache(cache);
 
-			persistenceLogger.debug({ key, goalText: entry.goalText }, "Scout cache hit");
+			persistenceLogger.debug({ key, goalText: entry.goalText }, "Flute cache hit");
 			return entry;
 		} catch (error) {
-			persistenceLogger.warn({ error }, "Error reading scout cache entry");
+			persistenceLogger.warn({ error }, "Error reading flute cache entry");
 			return null;
 		}
 	}
 
 	/**
-	 * Save a scout result to the cache
+	 * Save a flute result to the cache
 	 *
 	 * @param fingerprintHash Hash of the codebase fingerprint
-	 * @param goalHash Hash of the scout goal
-	 * @param scoutResult The scout intel result to cache
+	 * @param goalHash Hash of the flute goal
+	 * @param fluteResult The flute intel result to cache
 	 * @param goalText Original goal text (for debugging)
 	 */
-	saveScoutCacheEntry(fingerprintHash: string, goalHash: string, scoutResult: string, goalText: string): void {
+	saveFluteCacheEntry(fingerprintHash: string, goalHash: string, fluteResult: string, goalText: string): void {
 		try {
-			const cache = this.getScoutCache();
+			const cache = this.getFluteCache();
 			const key = `${fingerprintHash}:${goalHash}`;
 
-			const entry: ScoutCacheEntry = {
+			const entry: FluteCacheEntry = {
 				fingerprintHash,
 				goalHash,
-				scoutResult,
+				fluteResult,
 				goalText,
 				createdAt: new Date(),
 				lastUsedAt: new Date(),
@@ -465,13 +465,13 @@ export class Persistence {
 					delete cache.entries[entries[i][0]];
 				}
 
-				persistenceLogger.debug({ removed: toRemove }, "Evicted old scout cache entries (LRU)");
+				persistenceLogger.debug({ removed: toRemove }, "Evicted old flute cache entries (LRU)");
 			}
 
-			this.saveScoutCache(cache);
-			persistenceLogger.debug({ key, goalText }, "Saved scout result to cache");
+			this.saveFluteCache(cache);
+			persistenceLogger.debug({ key, goalText }, "Saved flute result to cache");
 		} catch (error) {
-			persistenceLogger.warn({ error }, "Error saving scout cache entry");
+			persistenceLogger.warn({ error }, "Error saving flute cache entry");
 			// Silent failure - caching is optional
 		}
 	}
@@ -479,9 +479,9 @@ export class Persistence {
 	/**
 	 * Clean up expired cache entries
 	 */
-	cleanupScoutCache(): void {
+	cleanupFluteCache(): void {
 		try {
-			const cache = this.getScoutCache();
+			const cache = this.getFluteCache();
 			const now = Date.now();
 			const ttlMs = SCOUT_CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
 			let removed = 0;
@@ -495,31 +495,31 @@ export class Persistence {
 			}
 
 			if (removed > 0) {
-				this.saveScoutCache(cache);
-				persistenceLogger.info({ removed }, "Cleaned up expired scout cache entries");
+				this.saveFluteCache(cache);
+				persistenceLogger.info({ removed }, "Cleaned up expired flute cache entries");
 			}
 		} catch (error) {
-			persistenceLogger.warn({ error }, "Error cleaning up scout cache");
+			persistenceLogger.warn({ error }, "Error cleaning up flute cache");
 		}
 	}
 
 	/**
-	 * Clear the entire scout cache
+	 * Clear the entire flute cache
 	 */
-	clearScoutCache(): void {
-		this.saveScoutCache({
+	clearFluteCache(): void {
+		this.saveFluteCache({
 			entries: {},
 			version: SCOUT_CACHE_VERSION,
 			lastUpdated: new Date(),
 		});
-		persistenceLogger.info("Cleared scout cache");
+		persistenceLogger.info("Cleared flute cache");
 	}
 
 	/**
-	 * Get scout cache statistics
+	 * Get flute cache statistics
 	 */
-	getScoutCacheStats(): { entryCount: number; oldestEntry: Date | null; newestEntry: Date | null } {
-		const cache = this.getScoutCache();
+	getFluteCacheStats(): { entryCount: number; oldestEntry: Date | null; newestEntry: Date | null } {
+		const cache = this.getFluteCache();
 		const entries = Object.values(cache.entries);
 
 		if (entries.length === 0) {

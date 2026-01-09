@@ -715,7 +715,7 @@ program
 // Plan command - execute a plan file intelligently
 program
 	.command("plan <file>")
-	.description("Execute a plan file with good judgment (uses planner to determine next steps)")
+	.description("Execute a plan file with good judgment (uses logistics to determine next steps)")
 	.option("-s, --stream", "Stream agent activity")
 	.option("-c, --continuous", "Keep executing until plan is complete")
 	.option("-n, --steps <n>", "Max steps to execute (default: unlimited in continuous mode)")
@@ -841,8 +841,8 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 
 					// Get the result for context
 					const waypoints = orchestrator.getStatus().waypoints;
-					const fabricatorTask = waypoints.find((t) => t.type === "fabricator");
-					lastResult = fabricatorTask?.result || "";
+					const questerTask = waypoints.find((t) => t.type === "quester");
+					lastResult = questerTask?.result || "";
 
 					// Check for completion markers
 					if (lastResult.toLowerCase().includes("plan complete")) {

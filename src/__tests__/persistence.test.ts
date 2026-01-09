@@ -227,7 +227,7 @@ describe("Persistence", () => {
 					{
 						id: "waypoint-1",
 						raidId: "old-raid",
-						type: "scout",
+						type: "flute",
 						description: "Explore codebase",
 						status: "complete",
 						createdAt: new Date(),
@@ -236,7 +236,7 @@ describe("Persistence", () => {
 				squad: [
 					{
 						id: "agent-1",
-						type: "scout",
+						type: "flute",
 						status: "idle",
 						spawnedAt: new Date(),
 						lastActivityAt: new Date(),

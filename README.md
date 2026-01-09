@@ -15,10 +15,10 @@ Undercity orchestrates multiple Claude agents to complete complex tasks. Start a
 undercity slingshot "Add dark mode toggle"
     │
     ▼
-[PLAN] Scout (Haiku) → Planner (Opus) → Human approval
+[PLAN] Flute (Haiku) → Logistics (Opus) → Human approval
     │
     ▼
-[EXECUTE] Fabricator (Opus) → Auditor (Opus) → Merge Queue
+[EXECUTE] Quester (Opus) → Sheriff (Opus) → Merge Queue
     │
     ▼
 [EXTRACT] Complete
@@ -52,8 +52,8 @@ undercity slingshot "Add user authentication"
 ```
 
 This starts the planning phase:
-1. **Scout** (Haiku) - Fast codebase reconnaissance
-2. **Planner** (Opus) - Creates detailed implementation spec
+1. **Flute** (Haiku) - Fast codebase reconnaissance
+2. **Logistics** (Opus) - Creates detailed implementation spec
 
 ### Check Status
 
@@ -68,8 +68,8 @@ undercity approve
 ```
 
 This starts the execution phase:
-1. **Fabricator** (Opus) - Implements the approved plan
-2. **Auditor** (Opus) - Reviews work with Rule of Five
+1. **Quester** (Opus) - Implements the approved plan
+2. **Sheriff** (Opus) - Reviews work with Rule of Five
 
 ### Complete the Raid
 
@@ -91,10 +91,10 @@ undercity setup      # Check authentication
 
 | Agent | Model | Tools | Purpose |
 |-------|-------|-------|---------|
-| Scout | Haiku | Read, Grep, Glob | Fast codebase reconnaissance |
-| Planner | Opus | Read, Grep, Glob | BMAD-style spec creation |
-| Fabricator | Opus | Read, Edit, Write, Bash, Grep, Glob | Code implementation |
-| Auditor | Opus | Read, Bash, Grep, Glob | Quality review (Rule of Five) |
+| Flute | Haiku | Read, Grep, Glob | Fast codebase reconnaissance |
+| Logistics | Opus | Read, Grep, Glob | BMAD-style spec creation |
+| Quester | Opus | Read, Edit, Write, Bash, Grep, Glob | Code implementation |
+| Sheriff | Opus | Read, Bash, Grep, Glob | Quality review (Rule of Five) |
 
 ## Persistence
 

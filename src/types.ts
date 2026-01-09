@@ -9,10 +9,10 @@
  * Raid status - the overall state of a work session
  */
 export type RaidStatus =
-	| "planning" // BMAD phase: Scout + Planner working
+	| "planning" // BMAD phase: Flute + Logistics working
 	| "awaiting_approval" // Human needs to approve the plan
 	| "executing" // Gas Town phase: Fabricators working
-	| "reviewing" // Auditor checking work
+	| "reviewing" // Sheriff checking work
 	| "merging" // Serial merge queue processing
 	| "extracting" // Final extraction in progress
 	| "complete" // Successfully extracted
@@ -35,12 +35,12 @@ export interface Raid {
 
 /**
  * Agent types in the squad
- * - Scout: Fast recon (Haiku)
- * - Planner: BMAD-style spec writer (Sonnet)
- * - Fabricator: Code builder (Sonnet)
- * - Auditor: Quality reviewer (Opus)
+ * - Flute: Fast recon (Haiku)
+ * - Logistics: BMAD-style spec writer (Sonnet)
+ * - Quester: Code builder (Sonnet)
+ * - Sheriff: Quality reviewer (Opus)
  */
-export type AgentType = "scout" | "planner" | "fabricator" | "auditor";
+export type AgentType = "flute" | "logistics" | "quester" | "sheriff";
 
 /**
  * Waypoint status within a raid
@@ -222,7 +222,7 @@ export interface FileTouch {
 	timestamp: Date;
 }
 
-// ============== Scout Cache Types ==============
+// ============== Flute Cache Types ==============
 
 /**
  * Fingerprint of the codebase state for cache validation
@@ -282,14 +282,14 @@ export interface FileTrackingState {
 }
 
 /**
- * A cached scout result entry
+ * A cached flute result entry
  */
-export interface ScoutCacheEntry {
+export interface FluteCacheEntry {
 	/** SHA-256 hash of CodebaseFingerprint for quick lookup */
 	fingerprintHash: string;
-	/** The cached scout intel result */
-	scoutResult: string;
-	/** Hash of the scout goal for per-goal caching */
+	/** The cached flute intel result */
+	fluteResult: string;
+	/** Hash of the flute goal for per-goal caching */
 	goalHash: string;
 	/** When this cache entry was created */
 	createdAt: Date;
@@ -300,11 +300,11 @@ export interface ScoutCacheEntry {
 }
 
 /**
- * Scout cache storage structure
+ * Flute cache storage structure
  */
-export interface ScoutCache {
+export interface FluteCache {
 	/** Cache entries keyed by combined fingerprintHash + goalHash */
-	entries: Record<string, ScoutCacheEntry>;
+	entries: Record<string, FluteCacheEntry>;
 	/** Cache format version for future migrations */
 	version: string;
 	/** When cache was last modified */
@@ -317,10 +317,10 @@ export interface ScoutCache {
  * Model choices for each agent type in a loadout
  */
 export interface LoadoutModelChoices {
-	scout: "haiku" | "sonnet" | "opus";
-	planner: "haiku" | "sonnet" | "opus";
-	fabricator: "haiku" | "sonnet" | "opus";
-	auditor: "haiku" | "sonnet" | "opus";
+	flute: "haiku" | "sonnet" | "opus";
+	logistics: "haiku" | "sonnet" | "opus";
+	quester: "haiku" | "sonnet" | "opus";
+	sheriff: "haiku" | "sonnet" | "opus";
 }
 
 /**

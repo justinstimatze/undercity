@@ -3,13 +3,13 @@
  *
  * Orchestrates the full raid lifecycle:
  * 1. PLAN PHASE (BMAD-style)
- *    - Scout analyzes the codebase
- *    - Planner creates detailed spec
+ *    - Flute analyzes the codebase
+ *    - Logistics creates detailed spec
  *    - Human approves the plan
  *
  * 2. EXECUTE PHASE (Gas Town-style)
  *    - Fabricators implement the approved plan
- *    - Auditor reviews the work
+ *    - Sheriff reviews the work
  *    - Serial merge queue handles integration
  *
  * 3. EXTRACT
@@ -334,7 +334,7 @@ export class RaidOrchestrator {
 	 * Start a new raid with a goal
 	 *
 	 * Phase 1: PLAN
-	 * - Scout the codebase
+	 * - Flute the codebase
 	 * - Create a plan
 	 * - Wait for approval
 	 */
@@ -378,64 +378,64 @@ export class RaidOrchestrator {
 	/**
 	 * Planning Phase (BMAD-style)
 	 *
-	 * 1. Scout analyzes the codebase (or uses cached results)
-	 * 2. Planner creates detailed spec
+	 * 1. Flute analyzes the codebase (or uses cached results)
+	 * 2. Logistics creates detailed spec
 	 */
 	private async startPlanningPhase(raid: Raid): Promise<void> {
 		this.log("Starting planning phase...");
 
-		// Create scout waypoint
-		const scoutTask: Waypoint = {
+		// Create flute waypoint
+		const fluteTask: Waypoint = {
 			id: generateTaskId(),
 			raidId: raid.id,
-			type: "scout",
-			description: `Scout the codebase to understand: ${raid.goal}`,
+			type: "flute",
+			description: `Flute the codebase to understand: ${raid.goal}`,
 			status: "pending",
 			createdAt: new Date(),
 		};
-		this.persistence.addTask(scoutTask);
+		this.persistence.addTask(fluteTask);
 
-		// Create planner waypoint (depends on scout)
+		// Create logistics waypoint (depends on flute)
 		const plannerTask: Waypoint = {
 			id: generateTaskId(),
 			raidId: raid.id,
-			type: "planner",
+			type: "logistics",
 			description: `Create implementation plan for: ${raid.goal}`,
 			status: "pending",
 			createdAt: new Date(),
 		};
 		this.persistence.addTask(plannerTask);
 
-		// Check scout cache before spawning agent
-		const cachedResult = this.checkScoutCache(raid.goal);
+		// Check flute cache before spawning agent
+		const cachedResult = this.checkFluteCache(raid.goal);
 		if (cachedResult) {
-			this.log("Using cached scout intel", { goal: raid.goal });
-			console.log(chalk.green("✓") + chalk.dim(" Scout cache hit - reusing previous analysis"));
+			this.log("Using cached flute intel", { goal: raid.goal });
+			console.log(chalk.green("✓") + chalk.dim(" Flute cache hit - reusing previous analysis"));
 
-			// Mark scout waypoint complete with cached result
-			this.persistence.updateTask(scoutTask.id, {
+			// Mark flute waypoint complete with cached result
+			this.persistence.updateTask(fluteTask.id, {
 				status: "complete",
 				result: cachedResult,
 				completedAt: new Date(),
 			});
 
-			// Proceed directly to planner with cached intel
-			await this.handleTaskCompletion(scoutTask, cachedResult);
+			// Proceed directly to logistics with cached intel
+			await this.handleTaskCompletion(fluteTask, cachedResult);
 			return;
 		}
 
-		// Cache miss - spawn scout agent
-		this.log("Scout cache miss, spawning agent", { goal: raid.goal });
-		await this.spawnAgent("scout", scoutTask);
+		// Cache miss - spawn flute agent
+		this.log("Flute cache miss, spawning agent", { goal: raid.goal });
+		await this.spawnAgent("flute", fluteTask);
 	}
 
 	/**
-	 * Check the scout cache for a matching result
+	 * Check the flute cache for a matching result
 	 *
 	 * @param goal The raid goal to check
-	 * @returns Cached scout result if found, null otherwise
+	 * @returns Cached flute result if found, null otherwise
 	 */
-	private checkScoutCache(goal: string): string | null {
+	private checkFluteCache(goal: string): string | null {
 		try {
 			// Only use cache if codebase is in a clean state
 			if (!isCacheableState()) {
@@ -454,29 +454,29 @@ export class RaidOrchestrator {
 			const goalHash = hashGoal(goal);
 
 			// Look up in cache
-			const entry = this.persistence.getScoutCacheEntry(fingerprintHash, goalHash);
+			const entry = this.persistence.getFluteCacheEntry(fingerprintHash, goalHash);
 			if (entry) {
-				return entry.scoutResult;
+				return entry.fluteResult;
 			}
 
 			return null;
 		} catch (error) {
-			this.log("Error checking scout cache", { error: String(error) });
+			this.log("Error checking flute cache", { error: String(error) });
 			return null;
 		}
 	}
 
 	/**
-	 * Store scout result in cache
+	 * Store flute result in cache
 	 *
 	 * @param goal The raid goal
-	 * @param result The scout intel result
+	 * @param result The flute intel result
 	 */
 	private storeScoutResult(goal: string, result: string): void {
 		try {
 			// Only cache if codebase is in a clean state
 			if (!isCacheableState()) {
-				this.log("Codebase has uncommitted changes, not caching scout result");
+				this.log("Codebase has uncommitted changes, not caching flute result");
 				return;
 			}
 
@@ -488,10 +488,10 @@ export class RaidOrchestrator {
 			const fingerprintHash = hashFingerprint(fingerprint);
 			const goalHash = hashGoal(goal);
 
-			this.persistence.saveScoutCacheEntry(fingerprintHash, goalHash, result, goal);
-			this.log("Stored scout result in cache", { goal });
+			this.persistence.saveFluteCacheEntry(fingerprintHash, goalHash, result, goal);
+			this.log("Stored flute result in cache", { goal });
 		} catch (error) {
-			this.log("Error storing scout result in cache", { error: String(error) });
+			this.log("Error storing flute result in cache", { error: String(error) });
 			// Silent failure - caching is optional
 		}
 	}
@@ -511,7 +511,7 @@ export class RaidOrchestrator {
 		});
 
 		// Start file tracking for fabricators (they're the ones that modify files)
-		if (type === "fabricator" && raid) {
+		if (type === "quester" && raid) {
 			this.fileTracker.startTracking(member.id, waypoint.id, raid.id);
 			this.persistence.saveFileTracking(this.fileTracker.getState());
 		}
@@ -556,8 +556,8 @@ export class RaidOrchestrator {
 			const existingSession = this.persistence.getSquadMemberSession(member.id);
 
 			// Use bypassPermissions for agents that need to write/execute
-			// Scout and Planner are read-only, Fabricator and Auditor need full access
-			const needsFullAccess = member.type === "fabricator" || member.type === "auditor";
+			// Flute and Logistics are read-only, Quester and Sheriff need full access
+			const needsFullAccess = member.type === "quester" || member.type === "sheriff";
 
 			const queryOptions = {
 				system_prompt: agentDef.prompt,
@@ -582,7 +582,7 @@ export class RaidOrchestrator {
 				this.streamAgentActivity(member, message);
 
 				// Track file operations for fabricators
-				if (member.type === "fabricator") {
+				if (member.type === "quester") {
 					this.trackFileOperationsFromMessage(member.id, message);
 				}
 
@@ -637,7 +637,7 @@ export class RaidOrchestrator {
 			squadLogger.info({ agentId: member.id, waypointId: waypoint.id }, "Agent completed waypoint");
 
 			// Stop file tracking for fabricators
-			if (member.type === "fabricator") {
+			if (member.type === "quester") {
 				this.fileTracker.stopTracking(member.id);
 				this.persistence.saveFileTracking(this.fileTracker.getState());
 
@@ -667,7 +667,7 @@ export class RaidOrchestrator {
 			});
 
 			// Stop file tracking on error too
-			if (member.type === "fabricator") {
+			if (member.type === "quester") {
 				this.fileTracker.stopTracking(member.id);
 				this.persistence.saveFileTracking(this.fileTracker.getState());
 			}
@@ -698,27 +698,27 @@ export class RaidOrchestrator {
 		if (!raid) return;
 
 		switch (waypoint.type) {
-			case "scout": {
-				// Store scout result in cache for future raids
+			case "flute": {
+				// Store flute result in cache for future raids
 				this.storeScoutResult(raid.goal, result);
 
-				// Scout done - spawn planner
+				// Flute done - spawn logistics
 				const plannerTask = this.persistence
 					.getTasks()
-					.find((t) => t.raidId === raid.id && t.type === "planner" && t.status === "pending");
+					.find((t) => t.raidId === raid.id && t.type === "logistics" && t.status === "pending");
 				if (plannerTask) {
-					// Update planner waypoint with scout intel
+					// Update logistics waypoint with flute intel
 					plannerTask.description = `${plannerTask.description}\n\nScout Intel:\n${result}`;
 					this.persistence.updateTask(plannerTask.id, {
 						description: plannerTask.description,
 					});
-					await this.spawnAgent("planner", plannerTask);
+					await this.spawnAgent("logistics", plannerTask);
 				}
 				break;
 			}
 
-			case "planner": {
-				// Planner done - update raid with plan summary
+			case "logistics": {
+				// Logistics done - update raid with plan summary
 				raid.planSummary = result;
 				raid.status = "awaiting_approval";
 				this.persistence.saveRaid(raid);
@@ -732,28 +732,28 @@ export class RaidOrchestrator {
 				break;
 			}
 
-			case "fabricator": {
-				// Fabricator done - queue for audit with summarized context
-				// Extract review-relevant parts of the plan and fabricator output
-				// This provides auditor with focused context on what to verify
+			case "quester": {
+				// Quester done - queue for audit with summarized context
+				// Extract review-relevant parts of the plan and quester output
+				// This provides sheriff with focused context on what to verify
 				const reviewContext = extractReviewContext(raid.planSummary || raid.goal, result);
 
 				const auditTask: Waypoint = {
 					id: generateTaskId(),
 					raidId: raid.id,
-					type: "auditor",
+					type: "sheriff",
 					description: `Review implementation for: ${raid.goal}\n\n${reviewContext}`,
 					status: "pending",
 					createdAt: new Date(),
 					branch: waypoint.branch,
 				};
 				this.persistence.addTask(auditTask);
-				await this.spawnAgent("auditor", auditTask);
+				await this.spawnAgent("sheriff", auditTask);
 				break;
 			}
 
-			case "auditor": {
-				// Auditor done - check if approved
+			case "sheriff": {
+				// Sheriff done - check if approved
 				const lower = result.toLowerCase();
 
 				// Positive signals
@@ -785,7 +785,7 @@ export class RaidOrchestrator {
 					await this.processMergeQueue();
 				} else {
 					this.log("Audit found issues", { result });
-					// Could spawn another fabricator to fix, for now just log
+					// Could spawn another quester to fix, for now just log
 				}
 				break;
 			}
@@ -807,7 +807,7 @@ export class RaidOrchestrator {
 
 		this.log("Plan approved. Starting execution phase...");
 
-		// Create fabricator waypoint with summarized context
+		// Create quester waypoint with summarized context
 		const commitInstructions = this.autoCommit
 			? "\n\nIMPORTANT: When done, commit all your changes with a clear commit message describing what you implemented."
 			: "";
@@ -819,7 +819,7 @@ export class RaidOrchestrator {
 		const fabricatorTask: Waypoint = {
 			id: generateTaskId(),
 			raidId: raid.id,
-			type: "fabricator",
+			type: "quester",
 			description: `Implement: ${raid.goal}\n\nApproved Plan:\n${summarizedPlan}${commitInstructions}`,
 			status: "pending",
 			createdAt: new Date(),
@@ -835,7 +835,7 @@ export class RaidOrchestrator {
 		}
 
 		this.persistence.addTask(fabricatorTask);
-		await this.spawnAgent("fabricator", fabricatorTask);
+		await this.spawnAgent("quester", fabricatorTask);
 	}
 
 	/**

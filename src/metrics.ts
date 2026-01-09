@@ -234,17 +234,17 @@ export class MetricsTracker {
 
 		// Calculate tokens by agent type
 		const tokensByAgentType: Record<AgentType, { total: number; avgPerQuest: number }> = {
-			scout: { total: 0, avgPerQuest: 0 },
-			planner: { total: 0, avgPerQuest: 0 },
-			fabricator: { total: 0, avgPerQuest: 0 },
-			auditor: { total: 0, avgPerQuest: 0 },
+			flute: { total: 0, avgPerQuest: 0 },
+			logistics: { total: 0, avgPerQuest: 0 },
+			quester: { total: 0, avgPerQuest: 0 },
+			sheriff: { total: 0, avgPerQuest: 0 },
 		};
 
 		const agentTypeQuests: Record<AgentType, number> = {
-			scout: 0,
-			planner: 0,
-			fabricator: 0,
-			auditor: 0,
+			flute: 0,
+			logistics: 0,
+			quester: 0,
+			sheriff: 0,
 		};
 
 		for (const metrics of questMetrics) {

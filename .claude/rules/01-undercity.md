@@ -5,7 +5,7 @@ Multi-agent orchestrator for Claude Max. Use undercity for continuous implementa
 ## When to Use Undercity
 
 Use undercity CLI for complex, multi-step tasks that benefit from:
-- **Planning before execution**: Scout + Planner create specs before Fabricators build
+- **Planning before execution**: Flute + Logistics create specs before Questers build
 - **Parallel agents**: Multiple agents working on different aspects
 - **Crash recovery**: State persists in `.undercity/` for resumption
 - **Clean merges**: Serial rebase + test + merge queue
@@ -41,10 +41,10 @@ undercity surrender
 undercity slingshot "goal"
     |
     v
-[PLAN] Scout (Haiku) -> Planner (Opus) -> Human approval
+[PLAN] Flute (Haiku) -> Logistics (Opus) -> Human approval
     |
     v
-[EXECUTE] Fabricators (Opus) -> Auditor (Opus) -> Merge Queue
+[EXECUTE] Questers (Opus) -> Sheriff (Opus) -> Merge Queue
     |
     v
 [EXTRACT] Complete
@@ -72,10 +72,10 @@ On session start:
 
 | Agent | Model | Tools | Purpose |
 |-------|-------|-------|---------|
-| Scout | Haiku | Read, Grep, Glob | Fast codebase reconnaissance |
-| Planner | Opus | Read, Grep, Glob | BMAD-style spec creation |
-| Fabricator | Opus | Read, Edit, Write, Bash, Grep, Glob | Code implementation |
-| Auditor | Opus | Read, Bash, Grep, Glob | Quality review with Rule of Five |
+| Flute | Haiku | Read, Grep, Glob | Fast codebase reconnaissance |
+| Logistics | Opus | Read, Grep, Glob | BMAD-style spec creation |
+| Quester | Opus | Read, Edit, Write, Bash, Grep, Glob | Code implementation |
+| Sheriff | Opus | Read, Bash, Grep, Glob | Quality review with Rule of Five |
 
 ## Rule of Five
 

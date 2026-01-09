@@ -9,7 +9,7 @@ import type { AgentType, Inventory, Raid, RaidStatus, SafePocket, Waypoint, Wayp
 /**
  * All agent types for parametrized testing
  */
-export const ALL_AGENT_TYPES: AgentType[] = ["scout", "planner", "fabricator", "auditor"];
+export const ALL_AGENT_TYPES: AgentType[] = ["flute", "logistics", "quester", "sheriff"];
 
 /**
  * Create a mock Waypoint with sensible defaults
@@ -17,7 +17,7 @@ export const ALL_AGENT_TYPES: AgentType[] = ["scout", "planner", "fabricator", "
 export const createMockTask = (overrides: Partial<Waypoint> = {}): Waypoint => ({
 	id: "waypoint-1",
 	raidId: "raid-1",
-	type: "fabricator",
+	type: "quester",
 	description: "Test waypoint",
 	status: "pending" as WaypointStatus,
 	createdAt: new Date("2024-01-01T00:00:00.000Z"),

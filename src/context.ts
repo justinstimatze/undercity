@@ -6,10 +6,10 @@
  * extracts only the relevant sections each agent needs.
  *
  * Context limits by agent type:
- * - Scout: Just the goal (~1K chars)
- * - Planner: Full scout report (~10K chars)
- * - Fabricator: Implementation details only (~5K chars)
- * - Auditor: Review requirements (~3K chars)
+ * - Flute: Just the goal (~1K chars)
+ * - Logistics: Full flute report (~10K chars)
+ * - Quester: Implementation details only (~5K chars)
+ * - Sheriff: Review requirements (~3K chars)
  */
 
 import type { AgentType } from "./types.js";
@@ -27,19 +27,19 @@ interface PlanSection {
  * Context limits per agent type (in characters)
  */
 const CONTEXT_LIMITS: Record<AgentType, number> = {
-	scout: 1000,
-	planner: 10000,
-	fabricator: 5000,
-	auditor: 3000,
+	flute: 1000,
+	logistics: 10000,
+	quester: 5000,
+	sheriff: 3000,
 };
 
 /**
  * Keywords that indicate relevant sections for each agent type
  */
 const RELEVANCE_KEYWORDS: Record<AgentType, string[]> = {
-	scout: ["goal", "objective", "target", "find", "locate"],
-	planner: ["scout", "intel", "findings", "structure", "files", "dependencies"],
-	fabricator: [
+	flute: ["goal", "objective", "target", "find", "locate"],
+	logistics: ["flute", "intel", "findings", "structure", "files", "dependencies"],
+	quester: [
 		"implement",
 		"create",
 		"modify",
@@ -53,7 +53,7 @@ const RELEVANCE_KEYWORDS: Record<AgentType, string[]> = {
 		"step",
 		"waypoint",
 	],
-	auditor: ["test", "verify", "check", "review", "requirement", "edge case", "security", "validation"],
+	sheriff: ["test", "verify", "check", "review", "requirement", "edge case", "security", "validation"],
 };
 
 /**
@@ -126,15 +126,15 @@ function calculateRelevanceScore(section: PlanSection, agentType: AgentType): nu
 		}
 	}
 
-	// Bonus for implementation-specific sections for fabricator
-	if (agentType === "fabricator") {
+	// Bonus for implementation-specific sections for quester
+	if (agentType === "quester") {
 		if (/files?\s+to\s+(modify|create|change)/i.test(textToSearch) || /implementation/i.test(section.heading)) {
 			score += 5;
 		}
 	}
 
-	// Bonus for test-related sections for auditor
-	if (agentType === "auditor") {
+	// Bonus for test-related sections for sheriff
+	if (agentType === "sheriff") {
 		if (/test/i.test(section.heading) || /verification|validation/i.test(section.heading)) {
 			score += 5;
 		}
@@ -236,8 +236,8 @@ export function smartTruncate(content: string, maxLength: number): string {
 export function summarizeContextForAgent(fullContext: string, agentType: AgentType, goal?: string): string {
 	const limit = CONTEXT_LIMITS[agentType];
 
-	// For scout, just return the goal
-	if (agentType === "scout") {
+	// For flute, just return the goal
+	if (agentType === "flute") {
 		if (goal) {
 			return smartTruncate(goal, limit);
 		}
@@ -270,7 +270,7 @@ export function summarizeContextForAgent(fullContext: string, agentType: AgentTy
 }
 
 /**
- * Extract implementation-focused context for fabricator
+ * Extract implementation-focused context for quester
  *
  * This specifically extracts:
  * - Files to modify/create
@@ -301,11 +301,11 @@ export function extractImplementationContext(planContent: string): string {
 	}
 
 	// Fall back to full context with smart summarization
-	return summarizeContextForAgent(planContent, "fabricator");
+	return summarizeContextForAgent(planContent, "quester");
 }
 
 /**
- * Extract review-focused context for auditor
+ * Extract review-focused context for sheriff
  *
  * This specifically extracts:
  * - Test requirements
@@ -313,7 +313,7 @@ export function extractImplementationContext(planContent: string): string {
  * - Security considerations
  * - Expected behavior
  */
-export function extractReviewContext(planContent: string, fabricatorOutput: string): string {
+export function extractReviewContext(planContent: string, questerOutput: string): string {
 	const planSections = parseMarkdownSections(planContent);
 
 	// Priority headings for review
@@ -340,11 +340,11 @@ export function extractReviewContext(planContent: string, fabricatorOutput: stri
 		result += "\n\n";
 	}
 
-	// Add truncated fabricator output
+	// Add truncated quester output
 	result += "## Implementation Output\n\n";
-	result += smartTruncate(fabricatorOutput, 1500);
+	result += smartTruncate(questerOutput, 1500);
 
-	return smartTruncate(result, CONTEXT_LIMITS.auditor);
+	return smartTruncate(result, CONTEXT_LIMITS.sheriff);
 }
 
 /**

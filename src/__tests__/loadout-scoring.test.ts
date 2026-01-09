@@ -23,12 +23,12 @@ const mockLoadoutConfig: LoadoutConfiguration = {
 	name: "Test Loadout",
 	description: "Test loadout for unit tests",
 	maxSquadSize: 4,
-	enabledAgentTypes: ["scout", "planner", "fabricator", "auditor"],
+	enabledAgentTypes: ["flute", "logistics", "quester", "sheriff"],
 	modelChoices: {
-		scout: "haiku",
-		planner: "sonnet",
-		fabricator: "sonnet",
-		auditor: "opus",
+		flute: "haiku",
+		logistics: "sonnet",
+		quester: "sonnet",
+		sheriff: "opus",
 	},
 	contextSize: "medium",
 	parallelismLevel: "limited",
@@ -253,15 +253,15 @@ describe("Performance Recording", () => {
 		};
 
 		const agentMetrics = {
-			"scout-1": { tokensUsed: 10000, timeSpent: 5000, taskSuccess: true },
-			"fabricator-1": { tokensUsed: 30000, timeSpent: 20000, taskSuccess: true },
+			"flute-1": { tokensUsed: 10000, timeSpent: 5000, taskSuccess: true },
+			"quester-1": { tokensUsed: 30000, timeSpent: 20000, taskSuccess: true },
 		};
 
 		const performance = recordLoadoutPerformance(mockLoadoutConfig, mockQuest, mockRaid, metrics, agentMetrics);
 
 		expect(performance.agentMetrics).toBeDefined();
-		expect(performance.agentMetrics!["scout-1"]).toEqual(agentMetrics["scout-1"]);
-		expect(performance.agentMetrics!["fabricator-1"]).toEqual(agentMetrics["fabricator-1"]);
+		expect(performance.agentMetrics!["flute-1"]).toEqual(agentMetrics["flute-1"]);
+		expect(performance.agentMetrics!["quester-1"]).toEqual(agentMetrics["quester-1"]);
 	});
 });
 
@@ -403,12 +403,12 @@ describe("Default Loadouts", () => {
 
 	it("should have appropriate model choices for different loadout types", () => {
 		const speedDemon = DEFAULT_LOADOUTS.find((l) => l.id === "speed-demon")!;
-		expect(speedDemon.modelChoices.scout).toBe("haiku"); // Speed focus
+		expect(speedDemon.modelChoices.flute).toBe("haiku"); // Speed focus
 
 		const qualityFocused = DEFAULT_LOADOUTS.find((l) => l.id === "quality-focused")!;
-		expect(qualityFocused.modelChoices.auditor).toBe("opus"); // Quality focus
+		expect(qualityFocused.modelChoices.sheriff).toBe("opus"); // Quality focus
 
 		const debugSpecialist = DEFAULT_LOADOUTS.find((l) => l.id === "debug-specialist")!;
-		expect(debugSpecialist.modelChoices.auditor).toBe("opus"); // Thorough review for bugs
+		expect(debugSpecialist.modelChoices.sheriff).toBe("opus"); // Thorough review for bugs
 	});
 });

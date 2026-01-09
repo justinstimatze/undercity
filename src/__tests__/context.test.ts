@@ -137,16 +137,16 @@ describe("extractRelevantSections", () => {
 		{ heading: "Random Notes", level: 3, content: "Some unrelated notes" },
 	];
 
-	it("extracts implementation sections for fabricator", () => {
-		const relevant = extractRelevantSections(testSections, "fabricator");
+	it("extracts implementation sections for quester", () => {
+		const relevant = extractRelevantSections(testSections, "quester");
 
 		// Should prioritize implementation-related sections
 		const headings = relevant.map((s) => s.heading);
 		expect(headings).toContain("Implementation Steps");
 	});
 
-	it("extracts test sections for auditor", () => {
-		const relevant = extractRelevantSections(testSections, "auditor");
+	it("extracts test sections for sheriff", () => {
+		const relevant = extractRelevantSections(testSections, "sheriff");
 
 		// Should prioritize test and security sections
 		const headings = relevant.map((s) => s.heading);
@@ -161,9 +161,9 @@ describe("extractRelevantSections", () => {
 			{ heading: "Section 3", level: 1, content: "C".repeat(2000) },
 		];
 
-		const relevant = extractRelevantSections(longSections, "auditor");
+		const relevant = extractRelevantSections(longSections, "sheriff");
 
-		// Should not exceed auditor limit (3000 chars)
+		// Should not exceed sheriff limit (3000 chars)
 		const totalLength = relevant.reduce((sum, s) => sum + s.heading.length + s.content.length, 0);
 		expect(totalLength).toBeLessThanOrEqual(3500); // Allow some margin
 	});
@@ -197,7 +197,7 @@ describe("summarizeContextForAgent", () => {
 ## Goal
 Add a new authentication feature.
 
-## Scout Intel
+## Flute Intel
 Found 3 files: auth.ts, user.ts, config.ts
 
 ## Implementation Steps
@@ -218,30 +218,30 @@ Found 3 files: auth.ts, user.ts, config.ts
 - Validate all inputs
 - Use secure tokens`;
 
-	it("returns truncated goal for scout", () => {
-		const result = summarizeContextForAgent(fullPlan, "scout", "Add auth");
+	it("returns truncated goal for flute", () => {
+		const result = summarizeContextForAgent(fullPlan, "flute", "Add auth");
 
 		expect(result.length).toBeLessThanOrEqual(1000);
 		expect(result).toBe("Add auth");
 	});
 
-	it("returns full context for planner (within limit)", () => {
-		const result = summarizeContextForAgent(fullPlan, "planner");
+	it("returns full context for logistics (within limit)", () => {
+		const result = summarizeContextForAgent(fullPlan, "logistics");
 
-		// Planner has 10K limit, so full plan should fit
+		// Logistics has 10K limit, so full plan should fit
 		expect(result.length).toBeLessThanOrEqual(10000);
 	});
 
-	it("extracts implementation focus for fabricator", () => {
-		const result = summarizeContextForAgent(fullPlan, "fabricator");
+	it("extracts implementation focus for quester", () => {
+		const result = summarizeContextForAgent(fullPlan, "quester");
 
 		// Should include implementation details
 		expect(result).toContain("Implementation");
 		expect(result.length).toBeLessThanOrEqual(5000);
 	});
 
-	it("extracts review focus for auditor", () => {
-		const result = summarizeContextForAgent(fullPlan, "auditor");
+	it("extracts review focus for sheriff", () => {
+		const result = summarizeContextForAgent(fullPlan, "sheriff");
 
 		expect(result.length).toBeLessThanOrEqual(3000);
 	});
@@ -249,7 +249,7 @@ Found 3 files: auth.ts, user.ts, config.ts
 	it("handles plain text input gracefully", () => {
 		const plainText = "Just some plain text without any markdown formatting at all.";
 
-		const result = summarizeContextForAgent(plainText, "fabricator");
+		const result = summarizeContextForAgent(plainText, "quester");
 
 		expect(result).toBeTruthy();
 		expect(result.length).toBeLessThanOrEqual(5000);
@@ -300,7 +300,7 @@ Random notes here.`;
 });
 
 describe("extractReviewContext", () => {
-	it("combines plan requirements with fabricator output", () => {
+	it("combines plan requirements with quester output", () => {
 		const plan = `# Plan
 
 ## Test Requirements
@@ -310,22 +310,22 @@ describe("extractReviewContext", () => {
 ## Security
 - Check XSS`;
 
-		const fabricatorOutput = "Created auth.ts with login/logout methods.";
+		const questerOutput = "Created auth.ts with login/logout methods.";
 
-		const result = extractReviewContext(plan, fabricatorOutput);
+		const result = extractReviewContext(plan, questerOutput);
 
 		expect(result).toContain("Review Requirements");
 		expect(result).toContain("Implementation Output");
 		expect(result).toContain("auth.ts");
 	});
 
-	it("truncates long fabricator output", () => {
+	it("truncates long quester output", () => {
 		const plan = "## Test Requirements\nTest everything.";
 		const longOutput = "A".repeat(3000);
 
 		const result = extractReviewContext(plan, longOutput);
 
-		// Should be within auditor limit
+		// Should be within sheriff limit
 		expect(result.length).toBeLessThanOrEqual(3500); // Some margin
 		expect(result).toContain("[...truncated]");
 	});
@@ -340,10 +340,10 @@ describe("extractReviewContext", () => {
 
 describe("getContextLimit", () => {
 	it("returns correct limits for each agent type", () => {
-		expect(getContextLimit("scout")).toBe(1000);
-		expect(getContextLimit("planner")).toBe(10000);
-		expect(getContextLimit("fabricator")).toBe(5000);
-		expect(getContextLimit("auditor")).toBe(3000);
+		expect(getContextLimit("flute")).toBe(1000);
+		expect(getContextLimit("logistics")).toBe(10000);
+		expect(getContextLimit("quester")).toBe(5000);
+		expect(getContextLimit("sheriff")).toBe(3000);
 	});
 });
 
@@ -357,14 +357,14 @@ This plan outlines the implementation of a new authentication system for the app
 We will be adding JWT-based authentication with refresh tokens.
 ${"This is additional context that makes the plan much larger. ".repeat(50)}
 
-## Scout Intel Report
-The scout found the following relevant files:
+## Flute Intel Report
+The flute found the following relevant files:
 - src/auth/index.ts - Main auth module
 - src/middleware/auth.ts - Auth middleware (does not exist, needs creation)
 - src/routes/user.ts - User routes that need protection
 - src/config/auth.ts - Auth configuration
 - src/types/auth.ts - Type definitions for auth
-${"More scout details that add to the size of this section. ".repeat(50)}
+${"More flute details that add to the size of this section. ".repeat(50)}
 
 ## Implementation Steps
 
@@ -391,15 +391,15 @@ ${"Additional security notes. ".repeat(30)}`;
 		// Full plan should be much larger than limits
 		expect(fullLength).toBeGreaterThan(10000);
 
-		// Test fabricator context extraction respects 5K limit
-		const fabricatorContext = summarizeContextForAgent(largePlan, "fabricator");
-		expect(fabricatorContext.length).toBeLessThanOrEqual(5000);
-		expect(fabricatorContext.length).toBeLessThan(fullLength);
+		// Test quester context extraction respects 5K limit
+		const questerContext = summarizeContextForAgent(largePlan, "quester");
+		expect(questerContext.length).toBeLessThanOrEqual(5000);
+		expect(questerContext.length).toBeLessThan(fullLength);
 
-		// Test auditor context extraction respects 3K limit
-		const auditorContext = summarizeContextForAgent(largePlan, "auditor");
-		expect(auditorContext.length).toBeLessThanOrEqual(3000);
-		expect(auditorContext.length).toBeLessThan(fullLength);
+		// Test sheriff context extraction respects 3K limit
+		const sheriffContext = summarizeContextForAgent(largePlan, "sheriff");
+		expect(sheriffContext.length).toBeLessThanOrEqual(3000);
+		expect(sheriffContext.length).toBeLessThan(fullLength);
 	});
 
 	it("preserves full content for small plans within limits", () => {
@@ -412,11 +412,11 @@ ${"Additional security notes. ".repeat(30)}`;
 ## Test Requirements
 - Test the function`;
 
-		// Small plan should fit within fabricator limit
-		const fabricatorContext = summarizeContextForAgent(smallPlan, "fabricator");
-		expect(fabricatorContext.length).toBeLessThanOrEqual(5000);
+		// Small plan should fit within quester limit
+		const questerContext = summarizeContextForAgent(smallPlan, "quester");
+		expect(questerContext.length).toBeLessThanOrEqual(5000);
 
 		// Should preserve meaningful content
-		expect(fabricatorContext).toContain("Implementation");
+		expect(questerContext).toContain("Implementation");
 	});
 });

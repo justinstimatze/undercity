@@ -27,7 +27,7 @@ git diff --staged
 
 **Swarm workflow (Rule of Five):**
 - Sheriff reviews staged changes, not committed changes
-- Fabricator and sheriff iterate on staged work before commit
+- Quester and sheriff iterate on staged work before commit
 - Multiple review passes happen pre-commit, not post-commit
 - Only commit after sheriff approval
 
