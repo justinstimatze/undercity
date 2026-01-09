@@ -12,7 +12,17 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { AgentType, Inventory, Loadout, Raid, SafePocket, SquadMember, Stash, Task } from "./types.js";
+import type {
+	AgentType,
+	FileTrackingState,
+	Inventory,
+	Loadout,
+	Raid,
+	SafePocket,
+	SquadMember,
+	Stash,
+	Task,
+} from "./types.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
 
@@ -236,6 +246,28 @@ export class Persistence {
 	saveSquadMemberSession(memberId: string, sessionId: string): void {
 		const path = join(this.stateDir, "squad", `${memberId}.json`);
 		writeFileSync(path, JSON.stringify({ sessionId, savedAt: new Date() }, null, 2));
+	}
+
+	// ============== File Tracking ==============
+	// Track which files each agent is touching
+
+	getFileTracking(): FileTrackingState {
+		return this.readJson<FileTrackingState>("file-tracking.json", {
+			entries: {},
+			lastUpdated: new Date(),
+		});
+	}
+
+	saveFileTracking(state: FileTrackingState): void {
+		state.lastUpdated = new Date();
+		this.writeJson("file-tracking.json", state);
+	}
+
+	clearFileTracking(): void {
+		this.writeJson<FileTrackingState>("file-tracking.json", {
+			entries: {},
+			lastUpdated: new Date(),
+		});
 	}
 
 	// ============== Utilities ==============

@@ -21,11 +21,12 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
+import { FileTracker, parseFileOperation } from "./file-tracker.js";
 import { createAndCheckout, MergeQueue } from "./git.js";
 import { raidLogger, squadLogger } from "./logger.js";
 import { Persistence } from "./persistence.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
-import type { AgentType, MergeQueueRetryConfig, Raid, SquadMember, Task } from "./types.js";
+import type { AgentType, FileConflict, MergeQueueRetryConfig, Raid, SquadMember, Task } from "./types.js";
 
 /**
  * Generate a unique raid ID
@@ -53,6 +54,7 @@ function generateTaskId(): string {
 export class RaidOrchestrator {
 	private persistence: Persistence;
 	private mergeQueue: MergeQueue;
+	private fileTracker: FileTracker;
 	private maxSquadSize: number;
 	private maxParallel: number;
 	private autoApprove: boolean;
@@ -76,6 +78,9 @@ export class RaidOrchestrator {
 	) {
 		this.persistence = new Persistence(options.stateDir);
 		this.mergeQueue = new MergeQueue(undefined, undefined, options.retryConfig);
+		// Initialize file tracker from persisted state
+		const trackingState = this.persistence.getFileTracking();
+		this.fileTracker = new FileTracker(trackingState);
 		this.maxSquadSize = options.maxSquadSize || 5;
 		// Clamp maxParallel to valid range: 1-5, default 3
 		this.maxParallel = Math.min(5, Math.max(1, options.maxParallel ?? 3));
@@ -190,6 +195,33 @@ export class RaidOrchestrator {
 	}
 
 	/**
+	 * Track file operations from SDK messages
+	 *
+	 * Parses tool_use messages to extract file operations and records them
+	 * in the file tracker for conflict detection.
+	 */
+	private trackFileOperationsFromMessage(agentId: string, message: unknown): void {
+		const msg = message as Record<string, unknown>;
+
+		// Handle assistant messages with content blocks (SDK format)
+		if (msg.type === "assistant") {
+			const content = msg.content as Array<{ type: string; name?: string; input?: Record<string, unknown> }>;
+			if (Array.isArray(content)) {
+				for (const block of content) {
+					if (block.type === "tool_use") {
+						const fileOp = parseFileOperation(block);
+						if (fileOp) {
+							this.fileTracker.recordFileAccess(agentId, fileOp.path, fileOp.operation);
+							// Persist after each file operation for crash recovery
+							this.persistence.saveFileTracking(this.fileTracker.getState());
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/**
 	 * Check if there's an active raid (GUPP principle)
 	 */
 	hasActiveRaid(): boolean {
@@ -201,6 +233,44 @@ export class RaidOrchestrator {
 	 */
 	getCurrentRaid(): Raid | undefined {
 		return this.persistence.getRaid();
+	}
+
+	/**
+	 * Get current file conflicts between active agents
+	 *
+	 * Use this to check if parallel fabricators are stepping on each other's toes.
+	 */
+	getFileConflicts(): FileConflict[] {
+		return this.fileTracker.detectConflicts();
+	}
+
+	/**
+	 * Check if spawning a new agent would conflict with existing work
+	 *
+	 * @param expectedFiles - Files the new agent is expected to touch
+	 * @returns Map of file paths to agent IDs currently working on them
+	 */
+	checkForConflicts(expectedFiles: string[]): Map<string, string[]> {
+		return this.fileTracker.wouldConflict(expectedFiles);
+	}
+
+	/**
+	 * Get files modified by a specific agent
+	 */
+	getAgentModifiedFiles(agentId: string): string[] {
+		return this.fileTracker.getModifiedFiles(agentId);
+	}
+
+	/**
+	 * Get a summary of file tracking status
+	 */
+	getFileTrackingSummary(): {
+		activeAgents: number;
+		completedAgents: number;
+		totalFilesTouched: number;
+		filesWithConflicts: number;
+	} {
+		return this.fileTracker.getSummary();
 	}
 
 	/**
@@ -278,6 +348,7 @@ export class RaidOrchestrator {
 	 * Spawn an agent to work on a task
 	 */
 	private async spawnAgent(type: AgentType, task: Task): Promise<SquadMember> {
+		const raid = this.getCurrentRaid();
 		const member = createSquadMember(type, task);
 		this.persistence.addSquadMember(member);
 
@@ -286,6 +357,12 @@ export class RaidOrchestrator {
 			status: "assigned",
 			agentId: member.id,
 		});
+
+		// Start file tracking for fabricators (they're the ones that modify files)
+		if (type === "fabricator" && raid) {
+			this.fileTracker.startTracking(member.id, task.id, raid.id);
+			this.persistence.saveFileTracking(this.fileTracker.getState());
+		}
 
 		squadLogger.info({ agentType: type, agentId: member.id }, "Spawned agent");
 
@@ -340,6 +417,11 @@ export class RaidOrchestrator {
 				// Stream activity to console
 				this.streamAgentActivity(member, message);
 
+				// Track file operations for fabricators
+				if (member.type === "fabricator") {
+					this.trackFileOperationsFromMessage(member.id, message);
+				}
+
 				// Capture session ID for resumption
 				if (message.type === "system" && message.subtype === "init") {
 					sessionId = message.session_id;
@@ -368,6 +450,20 @@ export class RaidOrchestrator {
 
 			squadLogger.info({ agentId: member.id, taskId: task.id }, "Agent completed task");
 
+			// Stop file tracking for fabricators
+			if (member.type === "fabricator") {
+				this.fileTracker.stopTracking(member.id);
+				this.persistence.saveFileTracking(this.fileTracker.getState());
+
+				const modifiedFiles = this.fileTracker.getModifiedFiles(member.id);
+				if (modifiedFiles.length > 0) {
+					squadLogger.info(
+						{ agentId: member.id, modifiedFiles: modifiedFiles.length },
+						"Agent modified files",
+					);
+				}
+			}
+
 			// Handle next steps based on task type
 			await this.handleTaskCompletion(task, result);
 		} catch (error) {
@@ -383,6 +479,12 @@ export class RaidOrchestrator {
 				status: "error",
 				lastActivityAt: new Date(),
 			});
+
+			// Stop file tracking on error too
+			if (member.type === "fabricator") {
+				this.fileTracker.stopTracking(member.id);
+				this.persistence.saveFileTracking(this.fileTracker.getState());
+			}
 
 			squadLogger.error({ agentId: member.id, error: errorMessage }, "Agent failed");
 		}
@@ -585,6 +687,10 @@ export class RaidOrchestrator {
 		// Add to stash history
 		this.persistence.addCompletedRaid(raid, true);
 
+		// Clear file tracking for this raid
+		this.fileTracker.clearRaid(raid.id);
+		this.persistence.saveFileTracking(this.fileTracker.getState());
+
 		// Clear pocket for next raid
 		this.persistence.clearPocket();
 
@@ -607,13 +713,25 @@ export class RaidOrchestrator {
 		squad: SquadMember[];
 		mergeQueue: ReturnType<MergeQueue["getQueue"]>;
 		maxParallel: number;
+		fileTracking: {
+			activeAgents: number;
+			completedAgents: number;
+			totalFilesTouched: number;
+			filesWithConflicts: number;
+			conflicts: FileConflict[];
+		};
 	} {
+		const trackingSummary = this.fileTracker.getSummary();
 		return {
 			raid: this.getCurrentRaid(),
 			tasks: this.persistence.getTasks(),
 			squad: this.persistence.getSquad(),
 			mergeQueue: this.mergeQueue.getQueue(),
 			maxParallel: this.maxParallel,
+			fileTracking: {
+				...trackingSummary,
+				conflicts: this.fileTracker.detectConflicts(),
+			},
 		};
 	}
 
@@ -627,6 +745,11 @@ export class RaidOrchestrator {
 			raid.completedAt = new Date();
 			this.persistence.saveRaid(raid);
 			this.persistence.addCompletedRaid(raid, false);
+
+			// Clear file tracking for this raid
+			this.fileTracker.clearRaid(raid.id);
+			this.persistence.saveFileTracking(this.fileTracker.getState());
+
 			this.persistence.clearPocket();
 			this.log("Raid surrendered", { raidId: raid.id });
 		}

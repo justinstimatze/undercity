@@ -151,6 +151,32 @@ export interface MergeQueueItem {
 	strategyUsed?: "theirs" | "ours" | "default";
 	/** Files with unresolved conflicts (when status is 'conflict') */
 	conflictFiles?: string[];
+	/** Number of retry attempts made */
+	retryCount?: number;
+	/** Maximum number of retries allowed */
+	maxRetries?: number;
+	/** When the last failure occurred */
+	lastFailedAt?: Date;
+	/** Earliest time to retry (for exponential backoff) */
+	nextRetryAfter?: Date;
+	/** Original error message from first failure (preserved across retries) */
+	originalError?: string;
+	/** Whether this item is currently being retried */
+	isRetry?: boolean;
+}
+
+/**
+ * Configuration options for merge queue retry behavior
+ */
+export interface MergeQueueRetryConfig {
+	/** Enable retry functionality (default: true) */
+	enabled: boolean;
+	/** Maximum number of retry attempts (default: 3) */
+	maxRetries: number;
+	/** Base delay in milliseconds for exponential backoff (default: 1000) */
+	baseDelayMs: number;
+	/** Maximum delay in milliseconds (default: 30000) */
+	maxDelayMs: number;
 }
 
 /**
@@ -177,4 +203,64 @@ export interface UndercityConfig {
 	autoApprove: boolean;
 	/** Verbose logging */
 	verbose: boolean;
+}
+
+/**
+ * File operation types for tracking
+ */
+export type FileOperation = "read" | "write" | "edit" | "delete";
+
+/**
+ * A record of a file being touched by an agent
+ */
+export interface FileTouch {
+	/** The file path (relative to cwd) */
+	path: string;
+	/** Type of operation performed */
+	operation: FileOperation;
+	/** When the file was touched */
+	timestamp: Date;
+}
+
+/**
+ * File tracking state for an agent/task
+ */
+export interface FileTrackingEntry {
+	/** The agent ID that touched these files */
+	agentId: string;
+	/** The task ID associated with this agent */
+	taskId: string;
+	/** The raid ID this belongs to */
+	raidId: string;
+	/** Files touched by this agent */
+	files: FileTouch[];
+	/** When tracking started */
+	startedAt: Date;
+	/** When tracking ended (agent completed) */
+	endedAt?: Date;
+}
+
+/**
+ * Conflict detection result
+ */
+export interface FileConflict {
+	/** The conflicting file path */
+	path: string;
+	/** Agents that have touched this file */
+	touchedBy: Array<{
+		agentId: string;
+		taskId: string;
+		operation: FileOperation;
+		timestamp: Date;
+	}>;
+}
+
+/**
+ * Overall file tracking state (persisted)
+ */
+export interface FileTrackingState {
+	/** Active tracking entries by agent ID */
+	entries: Record<string, FileTrackingEntry>;
+	/** Last updated timestamp */
+	lastUpdated: Date;
 }
