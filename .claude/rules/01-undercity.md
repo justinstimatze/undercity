@@ -86,6 +86,22 @@ Every output reviewed 5 times with different lenses:
 4. **Performance**: Any concerning patterns?
 5. **Maintainability**: Will future developers understand this?
 
+## Dependencies
+
+Use established libraries instead of reinventing the wheel. Check npm for well-maintained packages before writing custom implementations.
+
+**Do:**
+- Use popular, well-maintained packages (check downloads, last publish date, GitHub stars)
+- Prefer packages from known publishers (@anthropic-ai, @types, etc.)
+- Verify package name spelling carefully - **slopsquatting is real**
+
+**Don't:**
+- Install packages with suspicious names or typos
+- Use unmaintained packages (no updates in 2+ years)
+- Add dependencies for trivial functionality (left-pad syndrome)
+
+When in doubt, check the package on npm and GitHub before installing.
+
 ## When NOT to Use Undercity
 
 Skip undercity for:
