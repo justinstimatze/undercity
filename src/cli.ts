@@ -91,10 +91,11 @@ program
 	.option("-v, --verbose", "Enable verbose logging")
 	.option("-s, --stream", "Stream agent activity to console")
 	.option("-m, --max-squad <n>", "Maximum squad size", "5")
+	.option("-d, --dry-run", "Show the plan but don't execute (planning phase only)")
 	.action(
 		async (
 			goal: string | undefined,
-			options: { autoApprove?: boolean; yes?: boolean; verbose?: boolean; stream?: boolean; maxSquad?: string },
+			options: { autoApprove?: boolean; yes?: boolean; verbose?: boolean; stream?: boolean; maxSquad?: string; dryRun?: boolean },
 		) => {
 			const fullAuto = options.yes || false;
 			const orchestrator = new RaidOrchestrator({
@@ -139,7 +140,9 @@ program
 			if (goal) {
 				console.log(chalk.cyan("Launching raid via the Tubes..."));
 				console.log(`  Goal: ${goal}`);
-				if (fullAuto) {
+				if (options.dryRun) {
+					console.log(chalk.dim("  Mode: Dry run (planning only, no execution)"));
+				} else if (fullAuto) {
 					console.log(chalk.dim("  Mode: Full auto (will complete without intervention)"));
 				}
 				console.log();
@@ -147,6 +150,24 @@ program
 				try {
 					const raid = await orchestrator.start(goal);
 					const finalRaid = orchestrator.getCurrentRaid();
+
+					// In dry-run mode, show the plan and exit after planning phase
+					if (options.dryRun) {
+						if (finalRaid?.status === "awaiting_approval" && finalRaid?.planSummary) {
+							console.log(chalk.bold("\n📋 Plan Summary (dry run):"));
+							console.log(chalk.gray("─".repeat(60)));
+							console.log(finalRaid.planSummary);
+							console.log(chalk.gray("─".repeat(60)));
+							console.log();
+							console.log(chalk.yellow("Dry run complete. Plan was NOT executed."));
+							console.log(`To execute this plan, run: ${chalk.cyan("undercity approve")}`);
+							console.log(`To start fresh, run: ${chalk.cyan("undercity clear")}`);
+						} else {
+							console.log(chalk.yellow(`Raid is in ${finalRaid?.status || raid.status} status`));
+							console.log("Plan not yet available for review.");
+						}
+						return;
+					}
 
 					if (finalRaid?.status === "complete") {
 						console.log(chalk.green(`\n✓ Raid complete: ${raid.id}`));
@@ -183,6 +204,15 @@ program
 		console.log(`  Goal: ${status.raid.goal}`);
 		console.log(`  Status: ${statusColor(status.raid.status)}`);
 		console.log(`  Started: ${status.raid.startedAt}`);
+
+		// Calculate and display progress percentage
+		if (status.tasks.length > 0) {
+			const completedTasks = status.tasks.filter((t) => t.status === "complete").length;
+			const totalTasks = status.tasks.length;
+			const progressPercent = Math.round((completedTasks / totalTasks) * 100);
+			const progressBar = "█".repeat(Math.floor(progressPercent / 5)) + "░".repeat(20 - Math.floor(progressPercent / 5));
+			console.log(`  Progress: [${progressBar}] ${progressPercent}% (${completedTasks}/${totalTasks} tasks)`);
+		}
 
 		if (status.raid.planSummary && status.raid.status === "awaiting_approval") {
 			console.log();
@@ -398,6 +428,45 @@ program
 			console.log();
 			console.log("Or for API tokens (costs money):");
 			console.log('  Set: export ANTHROPIC_API_KEY="your-key"');
+		}
+	});
+
+// History command - show completed raids from stash
+program
+	.command("history")
+	.description("Show completed raids from the stash")
+	.option("-n, --count <n>", "Number of raids to show", "10")
+	.action((options: { count?: string }) => {
+		const persistence = new Persistence();
+		const stash = persistence.getStash();
+		const maxCount = Number.parseInt(options.count || "10", 10);
+
+		if (stash.completedRaids.length === 0) {
+			console.log(chalk.gray("No completed raids in history"));
+			console.log("Complete a raid to see it here.");
+			return;
+		}
+
+		console.log(chalk.bold("Raid History"));
+		console.log();
+
+		// Show most recent first
+		const raids = [...stash.completedRaids].reverse().slice(0, maxCount);
+
+		for (const raid of raids) {
+			const statusIcon = raid.success ? chalk.green("✓") : chalk.red("✗");
+			const statusText = raid.success ? chalk.green("success") : chalk.red("failed");
+			const completedAt = raid.completedAt ? new Date(raid.completedAt).toLocaleString() : "unknown";
+
+			console.log(`${statusIcon} ${chalk.bold(raid.id)}`);
+			console.log(`  Goal: ${raid.goal.substring(0, 60)}${raid.goal.length > 60 ? "..." : ""}`);
+			console.log(`  Status: ${statusText}`);
+			console.log(`  Completed: ${chalk.gray(completedAt)}`);
+			console.log();
+		}
+
+		if (stash.completedRaids.length > maxCount) {
+			console.log(chalk.gray(`... and ${stash.completedRaids.length - maxCount} more raids`));
 		}
 	});
 

@@ -86,6 +86,12 @@ export class RaidOrchestrator {
 
 	/**
 	 * Stream agent activity to console for visibility
+	 *
+	 * Handles multiple SDK message formats:
+	 * - "assistant" messages with content blocks (tool_use, text)
+	 * - "tool_result" messages for completed tool calls
+	 * - "user" messages (streaming text input)
+	 * - Other message types for debugging
 	 */
 	private streamAgentActivity(member: SquadMember, message: unknown): void {
 		if (!this.streamOutput) return;
@@ -93,9 +99,28 @@ export class RaidOrchestrator {
 		const msg = message as Record<string, unknown>;
 		const prefix = chalk.dim(`[${member.type}]`);
 
-		// Show tool usage (SDK format: type=assistant, tool uses in content)
+		// Handle content_block_start (streaming tool use)
+		if (msg.type === "content_block_start") {
+			const contentBlock = msg.content_block as { type?: string; name?: string } | undefined;
+			if (contentBlock?.type === "tool_use" && contentBlock.name) {
+				console.log(`${prefix} ${chalk.yellow(contentBlock.name)} ${chalk.dim("...")}`);
+			}
+		}
+
+		// Handle content_block_delta (streaming updates)
+		if (msg.type === "content_block_delta") {
+			const delta = msg.delta as { type?: string; partial_json?: string; text?: string } | undefined;
+			if (delta?.type === "text_delta" && delta.text) {
+				const text = delta.text.trim();
+				if (text && text.length < 100) {
+					process.stdout.write(chalk.gray(text.substring(0, 50)));
+				}
+			}
+		}
+
+		// Handle assistant messages with content blocks (SDK format)
 		if (msg.type === "assistant") {
-			const content = msg.content as Array<{ type: string; name?: string; input?: Record<string, unknown> }>;
+			const content = msg.content as Array<{ type: string; name?: string; input?: Record<string, unknown>; text?: string }>;
 			if (Array.isArray(content)) {
 				for (const block of content) {
 					if (block.type === "tool_use" && block.name) {
@@ -110,27 +135,44 @@ export class RaidOrchestrator {
 							inputSummary = chalk.cyan(String(input.command).substring(0, 60));
 						} else if ("content" in input) {
 							inputSummary = chalk.gray("(writing content)");
+						} else if ("prompt" in input) {
+							inputSummary = chalk.cyan(String(input.prompt).substring(0, 40) + "...");
 						}
 
 						console.log(`${prefix} ${chalk.yellow(block.name)} ${inputSummary}`);
-					} else if (block.type === "text") {
-						const text = (block as { text?: string }).text;
-						if (text) {
-							const firstLine = text.split("\n")[0].substring(0, 80);
-							if (firstLine.trim()) {
-								console.log(`${prefix} ${chalk.gray(firstLine)}${text.length > 80 ? "..." : ""}`);
-							}
+					} else if (block.type === "text" && block.text) {
+						const firstLine = block.text.split("\n")[0].substring(0, 80);
+						if (firstLine.trim()) {
+							console.log(`${prefix} ${chalk.gray(firstLine)}${block.text.length > 80 ? "..." : ""}`);
 						}
 					}
 				}
 			}
 		}
 
-		// Also show tool results briefly
+		// Handle tool results
 		if (msg.type === "tool_result") {
-			const toolName = (msg as { tool_name?: string }).tool_name;
+			const toolName = (msg as { tool_name?: string; name?: string }).tool_name || (msg as { name?: string }).name;
 			if (toolName) {
 				console.log(`${prefix} ${chalk.green("✓")} ${toolName}`);
+			}
+		}
+
+		// Handle message_start (new message beginning)
+		if (msg.type === "message_start") {
+			const msgData = msg.message as { role?: string } | undefined;
+			if (msgData?.role === "assistant") {
+				console.log(`${prefix} ${chalk.dim("thinking...")}`);
+			}
+		}
+
+		// Handle result messages (final output)
+		if (msg.type === "result") {
+			const subtype = msg.subtype as string | undefined;
+			if (subtype === "success") {
+				console.log(`${prefix} ${chalk.green("✓")} Task complete`);
+			} else if (subtype === "error") {
+				console.log(`${prefix} ${chalk.red("✗")} Error: ${msg.error || "unknown"}`);
 			}
 		}
 	}
