@@ -3,6 +3,10 @@
 ## Available
 
 ### Critical
+[worktree] Use git worktrees for raid branches - keep main repo on main, create .undercity/worktrees/<raid-id>/ for each raid so main stays editable
+[worktree] Raiders work in their worktree, elevator merges from worktree back to main
+[robustness] Add rate limit detection - catch 429 errors, pause squad, show countdown timer, auto-resume when quota resets
+[robustness] Add basic error recovery - if raider fails mid-waypoint, save partial progress and allow retry
 [self-improvement] Add ability for agents to add new quests - when quester/sheriff discovers work, they should be able to queue it
 [self-improvement] Parse agent output for "[NEW QUEST: ...]" markers and auto-add to quest board
 [self-improvement] Have sheriff generate follow-up quests for issues found during review
