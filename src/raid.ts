@@ -20,10 +20,10 @@
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { MergeQueue, createAndCheckout, getCurrentBranch } from "./git.js";
+import { createAndCheckout, MergeQueue } from "./git.js";
 import { Persistence } from "./persistence.js";
-import { SQUAD_AGENTS, createSquadMember, generateSquadMemberId } from "./squad.js";
-import type { AgentType, Raid, RaidStatus, SquadMember, Task } from "./types.js";
+import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
+import type { AgentType, Raid, SquadMember, Task } from "./types.js";
 
 /**
  * Generate a unique raid ID
@@ -55,12 +55,14 @@ export class RaidOrchestrator {
 	private autoApprove: boolean;
 	private verbose: boolean;
 
-	constructor(options: {
-		stateDir?: string;
-		maxSquadSize?: number;
-		autoApprove?: boolean;
-		verbose?: boolean;
-	} = {}) {
+	constructor(
+		options: {
+			stateDir?: string;
+			maxSquadSize?: number;
+			autoApprove?: boolean;
+			verbose?: boolean;
+		} = {},
+	) {
 		this.persistence = new Persistence(options.stateDir);
 		this.mergeQueue = new MergeQueue();
 		this.maxSquadSize = options.maxSquadSize || 5;
@@ -294,9 +296,9 @@ export class RaidOrchestrator {
 		switch (task.type) {
 			case "scout": {
 				// Scout done - spawn planner
-				const plannerTask = this.persistence.getTasks().find(
-					(t) => t.raidId === raid.id && t.type === "planner" && t.status === "pending",
-				);
+				const plannerTask = this.persistence
+					.getTasks()
+					.find((t) => t.raidId === raid.id && t.type === "planner" && t.status === "pending");
 				if (plannerTask) {
 					// Update planner task with scout intel
 					plannerTask.description = `${plannerTask.description}\n\nScout Intel:\n${result}`;
@@ -418,9 +420,9 @@ export class RaidOrchestrator {
 		}
 
 		// Check if all work is done
-		const pendingTasks = this.persistence.getTasks().filter(
-			(t) => t.raidId === raid.id && t.status !== "complete" && t.status !== "failed",
-		);
+		const pendingTasks = this.persistence
+			.getTasks()
+			.filter((t) => t.raidId === raid.id && t.status !== "complete" && t.status !== "failed");
 
 		if (pendingTasks.length === 0) {
 			await this.extract();

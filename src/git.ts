@@ -12,7 +12,7 @@
  */
 
 import { execSync, spawn } from "node:child_process";
-import type { MergeQueueItem, MergeStatus } from "./types.js";
+import type { MergeQueueItem } from "./types.js";
 
 /**
  * Git operation error
@@ -143,7 +143,7 @@ export function rebase(targetBranch: string): boolean {
 	try {
 		execGit(["rebase", targetBranch]);
 		return true;
-	} catch (error) {
+	} catch (_error) {
 		// Abort on conflict
 		try {
 			execGit(["rebase", "--abort"]);
@@ -373,17 +373,13 @@ export class MergeQueue {
 	 * Get items that failed
 	 */
 	getFailed(): MergeQueueItem[] {
-		return this.queue.filter(
-			(i) => i.status === "conflict" || i.status === "test_failed",
-		);
+		return this.queue.filter((i) => i.status === "conflict" || i.status === "test_failed");
 	}
 
 	/**
 	 * Clear failed items from the queue
 	 */
 	clearFailed(): void {
-		this.queue = this.queue.filter(
-			(i) => i.status !== "conflict" && i.status !== "test_failed",
-		);
+		this.queue = this.queue.filter((i) => i.status !== "conflict" && i.status !== "test_failed");
 	}
 }

@@ -12,6 +12,39 @@
  * @see https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04
  */
 
+// Git operations
+export {
+	branchExists,
+	checkoutBranch,
+	createAndCheckout,
+	createBranch,
+	deleteBranch,
+	GitError,
+	generateBranchName,
+	getCurrentBranch,
+	getDefaultBranch,
+	isWorkingTreeClean,
+	MergeQueue,
+	merge,
+	rebase,
+	runTests,
+	stash,
+	stashPop,
+} from "./git.js";
+
+// Persistence layer
+export { Persistence } from "./persistence.js";
+// Raid orchestration
+export { RaidOrchestrator } from "./raid.js";
+// Squad management
+export {
+	createSquadMember,
+	determineAgentType,
+	generateSquadMemberId,
+	getAgentDefinition,
+	getAllAgentDefinitions,
+	SQUAD_AGENTS,
+} from "./squad.js";
 // Core types
 export type {
 	AgentDefinition,
@@ -30,39 +63,3 @@ export type {
 	TaskStatus,
 	UndercityConfig,
 } from "./types.js";
-
-// Persistence layer
-export { Persistence } from "./persistence.js";
-
-// Squad management
-export {
-	SQUAD_AGENTS,
-	createSquadMember,
-	determineAgentType,
-	generateSquadMemberId,
-	getAgentDefinition,
-	getAllAgentDefinitions,
-} from "./squad.js";
-
-// Git operations
-export {
-	GitError,
-	MergeQueue,
-	branchExists,
-	checkoutBranch,
-	createAndCheckout,
-	createBranch,
-	deleteBranch,
-	generateBranchName,
-	getCurrentBranch,
-	getDefaultBranch,
-	isWorkingTreeClean,
-	merge,
-	rebase,
-	runTests,
-	stash,
-	stashPop,
-} from "./git.js";
-
-// Raid orchestration
-export { RaidOrchestrator } from "./raid.js";

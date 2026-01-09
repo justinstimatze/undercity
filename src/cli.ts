@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * Undercity CLI
  *
@@ -16,11 +17,11 @@
  *   clear             Clear all state
  */
 
-import chalk from "chalk";
-import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import chalk from "chalk";
+import { Command } from "commander";
 import { Persistence } from "./persistence.js";
 import { RaidOrchestrator } from "./raid.js";
 import type { RaidStatus } from "./types.js";
@@ -77,53 +78,55 @@ program
 	.option("-a, --auto-approve", "Auto-approve plans without human review")
 	.option("-v, --verbose", "Enable verbose logging")
 	.option("-m, --max-squad <n>", "Maximum squad size", "5")
-	.action(async (goal: string | undefined, options: { autoApprove?: boolean; verbose?: boolean; maxSquad?: string }) => {
-		const orchestrator = new RaidOrchestrator({
-			autoApprove: options.autoApprove,
-			verbose: options.verbose,
-			maxSquadSize: Number.parseInt(options.maxSquad || "5", 10),
-		});
+	.action(
+		async (goal: string | undefined, options: { autoApprove?: boolean; verbose?: boolean; maxSquad?: string }) => {
+			const orchestrator = new RaidOrchestrator({
+				autoApprove: options.autoApprove,
+				verbose: options.verbose,
+				maxSquadSize: Number.parseInt(options.maxSquad || "5", 10),
+			});
 
-		// Check for existing raid (GUPP)
-		if (orchestrator.hasActiveRaid()) {
-			const existing = orchestrator.getCurrentRaid();
-			if (existing) {
-				console.log(chalk.yellow("Active raid found:"));
-				console.log(`  ID: ${chalk.bold(existing.id)}`);
-				console.log(`  Goal: ${existing.goal}`);
-				console.log(`  Status: ${statusColor(existing.status)}`);
-				console.log();
-				console.log("Resuming...");
+			// Check for existing raid (GUPP)
+			if (orchestrator.hasActiveRaid()) {
+				const existing = orchestrator.getCurrentRaid();
+				if (existing) {
+					console.log(chalk.yellow("Active raid found:"));
+					console.log(`  ID: ${chalk.bold(existing.id)}`);
+					console.log(`  Goal: ${existing.goal}`);
+					console.log(`  Status: ${statusColor(existing.status)}`);
+					console.log();
+					console.log("Resuming...");
 
-				// If awaiting approval and no auto-approve, prompt
-				if (existing.status === "awaiting_approval" && !options.autoApprove) {
-					console.log(chalk.yellow("\nPlan awaiting approval. Use 'undercity approve' to continue."));
-					return;
+					// If awaiting approval and no auto-approve, prompt
+					if (existing.status === "awaiting_approval" && !options.autoApprove) {
+						console.log(chalk.yellow("\nPlan awaiting approval. Use 'undercity approve' to continue."));
+						return;
+					}
 				}
 			}
-		}
 
-		if (!goal && !orchestrator.hasActiveRaid()) {
-			console.error(chalk.red("Error: Goal is required to launch a new raid"));
-			console.log("Usage: undercity slingshot <goal>");
-			process.exit(1);
-		}
-
-		if (goal) {
-			console.log(chalk.cyan("Launching raid via the Tubes..."));
-			console.log(`  Goal: ${goal}`);
-			console.log();
-
-			try {
-				const raid = await orchestrator.start(goal);
-				console.log(chalk.green(`Raid started: ${raid.id}`));
-				console.log(`Status: ${statusColor(raid.status)}`);
-			} catch (error) {
-				console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+			if (!goal && !orchestrator.hasActiveRaid()) {
+				console.error(chalk.red("Error: Goal is required to launch a new raid"));
+				console.log("Usage: undercity slingshot <goal>");
 				process.exit(1);
 			}
-		}
-	});
+
+			if (goal) {
+				console.log(chalk.cyan("Launching raid via the Tubes..."));
+				console.log(`  Goal: ${goal}`);
+				console.log();
+
+				try {
+					const raid = await orchestrator.start(goal);
+					console.log(chalk.green(`Raid started: ${raid.id}`));
+					console.log(`Status: ${statusColor(raid.status)}`);
+				} catch (error) {
+					console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+					process.exit(1);
+				}
+			}
+		},
+	);
 
 // Status command
 program
@@ -248,7 +251,9 @@ program
 			return;
 		}
 
-		const pending = tasks.filter((t) => t.status === "pending" || t.status === "assigned" || t.status === "in_progress");
+		const pending = tasks.filter(
+			(t) => t.status === "pending" || t.status === "assigned" || t.status === "in_progress",
+		);
 		const completed = tasks.filter((t) => t.status === "complete");
 		const failed = tasks.filter((t) => t.status === "failed" || t.status === "blocked");
 
@@ -346,16 +351,16 @@ program
 			console.log();
 			console.log("To use Claude Max instead:");
 			console.log("  1. Run: claude setup-token");
-			console.log("  2. Set: export CLAUDE_CODE_OAUTH_TOKEN=\"your-token\"");
+			console.log('  2. Set: export CLAUDE_CODE_OAUTH_TOKEN="your-token"');
 		} else {
 			console.log(chalk.red("✗ No authentication configured"));
 			console.log();
 			console.log("To set up Claude Max authentication:");
 			console.log("  1. Run: claude setup-token");
-			console.log("  2. Set: export CLAUDE_CODE_OAUTH_TOKEN=\"your-token\"");
+			console.log('  2. Set: export CLAUDE_CODE_OAUTH_TOKEN="your-token"');
 			console.log();
 			console.log("Or for API tokens (costs money):");
-			console.log("  Set: export ANTHROPIC_API_KEY=\"your-key\"");
+			console.log('  Set: export ANTHROPIC_API_KEY="your-key"');
 		}
 	});
 

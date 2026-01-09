@@ -12,16 +12,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type {
-	AgentType,
-	Inventory,
-	Loadout,
-	Raid,
-	SafePocket,
-	SquadMember,
-	Stash,
-	Task,
-} from "./types.js";
+import type { AgentType, Inventory, Loadout, Raid, SafePocket, SquadMember, Stash, Task } from "./types.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
 

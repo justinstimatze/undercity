@@ -11,8 +11,28 @@ pnpm dev        # Watch mode
 ## Testing
 
 ```bash
-pnpm test       # Run tests
+pnpm test       # Run tests (vitest)
 pnpm typecheck  # Type check without emitting
+```
+
+## Format & Lint
+
+```bash
+pnpm format      # Check formatting
+pnpm format:fix  # Fix formatting
+pnpm lint        # Lint only
+pnpm lint:fix    # Lint with auto-fixes
+pnpm check       # Format + lint
+pnpm check:fix   # All of the above with fixes
+```
+
+Uses Biome. Configuration in `biome.json`.
+
+## Dependency Management
+
+```bash
+pnpm syncpack:lint  # Check dependency version consistency
+pnpm syncpack:fix   # Fix version mismatches
 ```
 
 ## Running
@@ -28,7 +48,32 @@ node ./bin/undercity.js slingshot "goal"
 pnpm start slingshot "goal"
 ```
 
-## Code Quality
+## Code Quality Targets
+
+- Cyclomatic complexity: ≤10 per function
+- Lines of code: ≤60 per function
+- Nesting depth: ≤3 levels
+
+## Logging
+
+Uses Pino for structured logging. Import from `./logger.js`:
+
+```typescript
+import { raidLogger, squadLogger } from "./logger.js";
+
+raidLogger.info({ raidId, goal }, "Starting raid");
+squadLogger.debug({ agentId, task }, "Agent spawned");
+```
+
+Set `LOG_LEVEL` environment variable to control verbosity (debug, info, warn, error).
+
+## Path Navigation
+
+When working with this codebase:
+- Source files are in `src/`
+- Compiled output goes to `dist/`
+- CLI entry point is `bin/undercity.js`
+- Runtime state stored in `.undercity/` (gitignored)
 
 **Always run from repository root:**
 ```bash
@@ -39,11 +84,3 @@ pnpm test
 # BAD
 cd src && tsc
 ```
-
-## Path Navigation
-
-When working with this codebase:
-- Source files are in `src/`
-- Compiled output goes to `dist/`
-- CLI entry point is `bin/undercity.js`
-- Runtime state stored in `.undercity/` (gitignored)
