@@ -592,3 +592,138 @@ export interface LoadoutRecommendation {
 	expectedDuration: number;
 	confidence: number;
 }
+
+// ============== A/B Efficiency Tracking Types ==============
+
+/**
+ * First-order efficiency metrics (direct quest completion)
+ */
+export interface FirstOrderEfficiency {
+	/** Initial tokens used for successful completion */
+	tokensUsed: number;
+	/** Time to first successful completion */
+	timeToComplete: number;
+	/** Was the quest successful on first attempt */
+	successfulFirstAttempt: boolean;
+}
+
+/**
+ * Second-order efficiency metrics (including rework and corrections)
+ */
+export interface SecondOrderEfficiency {
+	/** Total tokens including all rework attempts */
+	totalTokens: number;
+	/** Total time including all retry cycles */
+	totalTime: number;
+	/** Number of rework attempts required */
+	reworkAttempts: number;
+	/** Number of user interventions required */
+	userInterventions: number;
+	/** Time to stable completion (no further changes needed) */
+	timeToStableCompletion: number;
+}
+
+/**
+ * Efficiency outcome for A/B testing
+ */
+export interface EfficiencyOutcome {
+	/** Unique identifier for this outcome */
+	id: string;
+	/** Quest ID this outcome relates to */
+	questId: string;
+	/** Raid ID this outcome relates to */
+	raidId: string;
+	/** Experiment ID if part of an A/B test */
+	experimentId?: string;
+	/** Variant name if part of an A/B test */
+	variantName?: string;
+	/** Parallelism level used (linear vs swarm mode) */
+	parallelismLevel: ParallelismLevel;
+	/** Quest objective/description */
+	objective: string;
+	/** First-order efficiency metrics */
+	firstOrder: FirstOrderEfficiency;
+	/** Second-order efficiency metrics */
+	secondOrder: SecondOrderEfficiency;
+	/** Agents used in this quest execution */
+	agentsUsed: AgentType[];
+	/** Model choices used */
+	modelChoices: LoadoutModelChoices;
+	/** Whether the quest ultimately succeeded */
+	finalSuccess: boolean;
+	/** When this outcome was recorded */
+	recordedAt: Date;
+}
+
+/**
+ * Efficiency comparison result for A/B analysis
+ */
+export interface EfficiencyComparison {
+	/** Name of the comparison */
+	name: string;
+	/** Linear mode (sequential) results */
+	linearMode: {
+		sampleSize: number;
+		avgFirstOrderTokens: number;
+		avgSecondOrderTokens: number;
+		avgReworkRate: number;
+		avgTimeToStable: number;
+		avgUserInterventions: number;
+		successRate: number;
+	};
+	/** Swarm mode (parallel) results */
+	swarmMode: {
+		sampleSize: number;
+		avgFirstOrderTokens: number;
+		avgSecondOrderTokens: number;
+		avgReworkRate: number;
+		avgTimeToStable: number;
+		avgUserInterventions: number;
+		successRate: number;
+	};
+	/** Statistical significance tests */
+	significance: {
+		tokenEfficiencyPValue: number;
+		reworkRatePValue: number;
+		timeEfficiencyPValue: number;
+		successRatePValue: number;
+		overallSignificant: boolean;
+	};
+	/** Empirical model coefficients */
+	model: {
+		firstOrderMultiplier: number; // How much more tokens for first-order vs second-order
+		reworkPenalty: number; // Token penalty per rework cycle
+		parallelismBonus: number; // Time saved with parallel execution
+		qualityTradeoff: number; // Success rate difference
+	};
+}
+
+/**
+ * Rework attempt tracking
+ */
+export interface ReworkAttempt {
+	/** When the rework was attempted */
+	timestamp: Date;
+	/** Reason for rework (test failure, review feedback, etc) */
+	reason: string;
+	/** Agent that performed the rework */
+	agentType: AgentType;
+	/** Tokens used for this rework attempt */
+	tokensUsed: number;
+	/** Whether this rework resolved the issue */
+	successful: boolean;
+}
+
+/**
+ * User intervention tracking
+ */
+export interface UserIntervention {
+	/** When the intervention occurred */
+	timestamp: Date;
+	/** Type of intervention */
+	type: "approval_needed" | "conflict_resolution" | "clarification" | "manual_fix" | "direction_change";
+	/** Description of what the user did */
+	description: string;
+	/** Time spent on the intervention (in milliseconds) */
+	timeSpentMs: number;
+}

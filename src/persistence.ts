@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 import { persistenceLogger } from "./logger.js";
 import type {
 	AgentType,
+	EfficiencyOutcome,
 	FileTrackingState,
 	FluteCache,
 	FluteCacheEntry,
@@ -532,5 +533,75 @@ export class Persistence {
 			oldestEntry: new Date(Math.min(...dates)),
 			newestEntry: new Date(Math.max(...dates)),
 		};
+	}
+
+	// ============== Efficiency Tracking ==============
+
+	/**
+	 * Save efficiency outcome to storage
+	 */
+	saveEfficiencyOutcome(outcome: EfficiencyOutcome): void {
+		try {
+			const outcomesFile = this.getPath("efficiency-outcomes.json");
+			let outcomes: EfficiencyOutcome[] = [];
+
+			// Load existing outcomes
+			if (existsSync(outcomesFile)) {
+				const data = JSON.parse(readFileSync(outcomesFile, "utf8"));
+				outcomes = data.outcomes || [];
+			}
+
+			// Add new outcome
+			outcomes.push(outcome);
+
+			// Keep only the most recent 1000 outcomes to prevent file size growth
+			if (outcomes.length > 1000) {
+				outcomes = outcomes.slice(-1000);
+			}
+
+			// Save back to file
+			const data = {
+				outcomes,
+				version: "1.0",
+				lastUpdated: new Date().toISOString(),
+			};
+
+			writeFileSync(outcomesFile, JSON.stringify(data, null, 2));
+			persistenceLogger.debug({ outcomeId: outcome.id }, "Saved efficiency outcome");
+		} catch (error) {
+			persistenceLogger.error({ error: String(error) }, "Failed to save efficiency outcome");
+		}
+	}
+
+	/**
+	 * Load all efficiency outcomes
+	 */
+	getEfficiencyOutcomes(): EfficiencyOutcome[] {
+		try {
+			const outcomesFile = this.getPath("efficiency-outcomes.json");
+			if (!existsSync(outcomesFile)) {
+				return [];
+			}
+
+			const data = JSON.parse(readFileSync(outcomesFile, "utf8"));
+			return data.outcomes || [];
+		} catch (error) {
+			persistenceLogger.error({ error: String(error) }, "Failed to load efficiency outcomes");
+			return [];
+		}
+	}
+
+	/**
+	 * Get efficiency outcomes filtered by experiment ID
+	 */
+	getEfficiencyOutcomesByExperiment(experimentId: string): EfficiencyOutcome[] {
+		return this.getEfficiencyOutcomes().filter((o) => o.experimentId === experimentId);
+	}
+
+	/**
+	 * Get efficiency outcomes filtered by parallelism level
+	 */
+	getEfficiencyOutcomesByParallelism(parallelismLevel: string): EfficiencyOutcome[] {
+		return this.getEfficiencyOutcomes().filter((o) => o.parallelismLevel === parallelismLevel);
 	}
 }

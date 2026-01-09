@@ -23,6 +23,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
 import { extractImplementationContext, extractReviewContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
+import { EfficiencyTracker } from "./efficiency-tracker.js";
 import { FileTracker, parseFileOperation } from "./file-tracker.js";
 import {
 	calculateCodebaseFingerprint,
@@ -33,9 +34,20 @@ import {
 	isCacheableState,
 } from "./git.js";
 import { raidLogger, squadLogger } from "./logger.js";
+import { MetricsTracker } from "./metrics.js";
 import { Persistence } from "./persistence.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
-import type { AgentType, ElevatorRetryConfig, FileConflict, Raid, SquadMember, Waypoint } from "./types.js";
+import type {
+	AgentType,
+	EfficiencyOutcome,
+	ElevatorRetryConfig,
+	FileConflict,
+	LoadoutModelChoices,
+	ParallelismLevel,
+	Raid,
+	SquadMember,
+	Waypoint,
+} from "./types.js";
 
 /**
  * Timeout configuration for agent monitoring
@@ -77,6 +89,17 @@ export class RaidOrchestrator {
 	private verbose: boolean;
 	private streamOutput: boolean;
 
+	// Efficiency tracking
+	private efficiencyTracker?: EfficiencyTracker;
+	private metricsTracker: MetricsTracker;
+	private currentParallelismLevel: ParallelismLevel = "limited";
+	private currentModelChoices: LoadoutModelChoices = {
+		flute: "haiku",
+		logistics: "sonnet",
+		quester: "sonnet",
+		sheriff: "sonnet",
+	};
+
 	constructor(
 		options: {
 			stateDir?: string;
@@ -89,6 +112,10 @@ export class RaidOrchestrator {
 			streamOutput?: boolean;
 			/** Merge queue retry configuration */
 			retryConfig?: Partial<ElevatorRetryConfig>;
+			/** Parallelism level for efficiency tracking */
+			parallelismLevel?: ParallelismLevel;
+			/** Model choices for efficiency tracking */
+			modelChoices?: LoadoutModelChoices;
 		} = {},
 	) {
 		this.persistence = new Persistence(options.stateDir);
@@ -103,12 +130,100 @@ export class RaidOrchestrator {
 		this.autoCommit = options.autoCommit || false;
 		this.verbose = options.verbose || false;
 		this.streamOutput = options.streamOutput ?? options.verbose ?? false;
+
+		// Initialize metrics tracker
+		this.metricsTracker = new MetricsTracker();
+
+		// Initialize efficiency tracking configuration
+		if (options.parallelismLevel) {
+			this.currentParallelismLevel = options.parallelismLevel;
+		}
+		if (options.modelChoices) {
+			this.currentModelChoices = options.modelChoices;
+		}
 	}
 
 	private log(message: string, data?: Record<string, unknown>): void {
 		if (this.verbose) {
 			raidLogger.info(data ?? {}, message);
 		}
+	}
+
+	/**
+	 * Start efficiency tracking for a raid
+	 */
+	private startEfficiencyTracking(raidId: string, goal: string): void {
+		const questId = `quest-${raidId}`;
+		this.efficiencyTracker = new EfficiencyTracker(
+			questId,
+			raidId,
+			goal,
+			this.currentParallelismLevel,
+			this.currentModelChoices,
+		);
+		this.log("Started efficiency tracking", { raidId, questId });
+	}
+
+	/**
+	 * Configure efficiency tracking parameters
+	 */
+	configureEfficiencyTracking(
+		parallelismLevel: ParallelismLevel,
+		modelChoices: LoadoutModelChoices,
+		experimentId?: string,
+		variantName?: string,
+	): void {
+		this.currentParallelismLevel = parallelismLevel;
+		this.currentModelChoices = modelChoices;
+
+		// Update existing tracker if running
+		if (this.efficiencyTracker) {
+			// Re-create tracker with new parameters
+			const status = this.efficiencyTracker.getStatus();
+			const raid = this.getCurrentRaid();
+			if (raid) {
+				this.efficiencyTracker = new EfficiencyTracker(
+					status.questId,
+					raid.id,
+					raid.goal,
+					parallelismLevel,
+					modelChoices,
+					experimentId,
+					variantName,
+				);
+			}
+		}
+	}
+
+	/**
+	 * Record rework attempt in efficiency tracker
+	 */
+	private recordReworkAttempt(reason: string, agentType: AgentType, tokensUsed: number, successful: boolean): void {
+		if (this.efficiencyTracker) {
+			this.efficiencyTracker.recordReworkAttempt(reason, agentType, tokensUsed, successful);
+			this.log("Recorded rework attempt", { reason, agentType, tokensUsed, successful });
+		}
+	}
+
+	/**
+	 * Record user intervention in efficiency tracker
+	 */
+	recordUserIntervention(
+		type: "approval_needed" | "conflict_resolution" | "clarification" | "manual_fix" | "direction_change",
+		description: string,
+		timeSpentMs: number,
+	): void {
+		if (this.efficiencyTracker) {
+			this.efficiencyTracker.recordUserIntervention(type, description, timeSpentMs);
+			this.log("Recorded user intervention", { type, description, timeSpentMs });
+		}
+	}
+
+	/**
+	 * Get current efficiency outcome
+	 */
+	getEfficiencyOutcome(): EfficiencyOutcome | null {
+		return this.efficiencyTracker?.generateOutcome() ?? null;
 	}
 
 	/**
@@ -369,6 +484,9 @@ export class RaidOrchestrator {
 		// Start dual logging for this raid
 		dualLogger.start(raid.id);
 
+		// Start efficiency tracking for this raid
+		this.startEfficiencyTracking(raid.id, goal);
+
 		// Start planning phase
 		await this.startPlanningPhase(raid);
 
@@ -516,6 +634,11 @@ export class RaidOrchestrator {
 			this.persistence.saveFileTracking(this.fileTracker.getState());
 		}
 
+		// Record agent activity in efficiency tracker
+		if (this.efficiencyTracker) {
+			this.efficiencyTracker.recordAgentActivity(type);
+		}
+
 		squadLogger.info({ agentType: type, agentId: member.id }, "Spawned agent");
 
 		// Run the agent
@@ -586,6 +709,13 @@ export class RaidOrchestrator {
 					this.trackFileOperationsFromMessage(member.id, message);
 				}
 
+				// Track token usage for efficiency metrics
+				this.metricsTracker.recordTokenUsage(message, agentDef.model);
+				const usage = this.metricsTracker.extractTokenUsage(message);
+				if (usage && this.efficiencyTracker) {
+					this.efficiencyTracker.recordTokenUsage(usage.totalTokens, member.type);
+				}
+
 				// Update lastActivityAt on meaningful activity
 				// This keeps the timeout from triggering for actively working agents
 				const msg = message as Record<string, unknown>;
@@ -636,6 +766,11 @@ export class RaidOrchestrator {
 
 			squadLogger.info({ agentId: member.id, waypointId: waypoint.id }, "Agent completed waypoint");
 
+			// Record first attempt completion in efficiency tracker
+			if (this.efficiencyTracker) {
+				this.efficiencyTracker.recordFirstAttemptCompletion(true);
+			}
+
 			// Stop file tracking for fabricators
 			if (member.type === "quester") {
 				this.fileTracker.stopTracking(member.id);
@@ -665,6 +800,12 @@ export class RaidOrchestrator {
 				status: "error",
 				lastActivityAt: new Date(),
 			});
+
+			// Record failed attempt in efficiency tracker
+			if (this.efficiencyTracker) {
+				this.efficiencyTracker.recordFirstAttemptCompletion(false);
+				this.recordReworkAttempt(errorMessage, member.type, 0, false);
+			}
 
 			// Stop file tracking on error too
 			if (member.type === "quester") {
@@ -881,6 +1022,14 @@ export class RaidOrchestrator {
 		raid.completedAt = new Date();
 		this.persistence.saveRaid(raid);
 
+		// Record stable completion in efficiency tracker
+		if (this.efficiencyTracker) {
+			this.efficiencyTracker.recordStableCompletion(true);
+			const outcome = this.efficiencyTracker.generateOutcome();
+			this.persistence.saveEfficiencyOutcome(outcome);
+			this.log("Recorded efficiency outcome", { outcome });
+		}
+
 		// Add to stash history
 		this.persistence.addCompletedRaid(raid, true);
 
@@ -941,6 +1090,14 @@ export class RaidOrchestrator {
 	surrender(): void {
 		const raid = this.getCurrentRaid();
 		if (raid) {
+			// Record failure in efficiency tracker
+			if (this.efficiencyTracker) {
+				this.efficiencyTracker.recordStableCompletion(false);
+				const outcome = this.efficiencyTracker.generateOutcome();
+				this.persistence.saveEfficiencyOutcome(outcome);
+				this.log("Recorded failed efficiency outcome", { outcome });
+			}
+
 			raid.status = "failed";
 			raid.completedAt = new Date();
 			this.persistence.saveRaid(raid);

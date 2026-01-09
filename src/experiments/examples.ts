@@ -321,4 +321,138 @@ export class ExperimentTemplates {
 
     return experiment.id;
   }
+
+  /**
+   * Test linear vs swarm execution modes for efficiency tracking
+   */
+  createLinearVsSwarmEfficiencyExperiment(): string {
+    const variants: Omit<ExperimentVariant, "id">[] = [
+      {
+        name: "Linear Mode (Control)",
+        description: "Sequential execution: scout→planner→fabricator→sheriff",
+        weight: 0.5,
+        isControl: true,
+        parameters: {
+          parallelismLevel: "sequential",
+          maxSquadSize: 4,
+          squadComposition: ["flute", "logistics", "quester", "sheriff"],
+          modelChoices: {
+            flute: "haiku",
+            logistics: "sonnet",
+            quester: "sonnet",
+            sheriff: "sonnet",
+          },
+          contextSize: "medium",
+        },
+      },
+      {
+        name: "Swarm Mode",
+        description: "Parallel execution with maximum concurrency",
+        weight: 0.5,
+        parameters: {
+          parallelismLevel: "maximum",
+          maxSquadSize: 5,
+          squadComposition: ["flute", "logistics", "quester", "sheriff"],
+          modelChoices: {
+            flute: "haiku",
+            logistics: "sonnet",
+            quester: "sonnet",
+            sheriff: "sonnet",
+          },
+          contextSize: "medium",
+        },
+      },
+    ];
+
+    const experiment = this.framework.createExperiment(
+      "Linear vs Swarm Efficiency Analysis",
+      "Compare first-order (initial tokens) vs second-order (total tokens including rework) efficiency between linear and swarm execution modes",
+      "Swarm mode will reduce time-to-completion by 40% but increase total tokens by 20% due to coordination overhead and rework",
+      variants,
+      {
+        targetSampleSize: 60,
+        minimumDetectableEffect: 0.2,
+        tags: ["efficiency", "parallelism", "tokens", "coordination", "rework"],
+      }
+    );
+
+    return experiment.id;
+  }
+
+  /**
+   * Test aggressive swarm vs conservative sequential for high-complexity tasks
+   */
+  createComplexityModeExperiment(): string {
+    const variants: Omit<ExperimentVariant, "id">[] = [
+      {
+        name: "Conservative Sequential (Control)",
+        description: "High-quality sequential execution for complex tasks",
+        weight: 0.4,
+        isControl: true,
+        parameters: {
+          parallelismLevel: "sequential",
+          maxSquadSize: 4,
+          squadComposition: ["flute", "logistics", "quester", "sheriff"],
+          modelChoices: {
+            flute: "sonnet", // Upgraded for complexity
+            logistics: "opus", // Upgraded for planning
+            quester: "sonnet",
+            sheriff: "opus", // Upgraded for review
+          },
+          contextSize: "large",
+          autoApprove: false, // Human oversight for complex tasks
+        },
+      },
+      {
+        name: "Aggressive Swarm",
+        description: "Fast parallel execution with risk of higher rework",
+        weight: 0.3,
+        parameters: {
+          parallelismLevel: "maximum",
+          maxSquadSize: 5,
+          squadComposition: ["flute", "logistics", "quester", "sheriff"],
+          modelChoices: {
+            flute: "haiku", // Fast recon
+            logistics: "sonnet",
+            quester: "sonnet",
+            sheriff: "sonnet", // Faster review
+          },
+          contextSize: "medium",
+          autoApprove: true, // No human bottleneck
+        },
+      },
+      {
+        name: "Hybrid Approach",
+        description: "Sequential planning, parallel execution",
+        weight: 0.3,
+        parameters: {
+          parallelismLevel: "limited", // Controlled parallelism
+          maxSquadSize: 4,
+          squadComposition: ["flute", "logistics", "quester", "sheriff"],
+          modelChoices: {
+            flute: "haiku",
+            logistics: "opus", // Strong planning
+            quester: "sonnet",
+            sheriff: "sonnet",
+          },
+          contextSize: "medium",
+          autoApprove: false,
+        },
+      },
+    ];
+
+    const experiment = this.framework.createExperiment(
+      "Complexity Handling Strategies",
+      "Test different approaches to handling complex tasks: conservative sequential vs aggressive parallel vs hybrid",
+      "Conservative approach will have highest success rate but longest time, aggressive will be fastest but highest rework, hybrid will balance both",
+      variants,
+      {
+        targetSampleSize: 90,
+        minimumDetectableEffect: 0.15,
+        tags: ["complexity", "strategy", "risk-reward", "optimization"],
+      }
+    );
+
+    return experiment.id;
+  }
 }
