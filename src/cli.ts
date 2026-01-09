@@ -258,7 +258,7 @@ program
 			console.log();
 			console.log(chalk.bold("Squad"));
 			for (const member of status.squad) {
-				const statusIcon = member.status === "working" ? "⚡" : member.status === "done" ? "✓" : "○";
+				const statusIcon = member.status === "working" ? "🏃" : member.status === "done" ? "✓" : "○";
 				console.log(`  ${statusIcon} ${member.type} (${member.id}): ${member.status}`);
 			}
 		}
@@ -267,7 +267,7 @@ program
 			console.log();
 			console.log(chalk.bold("Tasks"));
 			for (const waypoint of status.waypoints) {
-				const statusIcon = waypoint.status === "complete" ? "✓" : waypoint.status === "in_progress" ? "⚡" : "○";
+				const statusIcon = waypoint.status === "complete" ? "✓" : waypoint.status === "in_progress" ? "🏃" : "○";
 				console.log(`  ${statusIcon} [${waypoint.type}] ${waypoint.description.substring(0, 50)}...`);
 			}
 		}
@@ -417,7 +417,7 @@ program
 						? chalk.gray("○")
 						: item.status === "conflict" || item.status === "test_failed"
 							? chalk.red("✗")
-							: chalk.yellow("⚡");
+							: chalk.yellow("🏃");
 
 			const retryInfo =
 				item.retryCount && item.retryCount > 0 ? chalk.dim(` (retry ${item.retryCount}/${item.maxRetries || 3})`) : "";
@@ -587,7 +587,7 @@ program
 			console.log(chalk.bold("In Progress"));
 			for (const item of inProgress) {
 				console.log(
-					`  ${chalk.cyan("⚡")} ${item.objective.substring(0, 60)}${item.objective.length > 60 ? "..." : ""}`,
+					`  ${chalk.cyan("🏃")} ${item.objective.substring(0, 60)}${item.objective.length > 60 ? "..." : ""}`,
 				);
 			}
 			console.log();
