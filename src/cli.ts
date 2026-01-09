@@ -22,6 +22,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { Command } from "commander";
+import { Persistence } from "./persistence.js";
 import {
 	addGoal,
 	addGoals,
@@ -33,7 +34,6 @@ import {
 	markFailed,
 	markInProgress,
 } from "./quest.js";
-import { Persistence } from "./persistence.js";
 import { RaidOrchestrator } from "./raid.js";
 import type { RaidStatus } from "./types.js";
 
@@ -91,19 +91,39 @@ program
 	.option("-v, --verbose", "Enable verbose logging")
 	.option("-s, --stream", "Stream agent activity to console")
 	.option("-m, --max-squad <n>", "Maximum squad size", "5")
+	.option("-p, --parallel <n>", "Maximum concurrent raiders (1-5)", "3")
 	.option("-d, --dry-run", "Show the plan but don't execute (planning phase only)")
+	.option("--max-retries <n>", "Maximum merge retry attempts (default: 3)", "3")
+	.option("--no-retry", "Disable merge queue retry functionality")
 	.action(
 		async (
 			goal: string | undefined,
-			options: { autoApprove?: boolean; yes?: boolean; verbose?: boolean; stream?: boolean; maxSquad?: string; dryRun?: boolean },
+			options: {
+				autoApprove?: boolean;
+				yes?: boolean;
+				verbose?: boolean;
+				stream?: boolean;
+				maxSquad?: string;
+				parallel?: string;
+				dryRun?: boolean;
+				maxRetries?: string;
+				retry?: boolean;
+			},
 		) => {
 			const fullAuto = options.yes || false;
+			// Parse and validate parallel option (default 3, max 5)
+			const parallelValue = Math.min(5, Math.max(1, Number.parseInt(options.parallel || "3", 10)));
 			const orchestrator = new RaidOrchestrator({
 				autoApprove: options.autoApprove || fullAuto,
 				verbose: options.verbose || fullAuto,
 				streamOutput: options.stream ?? options.verbose ?? fullAuto,
 				maxSquadSize: Number.parseInt(options.maxSquad || "5", 10),
+				maxParallel: parallelValue,
 				autoCommit: fullAuto,
+				retryConfig: {
+					enabled: options.retry !== false,
+					maxRetries: Number.parseInt(options.maxRetries || "3", 10),
+				},
 			});
 
 			// Check for existing raid (GUPP)
@@ -210,7 +230,8 @@ program
 			const completedTasks = status.tasks.filter((t) => t.status === "complete").length;
 			const totalTasks = status.tasks.length;
 			const progressPercent = Math.round((completedTasks / totalTasks) * 100);
-			const progressBar = "█".repeat(Math.floor(progressPercent / 5)) + "░".repeat(20 - Math.floor(progressPercent / 5));
+			const progressBar =
+				"█".repeat(Math.floor(progressPercent / 5)) + "░".repeat(20 - Math.floor(progressPercent / 5));
 			console.log(`  Progress: [${progressBar}] ${progressPercent}% (${completedTasks}/${totalTasks} tasks)`);
 		}
 
@@ -356,9 +377,57 @@ program
 	.command("merges")
 	.description("Show merge queue status")
 	.action(() => {
-		// Note: In real implementation, we'd need to persist the merge queue
-		console.log(chalk.gray("Merge queue is empty"));
-		console.log("Branches are merged serially: rebase → test → merge");
+		const orchestrator = new RaidOrchestrator({ verbose: false });
+		const status = orchestrator.getStatus();
+
+		if (status.mergeQueue.length === 0) {
+			console.log(chalk.gray("Merge queue is empty"));
+			console.log("Branches are merged serially: rebase → test → merge");
+			console.log(chalk.dim("Failed merges are automatically retried after successful merges (conflicts may resolve)"));
+			return;
+		}
+
+		console.log(chalk.bold("Merge Queue"));
+		console.log();
+
+		for (const item of status.mergeQueue) {
+			const statusIcon =
+				item.status === "complete"
+					? chalk.green("✓")
+					: item.status === "pending"
+						? chalk.gray("○")
+						: item.status === "conflict" || item.status === "test_failed"
+							? chalk.red("✗")
+							: chalk.yellow("⚡");
+
+			const retryInfo =
+				item.retryCount && item.retryCount > 0 ? chalk.dim(` (retry ${item.retryCount}/${item.maxRetries || 3})`) : "";
+
+			const isRetry = item.isRetry ? chalk.cyan(" [RETRY]") : "";
+
+			console.log(`  ${statusIcon} ${item.branch}${retryInfo}${isRetry}`);
+			console.log(`    Status: ${item.status}`);
+
+			if (item.error) {
+				console.log(`    Error: ${chalk.red(item.error.substring(0, 60))}${item.error.length > 60 ? "..." : ""}`);
+			}
+
+			if (item.originalError && item.originalError !== item.error) {
+				console.log(
+					`    Original error: ${chalk.dim(item.originalError.substring(0, 60))}${item.originalError.length > 60 ? "..." : ""}`,
+				);
+			}
+
+			if (item.lastFailedAt) {
+				console.log(`    Last failed: ${chalk.dim(new Date(item.lastFailedAt).toLocaleString())}`);
+			}
+
+			if (item.nextRetryAfter && new Date(item.nextRetryAfter) > new Date()) {
+				console.log(`    Next retry after: ${chalk.dim(new Date(item.nextRetryAfter).toLocaleString())}`);
+			}
+
+			console.log();
+		}
 	});
 
 // Extract command
@@ -498,7 +567,9 @@ program
 		if (inProgress.length > 0) {
 			console.log(chalk.bold("In Progress"));
 			for (const item of inProgress) {
-				console.log(`  ${chalk.cyan("⚡")} ${item.objective.substring(0, 60)}${item.objective.length > 60 ? "..." : ""}`);
+				console.log(
+					`  ${chalk.cyan("⚡")} ${item.objective.substring(0, 60)}${item.objective.length > 60 ? "..." : ""}`,
+				);
 			}
 			console.log();
 		}
@@ -506,7 +577,9 @@ program
 		if (pending.length > 0) {
 			console.log(chalk.bold("Pending"));
 			for (const item of pending.slice(0, 10)) {
-				console.log(`  ${chalk.gray("○")} ${item.objective.substring(0, 60)}${item.objective.length > 60 ? "..." : ""}`);
+				console.log(
+					`  ${chalk.gray("○")} ${item.objective.substring(0, 60)}${item.objective.length > 60 ? "..." : ""}`,
+				);
 			}
 			if (pending.length > 10) {
 				console.log(chalk.gray(`  ... and ${pending.length - 10} more`));

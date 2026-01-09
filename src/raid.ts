@@ -25,7 +25,7 @@ import { createAndCheckout, MergeQueue } from "./git.js";
 import { raidLogger, squadLogger } from "./logger.js";
 import { Persistence } from "./persistence.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
-import type { AgentType, Raid, SquadMember, Task } from "./types.js";
+import type { AgentType, MergeQueueRetryConfig, Raid, SquadMember, Task } from "./types.js";
 
 /**
  * Generate a unique raid ID
@@ -54,6 +54,7 @@ export class RaidOrchestrator {
 	private persistence: Persistence;
 	private mergeQueue: MergeQueue;
 	private maxSquadSize: number;
+	private maxParallel: number;
 	private autoApprove: boolean;
 	private autoCommit: boolean;
 	private verbose: boolean;
@@ -63,15 +64,21 @@ export class RaidOrchestrator {
 		options: {
 			stateDir?: string;
 			maxSquadSize?: number;
+			/** Maximum concurrent raiders (default 3, max 5) */
+			maxParallel?: number;
 			autoApprove?: boolean;
 			autoCommit?: boolean;
 			verbose?: boolean;
 			streamOutput?: boolean;
+			/** Merge queue retry configuration */
+			retryConfig?: Partial<MergeQueueRetryConfig>;
 		} = {},
 	) {
 		this.persistence = new Persistence(options.stateDir);
-		this.mergeQueue = new MergeQueue();
+		this.mergeQueue = new MergeQueue(undefined, undefined, options.retryConfig);
 		this.maxSquadSize = options.maxSquadSize || 5;
+		// Clamp maxParallel to valid range: 1-5, default 3
+		this.maxParallel = Math.min(5, Math.max(1, options.maxParallel ?? 3));
 		this.autoApprove = options.autoApprove || false;
 		this.autoCommit = options.autoCommit || false;
 		this.verbose = options.verbose || false;
@@ -120,7 +127,12 @@ export class RaidOrchestrator {
 
 		// Handle assistant messages with content blocks (SDK format)
 		if (msg.type === "assistant") {
-			const content = msg.content as Array<{ type: string; name?: string; input?: Record<string, unknown>; text?: string }>;
+			const content = msg.content as Array<{
+				type: string;
+				name?: string;
+				input?: Record<string, unknown>;
+				text?: string;
+			}>;
 			if (Array.isArray(content)) {
 				for (const block of content) {
 					if (block.type === "tool_use" && block.name) {
@@ -580,6 +592,13 @@ export class RaidOrchestrator {
 	}
 
 	/**
+	 * Get the maximum number of concurrent raiders
+	 */
+	getMaxParallel(): number {
+		return this.maxParallel;
+	}
+
+	/**
 	 * Get raid status summary
 	 */
 	getStatus(): {
@@ -587,12 +606,14 @@ export class RaidOrchestrator {
 		tasks: Task[];
 		squad: SquadMember[];
 		mergeQueue: ReturnType<MergeQueue["getQueue"]>;
+		maxParallel: number;
 	} {
 		return {
 			raid: this.getCurrentRaid(),
 			tasks: this.persistence.getTasks(),
 			squad: this.persistence.getSquad(),
 			mergeQueue: this.mergeQueue.getQueue(),
+			maxParallel: this.maxParallel,
 		};
 	}
 
