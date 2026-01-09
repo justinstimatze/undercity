@@ -727,3 +727,31 @@ export interface UserIntervention {
 	/** Time spent on the intervention (in milliseconds) */
 	timeSpentMs: number;
 }
+
+// ============== Git Worktree Types ==============
+
+/**
+ * Information about an active worktree for a raid
+ */
+export interface WorktreeInfo {
+	/** The raid ID this worktree belongs to */
+	raidId: string;
+	/** Absolute path to the worktree directory */
+	path: string;
+	/** Branch name for this worktree */
+	branch: string;
+	/** When the worktree was created */
+	createdAt: Date;
+	/** Whether the worktree is currently active */
+	isActive: boolean;
+}
+
+/**
+ * State tracking for git worktrees
+ */
+export interface WorktreeState {
+	/** Active worktrees by raid ID */
+	worktrees: Record<string, WorktreeInfo>;
+	/** Last updated timestamp */
+	lastUpdated: Date;
+}

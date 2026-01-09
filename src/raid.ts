@@ -48,6 +48,7 @@ import type {
 	SquadMember,
 	Waypoint,
 } from "./types.js";
+import { WorktreeError, WorktreeManager } from "./worktree-manager.js";
 
 /**
  * Timeout configuration for agent monitoring
@@ -82,6 +83,7 @@ export class RaidOrchestrator {
 	private persistence: Persistence;
 	private elevator: Elevator;
 	private fileTracker: FileTracker;
+	private worktreeManager: WorktreeManager;
 	private maxSquadSize: number;
 	private maxParallel: number;
 	private autoApprove: boolean;
@@ -123,6 +125,8 @@ export class RaidOrchestrator {
 		// Initialize file tracker from persisted state
 		const trackingState = this.persistence.getFileTracking();
 		this.fileTracker = new FileTracker(trackingState);
+		// Initialize worktree manager for raid isolation
+		this.worktreeManager = new WorktreeManager(options.stateDir);
 		this.maxSquadSize = options.maxSquadSize || 5;
 		// Clamp maxParallel to valid range: 1-5, default 3
 		this.maxParallel = Math.min(5, Math.max(1, options.maxParallel ?? 3));
@@ -141,11 +145,65 @@ export class RaidOrchestrator {
 		if (options.modelChoices) {
 			this.currentModelChoices = options.modelChoices;
 		}
+
+		// Perform startup recovery for orphaned worktrees
+		this.performStartupRecovery();
 	}
 
 	private log(message: string, data?: Record<string, unknown>): void {
 		if (this.verbose) {
 			raidLogger.info(data ?? {}, message);
+		}
+	}
+
+	/**
+	 * Perform startup recovery for orphaned worktrees and corrupted state
+	 */
+	private performStartupRecovery(): void {
+		try {
+			// Get current active raid from persistence
+			const currentRaid = this.getCurrentRaid();
+			const activeRaidIds: string[] = currentRaid ? [currentRaid.id] : [];
+
+			// Clean up orphaned worktrees (worktrees without corresponding active raids)
+			this.worktreeManager.cleanupOrphanedWorktrees(activeRaidIds);
+
+			// Validate worktree state consistency
+			const persistedWorktrees = this.persistence.getAllActiveWorktrees();
+			const actualWorktrees = this.worktreeManager.getActiveRaidWorktrees();
+
+			// Find worktrees that exist in persistence but not on disk
+			for (const persistedWorktree of persistedWorktrees) {
+				const exists = actualWorktrees.some((w) => w.raidId === persistedWorktree.raidId);
+				if (!exists) {
+					this.log("Cleaning up stale worktree from persistence", {
+						raidId: persistedWorktree.raidId,
+					});
+					this.persistence.removeWorktree(persistedWorktree.raidId);
+				}
+			}
+
+			// Find worktrees that exist on disk but not in persistence
+			for (const actualWorktree of actualWorktrees) {
+				if (!activeRaidIds.includes(actualWorktree.raidId)) {
+					this.log("Cleaning up untracked worktree", {
+						raidId: actualWorktree.raidId,
+					});
+					try {
+						this.worktreeManager.removeWorktree(actualWorktree.raidId, true);
+					} catch (error) {
+						this.log("Error cleaning up untracked worktree", {
+							raidId: actualWorktree.raidId,
+							error: String(error),
+						});
+					}
+				}
+			}
+
+			this.log("Startup recovery completed successfully");
+		} catch (error) {
+			this.log("Error during startup recovery", { error: String(error) });
+			// Non-fatal - continue with initialization
 		}
 	}
 
@@ -372,7 +430,7 @@ export class RaidOrchestrator {
 	 * Parses tool_use messages to extract file operations and records them
 	 * in the file tracker for conflict detection.
 	 */
-	private trackFileOperationsFromMessage(agentId: string, message: unknown): void {
+	private trackFileOperationsFromMessage(agentId: string, message: unknown, agentType?: AgentType): void {
 		const msg = message as Record<string, unknown>;
 
 		// Handle assistant messages with content blocks (SDK format)
@@ -383,7 +441,21 @@ export class RaidOrchestrator {
 					if (block.type === "tool_use") {
 						const fileOp = parseFileOperation(block);
 						if (fileOp) {
-							this.fileTracker.recordFileAccess(agentId, fileOp.path, fileOp.operation);
+							// Get the agent's working directory for proper path normalization
+							let agentCwd = process.cwd();
+
+							// Only use worktree path for agents that work in worktrees (quester/sheriff)
+							if (agentType === "quester" || agentType === "sheriff") {
+								const raid = this.getCurrentRaid();
+								if (raid) {
+									const worktreeInfo = this.persistence.getWorktreeForRaid(raid.id);
+									if (worktreeInfo) {
+										agentCwd = worktreeInfo.path;
+									}
+								}
+							}
+
+							this.fileTracker.recordFileAccess(agentId, fileOp.path, fileOp.operation, undefined, agentCwd);
 							// Persist after each file operation for crash recovery
 							this.persistence.saveFileTracking(this.fileTracker.getState());
 						}
@@ -682,6 +754,22 @@ export class RaidOrchestrator {
 			// Flute and Logistics are read-only, Quester and Sheriff need full access
 			const needsFullAccess = member.type === "quester" || member.type === "sheriff";
 
+			// Determine the working directory: use worktree for quester/sheriff, main repo for others
+			let workingDir = process.cwd();
+			if (member.type === "quester" || member.type === "sheriff") {
+				const raid = this.getCurrentRaid();
+				if (raid) {
+					const worktreeInfo = this.persistence.getWorktreeForRaid(raid.id);
+					if (worktreeInfo) {
+						workingDir = worktreeInfo.path;
+						this.log("Using worktree for agent", {
+							agentType: member.type,
+							worktreePath: worktreeInfo.path,
+						});
+					}
+				}
+			}
+
 			const queryOptions = {
 				system_prompt: agentDef.prompt,
 				allowed_tools: agentDef.tools,
@@ -693,7 +781,7 @@ export class RaidOrchestrator {
 							extraArgs: { "dangerously-skip-permissions": null },
 						}
 					: {}),
-				cwd: process.cwd(),
+				cwd: workingDir,
 				...(existingSession ? { resume: existingSession } : {}),
 			};
 
@@ -706,7 +794,7 @@ export class RaidOrchestrator {
 
 				// Track file operations for fabricators
 				if (member.type === "quester") {
-					this.trackFileOperationsFromMessage(member.id, message);
+					this.trackFileOperationsFromMessage(member.id, message, member.type);
 				}
 
 				// Track token usage for efficiency metrics
@@ -966,13 +1054,36 @@ export class RaidOrchestrator {
 			createdAt: new Date(),
 		};
 
-		// Create a branch for this work
-		const branchName = `undercity/${raid.id}/implement`;
+		// Create a worktree for this raid instead of switching branches
 		try {
-			createAndCheckout(branchName);
-			fabricatorTask.branch = branchName;
+			const worktreeInfo = this.worktreeManager.createWorktree(raid.id);
+			fabricatorTask.branch = worktreeInfo.branch;
+
+			// Save worktree info to persistence
+			this.persistence.addWorktree(worktreeInfo);
+
+			this.log("Created worktree for raid", {
+				raidId: raid.id,
+				worktreePath: worktreeInfo.path,
+				branch: worktreeInfo.branch,
+			});
 		} catch (error) {
-			this.log("Could not create branch", { error: String(error) });
+			const errorMessage = error instanceof WorktreeError ? error.message : String(error);
+			this.log("Could not create worktree", { raidId: raid.id, error: errorMessage });
+
+			// Fallback: use traditional branch switching for this raid
+			try {
+				const branchName = `undercity/${raid.id}/fallback`;
+				createAndCheckout(branchName);
+				fabricatorTask.branch = branchName;
+				this.log("Created fallback branch", { raidId: raid.id, branch: branchName });
+			} catch (fallbackError) {
+				this.log("Could not create fallback branch", {
+					raidId: raid.id,
+					error: String(fallbackError),
+				});
+				throw new Error(`Failed to create worktree or fallback branch: ${errorMessage}`);
+			}
 		}
 
 		this.persistence.addTask(fabricatorTask);
@@ -1036,6 +1147,17 @@ export class RaidOrchestrator {
 		// Clear file tracking for this raid
 		this.fileTracker.clearRaid(raid.id);
 		this.persistence.saveFileTracking(this.fileTracker.getState());
+
+		// Clean up worktree for this raid
+		try {
+			if (this.worktreeManager.hasWorktree(raid.id)) {
+				this.worktreeManager.removeWorktree(raid.id);
+				this.persistence.removeWorktree(raid.id);
+				this.log("Cleaned up worktree", { raidId: raid.id });
+			}
+		} catch (error) {
+			this.log("Error cleaning up worktree", { raidId: raid.id, error: String(error) });
+		}
 
 		// Clear pocket for next raid
 		this.persistence.clearPocket();
@@ -1107,6 +1229,17 @@ export class RaidOrchestrator {
 			this.fileTracker.clearRaid(raid.id);
 			this.persistence.saveFileTracking(this.fileTracker.getState());
 
+			// Clean up worktree for this raid
+			try {
+				if (this.worktreeManager.hasWorktree(raid.id)) {
+					this.worktreeManager.removeWorktree(raid.id, true); // Force cleanup on failure
+					this.persistence.removeWorktree(raid.id);
+					this.log("Cleaned up worktree", { raidId: raid.id });
+				}
+			} catch (error) {
+				this.log("Error cleaning up worktree", { raidId: raid.id, error: String(error) });
+			}
+
 			this.persistence.clearPocket();
 
 			// Stop dual logging and rotate log
@@ -1114,5 +1247,36 @@ export class RaidOrchestrator {
 
 			this.log("Raid surrendered", { raidId: raid.id });
 		}
+	}
+
+	/**
+	 * Emergency cleanup - clean up all worktrees and reset state
+	 * Use this when something goes wrong and you need to reset everything
+	 */
+	emergencyCleanup(): void {
+		this.log("Performing emergency cleanup");
+
+		try {
+			// Clean up all worktrees
+			this.worktreeManager.emergencyCleanup();
+
+			// Clear worktree state from persistence
+			this.persistence.clearWorktreeState();
+
+			// Clear all other state
+			this.persistence.clearAll();
+			this.fileTracker.clearRaid("");
+
+			this.log("Emergency cleanup completed successfully");
+		} catch (error) {
+			this.log("Error during emergency cleanup", { error: String(error) });
+		}
+	}
+
+	/**
+	 * Get worktree manager for external access
+	 */
+	getWorktreeManager(): WorktreeManager {
+		return this.worktreeManager;
 	}
 }

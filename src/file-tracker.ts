@@ -11,7 +11,7 @@
  * - Persisted state for crash recovery
  */
 
-import { relative } from "node:path";
+import { relative, resolve } from "node:path";
 import { logger } from "./logger.js";
 import type {
 	CrossQuestConflict,
@@ -56,6 +56,32 @@ export class FileTracker {
 		}
 		// Convert absolute path to relative
 		return relative(this.cwd, filePath);
+	}
+
+	/**
+	 * Normalize a file path considering the agent's working directory
+	 * This handles cases where agents work in worktrees with different base paths
+	 */
+	private normalizePathForAgent(filePath: string, agentCwd?: string): string {
+		// If no agent cwd provided, use standard normalization
+		if (!agentCwd) {
+			return this.normalizePath(filePath);
+		}
+
+		// If path is absolute, make it relative to main repo root
+		if (filePath.startsWith("/")) {
+			return relative(this.cwd, filePath);
+		}
+
+		// If path is relative and agent is in a worktree, resolve it relative to main repo
+		if (agentCwd !== this.cwd) {
+			// Path is relative to agent's working directory, make it relative to main repo
+			const absolutePath = resolve(agentCwd, filePath);
+			return relative(this.cwd, absolutePath);
+		}
+
+		// Agent is in main repo, use path as-is
+		return filePath;
 	}
 
 	/**
@@ -117,14 +143,21 @@ export class FileTracker {
 	/**
 	 * Record a file operation by an agent
 	 */
-	recordFileAccess(agentId: string, filePath: string, operation: FileOperation, questId?: string): void {
+	recordFileAccess(
+		agentId: string,
+		filePath: string,
+		operation: FileOperation,
+		questId?: string,
+		agentCwd?: string,
+	): void {
 		const entry = this.state.entries[agentId];
 		if (!entry) {
 			trackerLogger.warn({ agentId, filePath, operation }, "Attempted to record file access for untracked agent");
 			return;
 		}
 
-		const normalizedPath = this.normalizePath(filePath);
+		// Normalize path considering the agent's working directory
+		const normalizedPath = this.normalizePathForAgent(filePath, agentCwd);
 
 		const touch: FileTouch = {
 			path: normalizedPath,

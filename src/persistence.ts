@@ -30,6 +30,8 @@ import type {
 	SquadMember,
 	Stash,
 	Waypoint,
+	WorktreeInfo,
+	WorktreeState,
 } from "./types.js";
 
 /** Flute cache configuration */
@@ -338,6 +340,50 @@ export class Persistence {
 	clearFileTracking(): void {
 		this.writeJson<FileTrackingState>("file-tracking.json", {
 			entries: {},
+			lastUpdated: new Date(),
+		});
+	}
+
+	// ============== Git Worktree State ==============
+	// Track active worktrees for raid isolation
+
+	getWorktreeState(): WorktreeState {
+		return this.readJson<WorktreeState>("worktree-state.json", {
+			worktrees: {},
+			lastUpdated: new Date(),
+		});
+	}
+
+	saveWorktreeState(state: WorktreeState): void {
+		state.lastUpdated = new Date();
+		this.writeJson("worktree-state.json", state);
+	}
+
+	addWorktree(worktreeInfo: WorktreeInfo): void {
+		const state = this.getWorktreeState();
+		state.worktrees[worktreeInfo.raidId] = worktreeInfo;
+		this.saveWorktreeState(state);
+	}
+
+	removeWorktree(raidId: string): void {
+		const state = this.getWorktreeState();
+		delete state.worktrees[raidId];
+		this.saveWorktreeState(state);
+	}
+
+	getWorktreeForRaid(raidId: string): WorktreeInfo | null {
+		const state = this.getWorktreeState();
+		return state.worktrees[raidId] || null;
+	}
+
+	getAllActiveWorktrees(): WorktreeInfo[] {
+		const state = this.getWorktreeState();
+		return Object.values(state.worktrees).filter((w) => w.isActive);
+	}
+
+	clearWorktreeState(): void {
+		this.writeJson<WorktreeState>("worktree-state.json", {
+			worktrees: {},
 			lastUpdated: new Date(),
 		});
 	}

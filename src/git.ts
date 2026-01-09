@@ -672,10 +672,10 @@ export class Elevator {
 				return item;
 			}
 
-			// Step 3: Run tests
+			// Step 3: Run tests (in the main repository where we checked out)
 			item.status = "testing";
 			gitLogger.debug({ branch: item.branch }, "Running tests");
-			const testResult = await runTests();
+			const testResult = await runTests(process.cwd());
 
 			if (!testResult.success) {
 				item.status = "test_failed";
