@@ -1,5 +1,38 @@
 # Git Workflow
 
+## Staging and Committing
+
+**CRITICAL**: Never bulk-stage files. Always stage specific files relevant to the change.
+
+```bash
+# BAD - stages everything including untracked research data, experiments, etc.
+git add .
+git add -A
+git add --all
+
+# GOOD - stage only the files you changed intentionally
+git add src/types.ts src/persistence.ts
+git add specific-file.ts
+
+# GOOD - review what you're staging
+git status
+git diff --staged
+```
+
+**Before every commit:**
+1. Run `git status` to see what's changed
+2. Stage only files relevant to the current change
+3. Review staged changes with `git diff --staged`
+4. Commit with a focused message
+
+**Swarm workflow (Rule of Five):**
+- Sheriff reviews staged changes, not committed changes
+- Fabricator and sheriff iterate on staged work before commit
+- Multiple review passes happen pre-commit, not post-commit
+- Only commit after sheriff approval
+
+**Why this matters**: Bulk staging leads to accidentally committing local experiments, notes, and other files that shouldn't be in the repo. Review before commit catches issues earlier.
+
 ## Commit Messages
 
 - Keep commit messages concise and descriptive
