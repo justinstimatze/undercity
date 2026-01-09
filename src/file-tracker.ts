@@ -435,7 +435,7 @@ export class FileTracker {
 		const fileQuestMap = new Map<string, string[]>();
 		const writeOps: FileOperation[] = ["write", "edit", "delete"];
 
-		for (const [agentId, entry] of Object.entries(this.state.entries)) {
+		for (const [_agentId, entry] of Object.entries(this.state.entries)) {
 			if (entry.endedAt) continue; // Skip completed entries
 
 			for (const touch of entry.files) {
@@ -464,14 +464,14 @@ export class FileTracker {
 		const activeAgents = this.getActiveEntries().length;
 		const completedAgents = Object.keys(this.state.entries).length - activeAgents;
 
-		let totalFilesTouched = 0;
+		let _totalFilesTouched = 0;
 		const allFiles = new Set<string>();
 
 		for (const entry of Object.values(this.state.entries)) {
 			for (const touch of entry.files) {
 				allFiles.add(touch.path);
 			}
-			totalFilesTouched += entry.files.length;
+			_totalFilesTouched += entry.files.length;
 		}
 
 		const conflicts = this.detectConflicts();

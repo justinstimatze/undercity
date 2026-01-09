@@ -208,22 +208,22 @@ export function smartTruncate(content: string, maxLength: number): string {
 	const lastParagraph = truncated.lastIndexOf("\n\n");
 
 	if (lastParagraph > maxLength * 0.7) {
-		return truncated.substring(0, lastParagraph) + "\n\n[...truncated]";
+		return `${truncated.substring(0, lastParagraph)}\n\n[...truncated]`;
 	}
 
 	// Try to truncate at a sentence boundary
 	const lastSentence = truncated.lastIndexOf(". ");
 	if (lastSentence > maxLength * 0.8) {
-		return truncated.substring(0, lastSentence + 1) + "\n\n[...truncated]";
+		return `${truncated.substring(0, lastSentence + 1)}\n\n[...truncated]`;
 	}
 
 	// Fall back to word boundary
 	const lastSpace = truncated.lastIndexOf(" ");
 	if (lastSpace > maxLength * 0.9) {
-		return truncated.substring(0, lastSpace) + "...\n\n[...truncated]";
+		return `${truncated.substring(0, lastSpace)}...\n\n[...truncated]`;
 	}
 
-	return truncated + "...\n\n[...truncated]";
+	return `${truncated}...\n\n[...truncated]`;
 }
 
 /**

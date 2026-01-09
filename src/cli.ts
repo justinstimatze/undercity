@@ -36,7 +36,6 @@ import {
 	addGoal,
 	addGoals,
 	addQuests,
-	clearCompleted,
 	getAllItems,
 	getBacklogSummary,
 	getNextGoal,
@@ -837,8 +836,8 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 						console.log(chalk.cyan(`\n━━━ Step ${step} ━━━`));
 					}
 
-					const raid = await orchestrator.start(goal);
-					const finalRaid = orchestrator.getCurrentRaid();
+					const _raid = await orchestrator.start(goal);
+					const _finalRaid = orchestrator.getCurrentRaid();
 
 					// Get the result for context
 					const waypoints = orchestrator.getStatus().waypoints;

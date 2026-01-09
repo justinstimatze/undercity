@@ -5,15 +5,14 @@
  * Provides utilities for loadout selection, performance tracking, and recommendations.
  */
 
-import { persistenceLogger } from "./logger.js";
 import {
-	calculateLoadoutScore,
 	DEFAULT_LOADOUTS,
 	generateLoadoutRecommendations,
 	getBestLoadoutForQuest,
 	recordLoadoutPerformance,
 	updateLoadoutScores,
 } from "./loadout-scoring.js";
+import { persistenceLogger } from "./logger.js";
 import type { Persistence } from "./persistence.js";
 import type { Quest } from "./quest.js";
 import type {
@@ -63,7 +62,7 @@ export class LoadoutManager {
 	 * Get a loadout configuration by ID
 	 */
 	getLoadout(id: string): LoadoutConfiguration | undefined {
-		return this.getAllLoadouts().find(l => l.id === id);
+		return this.getAllLoadouts().find((l) => l.id === id);
 	}
 
 	/**
@@ -115,7 +114,7 @@ export class LoadoutManager {
 		quest: Quest,
 		raid: Raid,
 		metrics: EfficiencyMetrics,
-		agentMetrics?: Record<string, { tokensUsed: number; timeSpent: number; taskSuccess: boolean }>
+		agentMetrics?: Record<string, { tokensUsed: number; timeSpent: number; taskSuccess: boolean }>,
 	): LoadoutPerformance {
 		const performance = recordLoadoutPerformance(loadoutConfig, quest, raid, metrics, agentMetrics);
 		this.persistence.addLoadoutPerformance(performance);
@@ -123,12 +122,15 @@ export class LoadoutManager {
 		// Update scores after recording performance
 		this.updateAllLoadoutScores();
 
-		persistenceLogger.info({
-			questId: quest.id,
-			loadoutId: loadoutConfig.id,
-			questType: performance.questType,
-			success: metrics.success
-		}, "Recorded quest performance for loadout");
+		persistenceLogger.info(
+			{
+				questId: quest.id,
+				loadoutId: loadoutConfig.id,
+				questType: performance.questType,
+				success: metrics.success,
+			},
+			"Recorded quest performance for loadout",
+		);
 
 		return performance;
 	}
@@ -185,22 +187,25 @@ export class LoadoutManager {
 		const loadouts = this.getAllLoadouts();
 		const scores = this.getAllLoadoutScores();
 
-		const rankings = loadouts.map(loadout => ({
+		const rankings = loadouts.map((loadout) => ({
 			loadout,
-			score: scores.find(s => s.loadoutConfigId === loadout.id) || {
+			score: scores.find((s) => s.loadoutConfigId === loadout.id) || {
 				loadoutConfigId: loadout.id,
 				overallScore: 0,
-				performanceByQuestType: {} as Record<QuestType, {
-					score: number;
-					sampleCount: number;
-					avgTimeToComplete: number;
-					avgCost: number;
-					avgQuality: number;
-					successRate: number;
-				}>,
+				performanceByQuestType: {} as Record<
+					QuestType,
+					{
+						score: number;
+						sampleCount: number;
+						avgTimeToComplete: number;
+						avgCost: number;
+						avgQuality: number;
+						successRate: number;
+					}
+				>,
 				recentPerformance: [],
 				lastUpdated: new Date(),
-			}
+			},
 		}));
 
 		// Sort by overall score descending
@@ -220,19 +225,25 @@ export class LoadoutManager {
 
 		const bestLoadout = getBestLoadoutForQuest(quest, loadouts, scores);
 		if (bestLoadout) {
-			persistenceLogger.info({
-				questId: quest.id,
-				selectedLoadout: bestLoadout.id
-			}, "Selected best loadout for quest");
+			persistenceLogger.info(
+				{
+					questId: quest.id,
+					selectedLoadout: bestLoadout.id,
+				},
+				"Selected best loadout for quest",
+			);
 			return bestLoadout;
 		}
 
 		// Fallback to balanced performer
-		const fallback = loadouts.find(l => l.id === "balanced-performer") || loadouts[0];
-		persistenceLogger.warn({
-			questId: quest.id,
-			fallbackLoadout: fallback.id
-		}, "No optimal loadout found, using fallback");
+		const fallback = loadouts.find((l) => l.id === "balanced-performer") || loadouts[0];
+		persistenceLogger.warn(
+			{
+				questId: quest.id,
+				fallbackLoadout: fallback.id,
+			},
+			"No optimal loadout found, using fallback",
+		);
 		return fallback;
 	}
 
@@ -263,7 +274,16 @@ export class LoadoutManager {
 	 * Update all recommendations based on current performance data
 	 */
 	updateAllRecommendations(): void {
-		const questTypes: QuestType[] = ["debug", "feature", "refactor", "documentation", "test", "performance", "security", "research"];
+		const questTypes: QuestType[] = [
+			"debug",
+			"feature",
+			"refactor",
+			"documentation",
+			"test",
+			"performance",
+			"security",
+			"research",
+		];
 
 		for (const questType of questTypes) {
 			this.getQuestTypeRecommendation(questType);
@@ -291,15 +311,16 @@ export class LoadoutManager {
 		const performances = this.persistence.getLoadoutPerformances();
 
 		// Top performer by overall score
-		const topPerformer = scores.length > 0
-			? scores.reduce((best, score) => score.overallScore > best.overallScore ? score : best)
-			: null;
+		const topPerformer =
+			scores.length > 0
+				? scores.reduce((best, score) => (score.overallScore > best.overallScore ? score : best))
+				: null;
 
 		const topPerformerData = topPerformer
 			? {
-				loadout: loadouts.find(l => l.id === topPerformer.loadoutConfigId)!,
-				score: topPerformer.overallScore
-			  }
+					loadout: loadouts.find((l) => l.id === topPerformer.loadoutConfigId)!,
+					score: topPerformer.overallScore,
+				}
 			: null;
 
 		// Quest type breakdown
@@ -309,7 +330,7 @@ export class LoadoutManager {
 		}
 
 		// Average success rate
-		const successfulQuests = performances.filter(p => p.metrics.success).length;
+		const successfulQuests = performances.filter((p) => p.metrics.success).length;
 		const averageSuccessRate = performances.length > 0 ? (successfulQuests / performances.length) * 100 : 0;
 
 		// Cost efficiency leader (lowest average cost)
@@ -317,12 +338,13 @@ export class LoadoutManager {
 		let bestAvgCost = Number.POSITIVE_INFINITY;
 
 		for (const score of scores) {
-			const avgCost = Object.values(score.performanceByQuestType).reduce((sum, data) => sum + data.avgCost, 0) /
-							Object.keys(score.performanceByQuestType).length;
+			const avgCost =
+				Object.values(score.performanceByQuestType).reduce((sum, data) => sum + data.avgCost, 0) /
+				Object.keys(score.performanceByQuestType).length;
 
 			if (avgCost < bestAvgCost) {
 				bestAvgCost = avgCost;
-				const loadout = loadouts.find(l => l.id === score.loadoutConfigId);
+				const loadout = loadouts.find((l) => l.id === score.loadoutConfigId);
 				if (loadout) {
 					costEfficiencyLeader = { loadout, avgCost };
 				}
@@ -334,12 +356,13 @@ export class LoadoutManager {
 		let bestAvgTime = Number.POSITIVE_INFINITY;
 
 		for (const score of scores) {
-			const avgTime = Object.values(score.performanceByQuestType).reduce((sum, data) => sum + data.avgTimeToComplete, 0) /
-						   Object.keys(score.performanceByQuestType).length;
+			const avgTime =
+				Object.values(score.performanceByQuestType).reduce((sum, data) => sum + data.avgTimeToComplete, 0) /
+				Object.keys(score.performanceByQuestType).length;
 
 			if (avgTime < bestAvgTime) {
 				bestAvgTime = avgTime;
-				const loadout = loadouts.find(l => l.id === score.loadoutConfigId);
+				const loadout = loadouts.find((l) => l.id === score.loadoutConfigId);
 				if (loadout) {
 					speedLeader = { loadout, avgTime };
 				}

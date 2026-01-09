@@ -164,10 +164,7 @@ describe("extractRelevantSections", () => {
 		const relevant = extractRelevantSections(longSections, "auditor");
 
 		// Should not exceed auditor limit (3000 chars)
-		const totalLength = relevant.reduce(
-			(sum, s) => sum + s.heading.length + s.content.length,
-			0
-		);
+		const totalLength = relevant.reduce((sum, s) => sum + s.heading.length + s.content.length, 0);
 		expect(totalLength).toBeLessThanOrEqual(3500); // Allow some margin
 	});
 });
@@ -250,8 +247,7 @@ Found 3 files: auth.ts, user.ts, config.ts
 	});
 
 	it("handles plain text input gracefully", () => {
-		const plainText =
-			"Just some plain text without any markdown formatting at all.";
+		const plainText = "Just some plain text without any markdown formatting at all.";
 
 		const result = summarizeContextForAgent(plainText, "fabricator");
 
@@ -396,10 +392,7 @@ ${"Additional security notes. ".repeat(30)}`;
 		expect(fullLength).toBeGreaterThan(10000);
 
 		// Test fabricator context extraction respects 5K limit
-		const fabricatorContext = summarizeContextForAgent(
-			largePlan,
-			"fabricator"
-		);
+		const fabricatorContext = summarizeContextForAgent(largePlan, "fabricator");
 		expect(fabricatorContext.length).toBeLessThanOrEqual(5000);
 		expect(fabricatorContext.length).toBeLessThan(fullLength);
 

@@ -5,15 +5,20 @@
  * Handles conflict detection, resource allocation, and cross-quest coordination.
  */
 
-import chalk from "chalk";
+import { FileTracker } from "./file-tracker.js";
+import { raidLogger } from "./logger.js";
 import type { Quest } from "./quest.js";
-import { getReadyQuestsForBatch, markQuestSetInProgress, markQuestComplete, markQuestFailed, updateQuestAnalysis } from "./quest.js";
+import {
+	getReadyQuestsForBatch,
+	markQuestComplete,
+	markQuestFailed,
+	markQuestSetInProgress,
+	updateQuestAnalysis,
+} from "./quest.js";
 import { QuestAnalyzer } from "./quest-analyzer.js";
 import { QuestScheduler, type QuestSet } from "./quest-scheduler.js";
 import { RaidOrchestrator } from "./raid.js";
-import { FileTracker } from "./file-tracker.js";
-import { raidLogger } from "./logger.js";
-import type { QuestBatchResult, CrossQuestConflict, QuestSetMetadata } from "./types.js";
+import type { CrossQuestConflict, QuestBatchResult, QuestSetMetadata } from "./types.js";
 
 export interface QuestBatchOrchestratorOptions {
 	maxParallelQuests?: number;
@@ -60,7 +65,7 @@ export class QuestBatchOrchestrator {
 
 		this.log("QuestBatchOrchestrator initialized", {
 			maxParallelQuests: this.maxParallelQuests,
-			conflictResolution: this.options.conflictResolution
+			conflictResolution: this.options.conflictResolution,
 		});
 	}
 
@@ -110,7 +115,7 @@ export class QuestBatchOrchestrator {
 		}
 
 		this.log(`Selected optimal quest set with ${optimalSet.quests.length} quests`, {
-			questIds: optimalSet.quests.map(q => q.id),
+			questIds: optimalSet.quests.map((q) => q.id),
 			parallelismScore: optimalSet.parallelismScore,
 			riskLevel: optimalSet.riskLevel,
 		});
@@ -128,7 +133,7 @@ export class QuestBatchOrchestrator {
 		const startTime = Date.now();
 
 		try {
-			const raid = await this.createAndRunRaid(quest);
+			const _raid = await this.createAndRunRaid(quest);
 			const duration = Date.now() - startTime;
 
 			return {
@@ -162,7 +167,7 @@ export class QuestBatchOrchestrator {
 		this.log("Executing quest set", {
 			setId,
 			questCount: questSet.quests.length,
-			questIds: questSet.quests.map(q => q.id)
+			questIds: questSet.quests.map((q) => q.id),
 		});
 
 		// Start parallel quest execution
@@ -183,7 +188,7 @@ export class QuestBatchOrchestrator {
 			}
 
 			// Mark quests as in progress
-			const questIds = questSet.quests.map(q => q.id);
+			const questIds = questSet.quests.map((q) => q.id);
 			markQuestSetInProgress(questIds, raidIds);
 
 			// Record active quest set
@@ -209,7 +214,6 @@ export class QuestBatchOrchestrator {
 			for (const quest of questSet.quests) {
 				this.fileTracker.stopQuestTracking(quest.id);
 			}
-
 		} catch (error) {
 			this.log("Quest set execution failed", { setId, error: String(error) });
 
@@ -251,7 +255,7 @@ export class QuestBatchOrchestrator {
 			completed: completedQuests.length,
 			failed: failedQuests.length,
 			conflicts: conflicts.length,
-			duration: totalDuration
+			duration: totalDuration,
 		});
 
 		return {
@@ -268,18 +272,17 @@ export class QuestBatchOrchestrator {
 	private async executeQuestWithMonitoring(
 		quest: Quest,
 		setId: string,
-		results: Map<string, { success: boolean; error?: string }>
+		results: Map<string, { success: boolean; error?: string }>,
 	): Promise<void> {
 		try {
 			this.log(`Starting quest ${quest.id}`, { setId });
 
-			const raid = await this.createAndRunRaid(quest);
+			const _raid = await this.createAndRunRaid(quest);
 
 			results.set(quest.id, { success: true });
 			markQuestComplete(quest.id);
 
 			this.log(`Quest ${quest.id} completed successfully`, { setId });
-
 		} catch (error) {
 			const errorMessage = String(error);
 			this.log(`Quest ${quest.id} failed`, { setId, error: errorMessage });
@@ -319,7 +322,7 @@ export class QuestBatchOrchestrator {
 
 		// Wait for completion
 		while (raid.status !== "complete" && raid.status !== "failed") {
-			await new Promise(resolve => setTimeout(resolve, 1000));
+			await new Promise((resolve) => setTimeout(resolve, 1000));
 
 			// Get current status
 			const status = raidOrchestrator.getStatus();
@@ -331,10 +334,10 @@ export class QuestBatchOrchestrator {
 			const conflicts = this.fileTracker.detectCrossQuestConflicts();
 			if (conflicts.length > 0 && this.options.conflictResolution === "conservative") {
 				this.log(`Conflicts detected for quest ${quest.id}, aborting`, {
-					conflicts: conflicts.length
+					conflicts: conflicts.length,
 				});
 				raidOrchestrator.surrender();
-				throw new Error(`Quest aborted due to file conflicts: ${conflicts.map(c => c.conflictingFiles).join(", ")}`);
+				throw new Error(`Quest aborted due to file conflicts: ${conflicts.map((c) => c.conflictingFiles).join(", ")}`);
 			}
 		}
 
@@ -356,7 +359,7 @@ export class QuestBatchOrchestrator {
 				this.log(`Cross-quest conflicts detected`, {
 					setId,
 					conflicts: conflicts.length,
-					files: conflicts.map(c => c.conflictingFiles).flat()
+					files: conflicts.flatMap((c) => c.conflictingFiles),
 				});
 
 				// Handle conflicts based on resolution strategy
@@ -391,7 +394,7 @@ export class QuestBatchOrchestrator {
 					this.log(`Allowing conflict to continue (aggressive strategy)`, {
 						setId,
 						questIds: conflict.questIds,
-						files: conflict.conflictingFiles
+						files: conflict.conflictingFiles,
 					});
 					break;
 
@@ -399,9 +402,9 @@ export class QuestBatchOrchestrator {
 					// Abort only if severity is critical
 					if (conflict.severity === "critical") {
 						// Abort the quest with higher risk score
-						const questsWithRisk = conflict.questIds.map(id => {
+						const questsWithRisk = conflict.questIds.map((id) => {
 							// Find quest and get risk score
-							const metadata = this.activeQuestSets.get(setId);
+							const _metadata = this.activeQuestSets.get(setId);
 							return { id, risk: 0.5 }; // Default risk if not found
 						});
 
@@ -412,7 +415,10 @@ export class QuestBatchOrchestrator {
 						if (raid) {
 							this.log(`Aborting highest-risk quest ${questToAbort} (balanced)`, { setId });
 							raid.surrender();
-							markQuestFailed(questToAbort, `Aborted due to critical file conflict: ${conflict.conflictingFiles.join(", ")}`);
+							markQuestFailed(
+								questToAbort,
+								`Aborted due to critical file conflict: ${conflict.conflictingFiles.join(", ")}`,
+							);
 						}
 					}
 					break;
@@ -468,14 +474,12 @@ export class QuestBatchOrchestrator {
 			return {
 				availableQuests: [],
 				questSets: [],
-				recommendedAction: "No quests available for processing"
+				recommendedAction: "No quests available for processing",
 			};
 		}
 
 		const questSets = await this.scheduler.findParallelizableSets(availableQuests);
-		const optimalSet = questSets.length > 0
-			? this.scheduler.selectOptimalQuestSet(questSets, maxQuests)
-			: undefined;
+		const optimalSet = questSets.length > 0 ? this.scheduler.selectOptimalQuestSet(questSets, maxQuests) : undefined;
 
 		let recommendedAction = "";
 		if (!optimalSet) {

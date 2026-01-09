@@ -122,7 +122,7 @@ describe("DualLogger", () => {
 		expect(existsSync(logger.getCurrentLogPath())).toBe(false);
 
 		// Archived log should exist
-		const files = require("fs").readdirSync(logDir);
+		const files = require("node:fs").readdirSync(logDir);
 		const archivedLog = files.find((file: string) => file.startsWith("raid-test-raid-123"));
 		expect(archivedLog).toBeTruthy();
 

@@ -21,7 +21,7 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
-import { extractImplementationContext, extractReviewContext, summarizeContextForAgent } from "./context.js";
+import { extractImplementationContext, extractReviewContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
 import { FileTracker, parseFileOperation } from "./file-tracker.js";
 import {
@@ -210,7 +210,7 @@ export class RaidOrchestrator {
 						} else if ("content" in input) {
 							inputSummary = chalk.gray("(writing content)");
 						} else if ("prompt" in input) {
-							inputSummary = chalk.cyan(String(input.prompt).substring(0, 40) + "...");
+							inputSummary = chalk.cyan(`${String(input.prompt).substring(0, 40)}...`);
 						}
 
 						dualLogger.writeLine(`${prefix} ${chalk.yellow(block.name)} ${inputSummary}`);

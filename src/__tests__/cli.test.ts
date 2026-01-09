@@ -4,7 +4,7 @@
  * Tests for the command-line interface parsing and options handling.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 // We'll test the CLI by importing Commander and checking program configuration
 // Rather than actually executing commands (which would require mocking everything)

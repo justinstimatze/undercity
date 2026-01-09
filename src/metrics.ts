@@ -5,13 +5,8 @@
  * Provides tokens-per-completion ratios and historical analytics.
  */
 
-import type {
-	AgentType,
-	EfficiencyAnalytics,
-	QuestMetrics,
-	TokenUsage,
-} from "./types.js";
 import { RateLimitTracker } from "./rate-limit.js";
+import type { AgentType, EfficiencyAnalytics, QuestMetrics, TokenUsage } from "./types.js";
 
 /**
  * Tracks efficiency metrics for quests and raids
@@ -126,16 +121,10 @@ export class MetricsTracker {
 
 		// Record in rate limit tracker if we have enough info
 		if (this.questId && model) {
-			this.rateLimitTracker.recordQuest(
-				this.questId,
-				model,
-				usage.inputTokens,
-				usage.outputTokens,
-				{
-					raidId: this.raidId,
-					timestamp: new Date(),
-				}
-			);
+			this.rateLimitTracker.recordQuest(this.questId, model, usage.inputTokens, usage.outputTokens, {
+				raidId: this.raidId,
+				timestamp: new Date(),
+			});
 		}
 	}
 
@@ -145,7 +134,7 @@ export class MetricsTracker {
 	recordRateLimitHit(
 		model: "haiku" | "sonnet" | "opus",
 		error?: Error | string,
-		responseHeaders?: Record<string, string>
+		responseHeaders?: Record<string, string>,
 	): void {
 		const errorMessage = typeof error === "string" ? error : error?.message;
 		this.rateLimitTracker.recordRateLimitHit(model, errorMessage, responseHeaders);
@@ -232,17 +221,16 @@ export class MetricsTracker {
 		const successRate = (completedQuests.length / totalQuests) * 100;
 
 		// Calculate averages from completed quests only
-		const avgTokensPerCompletion = completedQuests.length > 0
-			? completedQuests.reduce((sum, m) => sum + m.totalTokens, 0) / completedQuests.length
-			: 0;
+		const avgTokensPerCompletion =
+			completedQuests.length > 0
+				? completedQuests.reduce((sum, m) => sum + m.totalTokens, 0) / completedQuests.length
+				: 0;
 
-		const avgDurationMs = questMetrics.length > 0
-			? questMetrics.reduce((sum, m) => sum + m.durationMs, 0) / questMetrics.length
-			: 0;
+		const avgDurationMs =
+			questMetrics.length > 0 ? questMetrics.reduce((sum, m) => sum + m.durationMs, 0) / questMetrics.length : 0;
 
-		const avgAgentsSpawned = questMetrics.length > 0
-			? questMetrics.reduce((sum, m) => sum + m.agentsSpawned, 0) / questMetrics.length
-			: 0;
+		const avgAgentsSpawned =
+			questMetrics.length > 0 ? questMetrics.reduce((sum, m) => sum + m.agentsSpawned, 0) / questMetrics.length : 0;
 
 		// Calculate tokens by agent type
 		const tokensByAgentType: Record<AgentType, { total: number; avgPerQuest: number }> = {
@@ -270,8 +258,7 @@ export class MetricsTracker {
 		for (const agentType of Object.keys(tokensByAgentType) as AgentType[]) {
 			const questCount = agentTypeQuests[agentType];
 			if (questCount > 0) {
-				tokensByAgentType[agentType].avgPerQuest =
-					tokensByAgentType[agentType].total / questCount;
+				tokensByAgentType[agentType].avgPerQuest = tokensByAgentType[agentType].total / questCount;
 			}
 		}
 

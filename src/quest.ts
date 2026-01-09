@@ -19,15 +19,15 @@ export interface Quest {
 	error?: string;
 
 	// NEW: Quest Matchmaking Fields
-	packageHints?: string[];           // Manual package hints
-	dependsOn?: string[];              // Quest IDs this quest depends on
-	conflicts?: string[];              // Quest IDs that conflict with this one
-	estimatedFiles?: string[];         // Expected files to be modified
-	tags?: string[];                   // Categorization tags (feature, bugfix, refactor)
+	packageHints?: string[]; // Manual package hints
+	dependsOn?: string[]; // Quest IDs this quest depends on
+	conflicts?: string[]; // Quest IDs that conflict with this one
+	estimatedFiles?: string[]; // Expected files to be modified
+	tags?: string[]; // Categorization tags (feature, bugfix, refactor)
 
 	// Computed during matchmaking
-	computedPackages?: string[];       // Auto-detected package boundaries
-	riskScore?: number;                // File overlap risk (0-1)
+	computedPackages?: string[]; // Auto-detected package boundaries
+	riskScore?: number; // File overlap risk (0-1)
 }
 
 export interface QuestBoard {
@@ -226,13 +226,13 @@ export function getQuestSetStatus(questIds: string[]): {
 	blocked: number;
 } {
 	const board = loadQuestBoard();
-	const quests = board.quests.filter(q => questIds.includes(q.id));
+	const quests = board.quests.filter((q) => questIds.includes(q.id));
 
 	return {
-		pending: quests.filter(q => q.status === "pending").length,
-		inProgress: quests.filter(q => q.status === "in_progress").length,
-		complete: quests.filter(q => q.status === "complete").length,
-		failed: quests.filter(q => q.status === "failed").length,
+		pending: quests.filter((q) => q.status === "pending").length,
+		inProgress: quests.filter((q) => q.status === "in_progress").length,
+		complete: quests.filter((q) => q.status === "complete").length,
+		failed: quests.filter((q) => q.status === "failed").length,
 		blocked: 0, // Will be computed by dependency analysis
 	};
 }
@@ -247,7 +247,7 @@ export function getQuestBoardAnalytics(): {
 	topConflictingPackages: string[];
 } {
 	const board = loadQuestBoard();
-	const completedQuests = board.quests.filter(q => q.status === "complete");
+	const completedQuests = board.quests.filter((q) => q.status === "complete");
 
 	// Calculate average completion time
 	let totalTime = 0;
@@ -262,7 +262,7 @@ export function getQuestBoardAnalytics(): {
 	const averageCompletionTime = validTimes > 0 ? totalTime / validTimes : 0;
 
 	// Count pending quests as parallelization opportunities
-	const pendingQuests = board.quests.filter(q => q.status === "pending").length;
+	const pendingQuests = board.quests.filter((q) => q.status === "pending").length;
 
 	// Collect package hints for conflict analysis
 	const packageCounts = new Map<string, number>();
@@ -290,14 +290,17 @@ export function getQuestBoardAnalytics(): {
 /**
  * Update quest with computed analysis results
  */
-export function updateQuestAnalysis(questId: string, analysis: {
-	computedPackages?: string[];
-	riskScore?: number;
-	estimatedFiles?: string[];
-	tags?: string[];
-}): void {
+export function updateQuestAnalysis(
+	questId: string,
+	analysis: {
+		computedPackages?: string[];
+		riskScore?: number;
+		estimatedFiles?: string[];
+		tags?: string[];
+	},
+): void {
 	const board = loadQuestBoard();
-	const quest = board.quests.find(q => q.id === questId);
+	const quest = board.quests.find((q) => q.id === questId);
 	if (quest) {
 		if (analysis.computedPackages) quest.computedPackages = analysis.computedPackages;
 		if (analysis.riskScore !== undefined) quest.riskScore = analysis.riskScore;

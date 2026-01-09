@@ -5,14 +5,7 @@
  * Logs tokens per quest, models usage over time, and captures 429 events.
  */
 
-import {
-	QuestUsage,
-	TokenUsage,
-	RateLimitHit,
-	RateLimitState,
-	RateLimitConfig,
-	TimeWindow,
-} from "./types.js";
+import type { QuestUsage, RateLimitConfig, RateLimitHit, RateLimitState, TimeWindow, TokenUsage } from "./types.js";
 
 /**
  * Default rate limit configuration
@@ -51,7 +44,7 @@ export class RateLimitTracker {
 	private calculateTokenUsage(
 		inputTokens: number,
 		outputTokens: number,
-		model: "haiku" | "sonnet" | "opus"
+		model: "haiku" | "sonnet" | "opus",
 	): TokenUsage {
 		const totalTokens = inputTokens + outputTokens;
 		const multiplier = this.state.config.tokenMultipliers[model];
@@ -78,7 +71,7 @@ export class RateLimitTracker {
 			raidId?: string;
 			agentId?: string;
 			timestamp?: Date;
-		}
+		},
 	): void {
 		const tokens = this.calculateTokenUsage(inputTokens, outputTokens, model);
 
@@ -108,7 +101,7 @@ export class RateLimitTracker {
 	recordRateLimitHit(
 		model: "haiku" | "sonnet" | "opus",
 		errorMessage?: string,
-		responseHeaders?: Record<string, string>
+		responseHeaders?: Record<string, string>,
 	): void {
 		const currentUsage = this.getCurrentUsage();
 
@@ -192,15 +185,11 @@ export class RateLimitTracker {
 		const threshold = this.state.config.warningThreshold;
 
 		if (fiveHourUsage >= threshold) {
-			console.warn(
-				`⚠️  Rate limit warning: ${(fiveHourUsage * 100).toFixed(1)}% of 5-hour limit used (${model})`
-			);
+			console.warn(`⚠️  Rate limit warning: ${(fiveHourUsage * 100).toFixed(1)}% of 5-hour limit used (${model})`);
 		}
 
 		if (weeklyUsage >= threshold) {
-			console.warn(
-				`⚠️  Rate limit warning: ${(weeklyUsage * 100).toFixed(1)}% of weekly limit used (${model})`
-			);
+			console.warn(`⚠️  Rate limit warning: ${(weeklyUsage * 100).toFixed(1)}% of weekly limit used (${model})`);
 		}
 	}
 
@@ -211,9 +200,7 @@ export class RateLimitTracker {
 		const cutoff = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000); // 8 days (1 week + buffer)
 
 		const originalLength = this.state.quests.length;
-		this.state.quests = this.state.quests.filter(
-			(quest) => quest.timestamp >= cutoff
-		);
+		this.state.quests = this.state.quests.filter((quest) => quest.timestamp >= cutoff);
 
 		const cleaned = originalLength - this.state.quests.length;
 		if (cleaned > 0) {
@@ -222,9 +209,7 @@ export class RateLimitTracker {
 
 		// Also clean up old rate limit hits
 		const originalHits = this.state.rateLimitHits.length;
-		this.state.rateLimitHits = this.state.rateLimitHits.filter(
-			(hit) => hit.timestamp >= cutoff
-		);
+		this.state.rateLimitHits = this.state.rateLimitHits.filter((hit) => hit.timestamp >= cutoff);
 
 		const cleanedHits = originalHits - this.state.rateLimitHits.length;
 		if (cleanedHits > 0) {
@@ -247,16 +232,11 @@ export class RateLimitTracker {
 
 		const totalQuests = modelQuests.length;
 		const totalTokens = modelQuests.reduce((sum, q) => sum + q.tokens.totalTokens, 0);
-		const sonnetEquivalentTokens = modelQuests.reduce(
-			(sum, q) => sum + q.tokens.sonnetEquivalentTokens,
-			0
-		);
+		const sonnetEquivalentTokens = modelQuests.reduce((sum, q) => sum + q.tokens.sonnetEquivalentTokens, 0);
 		const last24Hours = modelQuests
 			.filter((q) => q.timestamp >= yesterday)
 			.reduce((sum, q) => sum + q.tokens.totalTokens, 0);
-		const rateLimitHits = this.state.rateLimitHits.filter(
-			(hit) => hit.model === model
-		).length;
+		const rateLimitHits = this.state.rateLimitHits.filter((hit) => hit.model === model).length;
 
 		return {
 			totalQuests,
@@ -320,7 +300,7 @@ export class RateLimitTracker {
 
 		const lines = [
 			"📊 Rate Limit Usage Report",
-			"=" + "=".repeat(25),
+			`=${"=".repeat(25)}`,
 			"",
 			"Current Usage:",
 			`  5-hour window: ${current.last5HoursSonnet.toLocaleString()} Sonnet tokens (${(percentages.fiveHour * 100).toFixed(1)}%)`,
@@ -332,8 +312,8 @@ export class RateLimitTracker {
 		for (const [model, usage] of Object.entries(modelBreakdown)) {
 			lines.push(
 				`  ${model.padEnd(6)}: ${usage.totalQuests.toString().padStart(4)} quests, ` +
-				`${usage.sonnetEquivalentTokens.toLocaleString().padStart(8)} Sonnet eq, ` +
-				`${usage.rateLimitHits} rate limit hits`
+					`${usage.sonnetEquivalentTokens.toLocaleString().padStart(8)} Sonnet eq, ` +
+					`${usage.rateLimitHits} rate limit hits`,
 			);
 		}
 
@@ -341,13 +321,11 @@ export class RateLimitTracker {
 
 		if (totalRateLimitHits > 0) {
 			lines.push("", "Recent Rate Limit Hits:");
-			const recentHits = this.state.rateLimitHits
-				.slice(-3)
-				.reverse();
+			const recentHits = this.state.rateLimitHits.slice(-3).reverse();
 
 			for (const hit of recentHits) {
 				lines.push(
-					`  ${hit.timestamp.toISOString()} - ${hit.model} (${hit.currentUsage.last5HoursSonnet.toLocaleString()} tokens)`
+					`  ${hit.timestamp.toISOString()} - ${hit.model} (${hit.currentUsage.last5HoursSonnet.toLocaleString()} tokens)`,
 				);
 			}
 		}

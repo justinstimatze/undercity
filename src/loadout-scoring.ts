@@ -5,19 +5,15 @@
  * Helps determine which loadouts work best for which quest types.
  */
 
-import { createHash } from "node:crypto";
 import { persistenceLogger } from "./logger.js";
 import type { Quest } from "./quest.js";
 import type {
-	AgentType,
-	ContextSize,
 	EfficiencyMetrics,
 	LoadoutConfiguration,
 	LoadoutPerformance,
 	LoadoutRecommendation,
 	LoadoutScore,
 	ModelChoice,
-	ParallelismLevel,
 	QuestType,
 	Raid,
 } from "./types.js";
@@ -136,63 +132,113 @@ export function classifyQuestType(questObjective: string): QuestType {
 	// More specific patterns first to avoid conflicts
 
 	// Test patterns (check before feature patterns that might include "add")
-	if (objective.includes("unit test") || objective.includes("integration test") ||
-		objective.includes("test coverage") || objective.includes("write tests") ||
+	if (
+		objective.includes("unit test") ||
+		objective.includes("integration test") ||
+		objective.includes("test coverage") ||
+		objective.includes("write tests") ||
 		(objective.includes("test") && !objective.includes("test drive")) ||
 		objective.includes("coverage") ||
-		(objective.includes("spec") && !objective.includes("specification"))) {
+		(objective.includes("spec") && !objective.includes("specification"))
+	) {
 		return "test";
 	}
 
 	// Documentation patterns (check before feature patterns)
-	if (objective.includes("document") || objective.includes("docs") || objective.includes("readme") ||
-		objective.includes("comment") || objective.includes("explain") ||
-		objective.includes("write docs") || objective.includes("add comments")) {
+	if (
+		objective.includes("document") ||
+		objective.includes("docs") ||
+		objective.includes("readme") ||
+		objective.includes("comment") ||
+		objective.includes("explain") ||
+		objective.includes("write docs") ||
+		objective.includes("add comments")
+	) {
 		return "documentation";
 	}
 
 	// Security patterns (check before debug patterns that might include "fix")
-	if (objective.includes("security") || objective.includes("vulnerability") ||
-		objective.includes("permission") || objective.includes("secure") ||
-		(objective.includes("auth") && !objective.includes("authentication") && !objective.includes("authorize") && !objective.includes("author")) ||
-		objective.includes("encrypt") || objective.includes("ssl") || objective.includes("https")) {
+	if (
+		objective.includes("security") ||
+		objective.includes("vulnerability") ||
+		objective.includes("permission") ||
+		objective.includes("secure") ||
+		(objective.includes("auth") &&
+			!objective.includes("authentication") &&
+			!objective.includes("authorize") &&
+			!objective.includes("author")) ||
+		objective.includes("encrypt") ||
+		objective.includes("ssl") ||
+		objective.includes("https")
+	) {
 		return "security";
 	}
 
 	// Research patterns (check before performance patterns)
-	if (objective.includes("research") || objective.includes("investigate") ||
-		objective.includes("analyze") || objective.includes("study") ||
-		objective.includes("explore") || objective.includes("survey") ||
-		(objective.includes("understand") && !objective.includes("user"))) {
+	if (
+		objective.includes("research") ||
+		objective.includes("investigate") ||
+		objective.includes("analyze") ||
+		objective.includes("study") ||
+		objective.includes("explore") ||
+		objective.includes("survey") ||
+		(objective.includes("understand") && !objective.includes("user"))
+	) {
 		return "research";
 	}
 
 	// Performance patterns
-	if (objective.includes("optimize") || objective.includes("performance") || objective.includes("speed") ||
-		objective.includes("memory") || objective.includes("efficiency") ||
-		objective.includes("bottleneck") || objective.includes("cache") || objective.includes("fast")) {
+	if (
+		objective.includes("optimize") ||
+		objective.includes("performance") ||
+		objective.includes("speed") ||
+		objective.includes("memory") ||
+		objective.includes("efficiency") ||
+		objective.includes("bottleneck") ||
+		objective.includes("cache") ||
+		objective.includes("fast")
+	) {
 		return "performance";
 	}
 
 	// Debug patterns
-	if (objective.includes("bug") || objective.includes("error") ||
-		objective.includes("crash") || objective.includes("issue") || objective.includes("debug") ||
+	if (
+		objective.includes("bug") ||
+		objective.includes("error") ||
+		objective.includes("crash") ||
+		objective.includes("issue") ||
+		objective.includes("debug") ||
 		(objective.includes("fix") && !objective.includes("fixing feature")) ||
-		objective.includes("broken") || objective.includes("failing")) {
+		objective.includes("broken") ||
+		objective.includes("failing")
+	) {
 		return "debug";
 	}
 
 	// Refactor patterns
-	if (objective.includes("refactor") || objective.includes("restructure") || objective.includes("reorganize") ||
-		objective.includes("clean up") || objective.includes("improve structure") ||
-		objective.includes("simplify") || objective.includes("modernize")) {
+	if (
+		objective.includes("refactor") ||
+		objective.includes("restructure") ||
+		objective.includes("reorganize") ||
+		objective.includes("clean up") ||
+		objective.includes("improve structure") ||
+		objective.includes("simplify") ||
+		objective.includes("modernize")
+	) {
 		return "refactor";
 	}
 
 	// Feature patterns (most general, checked last)
-	if (objective.includes("add") || objective.includes("implement") || objective.includes("create") ||
-		objective.includes("build") || objective.includes("new feature") || objective.includes("feature") ||
-		objective.includes("develop") || objective.includes("introduce")) {
+	if (
+		objective.includes("add") ||
+		objective.includes("implement") ||
+		objective.includes("create") ||
+		objective.includes("build") ||
+		objective.includes("new feature") ||
+		objective.includes("feature") ||
+		objective.includes("develop") ||
+		objective.includes("introduce")
+	) {
 		return "feature";
 	}
 
@@ -252,7 +298,7 @@ export function calculateCompositeScore(metrics: EfficiencyMetrics): number {
 	const timeScore = Math.max(0, 100 - Math.min(100, metrics.timeToComplete / 60000)); // 60 seconds = 0 points
 	const costScore = Math.max(0, 100 - Math.min(100, metrics.costInCents * 10)); // $0.10 = 0 points
 	const qualityScore = metrics.qualityScore; // Already 0-100
-	const retryScore = Math.max(0, 100 - (metrics.retryCount * 25)); // Each retry = -25 points
+	const retryScore = Math.max(0, 100 - metrics.retryCount * 25); // Each retry = -25 points
 	const successScore = metrics.success ? 100 : 0;
 
 	// Weighted composite score
@@ -281,7 +327,7 @@ export function recordLoadoutPerformance(
 	quest: Quest,
 	raid: Raid,
 	metrics: EfficiencyMetrics,
-	agentMetrics?: Record<string, { tokensUsed: number; timeSpent: number; taskSuccess: boolean }>
+	agentMetrics?: Record<string, { tokensUsed: number; timeSpent: number; taskSuccess: boolean }>,
 ): LoadoutPerformance {
 	const questType = classifyQuestType(quest.objective);
 	const complexity = estimateQuestComplexity(quest.objective);
@@ -299,11 +345,14 @@ export function recordLoadoutPerformance(
 		agentMetrics,
 	};
 
-	persistenceLogger.info({
-		loadoutId: loadoutConfig.id,
-		questType,
-		score: calculateCompositeScore(metrics)
-	}, "Recorded loadout performance");
+	persistenceLogger.info(
+		{
+			loadoutId: loadoutConfig.id,
+			questType,
+			score: calculateCompositeScore(metrics),
+		},
+		"Recorded loadout performance",
+	);
 
 	return performance;
 }
@@ -311,11 +360,8 @@ export function recordLoadoutPerformance(
 /**
  * Calculate aggregated score for a loadout across all performances
  */
-export function calculateLoadoutScore(
-	loadoutConfigId: string,
-	performances: LoadoutPerformance[]
-): LoadoutScore {
-	const loadoutPerformances = performances.filter(p => p.loadoutConfigId === loadoutConfigId);
+export function calculateLoadoutScore(loadoutConfigId: string, performances: LoadoutPerformance[]): LoadoutScore {
+	const loadoutPerformances = performances.filter((p) => p.loadoutConfigId === loadoutConfigId);
 
 	if (loadoutPerformances.length === 0) {
 		return {
@@ -328,7 +374,8 @@ export function calculateLoadoutScore(
 	}
 
 	// Calculate overall score
-	const overallScore = loadoutPerformances.reduce((sum, p) => sum + calculateCompositeScore(p.metrics), 0) / loadoutPerformances.length;
+	const overallScore =
+		loadoutPerformances.reduce((sum, p) => sum + calculateCompositeScore(p.metrics), 0) / loadoutPerformances.length;
 
 	// Group by quest type
 	const byQuestType: Record<QuestType, LoadoutPerformance[]> = {} as Record<QuestType, LoadoutPerformance[]>;
@@ -338,24 +385,27 @@ export function calculateLoadoutScore(
 	}
 
 	// Calculate per quest type stats
-	const performanceByQuestType = Object.entries(byQuestType).reduce((acc, [questType, perfs]) => {
-		const scores = perfs.map(p => calculateCompositeScore(p.metrics));
-		const avgScore = scores.reduce((s, v) => s + v, 0) / scores.length;
-		const avgTime = perfs.reduce((s, p) => s + p.metrics.timeToComplete, 0) / perfs.length;
-		const avgCost = perfs.reduce((s, p) => s + p.metrics.costInCents, 0) / perfs.length;
-		const avgQuality = perfs.reduce((s, p) => s + p.metrics.qualityScore, 0) / perfs.length;
-		const successRate = (perfs.filter(p => p.metrics.success).length / perfs.length) * 100;
+	const performanceByQuestType = Object.entries(byQuestType).reduce(
+		(acc, [questType, perfs]) => {
+			const scores = perfs.map((p) => calculateCompositeScore(p.metrics));
+			const avgScore = scores.reduce((s, v) => s + v, 0) / scores.length;
+			const avgTime = perfs.reduce((s, p) => s + p.metrics.timeToComplete, 0) / perfs.length;
+			const avgCost = perfs.reduce((s, p) => s + p.metrics.costInCents, 0) / perfs.length;
+			const avgQuality = perfs.reduce((s, p) => s + p.metrics.qualityScore, 0) / perfs.length;
+			const successRate = (perfs.filter((p) => p.metrics.success).length / perfs.length) * 100;
 
-		acc[questType as QuestType] = {
-			score: avgScore,
-			sampleCount: perfs.length,
-			avgTimeToComplete: avgTime,
-			avgCost: avgCost,
-			avgQuality: avgQuality,
-			successRate,
-		};
-		return acc;
-	}, {} as Record<QuestType, any>);
+			acc[questType as QuestType] = {
+				score: avgScore,
+				sampleCount: perfs.length,
+				avgTimeToComplete: avgTime,
+				avgCost: avgCost,
+				avgQuality: avgQuality,
+				successRate,
+			};
+			return acc;
+		},
+		{} as Record<QuestType, any>,
+	);
 
 	// Get recent performances (last 10)
 	const recentPerformance = loadoutPerformances
@@ -377,16 +427,16 @@ export function calculateLoadoutScore(
 export function generateLoadoutRecommendations(
 	questType: QuestType,
 	loadoutConfigs: LoadoutConfiguration[],
-	loadoutScores: LoadoutScore[]
+	loadoutScores: LoadoutScore[],
 ): LoadoutRecommendation | null {
 	// Find loadouts that have performance data for this quest type
 	const relevantLoadouts = loadoutScores
-		.filter(score => score.performanceByQuestType[questType]?.sampleCount > 0)
-		.map(score => ({
-			loadout: loadoutConfigs.find(l => l.id === score.loadoutConfigId)!,
+		.filter((score) => score.performanceByQuestType[questType]?.sampleCount > 0)
+		.map((score) => ({
+			loadout: loadoutConfigs.find((l) => l.id === score.loadoutConfigId)!,
 			performance: score.performanceByQuestType[questType],
 		}))
-		.filter(item => item.loadout); // Filter out any missing loadouts
+		.filter((item) => item.loadout); // Filter out any missing loadouts
 
 	if (relevantLoadouts.length === 0) {
 		return null;
@@ -394,8 +444,8 @@ export function generateLoadoutRecommendations(
 
 	// Sort by score, with sample count as tiebreaker
 	relevantLoadouts.sort((a, b) => {
-		const scoreA = a.performance.score + (Math.log(a.performance.sampleCount) * 5); // Bonus for more samples
-		const scoreB = b.performance.score + (Math.log(b.performance.sampleCount) * 5);
+		const scoreA = a.performance.score + Math.log(a.performance.sampleCount) * 5; // Bonus for more samples
+		const scoreB = b.performance.score + Math.log(b.performance.sampleCount) * 5;
 		return scoreB - scoreA;
 	});
 
@@ -404,13 +454,13 @@ export function generateLoadoutRecommendations(
 
 	// Calculate confidence based on sample size and score spread
 	const sampleCount = best.performance.sampleCount;
-	const scoreSpread = relevantLoadouts.length > 1
-		? Math.abs(best.performance.score - relevantLoadouts[1].performance.score)
-		: 100;
-	const confidence = Math.min(100, (Math.log(sampleCount + 1) * 20) + (scoreSpread * 0.5));
+	const scoreSpread =
+		relevantLoadouts.length > 1 ? Math.abs(best.performance.score - relevantLoadouts[1].performance.score) : 100;
+	const confidence = Math.min(100, Math.log(sampleCount + 1) * 20 + scoreSpread * 0.5);
 
 	// Generate reasoning
-	const reasoning = `Recommended for ${questType} based on ${sampleCount} samples with ${best.performance.score.toFixed(1)} average score. ` +
+	const reasoning =
+		`Recommended for ${questType} based on ${sampleCount} samples with ${best.performance.score.toFixed(1)} average score. ` +
 		`Success rate: ${best.performance.successRate.toFixed(1)}%, avg cost: $${(best.performance.avgCost / 100).toFixed(3)}, ` +
 		`avg time: ${Math.round(best.performance.avgTimeToComplete / 1000)}s.`;
 
@@ -418,7 +468,7 @@ export function generateLoadoutRecommendations(
 		questType,
 		recommendedLoadout: best.loadout,
 		confidence,
-		alternativeLoadouts: alternatives.map(alt => ({
+		alternativeLoadouts: alternatives.map((alt) => ({
 			loadout: alt.loadout,
 			score: alt.performance.score,
 			reasoning: `Score: ${alt.performance.score.toFixed(1)} (${alt.performance.sampleCount} samples)`,
@@ -434,7 +484,7 @@ export function generateLoadoutRecommendations(
 export function getBestLoadoutForQuest(
 	quest: Quest,
 	loadoutConfigs: LoadoutConfiguration[],
-	loadoutScores: LoadoutScore[]
+	loadoutScores: LoadoutScore[],
 ): LoadoutConfiguration | null {
 	const questType = classifyQuestType(quest.objective);
 	const recommendation = generateLoadoutRecommendations(questType, loadoutConfigs, loadoutScores);
@@ -450,7 +500,10 @@ export function getBestLoadoutForQuest(
 /**
  * Get a suitable default loadout for a quest type
  */
-export function getDefaultLoadoutForQuestType(questType: QuestType, loadoutConfigs: LoadoutConfiguration[]): LoadoutConfiguration {
+export function getDefaultLoadoutForQuestType(
+	questType: QuestType,
+	loadoutConfigs: LoadoutConfiguration[],
+): LoadoutConfiguration {
 	// Try to find default loadouts by ID
 	let defaultId: string;
 
@@ -473,13 +526,13 @@ export function getDefaultLoadoutForQuestType(questType: QuestType, loadoutConfi
 			defaultId = "balanced-performer";
 	}
 
-	const defaultLoadout = loadoutConfigs.find(l => l.id === defaultId);
+	const defaultLoadout = loadoutConfigs.find((l) => l.id === defaultId);
 	if (defaultLoadout) {
 		return defaultLoadout;
 	}
 
 	// Fallback to first available or create a basic one
-	return loadoutConfigs[0] || DEFAULT_LOADOUTS.find(l => l.id === "balanced-performer")!;
+	return loadoutConfigs[0] || DEFAULT_LOADOUTS.find((l) => l.id === "balanced-performer")!;
 }
 
 /**
@@ -487,9 +540,9 @@ export function getDefaultLoadoutForQuestType(questType: QuestType, loadoutConfi
  */
 export function updateLoadoutScores(
 	performances: LoadoutPerformance[],
-	existingScores: LoadoutScore[]
+	existingScores: LoadoutScore[],
 ): LoadoutScore[] {
-	const loadoutIds = [...new Set(performances.map(p => p.loadoutConfigId))];
+	const loadoutIds = [...new Set(performances.map((p) => p.loadoutConfigId))];
 	const updatedScores: LoadoutScore[] = [];
 
 	for (const loadoutId of loadoutIds) {

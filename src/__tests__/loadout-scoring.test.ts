@@ -2,7 +2,7 @@
  * Tests for the loadout scoring system
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
 	calculateCompositeScore,
 	classifyQuestType,
@@ -15,7 +15,7 @@ import {
 	updateLoadoutScores,
 } from "../loadout-scoring.js";
 import type { Quest } from "../quest.js";
-import type { EfficiencyMetrics, LoadoutConfiguration, LoadoutScore, Raid } from "../types.js";
+import type { EfficiencyMetrics, LoadoutConfiguration, Raid } from "../types.js";
 
 // Mock data for testing
 const mockLoadoutConfig: LoadoutConfiguration = {

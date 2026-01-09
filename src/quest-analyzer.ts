@@ -82,7 +82,7 @@ export class QuestAnalyzer {
 	 * Analyze a quest for package boundaries, file estimates, and risk factors
 	 */
 	async analyzeQuest(quest: Quest): Promise<QuestAnalysis> {
-		const objective = quest.objective.toLowerCase();
+		const _objective = quest.objective.toLowerCase();
 
 		// Detect package boundaries
 		const packages = this.detectPackageBoundaries(quest.objective);
