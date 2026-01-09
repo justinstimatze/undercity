@@ -5,7 +5,7 @@
  *
  * Agent Types:
  * - Scout: Fast codebase reconnaissance (Haiku, read-only)
- * - Planner: BMAD-style spec writer (Opus, read-only)
+ * - Planner: BMAD-style spec writer (Sonnet, read-only, fast iteration)
  * - Fabricator: Code builder (Opus, full access)
  * - Auditor: Quality reviewer with Rule of Five (Opus, read + tests)
  *
@@ -38,7 +38,7 @@ Output your findings in a structured format the planner can use.`,
 		model: "haiku",
 	},
 
-	// Planner - BMAD-style spec creation, read-only, Opus for best planning
+	// Planner - BMAD-style spec creation, read-only, Sonnet for fast iteration
 	// Creates detailed specs using the Rule of Five
 	planner: {
 		description:
@@ -62,7 +62,7 @@ Your spec should include:
 Output a clear, actionable plan for fabricators to execute.
 Don't write code - write specs. The fabricators will implement.`,
 		tools: ["Read", "Grep", "Glob"],
-		model: "opus",
+		model: "sonnet",
 	},
 
 	// Fabricator - Builds things, full access, Opus for best implementation

@@ -10,3 +10,9 @@ Add vitest tests for the backlog module - test addGoal, getNextGoal, markComplet
 Add a --dry-run flag to slingshot that shows the plan but doesn't execute
 Add a "history" command to show completed raids from the stash
 Add progress percentage to status command based on completed vs total tasks
+
+# Bugs to fix
+Fix streamAgentActivity in raid.ts - SDK message format differs from expected, not showing tool calls in streaming output
+
+# Critical infrastructure
+Improve merge queue to auto-resolve conflicts - that's the whole point of having a merge queue. Use strategies like -X theirs, auto-merge, or intelligent retry
