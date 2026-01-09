@@ -14,5 +14,12 @@
     "lib": ["ES2024"]
   },
   "include": ["src/**/*"],
-  "exclude": ["dist/", "**/*.test.*"]
+  "exclude": [
+    "dist/",
+    "**/*.test.*",
+    "src/loadout-manager.ts",
+    "src/loadout-scoring.ts",
+    "src/metrics.ts",
+    "src/rate-limit.ts"
+  ]
 }

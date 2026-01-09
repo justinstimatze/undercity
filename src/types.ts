@@ -451,3 +451,144 @@ export interface QuestSetMetadata {
 	estimatedDuration: number;
 	riskLevel: "low" | "medium" | "high";
 }
+
+// ============== Metrics and Rate Limit Types ==============
+
+/**
+ * Quest types for categorization
+ */
+export type QuestType = "feature" | "bugfix" | "refactor" | "docs" | "test" | "chore" | "unknown";
+
+/**
+ * Model choice options
+ */
+export type ModelChoice = "haiku" | "sonnet" | "opus";
+
+/**
+ * Token usage tracking
+ */
+export interface TokenUsage {
+	inputTokens: number;
+	outputTokens: number;
+	totalTokens: number;
+	model: ModelChoice;
+	timestamp: Date;
+}
+
+/**
+ * Quest-level usage tracking
+ */
+export interface QuestUsage {
+	questId: string;
+	raidId: string;
+	objective: string;
+	startTime: Date;
+	endTime?: Date;
+	tokens: TokenUsage[];
+	totalInputTokens: number;
+	totalOutputTokens: number;
+	totalTokens: number;
+	success: boolean;
+	agentsUsed: AgentType[];
+}
+
+/**
+ * Rate limit hit event
+ */
+export interface RateLimitHit {
+	timestamp: Date;
+	endpoint: string;
+	model: ModelChoice;
+	retryAfter?: number;
+	tokenEstimate?: number;
+}
+
+/**
+ * Time window for rate limiting
+ */
+export interface TimeWindow {
+	start: Date;
+	end: Date;
+	tokensUsed: number;
+	limit: number;
+}
+
+/**
+ * Rate limit configuration
+ */
+export interface RateLimitConfig {
+	maxTokensPer5Hours: number;
+	maxTokensPerWeek: number;
+	warningThreshold: number;
+	tokenMultipliers: Record<ModelChoice, number>;
+}
+
+/**
+ * Rate limit state
+ */
+export interface RateLimitState {
+	hourlyWindow: TimeWindow;
+	weeklyWindow: TimeWindow;
+	recentHits: RateLimitHit[];
+	questUsage: QuestUsage[];
+	config: RateLimitConfig;
+	lastUpdated: Date;
+}
+
+/**
+ * Quest metrics for efficiency tracking
+ */
+export interface QuestMetrics {
+	questId: string;
+	raidId: string;
+	objective: string;
+	questType: QuestType;
+	startTime: Date;
+	endTime?: Date;
+	durationMs?: number;
+	tokenUsage: TokenUsage[];
+	totalTokens: number;
+	success: boolean;
+	agentsUsed: AgentType[];
+	reworkCount: number;
+}
+
+/**
+ * Efficiency metrics summary
+ */
+export interface EfficiencyMetrics {
+	questId: string;
+	tokensPerCompletion: number;
+	timeToComplete: number;
+	agentEfficiency: Record<AgentType, number>;
+	reworkRatio: number;
+	successRate: number;
+}
+
+/**
+ * Efficiency analytics aggregation
+ */
+export interface EfficiencyAnalytics {
+	totalQuests: number;
+	successfulQuests: number;
+	failedQuests: number;
+	totalTokens: number;
+	avgTokensPerQuest: number;
+	avgTimePerQuest: number;
+	tokensByAgent: Record<AgentType, { total: number; avgPerQuest: number }>;
+	questsByType: Record<QuestType, number>;
+	successRateByType: Record<QuestType, number>;
+	efficiencyTrend: Array<{ date: string; tokensPerQuest: number; successRate: number }>;
+}
+
+/**
+ * Loadout recommendation result
+ */
+export interface LoadoutRecommendation {
+	loadoutId: string;
+	score: number;
+	reason: string;
+	expectedTokens: number;
+	expectedDuration: number;
+	confidence: number;
+}
