@@ -1,6 +1,11 @@
 # Undercity
 
+> *"It only has to make sense for me."*
+> — Tamara, on her 365 buttons
+
 Multi-agent orchestrator for Claude Max. Inspired by [Gas Town](https://github.com/steveyegge/gastown) but built for budget extraction.
+
+Undercity uses extraction shooter metaphors, ARC Raiders lore, and unconventional terminology. None of it needs to be explained or justified. If scouts with flutes and serial merge queues help you ship code, that's all that matters.
 
 ## Overview
 
