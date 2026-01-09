@@ -190,8 +190,9 @@ program
 program
 	.command("approve")
 	.description("Approve the current plan and start execution")
-	.action(async () => {
-		const orchestrator = new RaidOrchestrator({ verbose: true });
+	.option("-s, --stream", "Stream agent activity to console")
+	.action(async (options: { stream?: boolean }) => {
+		const orchestrator = new RaidOrchestrator({ verbose: true, streamOutput: options.stream ?? true });
 		const raid = orchestrator.getCurrentRaid();
 
 		if (!raid) {

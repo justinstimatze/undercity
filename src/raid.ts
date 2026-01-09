@@ -87,42 +87,47 @@ export class RaidOrchestrator {
 	private streamAgentActivity(member: SquadMember, message: unknown): void {
 		if (!this.streamOutput) return;
 
-		const msg = message as {
-			type?: string;
-			subtype?: string;
-			tool_name?: string;
-			tool_input?: Record<string, unknown>;
-			content?: string;
-		};
-
+		const msg = message as Record<string, unknown>;
 		const prefix = chalk.dim(`[${member.type}]`);
 
-		// Show tool usage
-		if (msg.type === "assistant" && msg.subtype === "tool_use") {
-			const toolName = msg.tool_name || "unknown";
-			const input = msg.tool_input || {};
+		// Show tool usage (SDK format: type=assistant, tool uses in content)
+		if (msg.type === "assistant") {
+			const content = msg.content as Array<{ type: string; name?: string; input?: Record<string, unknown> }>;
+			if (Array.isArray(content)) {
+				for (const block of content) {
+					if (block.type === "tool_use" && block.name) {
+						const input = block.input || {};
+						let inputSummary = "";
 
-			// Format tool input nicely
-			let inputSummary = "";
-			if ("file_path" in input) {
-				inputSummary = chalk.cyan(String(input.file_path));
-			} else if ("pattern" in input) {
-				inputSummary = chalk.cyan(String(input.pattern));
-			} else if ("command" in input) {
-				inputSummary = chalk.cyan(String(input.command).substring(0, 60));
-			} else if ("content" in input) {
-				inputSummary = chalk.gray("(content)");
+						if ("file_path" in input) {
+							inputSummary = chalk.cyan(String(input.file_path));
+						} else if ("pattern" in input) {
+							inputSummary = chalk.cyan(String(input.pattern));
+						} else if ("command" in input) {
+							inputSummary = chalk.cyan(String(input.command).substring(0, 60));
+						} else if ("content" in input) {
+							inputSummary = chalk.gray("(writing content)");
+						}
+
+						console.log(`${prefix} ${chalk.yellow(block.name)} ${inputSummary}`);
+					} else if (block.type === "text") {
+						const text = (block as { text?: string }).text;
+						if (text) {
+							const firstLine = text.split("\n")[0].substring(0, 80);
+							if (firstLine.trim()) {
+								console.log(`${prefix} ${chalk.gray(firstLine)}${text.length > 80 ? "..." : ""}`);
+							}
+						}
+					}
+				}
 			}
-
-			console.log(`${prefix} ${chalk.yellow(toolName)} ${inputSummary}`);
 		}
 
-		// Show thinking/progress (assistant text)
-		if (msg.type === "assistant" && msg.subtype === "text" && msg.content) {
-			// Show first line of thinking, truncated
-			const firstLine = msg.content.split("\n")[0].substring(0, 80);
-			if (firstLine.trim()) {
-				console.log(`${prefix} ${chalk.gray(firstLine)}${msg.content.length > 80 ? "..." : ""}`);
+		// Also show tool results briefly
+		if (msg.type === "tool_result") {
+			const toolName = (msg as { tool_name?: string }).tool_name;
+			if (toolName) {
+				console.log(`${prefix} ${chalk.green("✓")} ${toolName}`);
 			}
 		}
 	}
