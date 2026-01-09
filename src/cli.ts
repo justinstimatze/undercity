@@ -76,19 +76,22 @@ program
 	.command("slingshot [goal]")
 	.description("Launch a new raid (or resume existing)")
 	.option("-a, --auto-approve", "Auto-approve plans without human review")
+	.option("-y, --yes", "Full auto mode: auto-approve and auto-commit (walk away)")
 	.option("-v, --verbose", "Enable verbose logging")
 	.option("-s, --stream", "Stream agent activity to console")
 	.option("-m, --max-squad <n>", "Maximum squad size", "5")
 	.action(
 		async (
 			goal: string | undefined,
-			options: { autoApprove?: boolean; verbose?: boolean; stream?: boolean; maxSquad?: string },
+			options: { autoApprove?: boolean; yes?: boolean; verbose?: boolean; stream?: boolean; maxSquad?: string },
 		) => {
+			const fullAuto = options.yes || false;
 			const orchestrator = new RaidOrchestrator({
-				autoApprove: options.autoApprove,
-				verbose: options.verbose,
-				streamOutput: options.stream ?? options.verbose,
+				autoApprove: options.autoApprove || fullAuto,
+				verbose: options.verbose || fullAuto,
+				streamOutput: options.stream ?? options.verbose ?? fullAuto,
 				maxSquadSize: Number.parseInt(options.maxSquad || "5", 10),
+				autoCommit: fullAuto,
 			});
 
 			// Check for existing raid (GUPP)
@@ -103,9 +106,15 @@ program
 					console.log("Resuming...");
 
 					// If awaiting approval and no auto-approve, prompt
-					if (existing.status === "awaiting_approval" && !options.autoApprove) {
+					if (existing.status === "awaiting_approval" && !fullAuto && !options.autoApprove) {
 						console.log(chalk.yellow("\nPlan awaiting approval. Use 'undercity approve' to continue."));
 						return;
+					}
+
+					// In full auto mode, auto-approve and continue
+					if (existing.status === "awaiting_approval" && fullAuto) {
+						console.log(chalk.cyan("Auto-approving plan..."));
+						await orchestrator.approvePlan();
 					}
 				}
 			}
@@ -119,12 +128,23 @@ program
 			if (goal) {
 				console.log(chalk.cyan("Launching raid via the Tubes..."));
 				console.log(`  Goal: ${goal}`);
+				if (fullAuto) {
+					console.log(chalk.dim("  Mode: Full auto (will complete without intervention)"));
+				}
 				console.log();
 
 				try {
 					const raid = await orchestrator.start(goal);
-					console.log(chalk.green(`Raid started: ${raid.id}`));
-					console.log(`Status: ${statusColor(raid.status)}`);
+					const finalRaid = orchestrator.getCurrentRaid();
+
+					if (finalRaid?.status === "complete") {
+						console.log(chalk.green(`\n✓ Raid complete: ${raid.id}`));
+					} else if (finalRaid?.status === "failed") {
+						console.log(chalk.red(`\n✗ Raid failed: ${raid.id}`));
+					} else {
+						console.log(chalk.green(`Raid started: ${raid.id}`));
+						console.log(`Status: ${statusColor(finalRaid?.status || raid.status)}`);
+					}
 				} catch (error) {
 					console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
 					process.exit(1);

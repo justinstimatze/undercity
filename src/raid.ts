@@ -55,6 +55,7 @@ export class RaidOrchestrator {
 	private mergeQueue: MergeQueue;
 	private maxSquadSize: number;
 	private autoApprove: boolean;
+	private autoCommit: boolean;
 	private verbose: boolean;
 	private streamOutput: boolean;
 
@@ -63,6 +64,7 @@ export class RaidOrchestrator {
 			stateDir?: string;
 			maxSquadSize?: number;
 			autoApprove?: boolean;
+			autoCommit?: boolean;
 			verbose?: boolean;
 			streamOutput?: boolean;
 		} = {},
@@ -71,6 +73,7 @@ export class RaidOrchestrator {
 		this.mergeQueue = new MergeQueue();
 		this.maxSquadSize = options.maxSquadSize || 5;
 		this.autoApprove = options.autoApprove || false;
+		this.autoCommit = options.autoCommit || false;
 		this.verbose = options.verbose || false;
 		this.streamOutput = options.streamOutput ?? options.verbose ?? false;
 	}
@@ -436,11 +439,15 @@ export class RaidOrchestrator {
 		this.log("Plan approved. Starting execution phase...");
 
 		// Create fabricator task
+		const commitInstructions = this.autoCommit
+			? "\n\nIMPORTANT: When done, commit all your changes with a clear commit message describing what you implemented."
+			: "";
+
 		const fabricatorTask: Task = {
 			id: generateTaskId(),
 			raidId: raid.id,
 			type: "fabricator",
-			description: `Implement: ${raid.goal}\n\nApproved Plan:\n${raid.planSummary}`,
+			description: `Implement: ${raid.goal}\n\nApproved Plan:\n${raid.planSummary}${commitInstructions}`,
 			status: "pending",
 			createdAt: new Date(),
 		};
