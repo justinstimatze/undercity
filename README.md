@@ -139,6 +139,7 @@ Run `undercity setup` to check your configuration.
 - [Gas Town](https://github.com/steveyegge/gastown) by Steve Yegge - Multi-agent orchestrator
 - [Beads](https://github.com/steveyegge/beads) - Git-backed task tracking
 - [BMAD Method](https://github.com/bmad-method/bmad-method) - Planning before execution
+- [tttc-light-js](https://github.com/AIObjectives/tttc-light-js) - CI/tooling patterns
 - ARC Raiders - Thematic inspiration (extraction shooter setting)
 
 ## License
