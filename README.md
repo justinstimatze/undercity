@@ -151,7 +151,7 @@ Undercity uses the Claude Agent SDK which supports:
 
 Run `undercity setup` to check your configuration.
 
-## Inspiration
+## Goop
 
 **Community projects:**
 - [Gas Town](https://github.com/steveyegge/gastown) by Steve Yegge - Multi-agent orchestrator
