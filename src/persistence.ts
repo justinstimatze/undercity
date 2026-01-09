@@ -18,6 +18,10 @@ import type {
 	FileTrackingState,
 	Inventory,
 	Loadout,
+	LoadoutConfiguration,
+	LoadoutPerformance,
+	LoadoutRecommendation,
+	LoadoutScore,
 	Raid,
 	SafePocket,
 	ScoutCache,
@@ -215,6 +219,10 @@ export class Persistence {
 	getStash(): Stash {
 		return this.readJson<Stash>("stash.json", {
 			completedRaids: [],
+			loadoutConfigurations: [],
+			loadoutPerformances: [],
+			loadoutScores: [],
+			loadoutRecommendations: [],
 			lastUpdated: new Date(),
 		});
 	}
@@ -233,6 +241,158 @@ export class Persistence {
 			success,
 		});
 		this.saveStash(stash);
+	}
+
+	// ============== Loadout Configuration Management ==============
+
+	getLoadoutConfigurations(): LoadoutConfiguration[] {
+		return this.getStash().loadoutConfigurations;
+	}
+
+	saveLoadoutConfiguration(config: LoadoutConfiguration): void {
+		const stash = this.getStash();
+		const existingIndex = stash.loadoutConfigurations.findIndex(l => l.id === config.id);
+
+		config.lastUpdated = new Date();
+
+		if (existingIndex >= 0) {
+			stash.loadoutConfigurations[existingIndex] = config;
+		} else {
+			stash.loadoutConfigurations.push(config);
+		}
+
+		this.saveStash(stash);
+		persistenceLogger.debug({ loadoutId: config.id, name: config.name }, "Saved loadout configuration");
+	}
+
+	removeLoadoutConfiguration(configId: string): void {
+		const stash = this.getStash();
+		stash.loadoutConfigurations = stash.loadoutConfigurations.filter(l => l.id !== configId);
+		this.saveStash(stash);
+		persistenceLogger.debug({ loadoutId: configId }, "Removed loadout configuration");
+	}
+
+	// ============== Loadout Performance Tracking ==============
+
+	getLoadoutPerformances(): LoadoutPerformance[] {
+		return this.getStash().loadoutPerformances;
+	}
+
+	addLoadoutPerformance(performance: LoadoutPerformance): void {
+		const stash = this.getStash();
+		stash.loadoutPerformances.push(performance);
+		this.saveStash(stash);
+		persistenceLogger.info({
+			performanceId: performance.id,
+			loadoutId: performance.loadoutConfigId,
+			questType: performance.questType
+		}, "Added loadout performance data");
+	}
+
+	getLoadoutPerformancesForConfig(configId: string): LoadoutPerformance[] {
+		return this.getLoadoutPerformances().filter(p => p.loadoutConfigId === configId);
+	}
+
+	getLoadoutPerformancesForQuestType(questType: string): LoadoutPerformance[] {
+		return this.getLoadoutPerformances().filter(p => p.questType === questType);
+	}
+
+	// ============== Loadout Scoring ==============
+
+	getLoadoutScores(): LoadoutScore[] {
+		return this.getStash().loadoutScores;
+	}
+
+	saveLoadoutScore(score: LoadoutScore): void {
+		const stash = this.getStash();
+		const existingIndex = stash.loadoutScores.findIndex(s => s.loadoutConfigId === score.loadoutConfigId);
+
+		score.lastUpdated = new Date();
+
+		if (existingIndex >= 0) {
+			stash.loadoutScores[existingIndex] = score;
+		} else {
+			stash.loadoutScores.push(score);
+		}
+
+		this.saveStash(stash);
+		persistenceLogger.debug({ loadoutId: score.loadoutConfigId, score: score.overallScore }, "Saved loadout score");
+	}
+
+	getLoadoutScore(configId: string): LoadoutScore | undefined {
+		return this.getLoadoutScores().find(s => s.loadoutConfigId === configId);
+	}
+
+	// ============== Loadout Recommendations ==============
+
+	getLoadoutRecommendations(): LoadoutRecommendation[] {
+		return this.getStash().loadoutRecommendations;
+	}
+
+	saveLoadoutRecommendation(recommendation: LoadoutRecommendation): void {
+		const stash = this.getStash();
+		const existingIndex = stash.loadoutRecommendations.findIndex(r => r.questType === recommendation.questType);
+
+		recommendation.lastUpdated = new Date();
+
+		if (existingIndex >= 0) {
+			stash.loadoutRecommendations[existingIndex] = recommendation;
+		} else {
+			stash.loadoutRecommendations.push(recommendation);
+		}
+
+		this.saveStash(stash);
+		persistenceLogger.debug({ questType: recommendation.questType, confidence: recommendation.confidence }, "Saved loadout recommendation");
+	}
+
+	getLoadoutRecommendationForQuestType(questType: string): LoadoutRecommendation | undefined {
+		return this.getLoadoutRecommendations().find(r => r.questType === questType);
+	}
+
+	// ============== Loadout Analytics ==============
+
+	cleanupOldPerformanceData(retentionDays: number = 90): void {
+		const cutoffDate = new Date();
+		cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+		const stash = this.getStash();
+		const before = stash.loadoutPerformances.length;
+		stash.loadoutPerformances = stash.loadoutPerformances.filter(
+			p => new Date(p.timestamp) > cutoffDate
+		);
+		const after = stash.loadoutPerformances.length;
+
+		if (before !== after) {
+			this.saveStash(stash);
+			persistenceLogger.info({ removed: before - after, retentionDays }, "Cleaned up old performance data");
+		}
+	}
+
+	getLoadoutAnalytics(): {
+		totalConfigs: number;
+		totalPerformances: number;
+		topPerformingLoadout: string | null;
+		questTypeStats: Record<string, number>;
+	} {
+		const stash = this.getStash();
+
+		const questTypeStats: Record<string, number> = {};
+		for (const perf of stash.loadoutPerformances) {
+			questTypeStats[perf.questType] = (questTypeStats[perf.questType] || 0) + 1;
+		}
+
+		const topPerformingLoadout = stash.loadoutScores.length > 0
+			? stash.loadoutScores.reduce((best, score) =>
+				score.overallScore > best.overallScore ? score : best
+			).loadoutConfigId
+			: null;
+
+		return {
+			totalConfigs: stash.loadoutConfigurations.length,
+			totalPerformances: stash.loadoutPerformances.length,
+			topPerformingLoadout,
+			questTypeStats,
+		};
 	}
 
 	// ============== Squad Member Sessions ==============

@@ -44,7 +44,6 @@ import {
 	planToQuests,
 	type ParsedPlan,
 } from "./plan-parser.js";
-import { Persistence } from "./persistence.js";
 import { RaidOrchestrator } from "./raid.js";
 import type { RaidStatus } from "./types.js";
 
@@ -235,6 +234,12 @@ program
 		console.log(`  Goal: ${status.raid.goal}`);
 		console.log(`  Status: ${statusColor(status.raid.status)}`);
 		console.log(`  Started: ${status.raid.startedAt}`);
+
+		// Show current loadout if available
+		const currentLoadout = orchestrator.getCurrentLoadout();
+		if (currentLoadout) {
+			console.log(`  Loadout: ${chalk.cyan(currentLoadout.name)} (${currentLoadout.id})`);
+		}
 
 		// Calculate and display progress percentage
 		if (status.tasks.length > 0) {
@@ -958,6 +963,167 @@ program
 		console.log(
 			`\nFinal: ${chalk.green(summary.complete)} complete, ${chalk.red(summary.failed)} failed, ${chalk.yellow(summary.pending)} pending`,
 		);
+	});
+
+// Loadout management commands
+program
+	.command("loadouts")
+	.description("Manage loadout configurations")
+	.option("-v, --verbose", "Show detailed information")
+	.action((options) => {
+		try {
+			const orchestrator = new RaidOrchestrator();
+			const loadoutManager = orchestrator.getLoadoutManager();
+			const loadouts = loadoutManager.getAllLoadouts();
+			const rankings = loadoutManager.getLoadoutRankings();
+
+			console.log(chalk.bold("Loadout Configurations"));
+			console.log("");
+
+			if (loadouts.length === 0) {
+				console.log(chalk.gray("No loadout configurations found"));
+				return;
+			}
+
+			for (const { loadout, score } of rankings) {
+				console.log(`${chalk.cyan(loadout.name)} (${loadout.id})`);
+				if (loadout.description) {
+					console.log(`  Description: ${chalk.gray(loadout.description)}`);
+				}
+				console.log(`  Score: ${score.overallScore.toFixed(1)}/100`);
+				console.log(`  Squad Size: ${loadout.maxSquadSize}, Context: ${loadout.contextSize}, Parallelism: ${loadout.parallelismLevel}`);
+				console.log(`  Auto-approve: ${loadout.autoApprove ? chalk.green("Yes") : chalk.red("No")}`);
+
+				if (options.verbose) {
+					console.log(`  Models: ${Object.entries(loadout.modelChoices).map(([type, model]) => `${type}=${model}`).join(", ")}`);
+					console.log(`  Performance Records: ${score.recentPerformance.length}`);
+				}
+				console.log("");
+			}
+
+			// Show analytics
+			const analytics = loadoutManager.getAnalytics();
+			console.log(chalk.bold("Analytics"));
+			console.log(`  Total Loadouts: ${analytics.totalLoadouts}`);
+			console.log(`  Performance Records: ${analytics.totalPerformanceRecords}`);
+			console.log(`  Success Rate: ${analytics.averageSuccessRate.toFixed(1)}%`);
+
+			if (analytics.topPerformer) {
+				console.log(`  Top Performer: ${chalk.green(analytics.topPerformer.loadout.name)} (${analytics.topPerformer.score.toFixed(1)})`);
+			}
+
+			if (analytics.speedLeader) {
+				console.log(`  Speed Leader: ${chalk.blue(analytics.speedLeader.loadout.name)} (${Math.round(analytics.speedLeader.avgTime / 1000)}s avg)`);
+			}
+
+			if (analytics.costEfficiencyLeader) {
+				console.log(`  Cost Leader: ${chalk.yellow(analytics.costEfficiencyLeader.loadout.name)} ($${(analytics.costEfficiencyLeader.avgCost / 100).toFixed(3)} avg)`);
+			}
+
+		} catch (error) {
+			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+			process.exit(1);
+		}
+	});
+
+// Loadout recommendations
+program
+	.command("recommendations")
+	.description("Show loadout recommendations by quest type")
+	.option("-t, --type <questType>", "Show recommendation for specific quest type")
+	.action((options) => {
+		try {
+			const orchestrator = new RaidOrchestrator();
+			const loadoutManager = orchestrator.getLoadoutManager();
+
+			if (options.type) {
+				const recommendation = loadoutManager.getQuestTypeRecommendation(options.type);
+				if (recommendation) {
+					console.log(chalk.bold(`Recommendation for ${options.type} quests:`));
+					console.log(`  ${chalk.green(recommendation.recommendedLoadout.name)}`);
+					console.log(`  Confidence: ${recommendation.confidence.toFixed(1)}%`);
+					console.log(`  Reasoning: ${recommendation.reasoning}`);
+
+					if (recommendation.alternativeLoadouts.length > 0) {
+						console.log("\n  Alternatives:");
+						for (const alt of recommendation.alternativeLoadouts) {
+							console.log(`    ${chalk.cyan(alt.loadout.name)} (score: ${alt.score.toFixed(1)}) - ${alt.reasoning}`);
+						}
+					}
+				} else {
+					console.log(chalk.yellow(`No recommendation available for ${options.type} quests yet`));
+				}
+			} else {
+				// Show all recommendations
+				const recommendations = loadoutManager.getAllRecommendations();
+
+				if (recommendations.length === 0) {
+					console.log(chalk.gray("No recommendations available yet - complete some quests to build performance data"));
+					return;
+				}
+
+				console.log(chalk.bold("Quest Type Recommendations"));
+				console.log("");
+
+				for (const rec of recommendations) {
+					console.log(`${chalk.bold(rec.questType)}: ${chalk.green(rec.recommendedLoadout.name)}`);
+					console.log(`  Confidence: ${rec.confidence.toFixed(1)}%`);
+					console.log(`  ${rec.reasoning}`);
+					console.log("");
+				}
+			}
+
+		} catch (error) {
+			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+			process.exit(1);
+		}
+	});
+
+// Performance analytics
+program
+	.command("analytics")
+	.description("Show detailed loadout performance analytics")
+	.action(() => {
+		try {
+			const orchestrator = new RaidOrchestrator();
+			const loadoutManager = orchestrator.getLoadoutManager();
+			const analytics = loadoutManager.getAnalytics();
+
+			console.log(chalk.bold("Loadout Performance Analytics"));
+			console.log("");
+
+			console.log("Overview:");
+			console.log(`  Total Configurations: ${analytics.totalLoadouts}`);
+			console.log(`  Performance Records: ${analytics.totalPerformanceRecords}`);
+			console.log(`  Overall Success Rate: ${analytics.averageSuccessRate.toFixed(1)}%`);
+			console.log("");
+
+			if (analytics.topPerformer) {
+				console.log(`Best Overall: ${chalk.green(analytics.topPerformer.loadout.name)} (${analytics.topPerformer.score.toFixed(1)} score)`);
+			}
+
+			if (analytics.speedLeader) {
+				console.log(`Fastest: ${chalk.blue(analytics.speedLeader.loadout.name)} (${Math.round(analytics.speedLeader.avgTime / 1000)}s average)`);
+			}
+
+			if (analytics.costEfficiencyLeader) {
+				console.log(`Most Cost Efficient: ${chalk.yellow(analytics.costEfficiencyLeader.loadout.name)} ($${(analytics.costEfficiencyLeader.avgCost / 100).toFixed(3)} average)`);
+			}
+			console.log("");
+
+			// Quest type breakdown
+			if (Object.keys(analytics.questTypeBreakdown).length > 0) {
+				console.log("Quest Type Distribution:");
+				for (const [type, count] of Object.entries(analytics.questTypeBreakdown)) {
+					const percentage = ((count / analytics.totalPerformanceRecords) * 100).toFixed(1);
+					console.log(`  ${type}: ${count} (${percentage}%)`);
+				}
+			}
+
+		} catch (error) {
+			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+			process.exit(1);
+		}
 	});
 
 // Parse and run

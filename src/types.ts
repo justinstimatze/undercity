@@ -110,6 +110,126 @@ export interface Inventory {
 	lastUpdated: Date;
 }
 
+/**
+ * Model configuration choices for different agent types
+ */
+export type ModelChoice = "haiku" | "sonnet" | "opus";
+
+/**
+ * Context size options for tasks
+ */
+export type ContextSize = "small" | "medium" | "large";
+
+/**
+ * Parallelism level for squad execution
+ */
+export type ParallelismLevel = "sequential" | "limited" | "maximum";
+
+/**
+ * Quest type categories for loadout optimization
+ */
+export type QuestType =
+	| "debug" // Bug fixes, error investigation
+	| "feature" // New feature implementation
+	| "refactor" // Code restructuring
+	| "documentation" // Writing docs, comments
+	| "test" // Writing tests, coverage
+	| "performance" // Optimization work
+	| "security" // Security fixes, audits
+	| "research" // Analysis, exploration;
+
+/**
+ * Efficiency metrics for measuring loadout performance
+ */
+export interface EfficiencyMetrics {
+	/** Time to complete in milliseconds */
+	timeToComplete: number;
+	/** Number of tokens used across all agents */
+	totalTokens: number;
+	/** Cost in cents */
+	costInCents: number;
+	/** Quality score 0-100 based on success rate and review feedback */
+	qualityScore: number;
+	/** Number of retry attempts needed */
+	retryCount: number;
+	/** Whether the quest was completed successfully */
+	success: boolean;
+}
+
+/**
+ * A specific loadout configuration
+ */
+export interface LoadoutConfiguration {
+	id: string;
+	name: string;
+	description?: string;
+	maxSquadSize: number;
+	enabledAgentTypes: AgentType[];
+	modelChoices: Record<AgentType, ModelChoice>;
+	contextSize: ContextSize;
+	parallelismLevel: ParallelismLevel;
+	autoApprove: boolean;
+	/** Custom configurations per agent type */
+	agentConfigs?: Record<AgentType, Record<string, any>>;
+	lastUpdated: Date;
+}
+
+/**
+ * Performance data for a loadout on a specific quest
+ */
+export interface LoadoutPerformance {
+	id: string;
+	loadoutConfigId: string;
+	questId: string;
+	questType: QuestType;
+	questComplexity: number; // 1-10 scale
+	raidId: string;
+	metrics: EfficiencyMetrics;
+	timestamp: Date;
+	/** Additional context about the quest */
+	questObjective?: string;
+	/** Agent-specific performance data */
+	agentMetrics?: Record<string, {
+		tokensUsed: number;
+		timeSpent: number;
+		taskSuccess: boolean;
+	}>;
+}
+
+/**
+ * Aggregated scoring data for a loadout
+ */
+export interface LoadoutScore {
+	loadoutConfigId: string;
+	overallScore: number; // 0-100 composite score
+	performanceByQuestType: Record<QuestType, {
+		score: number;
+		sampleCount: number;
+		avgTimeToComplete: number;
+		avgCost: number;
+		avgQuality: number;
+		successRate: number;
+	}>;
+	recentPerformance: LoadoutPerformance[]; // Last 10 performances
+	lastUpdated: Date;
+}
+
+/**
+ * Loadout recommendation for a quest type
+ */
+export interface LoadoutRecommendation {
+	questType: QuestType;
+	recommendedLoadout: LoadoutConfiguration;
+	confidence: number; // 0-100, based on sample size and performance
+	alternativeLoadouts: Array<{
+		loadout: LoadoutConfiguration;
+		score: number;
+		reasoning: string;
+	}>;
+	reasoning: string;
+	lastUpdated: Date;
+}
+
 export interface Loadout {
 	maxSquadSize: number;
 	enabledAgentTypes: AgentType[];
@@ -124,6 +244,14 @@ export interface Stash {
 		completedAt: Date;
 		success: boolean;
 	}>;
+	/** Available loadout configurations */
+	loadoutConfigurations: LoadoutConfiguration[];
+	/** Performance history for loadouts */
+	loadoutPerformances: LoadoutPerformance[];
+	/** Aggregated scores for each loadout */
+	loadoutScores: LoadoutScore[];
+	/** Quest type recommendations */
+	loadoutRecommendations: LoadoutRecommendation[];
 	lastUpdated: Date;
 }
 

@@ -4,7 +4,7 @@
  * Tests for the command-line interface parsing and options handling.
  */
 
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // We'll test the CLI by importing Commander and checking program configuration
 // Rather than actually executing commands (which would require mocking everything)
@@ -17,10 +17,7 @@ describe("CLI", () => {
 
 			// Create a test program similar to CLI structure
 			const program = new Command();
-			program
-				.name("undercity")
-				.description("Multi-agent orchestrator")
-				.version("0.1.0");
+			program.name("undercity").description("Multi-agent orchestrator").version("0.1.0");
 
 			expect(program.name()).toBe("undercity");
 			expect(program.description()).toBe("Multi-agent orchestrator");
@@ -56,9 +53,7 @@ describe("CLI", () => {
 			const { Command } = await import("commander");
 
 			const program = new Command();
-			const slingshotCmd = program
-				.command("slingshot [goal]")
-				.option("-m, --max-squad <n>", "Maximum squad size", "5");
+			const slingshotCmd = program.command("slingshot [goal]").option("-m, --max-squad <n>", "Maximum squad size", "5");
 
 			const maxSquadOption = slingshotCmd.options.find((o: { long: string }) => o.long === "--max-squad");
 			expect(maxSquadOption.defaultValue).toBe("5");
