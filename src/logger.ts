@@ -25,6 +25,7 @@ export const logger = pino({
 // Child loggers for different components
 // raidLogger specializes in logging events and details specific to raid operations in the Undercity system
 export const raidLogger = logger.child({ module: "raid" });
+// squadLogger specializes in logging events and details related to squad management and agent interactions in the Undercity system
 export const squadLogger = logger.child({ module: "squad" });
 export const gitLogger = logger.child({ module: "git" });
 export const persistenceLogger = logger.child({ module: "persistence" });
