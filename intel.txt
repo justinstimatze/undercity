@@ -4,7 +4,6 @@
 
 ### Phase 1: Stabilize (stop losing work)
 [config] BUG: Questers not picking up .claude/rules/ - SDK subagents should load repo config
-[elevator] Ensure quester always creates branch from latest main - fetch and checkout fresh main before branching
 [elevator] Fix elevator auto-processing - branches should auto-merge to main after sheriff approval
 [elevator] Implement optimal merge strategy: rebase from fresh main, try clean merge, then -X ours, report only truly unresolvable conflicts
 [elevator] Add fallback merge strategies: try ours, then theirs, then report specific conflict files
@@ -139,6 +138,7 @@
 2026-01-10: Use 'raider' instead of 'agent' in user-facing output (recovered from dangling commit)
 2026-01-10: CRITICAL FIX: Don't delete branch on merge failure - preserve worktrees/branches for manual recovery
 2026-01-10: CRITICAL FIX: Don't mark quests complete when merge fails - only extract when work lands on main
+2026-01-10: Worktree branches from origin/main after fetch - ensures fresh main even with external changes
 2026-01-xx: Add vitest tests for raid, cli, backlog modules (120 tests total)
 2026-01-xx: Add --dry-run flag to slingshot
 2026-01-xx: Add history command for completed raids

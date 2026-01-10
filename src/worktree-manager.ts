@@ -88,6 +88,19 @@ function worktreePathExists(worktreePath: string): boolean {
 }
 
 /**
+ * Fetch latest from origin to ensure we have up-to-date refs
+ */
+function fetchOrigin(): void {
+	try {
+		gitLogger.debug("Fetching latest from origin");
+		execGit(["fetch", "origin"]);
+	} catch (error) {
+		// Log but don't fail - we can still work with local refs
+		gitLogger.warn({ error: String(error) }, "Failed to fetch from origin, using local refs");
+	}
+}
+
+/**
  * Manages git worktrees for raid isolation
  */
 export class WorktreeManager {
@@ -139,9 +152,15 @@ export class WorktreeManager {
 			throw new WorktreeError(`Worktree already exists for raid ${raidId} at ${worktreePath}`, "git worktree add");
 		}
 
+		// CRITICAL: Fetch latest from origin before creating worktree
+		// This ensures we branch from the latest main, not a stale local copy
+		fetchOrigin();
+		const baseBranch = `origin/${this.mainBranch}`;
+
 		try {
-			// Create the worktree with a new branch from main
-			execGit(["worktree", "add", "-b", branchName, worktreePath, this.mainBranch]);
+			// Create the worktree with a new branch from origin/main (latest)
+			gitLogger.debug({ baseBranch }, "Creating worktree from latest origin");
+			execGit(["worktree", "add", "-b", branchName, worktreePath, baseBranch]);
 
 			const worktreeInfo: WorktreeInfo = {
 				raidId,
