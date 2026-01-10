@@ -18,6 +18,18 @@ import type {
 } from "./types.js";
 
 /**
+ * Snapshot of metrics for before/after comparison
+ */
+export interface MetricsSnapshot {
+	/** First-order efficiency captured */
+	firstOrder: FirstOrderEfficiency;
+	/** Second-order efficiency captured */
+	secondOrder: SecondOrderEfficiency;
+	/** Timestamp of the snapshot */
+	snapshotTime: Date;
+}
+
+/**
  * Real-time efficiency tracker for quest execution
  */
 export class EfficiencyTracker {
@@ -362,6 +374,53 @@ export class EfficiencyTracker {
 			firstAttemptMs: firstAttemptEnd - startTime,
 			reworkMs: stableEnd - firstAttemptEnd,
 			totalMs: stableEnd - startTime,
+		};
+	}
+
+	/**
+	 * Capture a snapshot of current metrics
+	 * (useful for before/after comparisons)
+	 */
+	captureMetricsSnapshot(): MetricsSnapshot {
+		return {
+			firstOrder: this.getFirstOrderMetrics(),
+			secondOrder: this.getSecondOrderMetrics(),
+			snapshotTime: new Date(),
+		};
+	}
+
+	/**
+	 * Compare two metrics snapshots to determine if the change improved metrics
+	 */
+	compareMetricsSnapshots(
+		before: MetricsSnapshot,
+		after: MetricsSnapshot,
+	): {
+		improved: boolean;
+		details: {
+			tokenDiff: number;
+			timeDiff: number;
+			reworkDiff: number;
+		};
+	} {
+		const tokenDiff = before.secondOrder.totalTokens - after.secondOrder.totalTokens;
+		const timeDiff = before.secondOrder.totalTime - after.secondOrder.totalTime;
+		const reworkDiff = before.secondOrder.reworkAttempts - after.secondOrder.reworkAttempts;
+
+		// Scoring: lower tokens, lower time, and fewer reworks are considered improvements
+		const improvements = [
+			tokenDiff > 0, // Fewer tokens used
+			timeDiff > 0, // Less time taken
+			reworkDiff > 0, // Fewer rework attempts
+		];
+
+		return {
+			improved: improvements.filter(Boolean).length >= 2, // At least 2 metrics must improve
+			details: {
+				tokenDiff,
+				timeDiff,
+				reworkDiff,
+			},
 		};
 	}
 
