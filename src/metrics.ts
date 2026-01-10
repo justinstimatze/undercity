@@ -132,8 +132,9 @@ export class MetricsTracker {
 
 	/**
 	 * Record token usage from Claude SDK message
+	 * Note: "local" model is tracked for metrics but skipped for rate limiting (it's free)
 	 */
-	recordTokenUsage(message: unknown, model?: "haiku" | "sonnet" | "opus"): void {
+	recordTokenUsage(message: unknown, model?: "local" | "haiku" | "sonnet" | "opus"): void {
 		const usage = this.extractTokenUsage(message);
 		if (!usage) {
 			return;
@@ -142,7 +143,8 @@ export class MetricsTracker {
 		this.totalTokens += usage.totalTokens;
 
 		// Record in rate limit tracker if we have enough info
-		if (this.questId && model) {
+		// Skip local models - they don't count toward API rate limits
+		if (this.questId && model && model !== "local") {
 			this.rateLimitTracker.recordQuest(this.questId, model, usage.inputTokens, usage.outputTokens, {
 				raidId: this.raidId,
 				timestamp: new Date(),
