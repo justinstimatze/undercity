@@ -621,7 +621,23 @@ Undercity initialized at: ${new Date().toISOString()}
 
 		const fs = require("node:fs");
 		if (!fs.existsSync(intelPath)) {
-			fs.writeFileSync(intelPath, defaultIntelContent);
+			const tempPath = `${intelPath}.tmp`;
+			try {
+				// Write to temporary file first
+				fs.writeFileSync(tempPath, defaultIntelContent, {
+					encoding: "utf-8",
+					flag: "w",
+				});
+
+				// Atomically rename temporary file to target file
+				fs.renameSync(tempPath, intelPath);
+			} catch (error) {
+				// Clean up temporary file if it exists
+				if (fs.existsSync(tempPath)) {
+					fs.unlinkSync(tempPath);
+				}
+				throw error;
+			}
 		}
 
 		console.log(chalk.green(`✓ Undercity initialized in ${stateDir}`));

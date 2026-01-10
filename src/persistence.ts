@@ -340,7 +340,25 @@ export class Persistence {
 
 	saveSquadMemberSession(memberId: string, sessionId: string): void {
 		const path = join(this.stateDir, "squad", `${memberId}.json`);
-		writeFileSync(path, JSON.stringify({ sessionId, savedAt: new Date() }, null, 2));
+		const tempPath = `${path}.tmp`;
+		const data = JSON.stringify({ sessionId, savedAt: new Date() }, null, 2);
+
+		try {
+			// Write to temporary file first
+			writeFileSync(tempPath, data, {
+				encoding: "utf-8",
+				flag: "w",
+			});
+
+			// Atomically rename temporary file to target file
+			renameSync(tempPath, path);
+		} catch (error) {
+			// Clean up temporary file if it exists
+			if (existsSync(tempPath)) {
+				unlinkSync(tempPath);
+			}
+			throw error;
+		}
 	}
 
 	// ============== File Tracking ==============
@@ -633,7 +651,23 @@ export class Persistence {
 				lastUpdated: new Date().toISOString(),
 			};
 
-			writeFileSync(outcomesFile, JSON.stringify(data, null, 2));
+			const tempPath = `${outcomesFile}.tmp`;
+			try {
+				// Write to temporary file first
+				writeFileSync(tempPath, JSON.stringify(data, null, 2), {
+					encoding: "utf-8",
+					flag: "w",
+				});
+
+				// Atomically rename temporary file to target file
+				renameSync(tempPath, outcomesFile);
+			} catch (writeError) {
+				// Clean up temporary file if it exists
+				if (existsSync(tempPath)) {
+					unlinkSync(tempPath);
+				}
+				throw writeError;
+			}
 			persistenceLogger.debug({ outcomeId: outcome.id }, "Saved efficiency outcome");
 		} catch (error) {
 			persistenceLogger.error({ error: String(error) }, "Failed to save efficiency outcome");
@@ -744,7 +778,23 @@ export class Persistence {
 				lastUpdated: new Date().toISOString(),
 			};
 
-			writeFileSync(metricsFile, JSON.stringify(data, null, 2));
+			const tempPath = `${metricsFile}.tmp`;
+			try {
+				// Write to temporary file first
+				writeFileSync(tempPath, JSON.stringify(data, null, 2), {
+					encoding: "utf-8",
+					flag: "w",
+				});
+
+				// Atomically rename temporary file to target file
+				renameSync(tempPath, metricsFile);
+			} catch (writeError) {
+				// Clean up temporary file if it exists
+				if (existsSync(tempPath)) {
+					unlinkSync(tempPath);
+				}
+				throw writeError;
+			}
 			persistenceLogger.debug({ questId: metrics.questId }, "Saved quest metrics");
 		} catch (error) {
 			persistenceLogger.error({ error: String(error) }, "Failed to save quest metrics");
@@ -860,7 +910,23 @@ export class Persistence {
 				lastUpdated: new Date().toISOString(),
 			};
 
-			writeFileSync(knowledgeFile, JSON.stringify(data, null, 2));
+			const tempPath = `${knowledgeFile}.tmp`;
+			try {
+				// Write to temporary file first
+				writeFileSync(tempPath, JSON.stringify(data, null, 2), {
+					encoding: "utf-8",
+					flag: "w",
+				});
+
+				// Atomically rename temporary file to target file
+				renameSync(tempPath, knowledgeFile);
+			} catch (writeError) {
+				// Clean up temporary file if it exists
+				if (existsSync(tempPath)) {
+					unlinkSync(tempPath);
+				}
+				throw writeError;
+			}
 			persistenceLogger.debug({ entryId: entry.id }, "Saved prompt knowledge");
 		} catch (error) {
 			persistenceLogger.error({ error: String(error) }, "Failed to save prompt knowledge");
@@ -924,9 +990,7 @@ export class Persistence {
 
 		// Create initial intel.txt with some default content
 		const intelPath = join(this.stateDir, "intel.txt");
-		writeFileSync(
-			intelPath,
-			`# Undercity Raid Intelligence
+		const intelContent = `# Undercity Raid Intelligence
 
 ## Raid Objectives
 - Maintain clarity of purpose
@@ -937,9 +1001,28 @@ export class Persistence {
 This file serves as a living document for strategic insights and raid reflections.
 
 Last Initialized: ${new Date().toISOString()}
-`,
-			"utf-8",
-		);
+`;
+
+		// Only create if it doesn't exist (initialization should not overwrite)
+		if (!existsSync(intelPath)) {
+			const tempPath = `${intelPath}.tmp`;
+			try {
+				// Write to temporary file first
+				writeFileSync(tempPath, intelContent, {
+					encoding: "utf-8",
+					flag: "w",
+				});
+
+				// Atomically rename temporary file to target file
+				renameSync(tempPath, intelPath);
+			} catch (error) {
+				// Clean up temporary file if it exists
+				if (existsSync(tempPath)) {
+					unlinkSync(tempPath);
+				}
+				throw error;
+			}
+		}
 
 		persistenceLogger.info({ stateDir }, "Initialized Undercity state directory");
 	}

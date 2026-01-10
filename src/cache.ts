@@ -81,9 +81,24 @@ class ContextCache {
 	private savePersistentCache(): void {
 		try {
 			const fixesPath = path.join(this.cacheDir, "error-fixes.json");
+			const tempPath = `${fixesPath}.tmp`;
 			const data = Object.fromEntries(this.errorFixes);
-			fs.writeFileSync(fixesPath, JSON.stringify(data, null, 2));
-		} catch {
+
+			// Write to temporary file first
+			fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), {
+				encoding: "utf-8",
+				flag: "w",
+			});
+
+			// Atomically rename temporary file to target file
+			fs.renameSync(tempPath, fixesPath);
+		} catch (error) {
+			// Clean up temporary file if it exists
+			const fixesPath = path.join(this.cacheDir, "error-fixes.json");
+			const tempPath = `${fixesPath}.tmp`;
+			if (fs.existsSync(tempPath)) {
+				fs.unlinkSync(tempPath);
+			}
 			// Cache save failed, non-fatal
 		}
 	}
