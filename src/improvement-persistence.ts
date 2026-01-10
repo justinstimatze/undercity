@@ -130,14 +130,28 @@ export class ImprovementPersistence {
 	 */
 	private saveStorage(): void {
 		const filePath = this.getStorageFilePath();
+		const tempFilePath = `${filePath}.tmp`;
 
 		try {
 			this.storage.lastUpdated = new Date();
 			const data = JSON.stringify(this.storage, null, 2);
-			fs.writeFileSync(filePath, data, "utf-8");
+
+			// Write to a temporary file first
+			fs.writeFileSync(tempFilePath, data, {
+				encoding: "utf-8",
+				flag: "w",
+			});
+
+			// Atomically rename the temporary file to the target file
+			fs.renameSync(tempFilePath, filePath);
 
 			raidLogger.debug({ filePath }, "Saved improvement storage");
 		} catch (error) {
+			// Clean up temporary file if it exists
+			if (fs.existsSync(tempFilePath)) {
+				fs.unlinkSync(tempFilePath);
+			}
+
 			raidLogger.error({ error: String(error), filePath }, "Failed to save improvement storage");
 		}
 	}
