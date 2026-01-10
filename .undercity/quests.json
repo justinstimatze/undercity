@@ -197,18 +197,21 @@
     {
       "id": "quest-mk84jc4c-vohd",
       "objective": "[metrics] Add 'undercity metrics' command - show success rate by tier, avg time, token usage, top failure patterns",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 22,
       "createdAt": "2026-01-10T09:50:06.876Z",
       "startedAt": "2026-01-10T10:31:40.793Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-10T10:34:36.429Z"
     },
     {
       "id": "quest-mk84jchv-ppk0",
       "objective": "[metrics] Track routing accuracy - did the routed tier succeed or need escalation? Log prediction vs actual",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 23,
-      "createdAt": "2026-01-10T09:50:07.363Z"
+      "createdAt": "2026-01-10T09:50:07.363Z",
+      "startedAt": "2026-01-10T10:43:28.887Z",
+      "raidId": ""
     },
     {
       "id": "quest-mk84jct5-etvj",
@@ -323,5 +326,5 @@
       "createdAt": "2026-01-10T10:22:44.046Z"
     }
   ],
-  "lastUpdated": "2026-01-10T10:31:40.793Z"
+  "lastUpdated": "2026-01-10T10:43:28.887Z"
 }

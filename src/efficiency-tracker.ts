@@ -303,6 +303,25 @@ export class EfficiencyTracker {
 	}
 
 	/**
+	 * Track routing prediction accuracy
+	 */
+	recordRoutingPrediction(
+		prediction: string,
+		actualTier: string,
+		successful: boolean,
+		timeToResolutionMs: number,
+	): void {
+		const routingIntervention: UserIntervention = {
+			timestamp: new Date(),
+			type: successful ? "clarification" : "direction_change",
+			description: `Routing Prediction: Predicted '${prediction}', Actual Tier: '${actualTier}'`,
+			timeSpentMs: timeToResolutionMs,
+		};
+
+		this.userInterventions.push(routingIntervention);
+	}
+
+	/**
 	 * Calculate current efficiency ratio (first-order vs second-order)
 	 */
 	getEfficiencyRatio(): number {
