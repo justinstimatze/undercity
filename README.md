@@ -160,21 +160,6 @@ export CLAUDE_CODE_OAUTH_TOKEN=...
 
 Run `undercity setup` to verify.
 
-### Local Models (Experimental)
-
-Ollama support for truly trivial tasks (not yet integrated into escalation chain):
-
-```bash
-# Check hardware and setup recommendations
-undercity setup-ollama
-
-# Models for limited hardware (CPU-only, <16GB RAM)
-ollama pull qwen2:0.5b   # tiny - ~300MB
-ollama pull qwen2:1.5b   # small - ~1GB
-```
-
-**Future vision:** local → haiku → sonnet → opus escalation chain, where trivial tasks never hit the API.
-
 ### Quest Board Location
 
 Default: `.undercity/quests.json`
@@ -212,7 +197,6 @@ The goal is **fully autonomous, dynamically optimal** - no human gating, no manu
 
 **Next:**
 - **Auto-planning**: Complex tasks get a planning phase, trivial ones skip it
-- **Local model tier**: Ollama for truly trivial tasks (free, instant)
 - **Parallel solos**: Multiple workers in git worktrees, elevator merge queue
 - **Learning from metrics**: Route better based on what's worked before
 

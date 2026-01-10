@@ -39,7 +39,6 @@ import chalk from "chalk";
 import { Command } from "commander";
 import { EfficiencyAnalyzer } from "./efficiency-analyzer.js";
 import { EfficiencyTracker } from "./efficiency-tracker.js";
-import { getAvailableModels, isOllamaAvailable, LOCAL_MODELS } from "./local-llm.js";
 import { UndercityOracle } from "./oracle.js";
 import { Persistence } from "./persistence.js";
 import {
@@ -651,74 +650,6 @@ program
 			console.log();
 			console.log("Or for API tokens (costs money):");
 			console.log('  Set: export ANTHROPIC_API_KEY="your-key"');
-		}
-	});
-
-// Setup Ollama command
-program
-	.command("setup-ollama")
-	.description("Check and setup local Ollama models")
-	.action(async () => {
-		console.log(chalk.bold("Undercity Ollama Setup"));
-		console.log();
-
-		// Check Ollama availability
-		if (!isOllamaAvailable()) {
-			console.log(chalk.red("✗ Ollama not installed or not running"));
-			console.log();
-			console.log("To set up Ollama:");
-			console.log("1. Install Ollama from https://ollama.com/");
-			console.log("2. Start Ollama: ollama serve");
-			console.log();
-			return;
-		}
-
-		// Get available models
-		const available = getAvailableModels();
-
-		console.log(chalk.green("✓ Ollama detected and running"));
-		console.log(`  ${available.length} model(s) available`);
-		console.log();
-
-		// Recommended models
-		const recommendedModels = Object.values(LOCAL_MODELS)
-			.flatMap((m) => [m.name, m.fallback])
-			.filter(Boolean);
-		const missingModels = recommendedModels.filter((model) => !available.includes(model));
-
-		if (missingModels.length > 0) {
-			console.log(chalk.yellow("⚠ Some recommended models are missing:"));
-			for (const model of missingModels) {
-				console.log(`  • ${model}`);
-			}
-			console.log();
-			console.log("Recommended models for code tasks:");
-			Object.entries(LOCAL_MODELS).forEach(([tier, models]) => {
-				console.log(`  ${tier} tier: ${models.name} (fallback: ${models.fallback})`);
-			});
-			console.log();
-			console.log("To install a model, run:");
-			console.log("  ollama pull <model-name>");
-			console.log("Example: ollama pull qwen2:0.5b");
-		} else {
-			console.log(chalk.green("✓ All recommended models are available"));
-		}
-
-		// Test basic functionality
-		try {
-			console.log();
-			console.log(chalk.cyan("Testing local LLM query..."));
-			const { queryLocal } = await import("./local-llm.js");
-			const result = await queryLocal("Hello, can you help me with a coding task?", { tier: "tiny", timeout: 10000 });
-
-			if (result) {
-				console.log(chalk.green("✓ Local LLM is working correctly"));
-			} else {
-				console.log(chalk.yellow("⚠ Could not query local LLM"));
-			}
-		} catch (error) {
-			console.log(chalk.red("✗ Error testing local LLM"));
-			console.log(String(error));
 		}
 	});
 
@@ -1638,7 +1569,6 @@ program
 
 					if (useLocalRouting) {
 						const { routeTask, executeWithLocalTools } = await import("./router.js");
-						const { queryLocal } = await import("./local-llm.js");
 
 						const routing = await routeTask(goal);
 
@@ -1657,21 +1587,6 @@ program
 								return;
 							}
 							console.log(chalk.yellow("  Local tool failed, falling back to LLM"));
-						}
-
-						if (routing.tier === "local-llm") {
-							console.log(chalk.dim(`Route: local-llm (${routing.reason})`));
-							console.log();
-
-							const localResult = await queryLocal(goal, { tier: "small", timeout: 30000 });
-							if (localResult) {
-								console.log(chalk.green.bold("\n✓ Task complete (local LLM)"));
-								console.log(
-									chalk.dim(`  Response: ${localResult.substring(0, 200)}${localResult.length > 200 ? "..." : ""}`),
-								);
-								return;
-							}
-							console.log(chalk.yellow("  Local LLM unavailable, falling back to Haiku"));
 						}
 					}
 
@@ -1738,7 +1653,6 @@ program
 			const { SoloOrchestrator, SupervisedOrchestrator } = await import("./solo.js");
 			const { RateLimitTracker } = await import("./rate-limit.js");
 			const { routeTask, executeWithLocalTools, logRoutingStats } = await import("./router.js");
-			const { queryLocal, isOllamaAvailable } = await import("./local-llm.js");
 
 			const maxCount = Number.parseInt(options.count || "0", 10);
 			const useLocalRouting = options.local !== false;
@@ -1749,7 +1663,6 @@ program
 			let supervisedCount = 0;
 			let soloCount = 0;
 			let localToolsCount = 0;
-			let localLlmCount = 0;
 			const routingDecisions: RoutingDecision[] = [];
 
 			// File logging helper
@@ -1813,12 +1726,7 @@ program
 			console.log(chalk.cyan.bold("\n⚡ Undercity Grind Mode"));
 			console.log(chalk.dim("  Autonomous • Adaptive • Rate limit aware"));
 			if (useLocalRouting) {
-				console.log(chalk.dim("  Local tools → Local LLM → Haiku → Sonnet → Opus"));
-				if (isOllamaAvailable()) {
-					console.log(chalk.green("  ✓ Ollama detected - local LLM available"));
-				} else {
-					console.log(chalk.yellow("  ⚠ Ollama not available - will skip local LLM tier"));
-				}
+				console.log(chalk.dim("  Local tools → Haiku → Sonnet → Opus"));
 			} else {
 				console.log(chalk.dim("  Simple tasks → Solo mode (fast)"));
 				console.log(chalk.dim("  Complex tasks → Supervised mode (Opus plans, workers execute)"));
@@ -1893,33 +1801,6 @@ program
 								};
 								if (localResult.success) {
 									console.log(chalk.green(`  ✓ Local tool: ${localResult.output.substring(0, 50)}...`));
-								}
-								break;
-							}
-
-							case "local-llm": {
-								// Try local LLM first (FREE - no API tokens)
-								localLlmCount++;
-								const llmResult = await queryLocal(
-									`Complete this coding task and explain what you did:\n\n${nextGoal.objective}`,
-									{ tier: "small", timeout: 60000 },
-								);
-								if (llmResult) {
-									result = {
-										status: "complete",
-										durationMs: Date.now() - taskStartTime,
-									};
-									console.log(chalk.green(`  ✓ Local LLM handled`));
-								} else {
-									// Local LLM failed, fall back to haiku
-									console.log(chalk.yellow("  Local LLM unavailable, falling back to Haiku"));
-									soloCount++;
-									const orchestrator = new SoloOrchestrator({
-										startingModel: "haiku",
-										autoCommit: true,
-										stream: options.stream,
-									});
-									result = await orchestrator.runTask(nextGoal.objective);
 								}
 								break;
 							}
@@ -2022,10 +1903,10 @@ program
 			}
 
 			// Calculate token savings from local execution
-			const localSavings = localToolsCount + localLlmCount;
+			const localSavings = localToolsCount;
 			const estimatedTokensSaved = routingDecisions
-				.filter((d) => d.tier === "local-tools" || d.tier === "local-llm")
-				.reduce((sum, d) => sum + (d.tier === "local-tools" ? 500 : 1000), 0);
+				.filter((d) => d.tier === "local-tools")
+				.reduce((sum) => sum + 500, 0);
 
 			console.log(chalk.bold("\n━━━ Grind Summary ━━━"));
 			console.log(`  ${chalk.green("✓")} Completed: ${completed}`);
@@ -2034,9 +1915,6 @@ program
 			console.log(chalk.dim("  Execution tiers:"));
 			if (localToolsCount > 0) {
 				console.log(`    ${chalk.green("🔧")} Local tools: ${localToolsCount} (FREE)`);
-			}
-			if (localLlmCount > 0) {
-				console.log(`    ${chalk.green("🤖")} Local LLM: ${localLlmCount} (FREE)`);
 			}
 			console.log(`    ${chalk.dim("⚡")} Solo (Haiku/Sonnet): ${soloCount}`);
 			console.log(`    ${chalk.dim("🎯")} Supervised (Opus): ${supervisedCount}`);

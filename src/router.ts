@@ -3,10 +3,9 @@
  *
  * Routes tasks to the optimal execution path:
  * 1. Local tools only (FREE) - linting, formatting, simple refactors
- * 2. Local LLM (FREE) - trivial tasks, summarization
- * 3. Haiku (CHEAP) - simple code tasks, exploration
- * 4. Sonnet (MODERATE) - standard implementation
- * 5. Opus (EXPENSIVE) - complex architecture, critical review
+ * 2. Haiku (CHEAP) - simple code tasks, exploration
+ * 3. Sonnet (MODERATE) - standard implementation
+ * 4. Opus (EXPENSIVE) - complex architecture, critical review
  *
  * Goal: Maximum throughput under plan limits
  */
@@ -14,13 +13,12 @@
 import { execSync } from "node:child_process";
 import { getCache } from "./cache.js";
 import { assessComplexityFast, type ComplexityLevel } from "./complexity.js";
-import { canHandleLocally, isOllamaAvailable } from "./local-llm.js";
 import { raidLogger } from "./logger.js";
 
 /**
  * Execution tier from cheapest to most expensive
  */
-export type ExecutionTier = "local-tools" | "local-llm" | "haiku" | "sonnet" | "opus";
+export type ExecutionTier = "local-tools" | "haiku" | "sonnet" | "opus";
 
 /**
  * Task routing decision
@@ -97,23 +95,8 @@ export async function routeTask(task: string): Promise<RoutingDecision> {
 		};
 	}
 
-	// 2. Check for trivial patterns (local LLM)
+	// 2. Check for trivial patterns (haiku)
 	if (isTrivialTask(task)) {
-		const hasOllama = isOllamaAvailable();
-		if (hasOllama) {
-			const canHandle = await canHandleLocally(task);
-			if (canHandle) {
-				return {
-					tier: "local-llm",
-					reason: "Trivial task, local LLM can handle",
-					confidence: 0.8,
-					estimatedTokens: 0,
-					canParallelize: true,
-					suggestedBatchSize: 5,
-				};
-			}
-		}
-		// Fall through to haiku if no local LLM
 		return {
 			tier: "haiku",
 			reason: "Trivial task, using cheapest cloud model",
@@ -264,10 +247,9 @@ export async function batchTasks(tasks: string[]): Promise<Map<ExecutionTier, st
 	const tierDecisions = new Map<ExecutionTier, RoutingDecision[]>();
 	const tierTokens = new Map<ExecutionTier, number>();
 
-	const tierOrder: ExecutionTier[] = ["local-tools", "local-llm", "haiku", "sonnet", "opus"];
+	const tierOrder: ExecutionTier[] = ["local-tools", "haiku", "sonnet", "opus"];
 	const tierParallelLimits: Record<ExecutionTier, number> = {
 		"local-tools": 10, // High parallelism for low-cost local operations
-		"local-llm": 5, // Moderate local LLM processing
 		haiku: 3, // Limited cheap cloud model tasks
 		sonnet: 2, // Careful allocation for standard complexity
 		opus: 1, // Strict limit for most expensive, critical tasks
@@ -275,7 +257,6 @@ export async function batchTasks(tasks: string[]): Promise<Map<ExecutionTier, st
 
 	const dynamicTierBudgets: Record<ExecutionTier, number> = {
 		"local-tools": 1000, // Minimal token budget for local tools
-		"local-llm": 5000, // Generous budget for local models
 		haiku: 10000, // Moderate budget for Haiku cloud tasks
 		sonnet: 15000, // Higher budget for more complex tasks
 		opus: 25000, // Maximum budget for critical tasks
@@ -452,7 +433,7 @@ export async function optimizeTaskOrder(tasks: string[]): Promise<string[]> {
 	);
 
 	// Sort by tier (cheapest first)
-	const tierOrder: ExecutionTier[] = ["local-tools", "local-llm", "haiku", "sonnet", "opus"];
+	const tierOrder: ExecutionTier[] = ["local-tools", "haiku", "sonnet", "opus"];
 
 	withDecisions.sort((a, b) => {
 		const aIndex = tierOrder.indexOf(a.decision.tier);
