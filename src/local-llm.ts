@@ -19,12 +19,13 @@ import { raidLogger } from "./logger.js";
 export type LocalModelTier = "tiny" | "small" | "medium";
 
 /**
- * Model configurations
+ * Model configurations - optimized for limited hardware (CPU-only, <16GB RAM)
+ * Users with GPUs can install larger models and they'll be auto-detected
  */
-const LOCAL_MODELS: Record<LocalModelTier, { name: string; fallback: string }> = {
-	tiny: { name: "tinyllama", fallback: "phi3:mini" },
-	small: { name: "phi3", fallback: "mistral" },
-	medium: { name: "deepseek-coder:6.7b", fallback: "codellama:7b" },
+export const LOCAL_MODELS: Record<LocalModelTier, { name: string; fallback: string }> = {
+	tiny: { name: "qwen2:0.5b", fallback: "tinyllama" },
+	small: { name: "qwen2:1.5b", fallback: "phi3:mini" },
+	medium: { name: "qwen2:1.5b", fallback: "phi3" }, // Same as small for limited hardware
 };
 
 /**

@@ -62,11 +62,12 @@
     {
       "id": "quest-solo-spell-check",
       "objective": "[solo] Add spell check to verification - pnpm spell as optional verification step",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 12,
       "createdAt": "2026-01-10T08:50:00.000Z",
       "startedAt": "2026-01-10T09:38:16.583Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-10T09:39:43.604Z"
     },
     {
       "id": "quest-ux-status-flicker",
@@ -134,10 +135,162 @@
     {
       "id": "quest-mk83qv1v-o4go",
       "objective": "run typecheck",
-      "status": "pending",
+      "status": "complete",
       "priority": 16,
-      "createdAt": "2026-01-10T09:27:58.387Z"
+      "createdAt": "2026-01-10T09:27:58.387Z",
+      "startedAt": "2026-01-10T09:48:49.504Z",
+      "raidId": "",
+      "completedAt": "2026-01-10T09:48:51.135Z"
+    },
+    {
+      "id": "quest-mk84e1cj-vvso",
+      "objective": "[setup] Add 'undercity setup-ollama' command - detect hardware, recommend models, pull them, test they work",
+      "status": "in_progress",
+      "priority": 17,
+      "createdAt": "2026-01-10T09:45:59.635Z",
+      "startedAt": "2026-01-10T09:54:05.243Z",
+      "raidId": ""
+    },
+    {
+      "id": "quest-mk84gfvr-1klk",
+      "objective": "[parallel] Add parallel-by-tier execution - batch local-tools, run 2-3 local LLM, serialize Claude API calls for max throughput",
+      "status": "pending",
+      "priority": 18,
+      "createdAt": "2026-01-10T09:47:51.783Z"
+    },
+    {
+      "id": "quest-mk84h5xx-ciui",
+      "objective": "[skynet] Build self-improvement loop - metrics collection, experiment framework, PM agent that generates improvement quests based on empirical data",
+      "status": "pending",
+      "priority": 19,
+      "createdAt": "2026-01-10T09:48:25.557Z"
+    },
+    {
+      "id": "quest-mk84ilj8-1ihq",
+      "objective": "[distributed] Build undercity hive - worker daemons on multiple machines, capability discovery, distributed task routing across home network",
+      "status": "pending",
+      "priority": 20,
+      "createdAt": "2026-01-10T09:49:32.420Z"
+    },
+    {
+      "id": "quest-mk84jbs1-t2pw",
+      "objective": "[metrics] Add metrics collector - track success/fail, time, tokens, model, escalations per task in .undercity/metrics.jsonl",
+      "status": "pending",
+      "priority": 21,
+      "createdAt": "2026-01-10T09:50:06.433Z"
+    },
+    {
+      "id": "quest-mk84jc4c-vohd",
+      "objective": "[metrics] Add 'undercity metrics' command - show success rate by tier, avg time, token usage, top failure patterns",
+      "status": "pending",
+      "priority": 22,
+      "createdAt": "2026-01-10T09:50:06.876Z"
+    },
+    {
+      "id": "quest-mk84jchv-ppk0",
+      "objective": "[metrics] Track routing accuracy - did the routed tier succeed or need escalation? Log prediction vs actual",
+      "status": "pending",
+      "priority": 23,
+      "createdAt": "2026-01-10T09:50:07.363Z"
+    },
+    {
+      "id": "quest-mk84jct5-etvj",
+      "objective": "[experiment] Add experiment framework - A/B test routing decisions, log variant and outcome",
+      "status": "pending",
+      "priority": 24,
+      "createdAt": "2026-01-10T09:50:07.769Z"
+    },
+    {
+      "id": "quest-mk84jd56-os9p",
+      "objective": "[experiment] Add 'undercity experiment' command - define hypothesis, run N trials, compare results",
+      "status": "pending",
+      "priority": 25,
+      "createdAt": "2026-01-10T09:50:08.202Z"
+    },
+    {
+      "id": "quest-mk84jdh6-sxno",
+      "objective": "[pm] Add PM agent - weekly review of metrics, identify worst-performing task types, generate improvement hypotheses",
+      "status": "pending",
+      "priority": 26,
+      "createdAt": "2026-01-10T09:50:08.634Z"
+    },
+    {
+      "id": "quest-mk84jdug-a6ga",
+      "objective": "[pm] PM generates quests - turn hypotheses into concrete improvement quests with expected impact",
+      "status": "pending",
+      "priority": 27,
+      "createdAt": "2026-01-10T09:50:09.112Z"
+    },
+    {
+      "id": "quest-mk84je6n-a1sv",
+      "objective": "[pm] Add 'undercity improve' command - trigger PM analysis and quest generation on demand",
+      "status": "pending",
+      "priority": 28,
+      "createdAt": "2026-01-10T09:50:09.551Z"
+    },
+    {
+      "id": "quest-mk84jeiu-6ko5",
+      "objective": "[dogfood] Add before/after validation - measure metrics before change, apply change, measure after, auto-rollback if worse",
+      "status": "pending",
+      "priority": 29,
+      "createdAt": "2026-01-10T09:50:09.990Z"
+    },
+    {
+      "id": "quest-mk84jeuq-cow5",
+      "objective": "[dogfood] Add 'undercity benchmark' command - run standard task set to measure baseline performance",
+      "status": "pending",
+      "priority": 30,
+      "createdAt": "2026-01-10T09:50:10.418Z"
+    },
+    {
+      "id": "quest-mk84jf6o-246w",
+      "objective": "[learning] Store successful prompts/approaches per task type - build institutional knowledge",
+      "status": "pending",
+      "priority": 31,
+      "createdAt": "2026-01-10T09:50:10.848Z"
+    },
+    {
+      "id": "quest-mk84jfje-c6pe",
+      "objective": "[learning] Add prompt tuning - PM identifies low-success prompts, generates improvements, A/B tests them",
+      "status": "pending",
+      "priority": 32,
+      "createdAt": "2026-01-10T09:50:11.307Z"
+    },
+    {
+      "id": "quest-mk84l871-b1ls",
+      "objective": "[learning] Evaluate DSPy for prompt optimization - once we have metrics data, assess if prompt quality is the bottleneck vs routing/model selection, add DSPy if warranted",
+      "status": "pending",
+      "priority": 33,
+      "createdAt": "2026-01-10T09:51:35.101Z"
+    },
+    {
+      "id": "quest-mk84nczb-fo84",
+      "objective": "[integration] Wire grind to use git worktrees - each parallel task gets isolated worktree, merge via elevator queue",
+      "status": "pending",
+      "priority": 34,
+      "createdAt": "2026-01-10T09:53:14.615Z"
+    },
+    {
+      "id": "quest-mk84ndbx-dams",
+      "objective": "[integration] Parallel grind workers - spawn N workers, each in own worktree, coordinate via shared state",
+      "status": "pending",
+      "priority": 35,
+      "createdAt": "2026-01-10T09:53:15.069Z"
+    },
+    {
+      "id": "quest-mk84ndok-07cb",
+      "objective": "[integration] Merge queue for parallel grind - workers complete tasks, queue for serial merge (rebase, test, merge)",
+      "status": "pending",
+      "priority": 36,
+      "createdAt": "2026-01-10T09:53:15.524Z"
+    },
+    {
+      "id": "quest-mk84ndzs-qga5",
+      "objective": "[integration] Conflict detection - if two workers touch same files, flag before merge attempt",
+      "status": "pending",
+      "priority": 37,
+      "createdAt": "2026-01-10T09:53:15.928Z"
     }
   ],
-  "lastUpdated": "2026-01-10T09:38:16.583Z"
+  "lastUpdated": "2026-01-10T09:54:05.243Z"
 }

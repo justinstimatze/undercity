@@ -37,6 +37,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { Command } from "commander";
+import { getAvailableModels, isOllamaAvailable, LOCAL_MODELS } from "./local-llm.js";
 import { UndercityOracle } from "./oracle.js";
 import { Persistence } from "./persistence.js";
 import {
@@ -533,6 +534,74 @@ program
 			console.log();
 			console.log("Or for API tokens (costs money):");
 			console.log('  Set: export ANTHROPIC_API_KEY="your-key"');
+		}
+	});
+
+// Setup Ollama command
+program
+	.command("setup-ollama")
+	.description("Check and setup local Ollama models")
+	.action(async () => {
+		console.log(chalk.bold("Undercity Ollama Setup"));
+		console.log();
+
+		// Check Ollama availability
+		if (!isOllamaAvailable()) {
+			console.log(chalk.red("✗ Ollama not installed or not running"));
+			console.log();
+			console.log("To set up Ollama:");
+			console.log("1. Install Ollama from https://ollama.com/");
+			console.log("2. Start Ollama: ollama serve");
+			console.log();
+			return;
+		}
+
+		// Get available models
+		const available = getAvailableModels();
+
+		console.log(chalk.green("✓ Ollama detected and running"));
+		console.log(`  ${available.length} model(s) available`);
+		console.log();
+
+		// Recommended models
+		const recommendedModels = Object.values(LOCAL_MODELS)
+			.flatMap((m) => [m.name, m.fallback])
+			.filter(Boolean);
+		const missingModels = recommendedModels.filter((model) => !available.includes(model));
+
+		if (missingModels.length > 0) {
+			console.log(chalk.yellow("⚠ Some recommended models are missing:"));
+			for (const model of missingModels) {
+				console.log(`  • ${model}`);
+			}
+			console.log();
+			console.log("Recommended models for code tasks:");
+			Object.entries(LOCAL_MODELS).forEach(([tier, models]) => {
+				console.log(`  ${tier} tier: ${models.name} (fallback: ${models.fallback})`);
+			});
+			console.log();
+			console.log("To install a model, run:");
+			console.log("  ollama pull <model-name>");
+			console.log("Example: ollama pull qwen2:0.5b");
+		} else {
+			console.log(chalk.green("✓ All recommended models are available"));
+		}
+
+		// Test basic functionality
+		try {
+			console.log();
+			console.log(chalk.cyan("Testing local LLM query..."));
+			const { queryLocal } = await import("./local-llm.js");
+			const result = await queryLocal("Hello, can you help me with a coding task?", { tier: "tiny", timeout: 10000 });
+
+			if (result) {
+				console.log(chalk.green("✓ Local LLM is working correctly"));
+			} else {
+				console.log(chalk.yellow("⚠ Could not query local LLM"));
+			}
+		} catch (error) {
+			console.log(chalk.red("✗ Error testing local LLM"));
+			console.log(String(error));
 		}
 	});
 
