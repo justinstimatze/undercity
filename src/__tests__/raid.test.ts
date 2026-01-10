@@ -253,13 +253,20 @@ describe("RaidOrchestrator", () => {
 			orchestrator = new RaidOrchestrator({ stateDir: ".undercity" });
 			orchestrator.surrender();
 
-			// Check raid was marked as failed
-			const updatedInventory = JSON.parse(mockFiles.get(".undercity/inventory.json") || "{}");
-			expect(updatedInventory.raid.status).toBe("failed");
+			// Check raid was added to stash as failed (surrender clears inventory via clearAll)
+			const stash = JSON.parse(mockFiles.get(".undercity/stash.json") || "{}");
+			expect(stash.completedRaids).toBeDefined();
+			expect(stash.completedRaids).toHaveLength(1);
+			expect(stash.completedRaids[0].id).toBe("raid-surrender");
+			expect(stash.completedRaids[0].success).toBe(false);
 
 			// Check pocket was cleared
 			const updatedPocket = JSON.parse(mockFiles.get(".undercity/pocket.json") || "{}");
 			expect(updatedPocket.raidId).toBeUndefined();
+
+			// Check inventory was cleared (surrender calls clearAll)
+			const updatedInventory = JSON.parse(mockFiles.get(".undercity/inventory.json") || "{}");
+			expect(updatedInventory.raid).toBeUndefined();
 		});
 	});
 
