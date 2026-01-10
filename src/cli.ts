@@ -562,21 +562,21 @@ program
 
 // Backlog command - show/manage the goal queue
 program
-	.command("backlog")
-	.description("Show the goal backlog")
+	.command("quests")
+	.description("Show the quest board")
 	.action(() => {
 		const items = getAllItems();
 		const summary = getBacklogSummary();
 
-		console.log(chalk.bold("Goal Backlog"));
+		console.log(chalk.bold("Quest Board"));
 		console.log(
 			`  ${chalk.yellow(summary.pending)} pending, ${chalk.cyan(summary.inProgress)} in progress, ${chalk.green(summary.complete)} complete, ${chalk.red(summary.failed)} failed`,
 		);
 		console.log();
 
 		if (items.length === 0) {
-			console.log(chalk.gray("No goals in backlog"));
-			console.log("Add goals with: undercity add <goal>");
+			console.log(chalk.gray("No quests on the board"));
+			console.log("Add quests with: undercity add <quest>");
 			return;
 		}
 

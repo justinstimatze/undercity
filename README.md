@@ -73,7 +73,7 @@ undercity extract
 
 ```bash
 undercity squad      # Show active agents
-undercity tasks      # Show task status
+undercity quests     # Show quest board
 undercity surrender  # Abort current raid
 undercity clear      # Clear all state
 undercity setup      # Check authentication
