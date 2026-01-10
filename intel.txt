@@ -38,6 +38,9 @@
 [self-improvement] Create self-observation log - persistent record of quest outcomes, timing, token usage in .undercity/observations.jsonl
 [self-improvement] Add opportunity pattern detection - analyze successful quests for replicable patterns, ask "what made this work?"
 [self-improvement] Add roadmap synthesis command ("undercity reflect") - analyze observation log to detect problems AND opportunities
+[tui] Build a TUI dashboard - combine status display and streaming logs in one view (eliminates need for third terminal)
+[tui] Show raider status, current waypoint, progress bars, and live activity in a split-pane layout
+[tui] Support for multiple concurrent squads with clear visual separation
 
 ### Medium
 [budget] Add quota budgeting per quest - set max token spend, fail gracefully if exceeded
@@ -71,11 +74,8 @@
 [verbose] Add --verbose flag to show detailed raider activity during raids (tool calls, file reads, decisions)
 [verbose] Add more streaming output for raiders - show what they're reading, writing, and deciding in real-time
 [verbose] Create debug mode that logs full raider context/prompts for troubleshooting slow or stuck raiders
-[tui] Build a TUI (terminal UI) dashboard to monitor parallel raiders and squads in real-time
-[tui] Show raider status, current waypoint, progress bars, and live activity in a split-pane layout
-[tui] Support for multiple concurrent squads with clear visual separation
-
 ### Low
+[webui] Optional web dashboard - browser-based status/logs view for when you're away from terminal
 [audit] Add structured audit trail - queryable log of what agents did, not just text logs
 [planning] Add logistics calibration - feedback loop to improve plan quality (too vague vs too detailed)
 [advanced] Add branch strategy options - try two approaches in parallel, pick the winner

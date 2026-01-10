@@ -583,6 +583,200 @@ export class Elevator {
 	}
 
 	/**
+	 * Check if a branch is owned by a worktree
+	 * @param branch - The branch name to check
+	 * @returns true if the branch is checked out in a worktree
+	 */
+	private isWorktreeBranch(branch: string): boolean {
+		try {
+			// List all worktrees and check if any have this branch checked out
+			const output = execGit(["worktree", "list", "--porcelain"]);
+			if (!output.trim()) {
+				return false;
+			}
+
+			const lines = output.split("\n");
+			let currentWorktreeBranch = "";
+			let currentWorktreePath = "";
+
+			for (const line of lines) {
+				if (line.startsWith("worktree ")) {
+					currentWorktreePath = line.substring("worktree ".length);
+				} else if (line.startsWith("branch ")) {
+					currentWorktreeBranch = line.substring("branch refs/heads/".length);
+					// Check if this worktree has our target branch
+					if (currentWorktreeBranch === branch) {
+						gitLogger.debug({ branch, worktreePath: currentWorktreePath }, "Branch is owned by worktree");
+						return true;
+					}
+				} else if (line === "") {
+					// Reset for next worktree
+					currentWorktreeBranch = "";
+					currentWorktreePath = "";
+				}
+			}
+
+			return false;
+		} catch (error) {
+			gitLogger.warn({ branch, error: String(error) }, "Failed to check if branch is in worktree");
+			return false;
+		}
+	}
+
+	/**
+	 * Get the worktree path for a branch
+	 * @param branch - The branch name
+	 * @returns the worktree path if found, null otherwise
+	 */
+	private getWorktreePath(branch: string): string | null {
+		try {
+			const output = execGit(["worktree", "list", "--porcelain"]);
+			if (!output.trim()) {
+				return null;
+			}
+
+			const lines = output.split("\n");
+			let currentWorktreeBranch = "";
+			let currentWorktreePath = "";
+
+			for (const line of lines) {
+				if (line.startsWith("worktree ")) {
+					currentWorktreePath = line.substring("worktree ".length);
+				} else if (line.startsWith("branch ")) {
+					currentWorktreeBranch = line.substring("branch refs/heads/".length);
+					if (currentWorktreeBranch === branch) {
+						return currentWorktreePath;
+					}
+				} else if (line === "") {
+					// Reset for next worktree
+					currentWorktreeBranch = "";
+					currentWorktreePath = "";
+				}
+			}
+
+			return null;
+		} catch (error) {
+			gitLogger.warn({ branch, error: String(error) }, "Failed to get worktree path");
+			return null;
+		}
+	}
+
+	/**
+	 * Process a worktree branch safely without checkout conflicts
+	 * @param item - The elevator item to process
+	 * @returns the processed item
+	 */
+	private async processWorktreeBranch(item: ElevatorItem): Promise<ElevatorItem> {
+		const worktreePath = this.getWorktreePath(item.branch);
+		if (!worktreePath) {
+			item.status = "conflict";
+			item.error = "Could not find worktree path for branch";
+			item.completedAt = new Date();
+			gitLogger.warn({ branch: item.branch }, "Branch preserved for manual recovery - worktree path not found");
+			return item;
+		}
+
+		try {
+			// Step 1: Rebase in the worktree
+			item.status = "rebasing";
+			gitLogger.debug({ branch: item.branch, worktreePath, onto: this.mainBranch }, "Rebasing in worktree");
+
+			try {
+				execGit(["rebase", this.mainBranch], worktreePath);
+			} catch (rebaseError) {
+				// Abort the rebase to clean up
+				try {
+					execGit(["rebase", "--abort"], worktreePath);
+				} catch {
+					// Ignore abort errors
+				}
+				item.status = "conflict";
+				item.error = "Rebase failed - manual resolution required";
+				item.completedAt = new Date();
+				gitLogger.warn({ branch: item.branch }, "Branch preserved for manual recovery - rebase failed");
+				return item;
+			}
+
+			// Step 2: Run tests in the worktree
+			item.status = "testing";
+			gitLogger.debug({ branch: item.branch, worktreePath }, "Running tests in worktree");
+			const testResult = await runTests(worktreePath);
+
+			if (!testResult.success) {
+				item.status = "test_failed";
+				item.error = testResult.output;
+				item.completedAt = new Date();
+				gitLogger.warn({ branch: item.branch }, "Branch preserved for manual recovery - tests failed");
+				return item;
+			}
+
+			// Step 3: Switch to main in the main repo and merge
+			const originalBranch = getCurrentBranch();
+			try {
+				checkoutBranch(this.mainBranch);
+
+				item.status = "merging";
+				gitLogger.debug(
+					{ branch: item.branch, into: this.mainBranch, strategy: this.mergeStrategy },
+					"Merging worktree branch",
+				);
+
+				const mergeSuccess = merge(item.branch, `Merge ${item.branch} via undercity`, this.mergeStrategy);
+
+				if (!mergeSuccess) {
+					item.status = "conflict";
+					item.error = "Merge failed - manual resolution required";
+					item.completedAt = new Date();
+					gitLogger.warn({ branch: item.branch }, "Branch preserved for manual recovery - merge failed");
+					return item;
+				}
+
+				// Step 4: On successful merge, we can safely delete the branch
+				// The worktree cleanup will happen separately via WorktreeManager
+				try {
+					// First remove the worktree to release the branch lock
+					execGit(["worktree", "remove", worktreePath, "--force"]);
+					gitLogger.debug({ branch: item.branch, worktreePath }, "Removed worktree after successful merge");
+				} catch (worktreeError) {
+					gitLogger.warn(
+						{ branch: item.branch, error: String(worktreeError) },
+						"Failed to remove worktree, but merge succeeded",
+					);
+				}
+
+				// Now delete the branch
+				try {
+					deleteBranch(item.branch);
+				} catch (branchError) {
+					gitLogger.warn({ branch: item.branch, error: String(branchError) }, "Failed to delete branch after merge");
+				}
+
+				item.status = "complete";
+				item.completedAt = new Date();
+
+				// Remove from queue
+				this.queue = this.queue.filter((i) => i !== item);
+
+				gitLogger.info({ branch: item.branch, waypointId: item.waypointId }, "Worktree branch merge complete");
+				return item;
+			} finally {
+				// Return to original branch
+				try {
+					checkoutBranch(originalBranch);
+				} catch {
+					// Best effort
+				}
+			}
+		} catch (error) {
+			item.status = "conflict";
+			item.error = error instanceof Error ? error.message : String(error);
+			item.completedAt = new Date();
+			gitLogger.warn({ branch: item.branch, error: item.error }, "Branch preserved for manual recovery");
+			return item;
+		}
+	}
+
+	/**
 	 * Check if an item is eligible for retry
 	 * @param item - The elevator item to check
 	 * @returns true if the item can be retried
@@ -654,8 +848,20 @@ export class Elevator {
 
 		this.processing = true;
 		const originalBranch = getCurrentBranch();
+		let branchPreserved = false;
 
 		try {
+			// Check if this branch is owned by a worktree
+			const isWorktreeBranch = this.isWorktreeBranch(item.branch);
+
+			if (isWorktreeBranch) {
+				// CRITICAL FIX: For worktree branches, merge from the worktree location
+				// This avoids the checkout conflict and preserves all work
+				gitLogger.debug({ branch: item.branch }, "Detected worktree branch, merging from worktree");
+				return await this.processWorktreeBranch(item);
+			}
+
+			// Legacy path: For non-worktree branches, use the original approach
 			// Step 1: Checkout the branch
 			gitLogger.debug({ branch: item.branch }, "Checking out branch");
 			checkoutBranch(item.branch);
@@ -669,6 +875,7 @@ export class Elevator {
 				item.status = "conflict";
 				item.error = "Rebase failed - manual resolution required";
 				item.completedAt = new Date();
+				branchPreserved = true; // Preserve branch for manual recovery
 				return item;
 			}
 
@@ -681,6 +888,7 @@ export class Elevator {
 				item.status = "test_failed";
 				item.error = testResult.output;
 				item.completedAt = new Date();
+				branchPreserved = true; // Preserve branch for manual recovery
 				return item;
 			}
 
@@ -698,10 +906,11 @@ export class Elevator {
 				item.status = "conflict";
 				item.error = "Merge failed - manual resolution required";
 				item.completedAt = new Date();
+				branchPreserved = true; // Preserve branch for manual recovery
 				return item;
 			}
 
-			// Step 5: Delete the branch
+			// Step 5: Delete the branch (only on success)
 			deleteBranch(item.branch);
 			item.status = "complete";
 			item.completedAt = new Date();
@@ -715,6 +924,8 @@ export class Elevator {
 			item.status = "conflict";
 			item.error = error instanceof Error ? error.message : String(error);
 			item.completedAt = new Date();
+			branchPreserved = true; // Preserve branch for manual recovery
+			gitLogger.warn({ branch: item.branch, error: item.error }, "Branch preserved for manual recovery");
 			return item;
 		} finally {
 			// Return to original branch
