@@ -187,18 +187,21 @@
     {
       "id": "quest-mk84jbs1-t2pw",
       "objective": "[metrics] Add metrics collector - track success/fail, time, tokens, model, escalations per task in .undercity/metrics.jsonl",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 21,
       "createdAt": "2026-01-10T09:50:06.433Z",
       "startedAt": "2026-01-10T10:30:34.539Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-10T10:31:40.791Z"
     },
     {
       "id": "quest-mk84jc4c-vohd",
       "objective": "[metrics] Add 'undercity metrics' command - show success rate by tier, avg time, token usage, top failure patterns",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 22,
-      "createdAt": "2026-01-10T09:50:06.876Z"
+      "createdAt": "2026-01-10T09:50:06.876Z",
+      "startedAt": "2026-01-10T10:31:40.793Z",
+      "raidId": ""
     },
     {
       "id": "quest-mk84jchv-ppk0",
@@ -320,5 +323,5 @@
       "createdAt": "2026-01-10T10:22:44.046Z"
     }
   ],
-  "lastUpdated": "2026-01-10T10:30:34.539Z"
+  "lastUpdated": "2026-01-10T10:31:40.793Z"
 }

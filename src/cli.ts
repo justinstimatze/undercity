@@ -37,6 +37,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { Command } from "commander";
+import { EfficiencyAnalyzer } from "./efficiency-analyzer.js";
+import { EfficiencyTracker } from "./efficiency-tracker.js";
 import { getAvailableModels, isOllamaAvailable, LOCAL_MODELS } from "./local-llm.js";
 import { UndercityOracle } from "./oracle.js";
 import { Persistence } from "./persistence.js";
@@ -494,6 +496,91 @@ program
 	});
 
 // Clear command
+program
+	.command("metrics")
+	.description("Show performance and efficiency metrics")
+	.option("-d, --days <days>", "Number of days to include in metrics", "30")
+	.option("--export <file>", "Export metrics to a JSON file")
+	.action(async (options) => {
+		try {
+			const days = parseInt(options.days || "30", 10);
+			const { getImprovementPersistence } = await import("./improvement-persistence.js");
+			const persistence = getImprovementPersistence();
+
+			const trackedOutcomes = persistence.getEfficiencyOutcomes();
+			const filteredOutcomes = trackedOutcomes.filter(
+				(outcome) => (Date.now() - outcome.recordedAt.getTime()) / (24 * 60 * 60 * 1000) <= days,
+			);
+
+			const { EfficiencyAnalyzer } = await import("./efficiency-analyzer.js");
+			const analyzer = new EfficiencyAnalyzer();
+			const analysis = analyzer.analyzeEfficiency(filteredOutcomes, "Undercity Metrics");
+			const insights = analyzer.generateInsights(analysis);
+
+			// Display metrics summary
+			console.log(chalk.bold.cyan("🚀 Undercity Performance Metrics 🚀"));
+
+			// Calculate aggregate metrics from outcomes
+			const successRate = filteredOutcomes.filter((o) => o.finalSuccess).length / filteredOutcomes.length;
+			const avgDurationMs =
+				filteredOutcomes.reduce((sum, o) => sum + o.secondOrder.timeToStableCompletion, 0) / filteredOutcomes.length;
+			const avgTokens =
+				filteredOutcomes.reduce((sum, o) => sum + o.secondOrder.totalTokens, 0) / filteredOutcomes.length;
+			const agentTypes = [...new Set(filteredOutcomes.flatMap((o) => o.agentsUsed))];
+
+			console.log(chalk.green("\n🎯 Success Metrics:"));
+			console.log(chalk.dim(`Success Rate: ${(successRate * 100).toFixed(2)}%`));
+			console.log(chalk.dim(`Average Duration: ${(avgDurationMs / 1000).toFixed(2)} seconds`));
+
+			console.log(chalk.green("\n💡 Efficiency Insights:"));
+			insights.slice(0, 3).forEach((insight, index) => {
+				console.log(chalk.dim(`${index + 1}. ${insight}`));
+			});
+
+			console.log(chalk.green("\n🔍 Agent Performance:"));
+			console.log(chalk.dim(`Agents Used: ${agentTypes.join(", ")}`));
+			console.log(chalk.dim(`Average Agents per Raid: ${agentTypes.length.toFixed(2)}`));
+
+			console.log(chalk.green("\n📊 Token Usage:"));
+			console.log(chalk.dim(`Average Tokens per Completion: ${avgTokens.toFixed(0)}`));
+
+			console.log(chalk.green("\n⚠️ Failure Patterns:"));
+			const failureReasons: Record<string, number> = {};
+			const failedOutcomes = filteredOutcomes.filter((o) => o.finalSuccess === false);
+
+			failedOutcomes.forEach((o) => {
+				const reason = "Unspecified Error";
+				failureReasons[reason] = (failureReasons[reason] || 0) + 1;
+			});
+
+			const sortedFailures = Object.entries(failureReasons)
+				.sort((a, b) => b[1] - a[1])
+				.slice(0, 3);
+
+			sortedFailures.forEach(([reason, count], index) => {
+				const percentage = (count / filteredOutcomes.length) * 100;
+				console.log(chalk.dim(`${index + 1}. ${reason}: ${percentage.toFixed(2)}%`));
+			});
+
+			// Show storage stats
+			const stats = persistence.getStorageStats();
+			console.log(chalk.bold("\nData Storage:"));
+			console.log(`  Quest metrics: ${stats.questMetrics}`);
+			console.log(`  Efficiency outcomes: ${stats.efficiencyOutcomes}`);
+			console.log(`  Experiment results: ${stats.experimentResults}`);
+			console.log(`  Storage size: ${(stats.storageSizeBytes / 1024).toFixed(1)} KB`);
+
+			// Export if requested
+			if (options.export) {
+				const fs = await import("node:fs");
+				fs.writeFileSync(options.export, JSON.stringify(analysis, null, 2));
+				console.log(chalk.green(`\n  ✓ Metrics exported to ${options.export}`));
+			}
+		} catch (error) {
+			console.error(chalk.red("Failed to show metrics:"), error instanceof Error ? error.message : String(error));
+		}
+	});
+
 program
 	.command("clear")
 	.description("Clear all state (use with caution)")
