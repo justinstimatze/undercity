@@ -2,63 +2,73 @@
 
 ## Available
 
-### Critical
-[evolution] Add self-optimization infrastructure - undercity should evolve its own prompts, protocols, and internal language based on empirical results
-[evolution] Track metrics per quest: success rate, time, tokens, retries, rejection rate, merge success
-[evolution] Allow agents to propose prompt/protocol mutations - test variants, keep what works
-[evolution] Remove human-readability constraint on internal comms - optimize for effectiveness and token efficiency, not comprehension
-[evolution] Add "undercity reflect" command - analyze observation log, propose and test improvements automatically
+### Phase 1: Stabilize (stop losing work)
+[elevator] CRITICAL BUG: Don't delete branch on merge failure - preserve work for manual recovery
+[elevator] BUG: Quests marked complete even when merge fails - only mark complete if work actually lands on main
+[config] BUG: Questers not picking up .claude/rules/ - SDK subagents should load repo config
+[elevator] Ensure quester always creates branch from latest main - fetch and checkout fresh main before branching
+[elevator] Fix elevator auto-processing - branches should auto-merge to main after sheriff approval
+[elevator] Implement optimal merge strategy: rebase from fresh main, try clean merge, then -X ours, report only truly unresolvable conflicts
+[elevator] Add fallback merge strategies: try ours, then theirs, then report specific conflict files
+[elevator] Make elevator retry failed merges after other branches succeed (conflicts may resolve)
+
+### Phase 2: Observe (can't improve what you can't measure)
+[observe] Implement genome.json - externalize all evolvable state (prompts, models, context limits, protocols) into structured JSON
+[observe] Load prompts from genome.json instead of hardcoded strings in squad.ts
+[observe] Add timing logs per phase - track how long flute/logistics/quester/sheriff each take
+[observe] Log to .undercity/metrics.jsonl - queryable history of quest durations, token usage, phase breakdowns
+[observe] Track metrics per quest: success rate, time, tokens, retries, rejection rate, merge success
+[observe] Track metrics per genome component - avgTime, avgTokens, successRate, rejectionRate
+[observe] Surface metrics in status - "Quester: 8m (avg 3m)" so we know what's dragging
+[observe] Create self-observation log - persistent record of quest outcomes in .undercity/observations.jsonl
+
+### Phase 3: Baseline (know where we are before changing things)
+[baseline] Capture baseline performance for each agent type before any evolution begins
+[baseline] Record current prompt lengths, token usage patterns, success rates as generation 0
+[baseline] Add "undercity baseline" command to snapshot current genome performance
+
+### Phase 4: Evolve (improve iteratively based on evidence)
+[evolve] Add mutation testing infrastructure - A/B test prompt variants, track sample size and results
+[evolve] Allow agents to propose prompt/protocol mutations - test variants, keep what works
+[evolve] Add "undercity reflect" command - analyze observation log, propose and test improvements automatically
+[evolve] Remove human-readability constraint on internal comms - optimize for effectiveness and token efficiency
+[evolve] Add convergence detection - recognize when a component has stopped improving (local optimum)
+[evolve] Add genome rollback - reset to known-good state if evolution degrades performance
+[evolve] Track cross-component effects - changing quester prompt may affect sheriff review success
+
+### Phase 5: Portability (use on real projects)
 [portability] Add support for external repos - undercity should work on any repo, not just itself
 [portability] Detect target repo from cwd (nearest git root), create .undercity/ there if missing
 [portability] Add "undercity init" command to initialize .undercity/ and intel.txt in a new repo
-[config] BUG: Questers not picking up .claude/rules/ - SDK subagents should load repo config (no-emoji, no-attribution rules being ignored)
-[elevator] BUG: Quests marked complete even when merge fails - only mark complete if work actually lands on main
-[elevator] CRITICAL BUG: Don't delete branch on merge failure - preserve work for manual recovery (we just lost 2 quests worth of work)
-[self-improvement] Add ability for agents to add new quests - when quester/sheriff discovers work, they should be able to queue it
-[self-improvement] Parse agent output for "[NEW QUEST: ...]" markers and auto-add to quest board
-[self-improvement] Have sheriff generate follow-up quests for issues found during review
-[elevator] Improve elevator to auto-resolve conflicts using git merge -X theirs strategy
-[elevator] Add fallback merge strategies: try ours, then theirs, then report specific conflict files
-[elevator] Make elevator retry failed merges after other branches succeed (conflicts may resolve)
-[elevator] Implement optimal merge strategy: rebase from fresh main first, then try clean merge, then -X ours (prefer main), only report conflicts if truly unresolvable
-[elevator] Ensure quester always creates branch from latest main - fetch and checkout fresh main before branching to avoid stale code conflicts
-[elevator] Fix elevator auto-processing - branches should auto-merge to main after sheriff approval, currently requires manual merge intervention
 
-### High
-[evolution] Implement genome.json - externalize all evolvable state (prompts, models, context limits, protocols) into structured JSON
-[evolution] Load prompts from genome.json instead of hardcoded strings in squad.ts
-[evolution] Add metrics tracking per genome component - avgTime, avgTokens, successRate, rejectionRate
-[evolution] Add mutation testing infrastructure - A/B test prompt variants, track sample size and results
-[perf] Add timing logs per phase - track how long flute/logistics/quester/sheriff each take
-[perf] Log to .undercity/metrics.jsonl - queryable history of quest durations, token usage, phase breakdowns
-[perf] Surface slow phases in status - "Quester: 8m (avg 3m)" so we know what's dragging
-[validation] Add worker/validator rejection loop - when sheriff rejects, send feedback to quester, quester fixes, sheriff reviews again (loop until approved or max retries)
-[validation] Track rejection iterations and feedback quality - measure how many loops typically needed, what feedback leads to fastest fixes
-[complexity] Add task complexity classification - auto-classify quests as trivial/simple/standard/critical based on scope, files touched, risk
-[complexity] Trivial tasks skip planning - single Haiku agent, no flute/logistics/sheriff overhead for typos and small fixes
-[complexity] Critical tasks get extra validators - scale Rule of Five literally with 5+ review passes for high-risk changes
-[complexity] Smart model selection per task - use Opus for complex planning, Sonnet for standard work, Haiku for trivial
-[isolation] Add Docker isolation option - full sandbox mode for untrusted or risky code execution
+### Phase 6: Scale (handle more complexity)
+[scale] Add task complexity classification - auto-classify quests as trivial/simple/standard/critical
+[scale] Trivial tasks skip planning - single Haiku agent, no flute/logistics/sheriff overhead
+[scale] Critical tasks get extra validators - scale Rule of Five with 5+ review passes
+[scale] Smart model selection per task - Opus for complex planning, Sonnet for standard, Haiku for trivial
+[scale] Add parallel quester support - spawn multiple questers working on different waypoints
+[scale] Implement waypoint splitting in logistics - break large tasks into independent subtasks
+[scale] Add a --parallel flag to control max concurrent agents (default 3, max 5)
+[scale] Track which files each quester is touching to avoid conflicts between parallel agents
+
+### High (important but not phase-gated)
+[validation] Add worker/validator rejection loop - sheriff rejects → quester fixes → retry until approved or max retries
+[validation] Track rejection iterations and feedback quality - what feedback leads to fastest fixes
+[self-improvement] Add ability for agents to add new quests - parse "[NEW QUEST: ...]" markers
+[self-improvement] Have sheriff generate follow-up quests for issues found during review
+[self-improvement] Add failure retrospectives - when quest fails, analyze why and generate improvement quest
+[self-improvement] Track user interventions - log manual steps, auto-generate improvement quests from patterns
 [recovery] Add rollback mechanism - auto-tag pre-merge state, easy undo if merged quest breaks things
 [control] Add quest dependencies - express "Quest A needs Quest B done first", block until satisfied
 [control] Add cancel specific agent - kill stuck quester without surrendering entire raid
-[parallelism] Add parallel quester support - spawn multiple questers working on different waypoints simultaneously
-[parallelism] Implement waypoint splitting in logistics - break large tasks into independent subtasks for parallel execution
-[parallelism] Add a --parallel flag to control max concurrent agents (default 3, max 5)
-[parallelism] Track which files each quester is touching to avoid conflicts between parallel agents
 [speed] Add context summarization - don't pass entire plan file to every agent, summarize relevant parts
-[speed] Add timeout handling - if an agent takes >10 minutes, log warning and consider intervention
-[self-improvement] Add failure retrospectives - when a quest fails, spawn an agent to analyze why and generate an improvement quest
-[self-improvement] Track user interventions - log every time the user has to manually step in, auto-generate improvement quests from patterns
-[self-improvement] Create self-observation log - persistent record of quest outcomes, timing, token usage in .undercity/observations.jsonl
-[self-improvement] Add opportunity pattern detection - analyze successful quests for replicable patterns, ask "what made this work?"
-[self-improvement] Add roadmap synthesis command ("undercity reflect") - analyze observation log to detect problems AND opportunities
-[ux] Add --json flag to status command - machine-readable output for Claude Code to parse and summarize
+[speed] Add timeout handling - if agent takes >10 minutes, log warning and consider intervention
+[ux] Add --json flag to status command - machine-readable output for Claude Code to parse
 [ux] Add clear "needs attention" markers in status - things Claude Code should surface to user
 [ux] Make `undercity work` background-friendly - good exit codes, status files Claude can poll
-[tui] Build a TUI dashboard - combine status display and streaming logs in one view (optional, for visibility)
+[tui] Build a TUI dashboard - combine status display and streaming logs in one view
 [tui] Show raider status, current waypoint, progress bars, and live activity in a split-pane layout
-[tui] Support for multiple concurrent squads with clear visual separation
+[isolation] Add Docker isolation option - full sandbox mode for untrusted or risky code execution
 
 ### Medium
 [budget] Add quota budgeting per quest - set max token spend, fail gracefully if exceeded
