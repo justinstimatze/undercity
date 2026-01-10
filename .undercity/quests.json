@@ -72,10 +72,9 @@
     {
       "id": "quest-ux-status-flicker",
       "objective": "[ux] Fix status flicker - atomic state file writes to prevent partial reads during watch",
-      "status": "in_progress",
+      "status": "pending",
       "priority": 20,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T10:11:51.210Z",
       "raidId": ""
     },
     {
@@ -101,68 +100,50 @@
     {
       "id": "quest-metrics-jsonl",
       "objective": "[metrics] Log to .undercity/metrics.jsonl - queryable history of quest durations, token usage, model escalations",
-      "status": "failed",
+      "status": "pending",
       "priority": 40,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T11:08:02.065Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:08:08.327Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-metrics-success-rate",
       "objective": "[metrics] Track success rate per complexity level - which tasks need escalation most?",
-      "status": "failed",
+      "status": "pending",
       "priority": 41,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T11:08:15.218Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:08:20.918Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-grind-improvements",
       "objective": "[grind] Improve grind command - better quest selection, skip already-complete, priority ordering",
-      "status": "failed",
+      "status": "pending",
       "priority": 50,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T11:08:20.919Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:08:27.440Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-parallel-solo",
       "objective": "[parallel] Add parallel solo mode - run multiple solo tasks on different branches concurrently",
-      "status": "failed",
+      "status": "pending",
       "priority": 60,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T11:08:27.441Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:08:33.069Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-tui-dashboard",
       "objective": "[tui] Build a TUI dashboard - combine status display and streaming logs in one view",
-      "status": "failed",
+      "status": "pending",
       "priority": 100,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T11:08:33.071Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:08:39.216Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-config-file",
       "objective": "[qol] Add config file support (.undercityrc) for default options like --stream, model choices",
-      "status": "failed",
+      "status": "pending",
       "priority": 110,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T11:08:39.217Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:08:45.006Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-mk83qv1v-o4go",
@@ -337,57 +318,42 @@
     {
       "id": "quest-mk84l871-b1ls",
       "objective": "[learning] Evaluate DSPy for prompt optimization - once we have metrics data, assess if prompt quality is the bottleneck vs routing/model selection, add DSPy if warranted",
-      "status": "failed",
+      "status": "pending",
       "priority": 33,
       "createdAt": "2026-01-10T09:51:35.101Z",
-      "startedAt": "2026-01-10T11:06:46.249Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:07:21.370Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-mk84nczb-fo84",
       "objective": "[integration] Wire grind to use git worktrees - each parallel task gets isolated worktree, merge via elevator queue",
-      "status": "failed",
+      "status": "pending",
       "priority": 34,
       "createdAt": "2026-01-10T09:53:14.615Z",
-      "startedAt": "2026-01-10T11:07:21.371Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:07:27.672Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-mk84ndbx-dams",
       "objective": "[integration] Parallel grind workers - spawn N workers, each in own worktree, coordinate via shared state",
-      "status": "failed",
+      "status": "pending",
       "priority": 35,
       "createdAt": "2026-01-10T09:53:15.069Z",
-      "startedAt": "2026-01-10T11:07:27.673Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:07:33.861Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-mk84ndok-07cb",
       "objective": "[integration] Merge queue for parallel grind - workers complete tasks, queue for serial merge (rebase, test, merge)",
-      "status": "failed",
+      "status": "pending",
       "priority": 36,
       "createdAt": "2026-01-10T09:53:15.524Z",
-      "startedAt": "2026-01-10T11:07:33.862Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:07:40.373Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-mk84ndzs-qga5",
       "objective": "[integration] Conflict detection - if two workers touch same files, flag before merge attempt",
-      "status": "failed",
+      "status": "pending",
       "priority": 37,
       "createdAt": "2026-01-10T09:53:15.928Z",
-      "startedAt": "2026-01-10T11:07:40.374Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:07:47.594Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-mk85ba7a-l6sb",
@@ -402,33 +368,28 @@
     {
       "id": "quest-mk85paa6-8cxu",
       "objective": "[experiment] Test local LLM code generation - try having Ollama generate diffs for simple edits, apply them locally, measure success rate vs haiku",
-      "status": "failed",
+      "status": "pending",
       "priority": 39,
       "createdAt": "2026-01-10T10:22:44.046Z",
-      "startedAt": "2026-01-10T11:07:55.795Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:08:02.064Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-mk86lots-qz2m",
       "objective": "[grind] Improve verification retry logic - allow multiple fix attempts at same tier before escalating",
-      "status": "failed",
+      "status": "pending",
       "priority": 40,
       "createdAt": "2026-01-10T10:47:55.888Z",
-      "startedAt": "2026-01-10T11:08:08.328Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:08:15.217Z",
-      "error": "Max attempts reached without passing verification"
+      "raidId": ""
     },
     {
       "id": "quest-postmortem",
       "objective": "[escalation] Add post-mortem analysis on tier escalation - have failed worker explain approach/failure, pass to next tier to avoid repeating mistakes",
-      "status": "pending",
+      "status": "complete",
       "priority": 15,
       "createdAt": "2026-01-10T12:00:00.000Z",
-      "note": "Only on escalation (haiku→sonnet→opus), not same-tier retries. Use Haiku for analysis (cheap). Pass structured context: approach taken, why it failed, what to try next."
+      "note": "Only on escalation (haiku→sonnet→opus), not same-tier retries. Use Haiku for analysis (cheap). Pass structured context: approach taken, why it failed, what to try next.",
+      "completedAt": "2026-01-10T19:16:52.000Z"
     }
   ],
-  "lastUpdated": "2026-01-10T12:00:00.000Z"
+  "lastUpdated": "2026-01-10T19:16:52.000Z"
 }

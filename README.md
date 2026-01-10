@@ -3,197 +3,222 @@
 > *"It only has to make sense for me."*
 > — Tamara, on her 365 buttons
 
-Multi-agent orchestrator built on the [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk). Inspired by [Gas Town](https://github.com/steveyegge/gastown) but designed for solo developers who want autonomous coding without managing 20+ parallel agents.
+Autonomous coding orchestrator built on the [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk). Inspired by [Gas Town](https://github.com/steveyegge/gastown) but designed for solo developers who want autonomous coding without the overhead.
 
-Uses extraction shooter metaphors and ARC Raiders lore because it's fun. If flutes, questers, and the elevator help you ship code, that's all that matters.
+## What Actually Works
 
-## Overview
-
-Undercity orchestrates multiple Claude agents to complete complex tasks. Start a raid, walk away, come back to completed work.
+After experimenting with multi-agent pipelines (flutes, questers, sheriffs, etc.), the system converged on something simpler and more effective:
 
 ```
-undercity slingshot "Add dark mode toggle"
-    │
-    ▼
-[PLAN] Flute (Haiku) → Logistics (Opus)
-    │
-    ▼
-[EXECUTE] Quester (Sonnet) → Sheriff (Opus) → Elevator
-    │
-    ▼
-[EXTRACT] Complete
+undercity solo "Fix the auth bug"     # Single task, adaptive model
+undercity grind                        # Batch process quest board
 ```
+
+**The core loop:**
+```
+┌─────────────────────────────────────────────────────────┐
+│  Task → Agent → Verify → Commit (or Escalate)          │
+│                                                         │
+│  Verification: biome → typecheck → build → tests       │
+│                                                         │
+│  Escalation:   haiku ──┬──> sonnet ──┬──> opus         │
+│                        │             │                  │
+│                  post-mortem   post-mortem              │
+│                   analysis      analysis                │
+└─────────────────────────────────────────────────────────┘
+```
+
+1. **Complexity routing**: Task analyzed, routed to cheapest capable model
+2. **Verification loop**: Every change must pass biome, typecheck, build, tests
+3. **Adaptive escalation**: If verification fails, escalate to smarter model
+4. **Post-mortem on escalation**: Failed tier explains what went wrong
+5. **Git cleanup**: Dirty state cleaned between tasks (no cascade failures)
 
 ## Installation
 
 ```bash
-# Clone the repo
 git clone https://github.com/justinstimatze/undercity.git
 cd undercity
-
-# Install dependencies
-pnpm install
-
-# Build
-pnpm build
-
-# Link globally (optional)
+pnpm install && pnpm build
 ln -sf $(pwd)/bin/undercity.js ~/.local/bin/undercity
 ```
 
-Requires Node.js 24+ and either a Claude Max subscription or Anthropic API key.
-
-## Quickstart
-
-The simplest setup: just use Claude Code.
-
-```
-You: "Add a dark mode toggle to settings"
-
-Claude: Added to intel.txt. Starting undercity...
-        [runs undercity work in background]
-
-You: "How's it going?"
-
-Claude: Quester is implementing the toggle component.
-        Sheriff review pending. Should be done in a few minutes.
-
-You: [keep working on other things]
-
-Claude: Dark mode quest complete. Merged to main.
-```
-
-Claude Code is your interface. Tell it what you want, it manages the quest board and runs undercity in the background. Ask for status when curious.
-
-**For more visibility**, run undercity in a separate terminal:
-
-```bash
-undercity work --stream    # Watch the full pipeline in real-time
-```
-
-Or use both terminals to monitor:
-```bash
-# Terminal 1: Streaming output
-undercity work --stream
-
-# Terminal 2: Status at a glance
-watch -n 5 undercity status
-```
+Requires Node.js 24+ and either Claude Max subscription or `ANTHROPIC_API_KEY`.
 
 ## Usage
 
-### Launch a Raid
+### Solo Mode (Single Task)
 
 ```bash
-undercity slingshot "Add user authentication"
+# Basic - routes to appropriate model automatically
+undercity solo "Add dark mode toggle"
+
+# Watch the agent work
+undercity solo "Fix the null check" --stream
+
+# Specific model (skip complexity routing)
+undercity solo "Refactor auth module" --model opus
 ```
 
-This runs the full pipeline:
-1. **Flute** (Haiku) - Fast codebase reconnaissance
-2. **Logistics** (Opus) - Creates detailed implementation spec
-3. **Quester** (Sonnet) - Implements the plan
-4. **Sheriff** (Opus) - Reviews work with Rule of Five
-
-### Check Status
+### Grind Mode (Batch Processing)
 
 ```bash
-undercity status
+# Process quest board automatically
+undercity grind
+
+# Limit number of quests
+undercity grind --limit 5
+
+# Just show what would run
+undercity grind --dry-run
 ```
 
-### Complete the Raid
+### Quest Board
 
 ```bash
-undercity extract
+# Add quests
+undercity quest add "Fix the login bug"
+undercity quest add "[feature] Add export to CSV"
+
+# List quests
+undercity quests
+
+# Clear completed
+undercity quest clear
 ```
 
-### Other Commands
+### Metrics & Improvement
 
 ```bash
-undercity squad      # Show active agents
-undercity quests     # Show quest board
-undercity surrender  # Abort current raid
-undercity clear      # Clear all state
-undercity setup      # Check authentication
+# View performance metrics
+undercity metrics
+
+# Generate improvement quests from metrics
+undercity improve
 ```
 
-## Agent Types
+## How It Works
 
-| Agent | Model | Tools | Purpose |
-|-------|-------|-------|---------|
-| Flute | Haiku | Read, Grep, Glob | Fast codebase reconnaissance |
-| Logistics | Opus | Read, Grep, Glob | BMAD-style spec creation |
-| Quester | Sonnet | Read, Edit, Write, Bash, Grep, Glob | Code implementation |
-| Sheriff | Opus | Read, Bash, Grep, Glob | Quality review (Rule of Five) |
+### Complexity Routing
 
-## Persistence
+Tasks are analyzed for complexity signals:
 
-State survives crashes via the persistence hierarchy:
+| Signal | Points | Example |
+|--------|--------|---------|
+| Multiple files | +2 | "Update auth across services" |
+| New feature | +2 | "Add dark mode" |
+| Refactoring | +2 | "Extract helper functions" |
+| Simple fix | -1 | "Fix typo" |
 
-| Layer | Purpose | File |
-|-------|---------|------|
-| Safe Pocket | Critical raid state | `.undercity/pocket.json` |
-| Inventory | Active tasks and squad | `.undercity/inventory.json` |
-| Loadout | Pre-raid configuration | `.undercity/loadout.json` |
-| Stash | Long-term storage | `.undercity/stash.json` |
+**Routing:**
+- Low complexity → Haiku (fast, cheap)
+- Medium → Sonnet (balanced)
+- High → Opus (best quality)
 
-## The GUPP Principle
+### Verification Loop
 
-> "If there is work in progress, continue it first."
+Every commit attempt runs:
 
-On startup, Undercity checks for active raids and resumes them automatically.
+```bash
+pnpm check       # biome lint + format
+pnpm build       # typecheck + compile
+pnpm test        # vitest
+```
 
-## Rule of Five
+If any step fails, agent gets feedback and retries. After 3 attempts at current tier, escalates to next model.
 
-Every output is reviewed 5 times with different lenses:
+### Post-Mortem Analysis
 
-1. **Correctness** - Does this solve the problem?
-2. **Edge cases** - What could go wrong?
-3. **Security** - Any OWASP top 10 issues?
-4. **Performance** - Any concerning patterns?
-5. **Maintainability** - Will future developers understand this?
+When escalating (haiku→sonnet or sonnet→opus), the failed tier provides a quick analysis:
 
-## Philosophy
+> "I tried adding a new function but didn't realize this module uses a class pattern. The type errors suggest I should extend the existing class instead. The next attempt should look at how similar features are implemented."
 
-Gas Town runs 20-30 parallel agents across multiple Claude accounts. Undercity takes the same core ideas but optimizes for a single developer on a single account.
+This helps the next tier avoid the same mistake.
 
-| Constraint | Undercity Approach |
-|------------|-------------------|
-| Rate limits | Smaller squad, serial execution |
-| Single account | Controlled parallelism, not swarm |
-| Context limits | On-demand loading, not everything upfront |
-| Session crashes | Persistence hierarchy for resumption |
+### Git Cleanup
 
-**Claude Code as coordinator**: Gas Town has "the Mayor" - an AI that distributes work to agents. In Undercity, your Claude Code session fills this role. You talk to Claude, Claude manages the quest board and monitors the autonomous workers. One interface for everything.
+After each failed task, working directory is reset:
 
-**Looted from:**
-- **Gas Town** (Steve Yegge): GUPP principle, session persistence, agent identities
-- **Jeffrey Emanuel**: Rule of Five (via Gas Town)
-- **Beads** (Steve Yegge): Git-backed state, resumption philosophy
-- **BMAD**: Planning before execution
+```bash
+git checkout -- .  # Revert changes
+git clean -fd      # Remove untracked files
+```
+
+This prevents cascade failures where one task's mess breaks subsequent tasks.
 
 ## Configuration
 
 ### Authentication
 
-Undercity uses the Claude Agent SDK which supports:
+```bash
+# API key (pay per use)
+export ANTHROPIC_API_KEY=sk-ant-...
 
-- **API Key**: Set `ANTHROPIC_API_KEY`
-- **Claude Max**: Set `CLAUDE_CODE_OAUTH_TOKEN`
+# Claude Max (subscription)
+export CLAUDE_CODE_OAUTH_TOKEN=...
+```
 
-Run `undercity setup` to check your configuration.
+Run `undercity setup` to verify.
 
-## Goop
+### Quest Board Location
 
-**Community projects:**
-- [Gas Town](https://github.com/steveyegge/gastown) by Steve Yegge - Multi-agent orchestrator
-- [Beads](https://github.com/steveyegge/beads) - Git-backed task tracking
-- [BMAD Method](https://github.com/bmad-method/bmad-method) - Planning before execution
+Default: `.undercity/quests.json`
 
-**Personal projects:**
-- [tttc-light-js](https://github.com/AIObjectives/tttc-light-js) - CI/tooling patterns
+```bash
+undercity --directory /other/project grind
+```
 
-**Other:**
-- ARC Raiders - Thematic inspiration (extraction shooter setting)
+## Architecture
+
+```
+undercity/
+├── src/
+│   ├── solo.ts           # Core task execution with escalation
+│   ├── grind.ts          # Batch processing
+│   ├── complexity.ts     # Task routing
+│   ├── context.ts        # Pre-flight briefing generation
+│   ├── verification.ts   # biome/typecheck/build/test runner
+│   └── cli.ts            # Command interface
+└── .undercity/
+    ├── quests.json       # Quest board
+    ├── metrics.jsonl     # Performance history
+    └── logs/             # Agent activity
+```
+
+## Legacy: The Raid Model
+
+The original design used extraction shooter metaphors (raids, flutes, questers, sheriffs). While fun to build, the multi-agent coordination added complexity without proportional benefit.
+
+**What we kept:**
+- Quest terminology (tasks → quests)
+- GUPP principle ("If work exists, continue it")
+- Persistence (crash recovery)
+
+**What we simplified:**
+- No planning/execution phases (just do the work)
+- No multiple agent types (one agent, multiple model tiers)
+- No elevator/merge queue (direct commits)
+
+The themed commands still exist (`undercity slingshot`, etc.) but `solo` and `grind` are the recommended path.
+
+## Philosophy
+
+| Principle | Implementation |
+|-----------|----------------|
+| Start cheap | Haiku first, escalate only when needed |
+| Verify everything | No commit without passing verification |
+| Learn from failure | Post-mortem analysis guides retries |
+| Clean slate | Git cleanup prevents cascade failures |
+| Measure what matters | Metrics track what actually works |
+
+## Credits
+
+**Looted from:**
+- **Gas Town** (Steve Yegge): GUPP principle, persistence philosophy
+- **Jeffrey Emanuel**: Rule of Five (via Gas Town)
+- **Beads** (Steve Yegge): Git-backed state
+
+**Extraction shooter theme** from ARC Raiders - because it's fun, even if the raid model got simplified.
 
 ## License
 
