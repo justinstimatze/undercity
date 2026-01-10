@@ -451,7 +451,20 @@ When done, provide a brief summary of what you changed.`;
 		let typecheckPassed = true;
 		let testsPassed = true;
 		let lintPassed = true;
-		const spellPassed = true;
+		let spellPassed = true;
+		try {
+			// Only run spell check on typescript and markdown files
+			execSync("pnpm spell 2>&1", { encoding: "utf-8", cwd: process.cwd(), timeout: 30000 });
+			feedbackParts.push("✓ Spell check passed");
+		} catch (error) {
+			spellPassed = false;
+			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
+			const spellingErrors = output.split("\n").filter((line) => line.includes("spelling error"));
+			const errorCount = spellingErrors.length;
+			issues.push(`Spelling issues (${errorCount})`);
+			const relevantErrors = spellingErrors.slice(0, 3).join("\n");
+			feedbackParts.push(`✗ SPELLING ISSUES - ${errorCount} found:\n${relevantErrors}`);
+		}
 		let codeHealthPassed = true;
 		let filesChanged = 0;
 		let linesChanged = 0;
@@ -993,7 +1006,20 @@ Fix any issues to complete the original goal. Run typecheck to verify.`;
 		let typecheckPassed = true;
 		let testsPassed = true;
 		let lintPassed = true;
-		const spellPassed = true;
+		let spellPassed = true;
+		try {
+			// Only run spell check on typescript and markdown files
+			execSync("pnpm spell 2>&1", { encoding: "utf-8", cwd: process.cwd(), timeout: 30000 });
+			feedbackParts.push("✓ Spell check passed");
+		} catch (error) {
+			spellPassed = false;
+			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
+			const spellingErrors = output.split("\n").filter((line) => line.includes("spelling error"));
+			const errorCount = spellingErrors.length;
+			issues.push(`Spelling issues (${errorCount})`);
+			const relevantErrors = spellingErrors.slice(0, 3).join("\n");
+			feedbackParts.push(`✗ SPELLING ISSUES - ${errorCount} found:\n${relevantErrors}`);
+		}
 		const codeHealthPassed = true;
 		let filesChanged = 0;
 		let linesChanged = 0;
