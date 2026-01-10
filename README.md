@@ -3,9 +3,9 @@
 > *"It only has to make sense for me."*
 > — Tamara, on her 365 buttons
 
-Multi-agent orchestrator for Claude Max. Inspired by [Gas Town](https://github.com/steveyegge/gastown) but built for normal people with a Claude Max subscription.
+Multi-agent orchestrator built on the [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk). Inspired by [Gas Town](https://github.com/steveyegge/gastown) but designed for solo developers who want autonomous coding without managing 20+ parallel agents.
 
-Undercity uses extraction shooter metaphors, ARC Raiders lore, and unconventional terminology. None of it needs to be explained or justified. If flutes, questers, and the elevator help you ship code, that's all that matters.
+Uses extraction shooter metaphors and ARC Raiders lore because it's fun. If flutes, questers, and the elevator help you ship code, that's all that matters.
 
 ## Overview
 
@@ -15,7 +15,7 @@ Undercity orchestrates multiple Claude agents to complete complex tasks. Start a
 undercity slingshot "Add dark mode toggle"
     │
     ▼
-[PLAN] Flute (Haiku) → Logistics (Opus) → Human approval
+[PLAN] Flute (Haiku) → Logistics (Opus)
     │
     ▼
 [EXECUTE] Quester (Sonnet) → Sheriff (Opus) → Elevator
@@ -41,7 +41,7 @@ pnpm build
 ln -sf $(pwd)/bin/undercity.js ~/.local/bin/undercity
 ```
 
-Requires Node.js 24+ and a Claude Max subscription (or API key).
+Requires Node.js 24+ and either a Claude Max subscription or Anthropic API key.
 
 ## Usage
 
@@ -51,25 +51,17 @@ Requires Node.js 24+ and a Claude Max subscription (or API key).
 undercity slingshot "Add user authentication"
 ```
 
-This starts the planning phase:
+This runs the full pipeline:
 1. **Flute** (Haiku) - Fast codebase reconnaissance
 2. **Logistics** (Opus) - Creates detailed implementation spec
+3. **Quester** (Sonnet) - Implements the plan
+4. **Sheriff** (Opus) - Reviews work with Rule of Five
 
 ### Check Status
 
 ```bash
 undercity status
 ```
-
-### Approve the Plan
-
-```bash
-undercity approve
-```
-
-This starts the execution phase:
-1. **Quester** (Opus) - Implements the approved plan
-2. **Sheriff** (Opus) - Reviews work with Rule of Five
 
 ### Complete the Raid
 
@@ -125,20 +117,20 @@ Every output is reviewed 5 times with different lenses:
 
 ## Philosophy
 
-Gas Town runs 20-30 parallel agents across multiple Claude accounts. Undercity is built for budget extraction - same core ideas, Claude Max constraints.
+Gas Town runs 20-30 parallel agents across multiple Claude accounts. Undercity takes the same core ideas but optimizes for a single developer on a single account.
 
 | Constraint | Undercity Approach |
 |------------|-------------------|
-| Rate limits | Smaller squad (5-10 agents max) |
+| Rate limits | Smaller squad, serial execution |
 | Single account | Controlled parallelism, not swarm |
 | Context limits | On-demand loading, not everything upfront |
-| Usage limits | Persistence hierarchy for resumption |
+| Session crashes | Persistence hierarchy for resumption |
 
 **Looted from:**
 - **Gas Town** (Steve Yegge): GUPP principle, session persistence, agent identities
 - **Jeffrey Emanuel**: Rule of Five (via Gas Town)
 - **Beads** (Steve Yegge): Git-backed state, resumption philosophy
-- **BMAD**: Planning before execution, spec approval gates
+- **BMAD**: Planning before execution
 
 ## Configuration
 
@@ -146,8 +138,8 @@ Gas Town runs 20-30 parallel agents across multiple Claude accounts. Undercity i
 
 Undercity uses the Claude Agent SDK which supports:
 
-- **Claude Max** (recommended): Set `CLAUDE_CODE_OAUTH_TOKEN`
 - **API Key**: Set `ANTHROPIC_API_KEY`
+- **Claude Max**: Set `CLAUDE_CODE_OAUTH_TOKEN`
 
 Run `undercity setup` to check your configuration.
 
