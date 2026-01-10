@@ -3,6 +3,11 @@
 ## Available
 
 ### Critical
+[evolution] Add self-optimization infrastructure - undercity should evolve its own prompts, protocols, and internal language based on empirical results
+[evolution] Track metrics per quest: success rate, time, tokens, retries, rejection rate, merge success
+[evolution] Allow agents to propose prompt/protocol mutations - test variants, keep what works
+[evolution] Remove human-readability constraint on internal comms - optimize for effectiveness and token efficiency, not comprehension
+[evolution] Add "undercity reflect" command - analyze observation log, propose and test improvements automatically
 [portability] Add support for external repos - undercity should work on any repo, not just itself
 [portability] Detect target repo from cwd (nearest git root), create .undercity/ there if missing
 [portability] Add "undercity init" command to initialize .undercity/ and intel.txt in a new repo
@@ -101,9 +106,6 @@
 [future] Add market intelligence agent - search online for competitor tools, emerging patterns in LLM orchestration
 [future] Allow terminology/model evolution - if observations show a concept isn't useful, flag for deprecation
 [future] Add swarm squad mode - all agents from start, sheriff monitors in real-time instead of at extraction
-[theme] Update "Raid extracted successfully" to "Extraction complete" or "Squad extracted"
-[theme] Review all log messages for ARC Raiders theme consistency
-[theme] Use ARC Raiders CLI phrases: "Going topside...", "Sheriff on patrol", "Rat spotted", "Contact!"
 
 ## Extracted
 2026-01-09: Standardize agent terminology (flute/logistics/quester/sheriff)
