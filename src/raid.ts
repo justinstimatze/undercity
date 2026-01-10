@@ -22,9 +22,11 @@
 import { readFileSync } from "node:fs";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
+import { CheckpointManager } from "./checkpoint-manager.js";
 import { extractImplementationContext, extractReviewContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
 import { EfficiencyTracker } from "./efficiency-tracker.js";
+import { ErrorEscalationManager, type EscalationDecision } from "./error-escalation.js";
 import { FileTracker, parseFileOperation } from "./file-tracker.js";
 import {
 	calculateCodebaseFingerprint,
@@ -40,6 +42,7 @@ import { Persistence } from "./persistence.js";
 import { parseIntelFile } from "./plan-parser.js";
 import { addQuests } from "./quest.js";
 import { RateLimitTracker } from "./rate-limit.js";
+import { RecoveryOrchestrator } from "./recovery-orchestrator.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
 import type {
 	AgentType,
@@ -107,6 +110,11 @@ export class RaidOrchestrator {
 		sheriff: "sonnet",
 	};
 
+	// Error recovery system
+	private checkpointManager: CheckpointManager;
+	private recoveryOrchestrator: RecoveryOrchestrator;
+	private escalationManager: ErrorEscalationManager;
+
 	constructor(
 		options: {
 			stateDir?: string;
@@ -154,6 +162,17 @@ export class RaidOrchestrator {
 		if (options.modelChoices) {
 			this.currentModelChoices = options.modelChoices;
 		}
+
+		// Initialize recovery system
+		this.checkpointManager = new CheckpointManager();
+		this.escalationManager = new ErrorEscalationManager();
+
+		const recoveryState = this.persistence.getRecoveryState();
+		this.recoveryOrchestrator = new RecoveryOrchestrator(
+			this.checkpointManager,
+			recoveryState || undefined,
+			this.rateLimitTracker,
+		);
 
 		// Perform startup recovery for orphaned worktrees
 		this.performStartupRecovery();
@@ -795,6 +814,9 @@ export class RaidOrchestrator {
 			this.persistence.saveFileTracking(this.fileTracker.getState());
 		}
 
+		// Start checkpoint monitoring if supported
+		this.checkpointManager.startCheckpointMonitoring(waypoint);
+
 		// Record agent activity in efficiency tracker
 		if (this.efficiencyTracker) {
 			this.efficiencyTracker.recordAgentActivity(type);
@@ -959,6 +981,9 @@ export class RaidOrchestrator {
 				}
 			}
 
+			// Stop checkpoint monitoring on completion
+			this.checkpointManager.stopCheckpointMonitoring(waypoint.id);
+
 			// Handle next steps based on waypoint type
 			await this.handleTaskCompletion(waypoint, result);
 		} catch (error) {
@@ -993,30 +1018,39 @@ export class RaidOrchestrator {
 				this.persistence.saveRateLimitState(this.rateLimitTracker.getState());
 			}
 
-			this.persistence.updateTask(waypoint.id, {
-				status: "failed",
-				error: errorMessage,
-				completedAt: new Date(),
-			});
+			// Stop file tracking on error
+			if (member.type === "quester") {
+				this.fileTracker.stopTracking(member.id);
+				this.persistence.saveFileTracking(this.fileTracker.getState());
+			}
 
-			this.persistence.updateSquadMember(member.id, {
-				status: "error",
-				lastActivityAt: new Date(),
-			});
+			// Stop checkpoint monitoring on error
+			this.checkpointManager.stopCheckpointMonitoring(waypoint.id);
+
+			// Try recovery before marking as failed
+			const recoveryAttempted = await this.attemptRecovery(waypoint, errorMessage, member);
+
+			if (!recoveryAttempted) {
+				// No recovery possible or recovery failed - mark as failed
+				this.persistence.updateTask(waypoint.id, {
+					status: "failed",
+					error: errorMessage,
+					completedAt: new Date(),
+				});
+
+				this.persistence.updateSquadMember(member.id, {
+					status: "error",
+					lastActivityAt: new Date(),
+				});
+
+				squadLogger.error({ agentId: member.id, error: errorMessage }, "Agent failed - no recovery possible");
+			}
 
 			// Record failed attempt in efficiency tracker
 			if (this.efficiencyTracker) {
 				this.efficiencyTracker.recordFirstAttemptCompletion(false);
 				this.recordReworkAttempt(errorMessage, member.type, 0, false);
 			}
-
-			// Stop file tracking on error too
-			if (member.type === "quester") {
-				this.fileTracker.stopTracking(member.id);
-				this.persistence.saveFileTracking(this.fileTracker.getState());
-			}
-
-			squadLogger.error({ agentId: member.id, error: errorMessage }, "Agent failed");
 		}
 	}
 
@@ -1218,6 +1252,176 @@ export class RaidOrchestrator {
 	}
 
 	/**
+	 * Attempt recovery for a failed waypoint
+	 */
+	private async attemptRecovery(waypoint: Waypoint, error: string | Error, member: SquadMember): Promise<boolean> {
+		const raid = this.getCurrentRaid();
+		if (!raid) {
+			return false;
+		}
+
+		// Check if recovery is possible
+		if (!this.recoveryOrchestrator.canRecover(waypoint, error)) {
+			this.log("Recovery not possible for waypoint", {
+				waypointId: waypoint.id,
+				agentType: member.type,
+				error: error instanceof Error ? error.message : error,
+			});
+			return false;
+		}
+
+		// Create checkpoint before attempting recovery if none exists
+		if (!waypoint.checkpoint && this.checkpointManager.supportsCheckpoints(waypoint.type)) {
+			const modifiedFiles = member.type === "quester" ? this.fileTracker.getModifiedFiles(member.id) : [];
+
+			const checkpoint = this.checkpointManager.tryCreateCheckpoint(
+				waypoint,
+				{ manualRequest: true },
+				{
+					progressDescription: "Pre-recovery checkpoint",
+					modifiedFiles,
+					sessionData: member.sessionId,
+					completionPercent: 50, // Assume 50% complete if we made it this far
+				},
+			);
+
+			if (checkpoint) {
+				this.persistence.updateTask(waypoint.id, {
+					checkpoint,
+					status: "checkpointed",
+				});
+			}
+		}
+
+		// Perform escalation analysis
+		const escalationContext = {
+			waypoint,
+			error,
+			classification: this.recoveryOrchestrator.classifyError(error, member.type),
+			attemptCount: (waypoint.recoveryAttempts || 0) + 1,
+			timeSinceFirstFailure: Date.now() - new Date(waypoint.createdAt).getTime(),
+			affectsOtherWaypoints: this.checkIfErrorAffectsOthers(error),
+			raidProgressPercent: this.calculateRaidProgress(),
+		};
+
+		const escalationDecision = this.escalationManager.determineEscalation(escalationContext);
+		this.escalationManager.recordEscalation(waypoint.id, escalationDecision);
+
+		// Update waypoint status based on escalation
+		const newStatus = this.escalationManager.determineWaypointStatus(escalationDecision.level);
+		this.persistence.updateTask(waypoint.id, {
+			status: newStatus,
+			recoveryAttempts: escalationContext.attemptCount,
+			error: error instanceof Error ? error.message : error,
+		});
+
+		this.log("Recovery escalation decision", {
+			waypointId: waypoint.id,
+			level: escalationDecision.level,
+			reason: escalationDecision.reason,
+			urgent: escalationDecision.urgent,
+		});
+
+		// Execute recovery if not escalated to human
+		if (escalationDecision.level !== "human_intervention" && escalationDecision.level !== "abort_raid") {
+			try {
+				const recoveryAttempt = await this.recoveryOrchestrator.executeRecovery(waypoint, error, {
+					agentType: member.type,
+					sessionId: member.sessionId,
+					modifiedFiles: member.type === "quester" ? this.fileTracker.getModifiedFiles(member.id) : [],
+					progressDescription: waypoint.checkpoint?.progressDescription,
+				});
+
+				// Persist recovery state
+				this.persistence.saveRecoveryState(this.recoveryOrchestrator.getRecoveryState());
+
+				if (recoveryAttempt.successful) {
+					this.log("Recovery successful", {
+						waypointId: waypoint.id,
+						strategy: recoveryAttempt.strategy,
+						attemptNumber: recoveryAttempt.attemptNumber,
+					});
+
+					// Reset waypoint for retry
+					this.persistence.updateTask(waypoint.id, {
+						status: "pending",
+						error: undefined,
+						agentId: undefined,
+					});
+
+					// Spawn new agent for retry (if strategy suggests different agent)
+					const newAgentType = recoveryAttempt.agentType !== member.type ? recoveryAttempt.agentType : member.type;
+
+					// Schedule retry (simplified - in practice this would be more sophisticated)
+					setTimeout(() => {
+						this.spawnAgent(newAgentType, waypoint).catch((retryError) => {
+							this.log("Recovery retry failed", {
+								waypointId: waypoint.id,
+								error: String(retryError),
+							});
+						});
+					}, 5000); // 5 second delay
+
+					return true;
+				} else {
+					this.log("Recovery failed", {
+						waypointId: waypoint.id,
+						error: recoveryAttempt.error,
+					});
+				}
+			} catch (recoveryError) {
+				this.log("Recovery execution failed", {
+					waypointId: waypoint.id,
+					error: String(recoveryError),
+				});
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Check if error affects other waypoints
+	 */
+	private checkIfErrorAffectsOthers(error: string | Error): boolean {
+		const errorText = error instanceof Error ? error.message : error;
+
+		// Rate limit errors affect all agents
+		if (errorText.includes("rate limit") || errorText.includes("429")) {
+			return true;
+		}
+
+		// System-wide errors affect others
+		if (errorText.includes("disk full") || errorText.includes("out of memory")) {
+			return true;
+		}
+
+		// Git errors might affect others working on same files
+		if (errorText.includes("git") || errorText.includes("merge conflict")) {
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Calculate overall raid progress percentage
+	 */
+	private calculateRaidProgress(): number {
+		const tasks = this.persistence.getTasks();
+		const raid = this.getCurrentRaid();
+
+		if (!raid || tasks.length === 0) {
+			return 0;
+		}
+
+		const raidTasks = tasks.filter((t) => t.raidId === raid.id);
+		const completedTasks = raidTasks.filter((t) => t.status === "complete");
+
+		return (completedTasks.length / raidTasks.length) * 100;
+	}
+
+	/**
 	 * Process the elevator
 	 */
 	private async processElevator(): Promise<void> {
@@ -1274,6 +1478,14 @@ export class RaidOrchestrator {
 		// Clear file tracking for this raid
 		this.fileTracker.clearRaid(raid.id);
 		this.persistence.saveFileTracking(this.fileTracker.getState());
+
+		// Clean up recovery system
+		const raidWaypoints = this.persistence.getTasks().filter((t) => t.raidId === raid.id);
+		for (const waypoint of raidWaypoints) {
+			this.checkpointManager.cleanup(waypoint.id);
+			this.recoveryOrchestrator.cleanupRecovery(waypoint.id);
+			this.escalationManager.cleanup(waypoint.id);
+		}
 
 		// Clean up worktree for this raid
 		try {
@@ -1349,6 +1561,11 @@ export class RaidOrchestrator {
 			filesWithConflicts: number;
 			conflicts: FileConflict[];
 		};
+		recovery: {
+			checkpointStats: ReturnType<CheckpointManager["getCheckpointStats"]>;
+			recoveryStats: ReturnType<RecoveryOrchestrator["getRecoveryStats"]>;
+			escalationSummary: ReturnType<ErrorEscalationManager["getEscalationSummary"]>;
+		};
 	} {
 		const trackingSummary = this.fileTracker.getSummary();
 		return {
@@ -1361,6 +1578,11 @@ export class RaidOrchestrator {
 			fileTracking: {
 				...trackingSummary,
 				conflicts: this.fileTracker.detectConflicts(),
+			},
+			recovery: {
+				checkpointStats: this.checkpointManager.getCheckpointStats(),
+				recoveryStats: this.recoveryOrchestrator.getRecoveryStats(),
+				escalationSummary: this.escalationManager.getEscalationSummary(),
 			},
 		};
 	}
@@ -1387,6 +1609,14 @@ export class RaidOrchestrator {
 			// Clear file tracking for this raid
 			this.fileTracker.clearRaid(raid.id);
 			this.persistence.saveFileTracking(this.fileTracker.getState());
+
+			// Clean up recovery system
+			const raidWaypoints = this.persistence.getTasks().filter((t) => t.raidId === raid.id);
+			for (const waypoint of raidWaypoints) {
+				this.checkpointManager.cleanup(waypoint.id);
+				this.recoveryOrchestrator.cleanupRecovery(waypoint.id);
+				this.escalationManager.cleanup(waypoint.id);
+			}
 
 			// Clean up worktree for this raid
 			try {
@@ -1425,6 +1655,10 @@ export class RaidOrchestrator {
 			// Clear all other state
 			this.persistence.clearAll();
 			this.fileTracker.clearRaid("");
+
+			// Clean up recovery system
+			this.checkpointManager.cleanupAll();
+			this.persistence.clearRecoveryState();
 
 			this.log("Emergency cleanup completed successfully");
 		} catch (error) {
