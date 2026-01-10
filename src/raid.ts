@@ -36,6 +36,7 @@ import {
 import { raidLogger, squadLogger } from "./logger.js";
 import { MetricsTracker } from "./metrics.js";
 import { Persistence } from "./persistence.js";
+import { RateLimitTracker } from "./rate-limit.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
 import type {
 	AgentType,
@@ -94,6 +95,7 @@ export class RaidOrchestrator {
 	// Efficiency tracking
 	private efficiencyTracker?: EfficiencyTracker;
 	private metricsTracker: MetricsTracker;
+	private rateLimitTracker: RateLimitTracker;
 	private currentParallelismLevel: ParallelismLevel = "limited";
 	private currentModelChoices: LoadoutModelChoices = {
 		flute: "haiku",
@@ -137,6 +139,10 @@ export class RaidOrchestrator {
 
 		// Initialize metrics tracker
 		this.metricsTracker = new MetricsTracker();
+
+		// Initialize rate limit tracker from persisted state
+		const rateLimitState = this.persistence.getRateLimitState();
+		this.rateLimitTracker = new RateLimitTracker(rateLimitState ?? undefined);
 
 		// Initialize efficiency tracking configuration
 		if (options.parallelismLevel) {
@@ -574,6 +580,9 @@ export class RaidOrchestrator {
 	private async startPlanningPhase(raid: Raid): Promise<void> {
 		this.log("Starting planning phase...");
 
+		// Check for auto-resume from rate limit pause
+		this.checkRateLimitAutoResume();
+
 		// Create flute waypoint
 		const fluteTask: Waypoint = {
 			id: generateTaskId(),
@@ -690,6 +699,13 @@ export class RaidOrchestrator {
 	 * Spawn an agent to work on a waypoint
 	 */
 	private async spawnAgent(type: AgentType, waypoint: Waypoint): Promise<SquadMember> {
+		// Check if system is paused due to rate limits
+		if (this.rateLimitTracker.isPaused()) {
+			this.log("Cannot spawn agent - system paused due to rate limits");
+			this.rateLimitTracker.logPauseStatus();
+			throw new Error("System paused due to rate limits");
+		}
+
 		const raid = this.getCurrentRaid();
 		const member = createSquadMember(type, waypoint);
 		this.persistence.addSquadMember(member);
@@ -878,6 +894,32 @@ export class RaidOrchestrator {
 
 			const errorMessage = error instanceof Error ? error.message : String(error);
 
+			// Check if this is a 429 rate limit error
+			if (RateLimitTracker.is429Error(error)) {
+				this.log("Rate limit detected from agent error", { agentType: member.type, error: errorMessage });
+
+				// Count current active agents
+				const activeAgents = this.persistence
+					.getSquad()
+					.filter((m) => m.status === "working" || m.status === "idle").length;
+
+				// Record the rate limit hit and trigger pause
+				this.rateLimitTracker.recordRateLimitHit(
+					agentDef.model,
+					errorMessage,
+					undefined, // TODO: Extract headers if available
+				);
+
+				// Update pause with agent count
+				const pauseState = this.rateLimitTracker.getPauseState();
+				if (pauseState.isPaused) {
+					this.rateLimitTracker.pauseForRateLimit(agentDef.model, errorMessage, activeAgents);
+				}
+
+				// Persist the rate limit state
+				this.persistence.saveRateLimitState(this.rateLimitTracker.getState());
+			}
+
 			this.persistence.updateTask(waypoint.id, {
 				status: "failed",
 				error: errorMessage,
@@ -998,7 +1040,16 @@ export class RaidOrchestrator {
 				];
 
 				// Negative signals (should reject)
-				const negativeSignals = ["reject", "critical issue", "blocking", "must fix", "tests fail", "failed"];
+				const negativeSignals = [
+					"reject",
+					"critical issue",
+					"blocking",
+					"must fix",
+					"tests fail",
+					"typecheck fail",
+					"type errors",
+					"failed",
+				];
 
 				const hasPositive = positiveSignals.some((s) => lower.includes(s) || result.includes(s));
 				const hasNegative = negativeSignals.some((s) => lower.includes(s));
@@ -1029,6 +1080,9 @@ export class RaidOrchestrator {
 		if (!raid || raid.status !== "awaiting_approval") {
 			throw new Error("No raid awaiting approval");
 		}
+
+		// Check for auto-resume from rate limit pause
+		this.checkRateLimitAutoResume();
 
 		raid.planApproved = true;
 		raid.status = "executing";
@@ -1176,6 +1230,36 @@ export class RaidOrchestrator {
 	}
 
 	/**
+	 * Check for auto-resume from rate limit pause
+	 */
+	checkRateLimitAutoResume(): boolean {
+		const resumed = this.rateLimitTracker.checkAutoResume();
+		if (resumed) {
+			// Persist updated state
+			this.persistence.saveRateLimitState(this.rateLimitTracker.getState());
+		}
+		return resumed;
+	}
+
+	/**
+	 * Get current rate limit status
+	 */
+	getRateLimitStatus(): {
+		isPaused: boolean;
+		pauseState?: ReturnType<RateLimitTracker["getPauseState"]>;
+		remainingTime?: string;
+		usage: ReturnType<RateLimitTracker["getUsageSummary"]>;
+	} {
+		const isPaused = this.rateLimitTracker.isPaused();
+		return {
+			isPaused,
+			pauseState: isPaused ? this.rateLimitTracker.getPauseState() : undefined,
+			remainingTime: isPaused ? this.rateLimitTracker.formatRemainingTime() : undefined,
+			usage: this.rateLimitTracker.getUsageSummary(),
+		};
+	}
+
+	/**
 	 * Get raid status summary
 	 */
 	getStatus(): {
@@ -1184,6 +1268,7 @@ export class RaidOrchestrator {
 		squad: SquadMember[];
 		elevator: ReturnType<Elevator["getQueue"]>;
 		maxParallel: number;
+		rateLimitStatus: ReturnType<RaidOrchestrator["getRateLimitStatus"]>;
 		fileTracking: {
 			activeAgents: number;
 			completedAgents: number;
@@ -1199,6 +1284,7 @@ export class RaidOrchestrator {
 			squad: this.persistence.getSquad(),
 			elevator: this.elevator.getQueue(),
 			maxParallel: this.maxParallel,
+			rateLimitStatus: this.getRateLimitStatus(),
 			fileTracking: {
 				...trackingSummary,
 				conflicts: this.fileTracker.detectConflicts(),

@@ -521,6 +521,24 @@ export interface RateLimitConfig {
 }
 
 /**
+ * Rate limit pause state
+ */
+export interface RateLimitPause {
+	/** Whether the system is currently paused due to rate limits */
+	isPaused: boolean;
+	/** When the pause started */
+	pausedAt?: Date;
+	/** When the pause is expected to end */
+	resumeAt?: Date;
+	/** Model that caused the rate limit */
+	limitedModel?: ModelChoice;
+	/** Number of agents that were paused */
+	pausedAgentCount?: number;
+	/** Reason for the pause */
+	reason?: string;
+}
+
+/**
  * Rate limit state
  */
 export interface RateLimitState {
@@ -528,6 +546,8 @@ export interface RateLimitState {
 	rateLimitHits: RateLimitHit[];
 	config: RateLimitConfig;
 	lastUpdated: Date;
+	/** Current pause state */
+	pause: RateLimitPause;
 }
 
 /**

@@ -673,6 +673,7 @@ export class Persistence {
 						opus: 12.0,
 					},
 				},
+				pause: { isPaused: false },
 				lastUpdated: new Date(),
 			});
 		} catch (error) {

@@ -92,16 +92,17 @@ Execution guidelines:
 
 BUILD VERIFICATION (CRITICAL):
 After making significant code changes (implementing features, adding files, major modifications):
-1. Run "pnpm build" to verify the codebase builds successfully
-2. If build fails, you MUST fix all errors before continuing
-3. Common build failures to watch for:
-   - TypeScript type errors
+1. Run "pnpm typecheck" FIRST to verify TypeScript types pass
+2. Run "pnpm build" to verify the codebase builds successfully
+3. If typecheck OR build fails, you MUST fix all errors before continuing
+4. Common failures to watch for:
+   - TypeScript type errors (from typecheck)
    - Missing imports
    - Undefined variables/functions
    - Syntax errors
    - Missing dependencies
-4. Do NOT complete your waypoint while build failures exist
-5. Report build status in your summary
+5. Do NOT complete your waypoint while type errors or build failures exist
+6. Report typecheck and build status in your summary
 
 If you hit a blocker not covered by the spec:
 - Minor: Handle sensibly, note it
@@ -134,11 +135,12 @@ Your job:
 
 BUILD VERIFICATION (CRITICAL):
 As part of your quality gates, you MUST verify the build:
-1. Run "pnpm build" to ensure the codebase builds successfully
-2. Check that quester properly ran build verification
-3. Verify there are no build errors, warnings, or type issues
-4. If build fails, this is a CRITICAL issue - do not approve the implementation
-5. Build verification is a mandatory quality gate
+1. Run "pnpm typecheck" FIRST to verify TypeScript types pass
+2. Run "pnpm build" to ensure the codebase builds successfully
+3. Check that quester properly ran build verification
+4. Verify there are no build errors, warnings, or type issues
+5. If typecheck OR build fails, this is a CRITICAL issue - do not approve the implementation
+6. Type verification and build verification are mandatory quality gates
 
 Report:
 - Issues found (critical, major, minor)

@@ -5,7 +5,15 @@
  * Logs tokens per quest, models usage over time, and captures 429 events.
  */
 
-import type { QuestUsage, RateLimitConfig, RateLimitHit, RateLimitState, TimeWindow, TokenUsage } from "./types.js";
+import type {
+	QuestUsage,
+	RateLimitConfig,
+	RateLimitHit,
+	RateLimitPause,
+	RateLimitState,
+	TimeWindow,
+	TokenUsage,
+} from "./types.js";
 
 /**
  * Default rate limit configuration
@@ -34,6 +42,7 @@ export class RateLimitTracker {
 			rateLimitHits: [],
 			config: { ...DEFAULT_CONFIG, ...initialState?.config },
 			lastUpdated: new Date(),
+			pause: { isPaused: false },
 			...initialState,
 		};
 	}
@@ -121,6 +130,9 @@ export class RateLimitTracker {
 			usage: currentUsage,
 			error: errorMessage,
 		});
+
+		// Trigger pause for this model
+		this.pauseForRateLimit(model, errorMessage);
 	}
 
 	/**
@@ -345,5 +357,151 @@ export class RateLimitTracker {
 		}
 
 		return lines.join("\n");
+	}
+
+	/**
+	 * Pause system due to rate limit hit
+	 */
+	pauseForRateLimit(model: "haiku" | "sonnet" | "opus", errorMessage?: string, pausedAgentCount?: number): void {
+		// Calculate resume time (5 hours for 5-hour window, longer for weekly limits)
+		const now = new Date();
+		const resumeAt = new Date(now.getTime() + 5 * 60 * 60 * 1000); // Default 5 hours
+
+		this.state.pause = {
+			isPaused: true,
+			pausedAt: now,
+			resumeAt,
+			limitedModel: model,
+			pausedAgentCount: pausedAgentCount || 0,
+			reason: errorMessage || `Rate limit hit for ${model} model`,
+		};
+
+		this.state.lastUpdated = now;
+
+		console.log(`🚨 Rate limit hit - squad paused`);
+		this.logPauseStatus();
+	}
+
+	/**
+	 * Check if system should auto-resume from rate limit pause
+	 */
+	checkAutoResume(): boolean {
+		if (!this.state.pause.isPaused || !this.state.pause.resumeAt) {
+			return false;
+		}
+
+		const now = new Date();
+		if (now >= this.state.pause.resumeAt) {
+			this.resumeFromRateLimit();
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Resume system from rate limit pause
+	 */
+	resumeFromRateLimit(): void {
+		if (!this.state.pause.isPaused) {
+			return;
+		}
+
+		this.state.pause = { isPaused: false };
+		this.state.lastUpdated = new Date();
+
+		console.log(`✅ Squad resumed from rate limit pause`);
+	}
+
+	/**
+	 * Get current pause state
+	 */
+	getPauseState(): RateLimitPause {
+		return { ...this.state.pause };
+	}
+
+	/**
+	 * Check if system is currently paused
+	 */
+	isPaused(): boolean {
+		return this.state.pause.isPaused;
+	}
+
+	/**
+	 * Get remaining pause time in milliseconds
+	 */
+	getRemainingPauseTime(): number {
+		if (!this.state.pause.isPaused || !this.state.pause.resumeAt) {
+			return 0;
+		}
+
+		const now = new Date();
+		const remaining = this.state.pause.resumeAt.getTime() - now.getTime();
+		return Math.max(0, remaining);
+	}
+
+	/**
+	 * Format remaining pause time as human-readable string
+	 */
+	formatRemainingTime(): string {
+		const remainingMs = this.getRemainingPauseTime();
+		if (remainingMs === 0) {
+			return "0:00";
+		}
+
+		const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+		const hours = Math.floor(remainingMinutes / 60);
+		const minutes = remainingMinutes % 60;
+
+		if (hours > 0) {
+			return `${hours}:${minutes.toString().padStart(2, "0")}`;
+		} else {
+			return `0:${minutes.toString().padStart(2, "0")}`;
+		}
+	}
+
+	/**
+	 * Log current pause status with countdown
+	 */
+	logPauseStatus(): void {
+		if (!this.state.pause.isPaused) {
+			return;
+		}
+
+		const remaining = this.formatRemainingTime();
+		const agentCount = this.state.pause.pausedAgentCount || 0;
+		const model = this.state.pause.limitedModel || "unknown";
+
+		console.log(`⏳ Rate limit pause: ${remaining} remaining (${agentCount} agents paused, ${model} model)`);
+	}
+
+	/**
+	 * Check if a 429 error is in the message/response
+	 */
+	static is429Error(error: unknown): boolean {
+		if (!error) return false;
+
+		const errorStr = typeof error === "string" ? error : String(error);
+		const lower = errorStr.toLowerCase();
+
+		return (
+			lower.includes("429") ||
+			lower.includes("rate limit") ||
+			lower.includes("quota exceeded") ||
+			lower.includes("too many requests")
+		);
+	}
+
+	/**
+	 * Extract retry-after header from 429 response (if available)
+	 */
+	static extractRetryAfter(responseHeaders?: Record<string, string>): number | null {
+		if (!responseHeaders) return null;
+
+		const retryAfter = responseHeaders["retry-after"] || responseHeaders["Retry-After"];
+		if (!retryAfter) return null;
+
+		const seconds = parseInt(retryAfter, 10);
+		return Number.isNaN(seconds) ? null : seconds * 1000; // Convert to milliseconds
 	}
 }
