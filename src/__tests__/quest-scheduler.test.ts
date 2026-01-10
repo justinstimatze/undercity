@@ -215,7 +215,7 @@ describe("QuestScheduler", () => {
 			const quest2 = createTestQuest("quest-2", "Waypoint 2", ["pkg2"]);
 
 			// We need to access private method for testing
-			const compatibility = (scheduler as any).checkQuestCompatibility(quest1, quest2);
+			const compatibility = (scheduler as unknown as { checkQuestCompatibility: (q1: unknown, q2: unknown) => unknown }).checkQuestCompatibility(quest1, quest2);
 
 			expect(compatibility.compatible).toBeFalsy();
 			expect(compatibility.conflicts).toContainEqual(
@@ -227,7 +227,7 @@ describe("QuestScheduler", () => {
 			const quest1 = createTestQuest("quest-1", "Waypoint 1", ["auth", "utils"], []);
 			const quest2 = createTestQuest("quest-2", "Waypoint 2", ["auth", "components"], []);
 
-			const compatibility = (scheduler as any).checkQuestCompatibility(quest1, quest2);
+			const compatibility = (scheduler as unknown as { checkQuestCompatibility: (q1: unknown, q2: unknown) => unknown }).checkQuestCompatibility(quest1, quest2);
 
 			expect(compatibility.compatible).toBeTruthy();
 			expect(compatibility.compatibilityScore).toBeLessThan(1.0);
@@ -240,7 +240,7 @@ describe("QuestScheduler", () => {
 			const quest1 = createTestQuest("quest-1", "Waypoint 1", ["pkg1"], ["src/shared.ts"]);
 			const quest2 = createTestQuest("quest-2", "Waypoint 2", ["pkg2"], ["src/shared.ts"]);
 
-			const compatibility = (scheduler as any).checkQuestCompatibility(quest1, quest2);
+			const compatibility = (scheduler as unknown as { checkQuestCompatibility: (q1: unknown, q2: unknown) => unknown }).checkQuestCompatibility(quest1, quest2);
 
 			expect(compatibility.compatible).toBeFalsy();
 			expect(compatibility.conflicts).toContainEqual(
@@ -252,7 +252,7 @@ describe("QuestScheduler", () => {
 			const quest1 = { ...createTestQuest("quest-1", "Waypoint 1", ["pkg1"]), riskScore: 0.8 };
 			const quest2 = { ...createTestQuest("quest-2", "Waypoint 2", ["pkg2"]), riskScore: 0.9 };
 
-			const compatibility = (scheduler as any).checkQuestCompatibility(quest1, quest2);
+			const compatibility = (scheduler as unknown as { checkQuestCompatibility: (q1: unknown, q2: unknown) => unknown }).checkQuestCompatibility(quest1, quest2);
 
 			expect(compatibility.compatibilityScore).toBeLessThan(0.7);
 		});
@@ -271,7 +271,7 @@ describe("QuestScheduler", () => {
 				createdAt: new Date(),
 			};
 
-			const compatibility = (scheduler as any).checkQuestCompatibility(quest1, quest2);
+			const compatibility = (scheduler as unknown as { checkQuestCompatibility: (q1: unknown, q2: unknown) => unknown }).checkQuestCompatibility(quest1, quest2);
 
 			// Should be compatible with perfect score when no conflicts detected
 			expect(compatibility.compatible).toBeTruthy();
@@ -328,8 +328,8 @@ describe("QuestScheduler", () => {
 				{ ...createTestQuest("quest-4", "Another risky waypoint", ["pkg4"]), riskScore: 0.8 },
 			];
 
-			const lowRisk = (scheduler as any).calculateSetRiskLevel(lowRiskSet);
-			const highRisk = (scheduler as any).calculateSetRiskLevel(highRiskSet);
+			const lowRisk = (scheduler as unknown as { calculateSetRiskLevel: (questSet: unknown) => string }).calculateSetRiskLevel(lowRiskSet);
+			const highRisk = (scheduler as unknown as { calculateSetRiskLevel: (questSet: unknown) => string }).calculateSetRiskLevel(highRiskSet);
 
 			expect(lowRisk).toBe("low");
 			expect(highRisk).toBe("high");

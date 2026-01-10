@@ -307,9 +307,11 @@ export class MetricsTracker {
 			}
 
 			// Agent type tracking
-			for (const agentType of metrics.agentTypes) {
-				tokensByAgentType[agentType].total += metrics.totalTokens;
-				agentTypeQuests[agentType]++;
+			if (metrics.agentTypes && Array.isArray(metrics.agentTypes)) {
+				for (const agentType of metrics.agentTypes) {
+					tokensByAgentType[agentType].total += metrics.totalTokens;
+					agentTypeQuests[agentType]++;
+				}
 			}
 		}
 
@@ -334,7 +336,7 @@ export class MetricsTracker {
 
 		// Compute complexity-level success rates and metrics
 		const successRateByComplexity = Object.entries(complexityBreakdown).reduce((acc, [complexity, data]) => {
-			acc[complexity] = {
+			acc[complexity as ComplexityLevel] = {
 				rate: data.totalQuests > 0 ? (data.successfulQuests / data.totalQuests) * 100 : 0,
 				totalQuests: data.totalQuests,
 				avgTokensPerQuest: data.totalQuests > 0 ? data.totalTokens / data.totalQuests : 0,
@@ -346,13 +348,21 @@ export class MetricsTracker {
 					0.8,
 			};
 			return acc;
-		}, {} as any);
+		}, {} as Record<ComplexityLevel, { rate: number; totalQuests: number; avgTokensPerQuest: number; escalationTrigger: number }>);
 
 		// Analysis period
-		const dates = questMetrics.map((m) => m.startedAt);
-		const analysisPeriod = {
+		const dates = questMetrics
+			.map((m) => m.startedAt)
+			.filter(d => d)
+			.map(d => d instanceof Date ? d : new Date(d))
+			.filter(d => !isNaN(d.getTime()));
+
+		const analysisPeriod = dates.length > 0 ? {
 			from: new Date(Math.min(...dates.map((d) => d.getTime()))),
 			to: new Date(Math.max(...dates.map((d) => d.getTime()))),
+		} : {
+			from: new Date(),
+			to: new Date(),
 		};
 
 		return {
@@ -367,4 +377,57 @@ export class MetricsTracker {
 			analysisPeriod,
 		};
 	}
+}
+
+/**
+ * Load all quest metrics from the JSONL file
+ */
+export async function loadQuestMetrics(): Promise<QuestMetrics[]> {
+	try {
+		const fileContent = await fs.readFile(METRICS_FILE, "utf-8");
+		const lines = fileContent.trim().split("\n");
+		const metrics: QuestMetrics[] = [];
+
+		for (const line of lines) {
+			if (line.trim()) {
+				try {
+					const parsed = JSON.parse(line);
+					// Convert date strings back to Date objects and set defaults for missing fields
+					if (parsed.timestamp) {
+						parsed.timestamp = new Date(parsed.timestamp);
+					}
+					if (parsed.startedAt) {
+						parsed.startedAt = new Date(parsed.startedAt);
+					}
+					if (parsed.completedAt) {
+						parsed.completedAt = new Date(parsed.completedAt);
+					}
+					// Ensure required fields exist with defaults
+					parsed.agentTypes = parsed.agentTypes || [];
+					parsed.objective = parsed.objective || "";
+					parsed.success = parsed.success ?? false;
+					parsed.totalTokens = parsed.totalTokens || 0;
+					parsed.durationMs = parsed.durationMs || 0;
+					parsed.agentsSpawned = parsed.agentsSpawned || 0;
+
+					metrics.push(parsed);
+				} catch (parseError) {
+					console.warn("Skipping malformed metrics line:", parseError);
+				}
+			}
+		}
+
+		return metrics;
+	} catch (error) {
+		// File doesn't exist or can't be read
+		return [];
+	}
+}
+
+/**
+ * Generate efficiency analytics from stored metrics
+ */
+export async function generateEfficiencyAnalytics(): Promise<EfficiencyAnalytics> {
+	const questMetrics = await loadQuestMetrics();
+	return MetricsTracker.calculateAnalytics(questMetrics);
 }

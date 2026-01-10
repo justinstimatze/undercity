@@ -6,15 +6,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoadoutManager } from "../loadout-manager.js";
 import { Persistence } from "../persistence.js";
 import type { Quest } from "../quest.js";
-import type { EfficiencyMetrics, LoadoutConfiguration, Raid } from "../types.js";
+import type { EfficiencyMetrics, LoadoutConfiguration, LoadoutPerformanceRecord, LoadoutRecommendation, LoadoutScore, Raid } from "../types.js";
 
 // Mock Persistence
 vi.mock("../persistence.js", () => {
 	class MockPersistence {
 		private loadoutConfigs: LoadoutConfiguration[] = [];
-		private performances: any[] = [];
-		private scores: any[] = [];
-		private recommendations: any[] = [];
+		private performances: LoadoutPerformanceRecord[] = [];
+		private scores: LoadoutScore[] = [];
+		private recommendations: LoadoutRecommendation[] = [];
 
 		getLoadoutConfigurations() {
 			return this.loadoutConfigs;

@@ -10,101 +10,100 @@ import type { EfficiencyComparison, EfficiencyOutcome } from "./types.js";
 /**
  * Statistical analysis utilities
  */
-class StatUtils {
-	/**
-	 * Calculate mean of an array
-	 */
-	static mean(values: number[]): number {
-		if (values.length === 0) return 0;
-		return values.reduce((sum, val) => sum + val, 0) / values.length;
+
+/**
+ * Calculate mean of an array
+ */
+function mean(values: number[]): number {
+	if (values.length === 0) return 0;
+	return values.reduce((sum, val) => sum + val, 0) / values.length;
+}
+
+/**
+ * Calculate standard deviation
+ */
+function standardDeviation(values: number[]): number {
+	if (values.length <= 1) return 0;
+	const meanValue = mean(values);
+	const squaredDiffs = values.map((val) => (val - meanValue) ** 2);
+	const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / squaredDiffs.length;
+	return Math.sqrt(variance);
+}
+
+/**
+ * Calculate degrees of freedom for Welch's t-test
+ */
+function welchDegreesOfFreedom(var1: number, n1: number, var2: number, n2: number): number {
+	const numerator = (var1 / n1 + var2 / n2) ** 2;
+	const denominator = (var1 / n1) ** 2 / (n1 - 1) + (var2 / n2) ** 2 / (n2 - 1);
+	return denominator === 0 ? 1 : numerator / denominator;
+}
+
+/**
+ * Approximate cumulative normal distribution
+ */
+function cumulativeNormal(z: number): number {
+	// Abramowitz and Stegun approximation
+	const t = 1.0 / (1.0 + 0.2316419 * Math.abs(z));
+	const d = 0.3989423 * Math.exp((-z * z) / 2.0);
+	const prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+	return z > 0 ? 1.0 - prob : prob;
+}
+
+/**
+ * Approximate cumulative t-distribution
+ */
+function cumulativeT(t: number, df: number): number {
+	// Simple approximation - for more accuracy, use a proper t-distribution library
+	if (df >= 30) {
+		return cumulativeNormal(t);
 	}
+	// For small df, use a rough approximation
+	const x = t / Math.sqrt(df);
+	return cumulativeNormal(x);
+}
 
-	/**
-	 * Calculate standard deviation
-	 */
-	static standardDeviation(values: number[]): number {
-		if (values.length <= 1) return 0;
-		const mean = StatUtils.mean(values);
-		const squaredDiffs = values.map((val) => (val - mean) ** 2);
-		const variance = StatUtils.mean(squaredDiffs);
-		return Math.sqrt(variance);
-	}
+/**
+ * Calculate two-proportion z-test p-value
+ */
+function twoProportionZTest(successes1: number, total1: number, successes2: number, total2: number): number {
+	if (total1 === 0 || total2 === 0) return 1.0;
 
-	/**
-	 * Calculate two-proportion z-test p-value
-	 */
-	static twoProportionZTest(successes1: number, total1: number, successes2: number, total2: number): number {
-		if (total1 === 0 || total2 === 0) return 1.0;
+	const p1 = successes1 / total1;
+	const p2 = successes2 / total2;
+	const pooled = (successes1 + successes2) / (total1 + total2);
 
-		const p1 = successes1 / total1;
-		const p2 = successes2 / total2;
-		const pooled = (successes1 + successes2) / (total1 + total2);
+	const standardError = Math.sqrt(pooled * (1 - pooled) * (1 / total1 + 1 / total2));
+	if (standardError === 0) return 1.0;
 
-		const standardError = Math.sqrt(pooled * (1 - pooled) * (1 / total1 + 1 / total2));
-		if (standardError === 0) return 1.0;
+	const zScore = Math.abs(p1 - p2) / standardError;
+	return 2 * (1 - cumulativeNormal(zScore)); // Two-tailed test
+}
 
-		const zScore = Math.abs(p1 - p2) / standardError;
-		return 2 * (1 - StatUtils.cumulativeNormal(zScore)); // Two-tailed test
-	}
+/**
+ * Calculate two-sample t-test p-value
+ */
+function twoSampleTTest(values1: number[], values2: number[]): number {
+	if (values1.length === 0 || values2.length === 0) return 1.0;
 
-	/**
-	 * Calculate two-sample t-test p-value
-	 */
-	static twoSampleTTest(values1: number[], values2: number[]): number {
-		if (values1.length === 0 || values2.length === 0) return 1.0;
+	const mean1 = mean(values1);
+	const mean2 = mean(values2);
+	const std1 = standardDeviation(values1);
+	const std2 = standardDeviation(values2);
+	const n1 = values1.length;
+	const n2 = values2.length;
 
-		const mean1 = StatUtils.mean(values1);
-		const mean2 = StatUtils.mean(values2);
-		const std1 = StatUtils.standardDeviation(values1);
-		const std2 = StatUtils.standardDeviation(values2);
-		const n1 = values1.length;
-		const n2 = values2.length;
+	// Welch's t-test (unequal variances)
+	const variance1 = std1 ** 2;
+	const variance2 = std2 ** 2;
+	const pooledVariance = variance1 / n1 + variance2 / n2;
 
-		// Welch's t-test (unequal variances)
-		const variance1 = std1 ** 2;
-		const variance2 = std2 ** 2;
-		const pooledVariance = variance1 / n1 + variance2 / n2;
+	if (pooledVariance === 0) return 1.0;
 
-		if (pooledVariance === 0) return 1.0;
+	const tScore = Math.abs(mean1 - mean2) / Math.sqrt(pooledVariance);
+	const df = welchDegreesOfFreedom(variance1, n1, variance2, n2);
 
-		const tScore = Math.abs(mean1 - mean2) / Math.sqrt(pooledVariance);
-		const df = StatUtils.welchDegreesOfFreedom(variance1, n1, variance2, n2);
-
-		return 2 * (1 - StatUtils.cumulativeT(tScore, df)); // Two-tailed test
-	}
-
-	/**
-	 * Calculate degrees of freedom for Welch's t-test
-	 */
-	private static welchDegreesOfFreedom(var1: number, n1: number, var2: number, n2: number): number {
-		const numerator = (var1 / n1 + var2 / n2) ** 2;
-		const denominator = (var1 / n1) ** 2 / (n1 - 1) + (var2 / n2) ** 2 / (n2 - 1);
-		return denominator === 0 ? 1 : numerator / denominator;
-	}
-
-	/**
-	 * Approximate cumulative normal distribution
-	 */
-	private static cumulativeNormal(z: number): number {
-		// Abramowitz and Stegun approximation
-		const t = 1.0 / (1.0 + 0.2316419 * Math.abs(z));
-		const d = 0.3989423 * Math.exp((-z * z) / 2.0);
-		const prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-		return z > 0 ? 1.0 - prob : prob;
-	}
-
-	/**
-	 * Approximate cumulative t-distribution
-	 */
-	private static cumulativeT(t: number, df: number): number {
-		// Simple approximation - for more accuracy, use a proper t-distribution library
-		if (df >= 30) {
-			return StatUtils.cumulativeNormal(t);
-		}
-		// For small df, use a rough approximation
-		const x = t / Math.sqrt(df);
-		return StatUtils.cumulativeNormal(x);
-	}
+	return 2 * (1 - cumulativeT(tScore, df)); // Two-tailed test
 }
 
 /**
@@ -148,11 +147,11 @@ export class EfficiencyAnalyzer {
 
 		return {
 			sampleSize: outcomes.length,
-			avgFirstOrderTokens: StatUtils.mean(firstOrderTokens),
-			avgSecondOrderTokens: StatUtils.mean(secondOrderTokens),
-			avgReworkRate: StatUtils.mean(reworkRates),
-			avgTimeToStable: StatUtils.mean(timesToStable),
-			avgUserInterventions: StatUtils.mean(userInterventions),
+			avgFirstOrderTokens: mean(firstOrderTokens),
+			avgSecondOrderTokens: mean(secondOrderTokens),
+			avgReworkRate: mean(reworkRates),
+			avgTimeToStable: mean(timesToStable),
+			avgUserInterventions: mean(userInterventions),
 			successRate: successfulOutcomes.length / outcomes.length,
 		};
 	}
@@ -164,22 +163,22 @@ export class EfficiencyAnalyzer {
 		// Token efficiency comparison (first-order tokens)
 		const linearFirstOrder = linearOutcomes.map((o) => o.firstOrder.tokensUsed);
 		const swarmFirstOrder = swarmOutcomes.map((o) => o.firstOrder.tokensUsed);
-		const tokenEfficiencyPValue = StatUtils.twoSampleTTest(linearFirstOrder, swarmFirstOrder);
+		const tokenEfficiencyPValue = twoSampleTTest(linearFirstOrder, swarmFirstOrder);
 
 		// Rework rate comparison
 		const linearRework = linearOutcomes.map((o) => o.secondOrder.reworkAttempts);
 		const swarmRework = swarmOutcomes.map((o) => o.secondOrder.reworkAttempts);
-		const reworkRatePValue = StatUtils.twoSampleTTest(linearRework, swarmRework);
+		const reworkRatePValue = twoSampleTTest(linearRework, swarmRework);
 
 		// Time efficiency comparison
 		const linearTime = linearOutcomes.map((o) => o.secondOrder.timeToStableCompletion);
 		const swarmTime = swarmOutcomes.map((o) => o.secondOrder.timeToStableCompletion);
-		const timeEfficiencyPValue = StatUtils.twoSampleTTest(linearTime, swarmTime);
+		const timeEfficiencyPValue = twoSampleTTest(linearTime, swarmTime);
 
 		// Success rate comparison
 		const linearSuccesses = linearOutcomes.filter((o) => o.finalSuccess).length;
 		const swarmSuccesses = swarmOutcomes.filter((o) => o.finalSuccess).length;
-		const successRatePValue = StatUtils.twoProportionZTest(
+		const successRatePValue = twoProportionZTest(
 			linearSuccesses,
 			linearOutcomes.length,
 			swarmSuccesses,
@@ -228,7 +227,7 @@ export class EfficiencyAnalyzer {
 				reworkPenalties.push(penalty);
 			}
 		}
-		const reworkPenalty = StatUtils.mean(reworkPenalties);
+		const reworkPenalty = mean(reworkPenalties);
 
 		// Calculate parallelism bonus (time saved with parallel execution)
 		const parallelismBonus =
@@ -399,7 +398,6 @@ export class EfficiencyAnalyzer {
 		secondOrderTokens: { lower: number; upper: number; mean: number };
 		reworkRate: { lower: number; upper: number; mean: number };
 	} {
-		const _alpha = 1 - confidence;
 		const zScore = 1.96; // Approximate for 95% confidence
 
 		const firstOrderTokens = outcomes.map((o) => o.firstOrder.tokensUsed);
@@ -407,13 +405,13 @@ export class EfficiencyAnalyzer {
 		const reworkRates = outcomes.map((o) => o.secondOrder.reworkAttempts);
 
 		const calculateInterval = (values: number[]) => {
-			const mean = StatUtils.mean(values);
-			const std = StatUtils.standardDeviation(values);
+			const meanValue = mean(values);
+			const std = standardDeviation(values);
 			const margin = (zScore * std) / Math.sqrt(values.length);
 			return {
-				lower: mean - margin,
-				upper: mean + margin,
-				mean,
+				lower: meanValue - margin,
+				upper: meanValue + margin,
+				mean: meanValue,
 			};
 		};
 

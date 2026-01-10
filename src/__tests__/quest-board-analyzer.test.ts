@@ -295,7 +295,7 @@ describe("QuestBoardAnalyzer", () => {
 			};
 
 			const highTimeSavings = 50;
-			const benefit = (analyzer as any).categorizeBenefit(highBenefitSet, highTimeSavings);
+			const benefit = (analyzer as unknown as { categorizeBenefit: (questSet: unknown, timeSavings: number) => "high" | "medium" | "low" }).categorizeBenefit(highBenefitSet, highTimeSavings);
 			expect(benefit).toBe("high");
 
 			// Test low benefit conditions
@@ -308,7 +308,7 @@ describe("QuestBoardAnalyzer", () => {
 			};
 
 			const lowTimeSavings = 10;
-			const lowBenefit = (analyzer as any).categorizeBenefit(lowBenefitSet, lowTimeSavings);
+			const lowBenefit = (analyzer as unknown as { categorizeBenefit: (questSet: unknown, timeSavings: number) => "high" | "medium" | "low" }).categorizeBenefit(lowBenefitSet, lowTimeSavings);
 			expect(lowBenefit).toBe("low");
 		});
 
@@ -324,7 +324,7 @@ describe("QuestBoardAnalyzer", () => {
 				compatibilityMatrix: [],
 			};
 
-			const timeSavings = (analyzer as any).estimateTimeSavings(questSet);
+			const timeSavings = (analyzer as unknown as { estimateTimeSavings: (questSet: unknown) => number }).estimateTimeSavings(questSet);
 
 			// Sequential: 15 + 60 = 75 minutes, Parallel: max(15, 60) = 60 minutes
 			// Savings: (75-60)/75 = 20%
@@ -343,7 +343,7 @@ describe("QuestBoardAnalyzer", () => {
 				compatibilityMatrix: [],
 			};
 
-			const description = (analyzer as any).generateOpportunityDescription(questSet);
+			const description = (analyzer as unknown as { generateOpportunityDescription: (questSet: unknown) => string }).generateOpportunityDescription(questSet);
 			expect(description).toContain("2");
 			expect(description).toContain("feature/bugfix");
 		});

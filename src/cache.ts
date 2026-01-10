@@ -92,7 +92,7 @@ class ContextCache {
 
 			// Atomically rename temporary file to target file
 			fs.renameSync(tempPath, fixesPath);
-		} catch (error) {
+		} catch (_error) {
 			// Clean up temporary file if it exists
 			const fixesPath = path.join(this.cacheDir, "error-fixes.json");
 			const tempPath = `${fixesPath}.tmp`;
@@ -348,7 +348,7 @@ export function parseTypeScriptErrors(tscOutput: string): StructuredError[] {
 /**
  * Get suggestion for common TypeScript errors
  */
-function getSuggestionForError(code: string, message: string): string | undefined {
+function getSuggestionForError(code: string, _message: string): string | undefined {
 	const suggestions: Record<string, string> = {
 		TS2345: "Check argument types match parameter types",
 		TS2322: "Check assignment types are compatible",

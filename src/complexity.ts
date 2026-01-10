@@ -106,6 +106,18 @@ const SCOPE_SIGNALS = {
  * Fast, no API calls, good for initial triage
  */
 export function assessComplexityFast(task: string): ComplexityAssessment {
+	if (!task) {
+		return {
+			level: "simple",
+			confidence: 0.5,
+			model: "haiku",
+			useFullChain: false,
+			needsReview: false,
+			estimatedScope: "single-file",
+			score: 1,
+			signals: ["no task description provided"]
+		};
+	}
 	const taskLower = task.toLowerCase();
 	const signals: string[] = [];
 	let score = 0;

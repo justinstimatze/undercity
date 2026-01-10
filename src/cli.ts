@@ -526,6 +526,63 @@ program
 		console.log(`\nEscalation Rate: ${(metrics.escalationRate * 100).toFixed(2)}%`);
 	});
 
+// Complexity-based success rate analysis
+program
+	.command("complexity-metrics")
+	.description("Show success rates by complexity level and escalation guidance")
+	.option("--json", "Output as JSON")
+	.action(async (options) => {
+		const { generateEfficiencyAnalytics } = await import("./metrics.js");
+		const analytics = await generateEfficiencyAnalytics();
+
+		if (options.json) {
+			console.log(JSON.stringify(analytics, null, 2));
+			return;
+		}
+
+		console.log(chalk.bold("Success Rate by Complexity Level"));
+		console.log(chalk.dim("Identify which tasks need escalation most\n"));
+
+		// Sort complexity levels by escalation need (lowest success rate first)
+		const complexityLevels = Object.entries(analytics.successRateByComplexity)
+			.sort(([, a], [, b]) => a.rate - b.rate);
+
+		for (const [level, data] of complexityLevels) {
+			const statusColor = data.rate >= 80 ? chalk.green : data.rate >= 60 ? chalk.yellow : chalk.red;
+			const escalationColor = data.rate < data.escalationTrigger * 100 ? chalk.red : chalk.white;
+
+			console.log(`${chalk.cyan(level.toUpperCase().padEnd(10))} ${statusColor(`${data.rate.toFixed(1)}%`)} success rate`);
+			console.log(`  ${chalk.dim(`Total quests: ${data.totalQuests}`)}`);
+			console.log(`  ${chalk.dim(`Avg tokens: ${data.avgTokensPerQuest.toFixed(0)}`)}`);
+			console.log(`  ${escalationColor(`Escalation threshold: ${(data.escalationTrigger * 100).toFixed(0)}%`)}`);
+
+			if (data.rate < data.escalationTrigger * 100) {
+				console.log(`  ${chalk.red.bold("⚠ ESCALATION RECOMMENDED")}`);
+			}
+			console.log();
+		}
+
+		console.log(chalk.cyan("Overall Analytics:"));
+		console.log(`  Total quests analyzed: ${analytics.totalQuests}`);
+		console.log(`  Overall success rate: ${analytics.successRate.toFixed(1)}%`);
+		console.log(`  Average tokens per completion: ${analytics.avgTokensPerCompletion.toFixed(0)}`);
+
+		if (analytics.mostEfficientAgentType) {
+			console.log(`  Most efficient agent: ${analytics.mostEfficientAgentType}`);
+		}
+
+		// Show which complexity levels need attention
+		const needsEscalation = complexityLevels.filter(([, data]) => data.rate < data.escalationTrigger * 100);
+		if (needsEscalation.length > 0) {
+			console.log(`\n${chalk.red.bold("Complexity levels requiring escalation:")}`);
+			for (const [level] of needsEscalation) {
+				console.log(`  • ${level} - Consider routing to higher-tier agents`);
+			}
+		} else {
+			console.log(`\n${chalk.green("All complexity levels are performing adequately")}`);
+		}
+	});
+
 async function runBenchmark(): Promise<void> {
 	const { RaidOrchestrator } = await import("./raid.js");
 	const { getMetricsCollector } = await import("./metrics-collector.js");

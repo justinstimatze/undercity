@@ -66,7 +66,7 @@ function getRepoRoot(explicitRoot?: string): string {
 				throw new Error("Not a valid directory");
 			}
 			return absoluteRoot;
-		} catch (dirError) {
+		} catch (_dirError) {
 			throw new WorktreeError(`Invalid repository root: ${explicitRoot}`, "root-validation", 1);
 		}
 	}

@@ -9,7 +9,7 @@ import { CheckpointManager } from "../checkpoint-manager.js";
 import { ErrorEscalationManager } from "../error-escalation.js";
 import { RecoveryManager } from "../recovery-manager.js";
 import { RecoveryOrchestrator } from "../recovery-orchestrator.js";
-import type { AgentType, Waypoint } from "../types.js";
+import type { Waypoint } from "../types.js";
 
 describe("Recovery System", () => {
 	let checkpointManager: CheckpointManager;
