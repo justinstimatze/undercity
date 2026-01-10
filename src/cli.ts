@@ -583,6 +583,158 @@ program
 		}
 	});
 
+// Enhanced metrics command for detailed tracking
+program
+	.command("enhanced-metrics")
+	.description("Show detailed metrics with escalation and token usage analysis")
+	.option("--days <days>", "Days of history to analyze", "30")
+	.option("--json", "Output as JSON")
+	.action(async (options) => {
+		const { EnhancedMetricsQuery } = await import("./enhanced-metrics.js");
+
+		const days = parseInt(options.days, 10);
+		const tokenTrends = await EnhancedMetricsQuery.getTokenUsageTrends(days);
+		const escalationAnalysis = await EnhancedMetricsQuery.getEscalationAnalysis();
+
+		if (options.json) {
+			console.log(JSON.stringify({ tokenTrends, escalationAnalysis }, null, 2));
+			return;
+		}
+
+		console.log(chalk.bold("Enhanced Metrics Analysis"));
+		console.log(chalk.dim(`Analysis period: Last ${days} days\n`));
+
+		// Token Usage Overview
+		console.log(chalk.cyan("📊 Token Usage Overview"));
+		console.log(`Total tokens used: ${tokenTrends.totalTokens.toLocaleString()}`);
+		console.log(`Average efficiency ratio: ${(tokenTrends.averageEfficiencyRatio * 100).toFixed(1)}%`);
+		console.log();
+
+		// Token distribution by model
+		console.log(chalk.cyan("🤖 Token Distribution by Model"));
+		const modelTotal = Object.values(tokenTrends.tokensByModel).reduce((sum, count) => sum + count, 0);
+		for (const [model, tokens] of Object.entries(tokenTrends.tokensByModel)) {
+			const percentage = modelTotal > 0 ? (tokens / modelTotal * 100).toFixed(1) : "0.0";
+			const modelColor = model === "opus" ? chalk.red : model === "sonnet" ? chalk.yellow : chalk.green;
+			console.log(`  ${modelColor(model.padEnd(8))}: ${tokens.toLocaleString().padStart(10)} tokens (${percentage}%)`);
+		}
+		console.log();
+
+		// Token distribution by phase
+		console.log(chalk.cyan("⚡ Token Distribution by Phase"));
+		const phaseTotal = Object.values(tokenTrends.tokensByPhase).reduce((sum, count) => sum + count, 0);
+		for (const [phase, tokens] of Object.entries(tokenTrends.tokensByPhase)) {
+			const percentage = phaseTotal > 0 ? (tokens / phaseTotal * 100).toFixed(1) : "0.0";
+			console.log(`  ${phase.padEnd(12)}: ${tokens.toLocaleString().padStart(10)} tokens (${percentage}%)`);
+		}
+		console.log();
+
+		// Model Escalation Analysis
+		console.log(chalk.cyan("🔄 Model Escalation Analysis"));
+		console.log(`Total escalations: ${escalationAnalysis.totalEscalations}`);
+		console.log(`Escalation success rate: ${(escalationAnalysis.escalationSuccessRate * 100).toFixed(1)}%`);
+		console.log(`Average tokens saved per escalation: ${escalationAnalysis.averageTokensSaved.toFixed(0)}`);
+		console.log();
+
+		if (Object.keys(escalationAnalysis.escalationsByModel).length > 0) {
+			console.log("Most common escalation paths:");
+			for (const [path, count] of Object.entries(escalationAnalysis.escalationsByModel)) {
+				console.log(`  ${path}: ${count} times`);
+			}
+			console.log();
+		}
+
+		if (escalationAnalysis.commonEscalationReasons.length > 0) {
+			console.log("Top escalation reasons:");
+			for (const { reason, count } of escalationAnalysis.commonEscalationReasons.slice(0, 5)) {
+				console.log(`  ${reason}: ${count} times`);
+			}
+			console.log();
+		}
+
+		// Daily usage trends
+		if (tokenTrends.dailyUsage.length > 0) {
+			console.log(chalk.cyan("📈 Recent Usage Trends"));
+			const recent = tokenTrends.dailyUsage.slice(-7); // Last 7 days
+			for (const day of recent) {
+				const date = new Date(day.date).toLocaleDateString();
+				console.log(`  ${date}: ${day.tokens.toLocaleString()} tokens, ${day.quests} quests`);
+			}
+		}
+	});
+
+// Escalation patterns command
+program
+	.command("escalation-patterns")
+	.description("Analyze model escalation patterns and effectiveness")
+	.action(async () => {
+		const { EnhancedMetricsQuery } = await import("./enhanced-metrics.js");
+		const analysis = await EnhancedMetricsQuery.getEscalationAnalysis();
+
+		console.log(chalk.bold("🔄 Model Escalation Patterns Analysis\n"));
+
+		if (analysis.totalEscalations === 0) {
+			console.log(chalk.yellow("No escalation data found in metrics history."));
+			console.log(chalk.dim("Enhanced metrics tracking may need to be integrated into the orchestrator."));
+			return;
+		}
+
+		// Success rate analysis
+		const successColor = analysis.escalationSuccessRate >= 0.8 ? chalk.green :
+			analysis.escalationSuccessRate >= 0.6 ? chalk.yellow : chalk.red;
+
+		console.log(chalk.cyan("Overall Escalation Performance"));
+		console.log(`Total escalations: ${analysis.totalEscalations}`);
+		console.log(`Success rate: ${successColor(`${(analysis.escalationSuccessRate * 100).toFixed(1)}%`)}`);
+		console.log(`Average tokens saved: ${analysis.averageTokensSaved.toFixed(0)}`);
+		console.log();
+
+		// Escalation path effectiveness
+		console.log(chalk.cyan("Escalation Path Effectiveness"));
+		const sortedPaths = Object.entries(analysis.escalationsByModel)
+			.sort(([, a], [, b]) => b - a);
+
+		for (const [path, count] of sortedPaths) {
+			console.log(`  ${path}: ${count} escalations`);
+		}
+		console.log();
+
+		// Common reasons
+		if (analysis.commonEscalationReasons.length > 0) {
+			console.log(chalk.cyan("Most Common Escalation Triggers"));
+			for (const { reason, count } of analysis.commonEscalationReasons.slice(0, 10)) {
+				console.log(`  ${count.toString().padStart(3)}x ${reason}`);
+			}
+			console.log();
+		}
+
+		// Recommendations
+		console.log(chalk.cyan("💡 Recommendations"));
+
+		if (analysis.escalationSuccessRate < 0.6) {
+			console.log(chalk.red("  • Low escalation success rate - review escalation triggers"));
+		}
+
+		if (analysis.averageTokensSaved < 0) {
+			console.log(chalk.red("  • Escalations are increasing token usage - review efficiency"));
+		} else if (analysis.averageTokensSaved > 100) {
+			console.log(chalk.green("  • Escalations are saving tokens effectively"));
+		}
+
+		// Look for patterns in the escalation paths
+		const hasHaikuToOpus = analysis.escalationsByModel["haiku → opus"] > 0;
+		const hasHaikuToSonnet = analysis.escalationsByModel["haiku → sonnet"] > 0;
+		const hasSonnetToOpus = analysis.escalationsByModel["sonnet → opus"] > 0;
+
+		if (hasHaikuToOpus && !hasHaikuToSonnet) {
+			console.log(chalk.yellow("  • Consider using Sonnet as intermediate step instead of jumping to Opus"));
+		}
+
+		if (analysis.totalEscalations > 50) {
+			console.log(chalk.blue("  • High escalation volume - consider adjusting initial model selection"));
+		}
+	});
+
 async function runBenchmark(): Promise<void> {
 	const { RaidOrchestrator } = await import("./raid.js");
 	const { getMetricsCollector } = await import("./metrics-collector.js");
