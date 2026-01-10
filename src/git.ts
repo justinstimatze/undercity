@@ -326,6 +326,18 @@ export function deleteBranch(branch: string, force = false): void {
 }
 
 /**
+ * Push current branch to origin
+ * CRITICAL: This ensures merged work is saved to remote, not just local
+ */
+export function pushToOrigin(branch?: string): void {
+	const args = ["push", "origin"];
+	if (branch) {
+		args.push(branch);
+	}
+	execGit(args);
+}
+
+/**
  * Run tests using pnpm
  * Returns { success: boolean, output: string }
  */
@@ -731,7 +743,21 @@ export class Elevator {
 					return item;
 				}
 
-				// Step 4: On successful merge, we can safely delete the branch
+				// Step 4: Push to origin - CRITICAL to save work remotely
+				item.status = "pushing";
+				try {
+					pushToOrigin(this.mainBranch);
+					gitLogger.info({ branch: this.mainBranch }, "Pushed merge to origin");
+				} catch (pushError) {
+					// Push failure is serious but don't fail the whole merge
+					// Work is on local main, user can push manually
+					gitLogger.error(
+						{ branch: this.mainBranch, error: String(pushError) },
+						"Failed to push to origin - work is on local main, push manually",
+					);
+				}
+
+				// Step 5: On successful merge, we can safely delete the branch
 				// The worktree cleanup will happen separately via WorktreeManager
 				try {
 					// First remove the worktree to release the branch lock

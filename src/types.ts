@@ -145,7 +145,8 @@ export type MergeStatus =
 	| "rebasing" // Currently rebasing
 	| "testing" // Running tests
 	| "merging" // Actually merging
-	| "complete" // Successfully merged
+	| "pushing" // Pushing to origin
+	| "complete" // Successfully merged and pushed
 	| "conflict" // Needs manual resolution
 	| "test_failed"; // Tests failed
 

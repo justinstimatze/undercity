@@ -26,6 +26,7 @@ export {
 	getDefaultBranch,
 	isWorkingTreeClean,
 	merge,
+	pushToOrigin,
 	rebase,
 	runTests,
 	stash,
