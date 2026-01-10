@@ -4,8 +4,9 @@ node_modules/
 # Build output
 dist/
 
-# Runtime state
-.undercity/
+# Runtime state (but track quests.json - the work queue)
+.undercity/*
+!.undercity/quests.json
 
 # IDE
 .vscode/
