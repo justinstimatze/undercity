@@ -3,6 +3,9 @@
 ## Available
 
 ### Critical
+[portability] Add support for external repos - undercity should work on any repo, not just itself
+[portability] Detect target repo from cwd (nearest git root), create .undercity/ there if missing
+[portability] Add "undercity init" command to initialize .undercity/ and intel.txt in a new repo
 [config] BUG: Questers not picking up .claude/rules/ - SDK subagents should load repo config (no-emoji, no-attribution rules being ignored)
 [elevator] BUG: Quests marked complete even when merge fails - only mark complete if work actually lands on main
 [elevator] CRITICAL BUG: Don't delete branch on merge failure - preserve work for manual recovery (we just lost 2 quests worth of work)
