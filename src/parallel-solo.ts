@@ -181,7 +181,7 @@ export class ParallelSoloOrchestrator {
 
 			for (const taskResult of successfulTasks) {
 				try {
-					await this.mergeBranch(taskResult.branch, taskResult.taskId);
+					await this.mergeBranch(taskResult.branch, taskResult.taskId, taskResult.worktreePath);
 					taskResult.merged = true;
 					console.log(chalk.green(`  ✓ Merged: ${taskResult.taskId}`));
 				} catch (error) {
@@ -232,48 +232,55 @@ export class ParallelSoloOrchestrator {
 	}
 
 	/**
-	 * Merge a branch into main using rebase strategy
+	 * Merge a worktree's changes into main using rebase strategy
+	 *
+	 * Strategy: Work from within the worktree to rebase onto origin/main,
+	 * run verification, then push directly to main.
 	 */
-	private async mergeBranch(branch: string, taskId: string): Promise<void> {
-		const mainRepo = this.worktreeManager.getMainRepoPath();
+	private async mergeBranch(branch: string, taskId: string, worktreePath: string): Promise<void> {
 		const mainBranch = this.worktreeManager.getMainBranch();
 
-		// Fetch and checkout main
-		execInDir(`git fetch origin`, mainRepo);
-		execInDir(`git checkout ${mainBranch}`, mainRepo);
-		execInDir(`git pull origin ${mainBranch}`, mainRepo);
+		// Fetch latest main into the worktree
+		execInDir(`git fetch origin ${mainBranch}`, worktreePath);
 
-		// Rebase the branch onto main
+		// Rebase onto origin/main
 		try {
-			execInDir(`git rebase ${mainBranch} ${branch}`, mainRepo);
+			execInDir(`git rebase origin/${mainBranch}`, worktreePath);
 		} catch (error) {
 			// Abort rebase if it fails
 			try {
-				execInDir(`git rebase --abort`, mainRepo);
+				execInDir(`git rebase --abort`, worktreePath);
 			} catch {
 				// Ignore abort errors
 			}
 			throw new Error(`Rebase failed for ${taskId}: ${error}`);
 		}
 
-		// Run tests before merging
+		// Run verification after rebase (catches any merge issues)
 		try {
 			console.log(chalk.dim(`    Running verification for ${taskId}...`));
-			execInDir(`pnpm typecheck`, mainRepo);
-			execInDir(`pnpm test --run`, mainRepo);
+			execInDir(`pnpm typecheck`, worktreePath);
+			execInDir(`pnpm test --run`, worktreePath);
 		} catch (error) {
 			throw new Error(`Verification failed for ${taskId}: ${error}`);
 		}
 
-		// Fast-forward merge
-		execInDir(`git checkout ${mainBranch}`, mainRepo);
-		execInDir(`git merge --ff-only ${branch}`, mainRepo);
-
-		// Push to origin
+		// Push the rebased branch to main
 		try {
-			execInDir(`git push origin ${mainBranch}`, mainRepo);
+			execInDir(`git push origin HEAD:${mainBranch}`, worktreePath);
 		} catch (error) {
-			console.log(chalk.yellow(`    Warning: Push failed for ${taskId}, changes are local only`));
+			throw new Error(`Push failed for ${taskId}: ${error}`);
+		}
+
+		// Update the main repo to reflect the pushed changes
+		const mainRepo = this.worktreeManager.getMainRepoPath();
+		try {
+			execInDir(`git fetch origin`, mainRepo);
+			execInDir(`git checkout ${mainBranch}`, mainRepo);
+			execInDir(`git pull origin ${mainBranch}`, mainRepo);
+		} catch {
+			// Non-fatal - main repo update failed but push succeeded
+			console.log(chalk.dim(`    Note: Local main branch not updated, but push succeeded`));
 		}
 	}
 }
