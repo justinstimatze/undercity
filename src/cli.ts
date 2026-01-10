@@ -1846,5 +1846,286 @@ program
 		},
 	);
 
+// ===== Self-Improvement Commands =====
+
+program
+	.command("metrics")
+	.description("Show self-improvement metrics and analytics")
+	.option("-d, --days <days>", "Number of days to include in analysis", "30")
+	.option("--export <file>", "Export raw data to file")
+	.action(async (options) => {
+		try {
+			const { getImprovementPersistence } = await import("./improvement-persistence.js");
+			const { selfImprovementAgent } = await import("./self-improvement.js");
+
+			const persistence = getImprovementPersistence();
+			const days = parseInt(options.days, 10);
+			const fromDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+			// Get metrics for the specified period
+			const questMetrics = persistence.getQuestMetricsInRange(fromDate, new Date());
+			const efficiencyOutcomes = persistence.getEfficiencyOutcomes().filter((eo) => eo.recordedAt >= fromDate);
+
+			console.log(chalk.cyan.bold("\n📊 Self-Improvement Metrics"));
+			console.log(chalk.dim(`  Analysis period: Last ${days} days\n`));
+
+			if (questMetrics.length === 0) {
+				console.log(chalk.yellow("  No metrics data available for this period"));
+				return;
+			}
+
+			// Calculate analytics
+			const { MetricsTracker } = await import("./metrics.js");
+			const analytics = MetricsTracker.calculateAnalytics(questMetrics);
+
+			console.log(chalk.bold("Performance Summary:"));
+			console.log(`  ${chalk.green("✓")} Success Rate: ${analytics.successRate.toFixed(1)}%`);
+			console.log(`  ${chalk.blue("⏱")}  Average Duration: ${Math.round(analytics.avgDurationMs / 60000)} minutes`);
+			console.log(`  ${chalk.yellow("🔤")} Average Tokens: ${Math.round(analytics.avgTokensPerCompletion)}`);
+			console.log(`  ${chalk.magenta("🤖")} Average Agents: ${analytics.avgAgentsSpawned.toFixed(1)}`);
+			if (analytics.mostEfficientAgentType) {
+				console.log(`  ${chalk.green("⭐")} Most Efficient: ${analytics.mostEfficientAgentType}`);
+			}
+
+			// Show efficiency outcomes if available
+			if (efficiencyOutcomes.length > 0) {
+				const { EfficiencyAnalyzer } = await import("./efficiency-analyzer.js");
+				const analyzer = new EfficiencyAnalyzer();
+				const comparison = analyzer.analyzeEfficiency(efficiencyOutcomes);
+
+				console.log(chalk.bold("\nA/B Testing Results:"));
+				if (comparison.significance.overallSignificant) {
+					const insights = analyzer.generateInsights(comparison);
+					insights.slice(0, 3).forEach((insight) => {
+						console.log(`  ${insight}`);
+					});
+				} else {
+					console.log(`  ${chalk.dim("No statistically significant differences found")}`);
+				}
+			}
+
+			// Show storage stats
+			const stats = persistence.getStorageStats();
+			console.log(chalk.bold("\nData Storage:"));
+			console.log(`  Quest metrics: ${stats.questMetrics}`);
+			console.log(`  Efficiency outcomes: ${stats.efficiencyOutcomes}`);
+			console.log(`  Experiment results: ${stats.experimentResults}`);
+			console.log(`  Storage size: ${(stats.storageSizeBytes / 1024).toFixed(1)} KB`);
+
+			// Export if requested
+			if (options.export) {
+				const data = persistence.exportData();
+				const fs = await import("node:fs");
+				fs.writeFileSync(options.export, JSON.stringify(data, null, 2));
+				console.log(chalk.green(`\n  ✓ Data exported to ${options.export}`));
+			}
+		} catch (error) {
+			console.error(chalk.red("Failed to show metrics:"), error instanceof Error ? error.message : String(error));
+		}
+	});
+
+program
+	.command("experiments")
+	.description("Manage A/B experiments for self-improvement")
+	.option("--list", "List active experiments")
+	.option("--start", "Start a new experiment (interactive)")
+	.option("--stop <id>", "Stop an experiment")
+	.option("--status <id>", "Show experiment status")
+	.action(async (options) => {
+		try {
+			const { getImprovementPersistence } = await import("./improvement-persistence.js");
+			const { selfImprovementAgent } = await import("./self-improvement.js");
+
+			const persistence = getImprovementPersistence();
+
+			if (options.list) {
+				const experiments = persistence.getActiveExperiments();
+				const experimentIds = Object.keys(experiments);
+
+				console.log(chalk.cyan.bold("\n🧪 Active Experiments"));
+
+				if (experimentIds.length === 0) {
+					console.log(chalk.yellow("  No active experiments"));
+					return;
+				}
+
+				for (const id of experimentIds) {
+					const config = experiments[id];
+					const status = selfImprovementAgent.getExperimentStatus(id);
+
+					console.log(`\n  ${chalk.bold(id)}`);
+					console.log(`    Hypothesis: ${config.hypothesis}`);
+					console.log(
+						`    Progress: ${status.resultsCount}/${config.targetSampleSize} (${(status.completionRate * 100).toFixed(1)}%)`,
+					);
+					console.log(`    Variants: ${config.variants.map((v) => v.name).join(", ")}`);
+				}
+			} else if (options.start) {
+				console.log(chalk.cyan.bold("\n🧪 Starting New Experiment"));
+				console.log(chalk.yellow("  Interactive experiment creation not yet implemented"));
+				console.log(chalk.dim("  Use the API to create experiments programmatically"));
+			} else if (options.stop) {
+				const removed = selfImprovementAgent.stopExperiment(options.stop);
+				persistence.removeActiveExperiment(options.stop);
+
+				if (removed) {
+					console.log(chalk.green(`\n  ✓ Stopped experiment: ${options.stop}`));
+				} else {
+					console.log(chalk.red(`\n  ✗ Experiment not found: ${options.stop}`));
+				}
+			} else if (options.status) {
+				const status = selfImprovementAgent.getExperimentStatus(options.status);
+
+				if (!status.config) {
+					console.log(chalk.red(`\n  ✗ Experiment not found: ${options.status}`));
+					return;
+				}
+
+				console.log(chalk.cyan.bold(`\n🧪 Experiment Status: ${options.status}`));
+				console.log(`  Hypothesis: ${status.config.hypothesis}`);
+				console.log(
+					`  Progress: ${status.resultsCount}/${status.config.targetSampleSize} (${(status.completionRate * 100).toFixed(1)}%)`,
+				);
+
+				if (status.preliminaryResults) {
+					const { EfficiencyAnalyzer } = await import("./efficiency-analyzer.js");
+					const analyzer = new EfficiencyAnalyzer();
+					const insights = analyzer.generateInsights(status.preliminaryResults);
+
+					console.log(chalk.bold("\n  Preliminary Results:"));
+					insights.slice(0, 3).forEach((insight) => {
+						console.log(`    ${insight}`);
+					});
+				} else {
+					console.log(chalk.yellow("\n  Not enough data for preliminary analysis"));
+				}
+			} else {
+				// Default: show summary
+				const experiments = persistence.getActiveExperiments();
+				console.log(chalk.cyan.bold("\n🧪 Experiments Overview"));
+				console.log(`  Active experiments: ${Object.keys(experiments).length}`);
+				console.log(chalk.dim("  Use --list to see details, --start to create, or --stop <id> to stop"));
+			}
+		} catch (error) {
+			console.error(chalk.red("Failed to manage experiments:"), error instanceof Error ? error.message : String(error));
+		}
+	});
+
+program
+	.command("improve")
+	.description("Generate and show improvement quests based on empirical data")
+	.option("--priority <level>", "Filter by priority (low, medium, high, critical)")
+	.option("--category <type>", "Filter by category (performance, quality, efficiency, reliability, usability)")
+	.option("--generate", "Generate new improvement quests from current data")
+	.action(async (options) => {
+		try {
+			const { getImprovementPersistence } = await import("./improvement-persistence.js");
+			const { selfImprovementAgent } = await import("./self-improvement.js");
+
+			const persistence = getImprovementPersistence();
+			let quests = persistence.getImprovementQuests();
+
+			if (options.generate) {
+				console.log(chalk.cyan.bold("\n🔄 Generating Improvement Quests..."));
+
+				// Load data
+				const questMetrics = persistence.getQuestMetrics();
+				const efficiencyOutcomes = persistence.getEfficiencyOutcomes();
+				const experimentResults = persistence.getExperimentResults();
+
+				// Populate self-improvement agent
+				for (const metric of questMetrics) {
+					selfImprovementAgent.collectQuestMetrics(metric);
+				}
+				for (const outcome of efficiencyOutcomes) {
+					selfImprovementAgent.collectEfficiencyOutcome(outcome);
+				}
+				for (const result of experimentResults) {
+					selfImprovementAgent.runExperiment(result.hypothesis, () =>
+						result.success ? Promise.resolve(result.details) : Promise.reject(result.details),
+					);
+				}
+
+				// Generate new quests
+				const newQuests = selfImprovementAgent.generateImprovementQuests();
+
+				// Save new quests
+				for (const quest of newQuests) {
+					persistence.addImprovementQuest(quest);
+				}
+
+				quests = persistence.getImprovementQuests();
+				console.log(chalk.green(`  ✓ Generated ${newQuests.length} improvement quests`));
+			}
+
+			// Filter quests
+			if (options.priority) {
+				quests = quests.filter((q) => q.priority === options.priority);
+			}
+			if (options.category) {
+				quests = quests.filter((q) => q.category === options.category);
+			}
+
+			// Sort by priority and impact
+			quests.sort((a, b) => {
+				const priorityScore = { critical: 4, high: 3, medium: 2, low: 1 };
+				const aPriority = priorityScore[a.priority];
+				const bPriority = priorityScore[b.priority];
+
+				if (aPriority !== bPriority) {
+					return bPriority - aPriority;
+				}
+
+				return b.estimatedImpact - a.estimatedImpact;
+			});
+
+			console.log(chalk.cyan.bold("\n🎯 Improvement Quests"));
+
+			if (quests.length === 0) {
+				console.log(chalk.yellow("  No improvement quests available"));
+				if (!options.generate) {
+					console.log(chalk.dim("  Use --generate to create quests from current data"));
+				}
+				return;
+			}
+
+			// Show top 10 quests
+			const topQuests = quests.slice(0, 10);
+
+			for (const quest of topQuests) {
+				const priorityColor = {
+					critical: chalk.red,
+					high: chalk.yellow,
+					medium: chalk.blue,
+					low: chalk.gray,
+				}[quest.priority];
+
+				const categoryEmoji = {
+					performance: "⚡",
+					quality: "✨",
+					efficiency: "🔧",
+					reliability: "🛡️",
+					usability: "👤",
+				}[quest.category];
+
+				console.log(
+					`\n  ${categoryEmoji} ${priorityColor(quest.priority.toUpperCase())} - Impact: ${quest.estimatedImpact}`,
+				);
+				console.log(`    ${chalk.bold(quest.title)}`);
+				console.log(`    ${chalk.dim(quest.description.slice(0, 100))}${quest.description.length > 100 ? "..." : ""}`);
+				console.log(`    ${chalk.dim(`Data: ${quest.dataSource} | Effort: ${quest.estimatedEffort}`)}`);
+			}
+
+			if (quests.length > 10) {
+				console.log(chalk.dim(`\n  ... and ${quests.length - 10} more quests`));
+			}
+		} catch (error) {
+			console.error(
+				chalk.red("Failed to show improvement quests:"),
+				error instanceof Error ? error.message : String(error),
+			);
+		}
+	});
+
 // Parse and run
 program.parse();

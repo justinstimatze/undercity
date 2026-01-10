@@ -155,18 +155,21 @@
     {
       "id": "quest-mk84gfvr-1klk",
       "objective": "[parallel] Add parallel-by-tier execution - batch local-tools, run 2-3 local LLM, serialize Claude API calls for max throughput",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 18,
       "createdAt": "2026-01-10T09:47:51.783Z",
       "startedAt": "2026-01-10T09:55:54.945Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-10T09:59:36.640Z"
     },
     {
       "id": "quest-mk84h5xx-ciui",
       "objective": "[skynet] Build self-improvement loop - metrics collection, experiment framework, PM agent that generates improvement quests based on empirical data",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 19,
-      "createdAt": "2026-01-10T09:48:25.557Z"
+      "createdAt": "2026-01-10T09:48:25.557Z",
+      "startedAt": "2026-01-10T09:59:36.641Z",
+      "raidId": ""
     },
     {
       "id": "quest-mk84ilj8-1ihq",
@@ -295,5 +298,5 @@
       "createdAt": "2026-01-10T09:53:15.928Z"
     }
   ],
-  "lastUpdated": "2026-01-10T09:55:54.945Z"
+  "lastUpdated": "2026-01-10T09:59:36.641Z"
 }

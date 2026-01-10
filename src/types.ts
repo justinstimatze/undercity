@@ -897,3 +897,19 @@ export interface RecoveryState {
 		lastUpdated: Date;
 	};
 }
+
+// Self-Improvement Loop Types
+export interface CompletionMetrics {
+	raidId: string;
+	goal: string;
+	completionTime: number;
+	agentsInvolved: AgentType[];
+	success: boolean;
+}
+
+export interface ExperimentResult {
+	hypothesis: string;
+	success: boolean;
+	duration: number;
+	details: unknown;
+}

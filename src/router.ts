@@ -169,7 +169,7 @@ function requiresOpus(task: string): boolean {
 /**
  * Route by complexity level
  */
-function routeByComplexity(level: ComplexityLevel, task: string): RoutingDecision {
+function routeByComplexity(level: ComplexityLevel, _task: string): RoutingDecision {
 	switch (level) {
 		case "trivial":
 			return {
