@@ -968,3 +968,33 @@ export interface ImprovementQuest {
 	/** Optional associated experiment ID */
 	experimentId?: string;
 }
+
+/**
+ * Prompt Knowledge tracking for institutional learning
+ * Captures successful approaches and prompts per task type
+ */
+export interface PromptKnowledge {
+	/** Unique hash identifier for this prompt/approach */
+	id: string;
+	/** Type of task this knowledge applies to */
+	taskType: string;
+	/** The original prompt or input */
+	prompt: string;
+	/** Successful approach or implementation details */
+	approach: string;
+	/** Performance metrics from successful execution */
+	metrics: {
+		/** Tokens used */
+		tokensUsed: number;
+		/** Execution time in milliseconds */
+		executionTimeMs: number;
+		/** Success rating (1-5) */
+		successRating?: number;
+	};
+	/** Metadata tags for searchability */
+	tags: string[];
+	/** When this knowledge was first recorded */
+	recordedAt: Date;
+	/** Number of times this approach has been successful */
+	successCount: number;
+}

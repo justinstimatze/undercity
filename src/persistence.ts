@@ -25,6 +25,7 @@ import type {
 	LoadoutPerformanceRecord,
 	LoadoutScore,
 	LoadoutStorage,
+	PromptKnowledge,
 	QuestMetrics,
 	Raid,
 	RateLimitState,
@@ -791,6 +792,106 @@ export class Persistence {
 				lastUpdated: new Date(),
 			},
 		});
+	}
+
+	// ============== Prompt Knowledge ==============
+
+	/**
+	 * Save prompt knowledge entry
+	 */
+	savePromptKnowledge(entry: PromptKnowledge): void {
+		try {
+			const knowledgeFile = this.getPath("prompt-knowledge.json");
+			let knowledge: PromptKnowledge[] = [];
+
+			// Load existing knowledge
+			if (existsSync(knowledgeFile)) {
+				const data = JSON.parse(readFileSync(knowledgeFile, "utf8"));
+				knowledge = data.knowledge || [];
+			}
+
+			// Check if this approach already exists
+			const existingIndex = knowledge.findIndex((k) => k.id === entry.id);
+			if (existingIndex !== -1) {
+				// Update existing entry
+				knowledge[existingIndex] = {
+					...knowledge[existingIndex],
+					approach: entry.approach,
+					metrics: {
+						tokensUsed: (knowledge[existingIndex].metrics.tokensUsed + entry.metrics.tokensUsed) / 2,
+						executionTimeMs: (knowledge[existingIndex].metrics.executionTimeMs + entry.metrics.executionTimeMs) / 2,
+						successRating: entry.metrics.successRating ?? knowledge[existingIndex].metrics.successRating,
+					},
+					tags: [...new Set([...knowledge[existingIndex].tags, ...entry.tags])],
+					successCount: knowledge[existingIndex].successCount + 1,
+				};
+			} else {
+				// Add new entry
+				knowledge.push(entry);
+			}
+
+			// Keep only the most recent 1000 entries
+			if (knowledge.length > 1000) {
+				knowledge = knowledge.sort((a, b) => b.recordedAt.getTime() - a.recordedAt.getTime()).slice(0, 1000);
+			}
+
+			// Save back to file
+			const data = {
+				knowledge,
+				version: "1.0",
+				lastUpdated: new Date().toISOString(),
+			};
+
+			writeFileSync(knowledgeFile, JSON.stringify(data, null, 2));
+			persistenceLogger.debug({ entryId: entry.id }, "Saved prompt knowledge");
+		} catch (error) {
+			persistenceLogger.error({ error: String(error) }, "Failed to save prompt knowledge");
+		}
+	}
+
+	/**
+	 * Load all prompt knowledge entries
+	 */
+	getPromptKnowledge(): PromptKnowledge[] {
+		try {
+			const knowledgeFile = this.getPath("prompt-knowledge.json");
+			if (!existsSync(knowledgeFile)) {
+				return [];
+			}
+
+			const data = JSON.parse(readFileSync(knowledgeFile, "utf8"));
+			return data.knowledge || [];
+		} catch (error) {
+			persistenceLogger.error({ error: String(error) }, "Failed to load prompt knowledge");
+			return [];
+		}
+	}
+
+	/**
+	 * Get prompt knowledge filtered by task type
+	 */
+	getPromptKnowledgeByType(taskType: string): PromptKnowledge[] {
+		return this.getPromptKnowledge()
+			.filter((k) => k.taskType === taskType)
+			.sort((a, b) => b.successCount - a.successCount);
+	}
+
+	/**
+	 * Get top N most successful knowledge entries
+	 */
+	getTopPromptKnowledge(limit: number = 10): PromptKnowledge[] {
+		return this.getPromptKnowledge()
+			.sort((a, b) => b.successCount - a.successCount)
+			.slice(0, limit);
+	}
+
+	/**
+	 * Get prompt knowledge filtered by tags
+	 */
+	getPromptKnowledgeByTags(tags: string[]): PromptKnowledge[] {
+		return this.getPromptKnowledge()
+			.filter((k) => tags.some((tag) => k.tags.includes(tag)))
+			.sort((a, b) => b.successCount - a.successCount);
 	}
 
 	/**
