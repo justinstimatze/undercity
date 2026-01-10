@@ -22,18 +22,21 @@
     {
       "id": "quest-bug-surrender",
       "objective": "[bug] Surrender should clear inventory.json so status shows 'No active raid'",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 2,
       "createdAt": "2026-01-10T08:50:00.000Z",
       "startedAt": "2026-01-10T09:30:39.752Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-10T09:31:41.129Z"
     },
     {
       "id": "quest-bug-sdk-cwd",
       "objective": "[bug] SDK cwd option not isolating agent file operations - agents write to process.cwd() not worktree",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 3,
-      "createdAt": "2026-01-10T08:50:00.000Z"
+      "createdAt": "2026-01-10T08:50:00.000Z",
+      "startedAt": "2026-01-10T09:31:41.130Z",
+      "raidId": ""
     },
     {
       "id": "quest-solo-token-tracking",
@@ -127,5 +130,5 @@
       "createdAt": "2026-01-10T09:27:58.387Z"
     }
   ],
-  "lastUpdated": "2026-01-10T09:30:39.752Z"
+  "lastUpdated": "2026-01-10T09:31:41.130Z"
 }

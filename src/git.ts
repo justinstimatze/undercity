@@ -687,7 +687,7 @@ export class Elevator {
 	 * @param item - The elevator item to process
 	 * @returns the processed item
 	 */
-	private async processWorktreeBranch(item: ElevatorItem): Promise<ElevatorItem> {
+	private async processWorktreeBranch(item: ElevatorItem, cwd: string): Promise<ElevatorItem> {
 		const worktreePath = this.getWorktreePath(item.branch);
 		if (!worktreePath) {
 			item.status = "conflict";
@@ -721,7 +721,7 @@ export class Elevator {
 			// Step 2: Run tests in the worktree
 			item.status = "testing";
 			gitLogger.debug({ branch: item.branch, worktreePath }, "Running tests in worktree");
-			const testResult = await runTests(worktreePath);
+			const testResult = await runTests(worktreePath || cwd);
 
 			if (!testResult.success) {
 				item.status = "test_failed";
@@ -900,6 +900,7 @@ export class Elevator {
 
 		this.processing = true;
 		const originalBranch = getCurrentBranch();
+		const cwd = process.cwd(); // Capture current working directory
 		let branchPreserved = false;
 
 		try {
@@ -910,7 +911,7 @@ export class Elevator {
 				// CRITICAL FIX: For worktree branches, merge from the worktree location
 				// This avoids the checkout conflict and preserves all work
 				gitLogger.debug({ branch: item.branch }, "Detected worktree branch, merging from worktree");
-				return await this.processWorktreeBranch(item);
+				return await this.processWorktreeBranch(item, cwd);
 			}
 
 			// Legacy path: For non-worktree branches, use the original approach
@@ -934,7 +935,7 @@ export class Elevator {
 			// Step 3: Run tests (in the main repository where we checked out)
 			item.status = "testing";
 			gitLogger.debug({ branch: item.branch }, "Running tests");
-			const testResult = await runTests(process.cwd());
+			const testResult = await runTests(cwd);
 
 			if (!testResult.success) {
 				item.status = "test_failed";
