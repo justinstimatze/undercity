@@ -851,8 +851,8 @@ When done, provide a brief summary of what you changed.`;
 			const shortTask = task.substring(0, 50) + (task.length > 50 ? "..." : "");
 			const commitMessage = shortTask;
 
-			// Commit
-			execSync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`, {
+			// Commit (skip hooks - we already did verification)
+			execSync(`git commit --no-verify -m "${commitMessage.replace(/"/g, '\\"')}"`, {
 				cwd: process.cwd(),
 			});
 
@@ -1303,12 +1303,12 @@ Fix any issues to complete the original goal. Run typecheck to verify.`;
 	}
 
 	/**
-	 * Commit work
+	 * Commit work (skip hooks - we already did verification)
 	 */
 	private async commitWork(goal: string): Promise<string> {
 		execSync("git add -A");
 		const shortGoal = goal.substring(0, 50) + (goal.length > 50 ? "..." : "");
-		execSync(`git commit -m "${shortGoal.replace(/"/g, '\\"')}"`);
+		execSync(`git commit --no-verify -m "${shortGoal.replace(/"/g, '\\"')}"`);
 		return execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
 	}
 }

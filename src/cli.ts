@@ -71,6 +71,14 @@ import type { RaidStatus } from "./types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Deprecation warning helper
+function showDeprecationWarning(command: string, alternative: string): void {
+	console.log(chalk.yellow.bold("\n⚠️  DEPRECATED COMMAND"));
+	console.log(chalk.yellow(`   '${command}' uses the legacy raid workflow.`));
+	console.log(chalk.yellow(`   Recommended: ${chalk.cyan(alternative)}`));
+	console.log(chalk.dim("   The raid system will be removed in a future version.\n"));
+}
+
 // Get version from package.json
 function getVersion(): string {
 	try {
@@ -114,10 +122,10 @@ program
 	.description("Multi-raider orchestrator for Claude Max - Gas Town for budget extraction")
 	.version(getVersion());
 
-// Slingshot command - launch a raid via the Tubes
+// Slingshot command - launch a raid via the Tubes (DEPRECATED)
 program
 	.command("slingshot [goal]")
-	.description("Launch a new raid (or resume existing)")
+	.description("[DEPRECATED] Launch a new raid (use 'solo' or 'grind' instead)")
 	.option("-a, --auto-approve", "Auto-approve plans without human review")
 	.option("-y, --yes", "Full auto mode: auto-approve and auto-commit (walk away)")
 	.option("-v, --verbose", "Enable verbose logging")
@@ -142,6 +150,7 @@ program
 				retry?: boolean;
 			},
 		) => {
+			showDeprecationWarning("slingshot", "undercity solo <goal> --stream");
 			const fullAuto = options.yes || false;
 			// Parse and validate parallel option (default 3, max 5)
 			const parallelValue = Math.min(5, Math.max(1, Number.parseInt(options.parallel || "3", 10)));
@@ -1120,10 +1129,10 @@ program
 		);
 	});
 
-// Quest batch command - process multiple quests in parallel
+// Quest batch command - process multiple quests in parallel (DEPRECATED)
 program
 	.command("quest-batch")
-	.description("Process multiple quests in parallel batches")
+	.description("[DEPRECATED] Process multiple quests in parallel (use 'grind --parallel' instead)")
 	.option("-n, --max-quests <n>", "Maximum concurrent quests (1-5)", "3")
 	.option("--dry-run", "Show quest matchmaking without executing")
 	.option("--analyze-only", "Analyze quests and show compatibility matrix")
@@ -1145,6 +1154,8 @@ program
 			riskThreshold?: string;
 			conflictResolution?: string;
 		}) => {
+			showDeprecationWarning("quest-batch", "undercity grind --parallel 3");
+
 			const maxQuests = Math.min(5, Math.max(1, Number.parseInt(options.maxQuests || "3", 10)));
 			const riskThreshold = Math.min(1, Math.max(0, Number.parseFloat(options.riskThreshold || "0.7")));
 			const conflictResolution = (options.conflictResolution || "balanced") as

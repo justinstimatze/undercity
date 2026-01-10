@@ -71,7 +71,27 @@ undercity grind --limit 5
 
 # Just show what would run
 undercity grind --dry-run
+
+# Run quests in parallel (uses git worktrees)
+undercity grind --parallel 3
 ```
+
+### Parallel Mode
+
+Run multiple quests concurrently using isolated git worktrees:
+
+```bash
+undercity grind --parallel 3    # Run 3 quests in parallel
+```
+
+**How it works:**
+1. Creates isolated git worktrees for each task
+2. Runs SoloOrchestrators concurrently (one per worktree)
+3. Each task gets its own branch
+4. Successful branches merge serially (rebase → typecheck → merge)
+5. Worktrees cleaned up after completion
+
+This is useful for processing independent quests faster while maintaining clean git history.
 
 ### Quest Board
 
@@ -174,7 +194,8 @@ undercity --directory /other/project grind
 undercity/
 ├── src/
 │   ├── solo.ts           # Core task execution with escalation
-│   ├── grind.ts          # Batch processing
+│   ├── parallel-solo.ts  # Parallel execution via worktrees
+│   ├── worktree-manager.ts # Git worktree management
 │   ├── complexity.ts     # Task routing
 │   ├── context.ts        # Pre-flight briefing generation
 │   ├── verification.ts   # biome/typecheck/build/test runner
@@ -182,6 +203,7 @@ undercity/
 └── .undercity/
     ├── quests.json       # Quest board
     ├── metrics.jsonl     # Performance history
+    ├── worktrees/        # Isolated worktrees for parallel tasks
     └── logs/             # Agent activity
 ```
 
@@ -194,10 +216,11 @@ The goal is **fully autonomous, dynamically optimal** - no human gating, no manu
 - Adaptive escalation with same-tier retries for trivial errors
 - Post-mortem analysis on tier escalation
 - Error category tracking for learning
+- Parallel execution via git worktrees (`grind --parallel`)
 
 **Next:**
 - **Auto-planning**: Complex tasks get a planning phase, trivial ones skip it
-- **Parallel solos**: Multiple workers in git worktrees, elevator merge queue
+- **Dynamic parallelism**: Auto-detect optimal parallel count based on system resources
 - **Learning from metrics**: Route better based on what's worked before
 
 **Future:**
@@ -220,7 +243,7 @@ The original design used extraction shooter metaphors (raids, flutes, questers, 
 - Multiple agent types → one agent, multiple model tiers
 - Human approval gates → fully autonomous
 
-The themed commands still exist (`undercity slingshot`, etc.) but `solo` and `grind` are the recommended path.
+The themed commands still exist (`undercity slingshot`, etc.) but are **deprecated**. Use `solo` and `grind` instead.
 
 ## Philosophy
 
