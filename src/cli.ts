@@ -496,7 +496,98 @@ program
 	});
 
 // Clear command
-program.command("metrics");
+program
+	.command("metrics")
+	.description("Show performance metrics and analytics")
+	.action(() => {
+		const { getMetricsCollector } = require("./metrics-collector.js");
+		const metricsCollector = getMetricsCollector();
+		const metrics = metricsCollector.getMetricsSummary();
+
+		console.log(chalk.bold("Performance Metrics"));
+		console.log(`Total Tasks: ${metrics.totalTasks}`);
+		console.log(`Success Rate: ${(metrics.successRate * 100).toFixed(2)}%`);
+		console.log(`Average Tokens Used: ${metrics.avgTokens.toFixed(2)}`);
+		console.log(`Average Time per Task: ${(metrics.avgTimeTakenMs / 1000).toFixed(2)}s`);
+		console.log("\nModel Distribution:");
+		for (const [model, count] of Object.entries(metrics.modelDistribution)) {
+			console.log(
+				`  ${model}: ${count as number} tasks (${(((count as number) / metrics.totalTasks) * 100).toFixed(2)}%)`,
+			);
+		}
+		console.log(`\nEscalation Rate: ${(metrics.escalationRate * 100).toFixed(2)}%`);
+	});
+
+async function runBenchmark(): Promise<void> {
+	const { RaidOrchestrator } = require("./raid.js");
+	const { getMetricsCollector } = require("./metrics-collector.js");
+	const metricsCollector = getMetricsCollector();
+
+	const benchmarkTasks = [
+		"Type generation: Create complex TypeScript type definitions",
+		"Zod schema: Define a multi-layer validation schema",
+		"Performance test: Measure array processing speed",
+		"Error handling: Create a robust error handling module",
+		"Logging: Implement structured logging with detailed tracing",
+	];
+
+	console.log(chalk.cyan("🚀 Starting Undercity Benchmark"));
+	console.log(chalk.dim("Running standard set of performance tasks"));
+
+	const orchestrator = new RaidOrchestrator({
+		verbose: true,
+		streamOutput: true,
+		autoApprove: true,
+		maxSquadSize: 3,
+		maxParallel: 2,
+	});
+
+	const startTime = Date.now();
+	console.log();
+
+	try {
+		for (const task of benchmarkTasks) {
+			console.log(chalk.blue(`\n📋 Task: ${task}`));
+
+			try {
+				await orchestrator.start(task);
+				await orchestrator.approvePlan();
+				await orchestrator.extract();
+			} catch (taskError) {
+				console.error(chalk.red(`Task failed: ${task}`));
+				console.error(chalk.dim(String(taskError)));
+			}
+		}
+
+		const endTime = Date.now();
+		const totalDuration = endTime - startTime;
+
+		console.log(chalk.green("\n✅ Benchmark Completed"));
+		console.log(chalk.dim(`Total Duration: ${(totalDuration / 1000).toFixed(2)} seconds`));
+
+		const metrics = metricsCollector.getMetricsSummary(new Date(startTime), new Date(endTime));
+		console.log(chalk.bold("\nBenchmark Summary:"));
+		console.log(`Total Tasks: ${metrics.totalTasks}`);
+		console.log(`Success Rate: ${(metrics.successRate * 100).toFixed(2)}%`);
+		console.log(`Average Tokens Used: ${metrics.avgTokens.toFixed(2)}`);
+		console.log(`Average Task Duration: ${(metrics.avgTimeTakenMs / 1000).toFixed(2)} seconds`);
+	} catch (error) {
+		console.error(chalk.red("Benchmark failed:"), error);
+		process.exit(1);
+	}
+}
+
+program
+	.command("benchmark")
+	.description("Run a standard set of performance benchmark tasks")
+	.action(async () => {
+		try {
+			await runBenchmark();
+		} catch (error) {
+			console.error(chalk.red("Benchmark error:"), error);
+			process.exit(1);
+		}
+	});
 
 // Improve command - trigger performance management and quest generation
 program
