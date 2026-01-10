@@ -1454,6 +1454,7 @@ program
 	.option("--supervised", "Use supervised mode (Opus orchestrates workers)")
 	.option("--worker <tier>", "Worker model for supervised mode: haiku, sonnet", "sonnet")
 	.option("-d, --dry-run", "Show complexity assessment without executing")
+	.option("--no-local", "Disable local tools and local LLM routing")
 	.action(
 		async (
 			goal: string,
@@ -1466,6 +1467,7 @@ program
 				supervised?: boolean;
 				worker?: string;
 				dryRun?: boolean;
+				local?: boolean;
 			},
 		) => {
 			// Dynamic import to avoid loading heavy modules until needed
@@ -1514,6 +1516,48 @@ program
 						}
 					}
 				} else {
+					// Check smart routing first (unless disabled with --no-local)
+					const useLocalRouting = options.local !== false;
+
+					if (useLocalRouting) {
+						const { routeTask, executeWithLocalTools } = await import("./router.js");
+						const { queryLocal } = await import("./local-llm.js");
+
+						const routing = await routeTask(goal);
+
+						if (routing.tier === "local-tools") {
+							console.log(chalk.dim(`Route: local-tools (${routing.reason})`));
+							console.log();
+
+							const toolResult = await executeWithLocalTools(goal);
+							if (toolResult.success) {
+								console.log(chalk.green.bold("\n✓ Task complete (local tools)"));
+								console.log(
+									chalk.dim(
+										`  Output: ${toolResult.output.substring(0, 200)}${toolResult.output.length > 200 ? "..." : ""}`,
+									),
+								);
+								return;
+							}
+							console.log(chalk.yellow("  Local tool failed, falling back to LLM"));
+						}
+
+						if (routing.tier === "local-llm") {
+							console.log(chalk.dim(`Route: local-llm (${routing.reason})`));
+							console.log();
+
+							const localResult = await queryLocal(goal, { tier: "small", timeout: 30000 });
+							if (localResult) {
+								console.log(chalk.green.bold("\n✓ Task complete (local LLM)"));
+								console.log(
+									chalk.dim(`  Response: ${localResult.substring(0, 200)}${localResult.length > 200 ? "..." : ""}`),
+								);
+								return;
+							}
+							console.log(chalk.yellow("  Local LLM unavailable, falling back to Haiku"));
+						}
+					}
+
 					// Standard mode: adaptive escalation
 					const startingModel = (options.model || "sonnet") as "haiku" | "sonnet" | "opus";
 					console.log(chalk.dim(`Mode: Standard (${startingModel} → escalate if needed)`));
