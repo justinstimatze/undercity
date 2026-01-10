@@ -792,4 +792,36 @@ export class Persistence {
 			},
 		});
 	}
+
+	/**
+	 * Initialize .undercity/ directory and create initial intel.txt
+	 *
+	 * @param stateDir Optional custom state directory, defaults to .undercity
+	 */
+	initializeUndercity(stateDir: string = DEFAULT_STATE_DIR): void {
+		// Use existing ensureDirectories method
+		this.stateDir = stateDir;
+		this.ensureDirectories();
+
+		// Create initial intel.txt with some default content
+		const intelPath = join(this.stateDir, "intel.txt");
+		writeFileSync(
+			intelPath,
+			`# Undercity Raid Intelligence
+
+## Raid Objectives
+- Maintain clarity of purpose
+- Adapt to emerging challenges
+- Learn and improve continuously
+
+## Notes
+This file serves as a living document for strategic insights and raid reflections.
+
+Last Initialized: ${new Date().toISOString()}
+`,
+			"utf-8",
+		);
+
+		persistenceLogger.info({ stateDir }, "Initialized Undercity state directory");
+	}
 }
