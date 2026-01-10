@@ -952,9 +952,10 @@ program
 					markFailed(nextGoal.id, "Raid failed");
 					console.log(chalk.red(`✗ Quest failed: ${nextGoal.objective.substring(0, 40)}...`));
 				} else {
-					// Raid didn't fully complete (maybe awaiting something)
-					markComplete(nextGoal.id); // Consider it done for now
-					console.log(chalk.yellow(`⚠ Quest processed: ${nextGoal.objective.substring(0, 40)}...`));
+					// Raid didn't complete properly - don't auto-complete, mark as failed
+					const status = finalRaid?.status ?? "unknown";
+					markFailed(nextGoal.id, `Raid ended with status: ${status}`);
+					console.log(chalk.red(`✗ Quest incomplete (status: ${status}): ${nextGoal.objective.substring(0, 40)}...`));
 				}
 
 				// Clear raid state for next goal
