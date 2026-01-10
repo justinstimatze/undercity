@@ -1,814 +1,681 @@
 {
   "quests": [
     {
-      "id": "quest-elevator-critical",
-      "objective": "CRITICAL: Fix elevator branch deletion on merge failure - worktree still owns the branch so checkout fails, then cleanup deletes branch with all work. Either merge FROM the worktree, or release worktree lock BEFORE merge. Preserve branches for manual recovery on any failure.",
+      "id": "quest-phase1-fallback-merge",
+      "objective": "[elevator] Add fallback merge strategies: try ours, then theirs, then report specific conflict files",
       "status": "complete",
-      "priority": -100,
-      "createdAt": "2026-01-10T01:30:00.000Z",
-      "startedAt": "2026-01-10T04:04:52.719Z",
-      "raidId": "raid-mk7rpiof-950suq",
-      "completedAt": "2026-01-10T04:04:52.719Z"
+      "priority": 1,
+      "createdAt": "2026-01-10T00:00:00.000Z",
+      "completedAt": "2026-01-10T08:00:00.000Z",
+      "note": "Implemented optimal merge strategy: clean → -X ours → report conflicts"
     },
     {
-      "id": "quest-ratelimit",
-      "objective": "Add rate limit detection - catch 429 errors, pause squad, show countdown timer, auto-resume when quota resets",
+      "id": "quest-phase1-retry-merges",
+      "objective": "[elevator] Make elevator retry failed merges after other branches succeed (conflicts may resolve)",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase2-genome-json",
+      "objective": "[observe] Implement genome.json - externalize all evolvable state (prompts, models, context limits, protocols) into structured JSON",
+      "status": "pending",
+      "priority": 10,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase2-load-prompts",
+      "objective": "[observe] Load prompts from genome.json instead of hardcoded strings in squad.ts",
+      "status": "pending",
+      "priority": 11,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase2-timing-logs",
+      "objective": "[observe] Add timing logs per phase - track how long flute/logistics/quester/sheriff each take",
+      "status": "pending",
+      "priority": 12,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase2-metrics-jsonl",
+      "objective": "[observe] Log to .undercity/metrics.jsonl - queryable history of quest durations, token usage, phase breakdowns",
+      "status": "pending",
+      "priority": 13,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase2-metrics-per-quest",
+      "objective": "[observe] Track metrics per quest: success rate, time, tokens, retries, rejection rate, merge success",
+      "status": "pending",
+      "priority": 14,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase2-metrics-per-genome",
+      "objective": "[observe] Track metrics per genome component - avgTime, avgTokens, successRate, rejectionRate",
+      "status": "pending",
+      "priority": 15,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase2-surface-metrics",
+      "objective": "[observe] Surface metrics in status - \"Quester: 8m (avg 3m)\" so we know what's dragging",
+      "status": "pending",
+      "priority": 16,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase2-observation-log",
+      "objective": "[observe] Create self-observation log - persistent record of quest outcomes in .undercity/observations.jsonl",
+      "status": "pending",
+      "priority": 17,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase3-capture-baseline",
+      "objective": "[baseline] Capture baseline performance for each agent type before any evolution begins",
+      "status": "pending",
+      "priority": 20,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase3-record-gen0",
+      "objective": "[baseline] Record current prompt lengths, token usage patterns, success rates as generation 0",
+      "status": "pending",
+      "priority": 21,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase3-baseline-command",
+      "objective": "[baseline] Add \"undercity baseline\" command to snapshot current genome performance",
+      "status": "pending",
+      "priority": 22,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase4-mutation-testing",
+      "objective": "[evolve] Add mutation testing infrastructure - A/B test prompt variants, track sample size and results",
+      "status": "pending",
+      "priority": 30,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase4-propose-mutations",
+      "objective": "[evolve] Allow agents to propose prompt/protocol mutations - test variants, keep what works",
+      "status": "pending",
+      "priority": 31,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase4-reflect-command",
+      "objective": "[evolve] Add \"undercity reflect\" command - analyze observation log, propose and test improvements automatically",
+      "status": "pending",
+      "priority": 32,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase4-optimize-comms",
+      "objective": "[evolve] Remove human-readability constraint on internal comms - optimize for effectiveness and token efficiency",
+      "status": "pending",
+      "priority": 33,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase4-convergence",
+      "objective": "[evolve] Add convergence detection - recognize when a component has stopped improving (local optimum)",
+      "status": "pending",
+      "priority": 34,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase4-rollback",
+      "objective": "[evolve] Add genome rollback - reset to known-good state if evolution degrades performance",
+      "status": "pending",
+      "priority": 35,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase4-cross-component",
+      "objective": "[evolve] Track cross-component effects - changing quester prompt may affect sheriff review success",
+      "status": "pending",
+      "priority": 36,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase5-external-repos",
+      "objective": "[portability] Add support for external repos - undercity should work on any repo, not just itself",
+      "status": "pending",
+      "priority": 40,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase5-detect-target",
+      "objective": "[portability] Detect target repo from cwd (nearest git root), create .undercity/ there if missing",
+      "status": "pending",
+      "priority": 41,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase5-init-command",
+      "objective": "[portability] Add \"undercity init\" command to initialize .undercity/ and intel.txt in a new repo",
+      "status": "pending",
+      "priority": 42,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase6-complexity",
+      "objective": "[scale] Add task complexity classification - auto-classify quests as trivial/simple/standard/critical",
+      "status": "pending",
+      "priority": 50,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase6-trivial-skip",
+      "objective": "[scale] Trivial tasks skip planning - single Haiku agent, no flute/logistics/sheriff overhead",
+      "status": "pending",
+      "priority": 51,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase6-critical-extra",
+      "objective": "[scale] Critical tasks get extra validators - scale Rule of Five with 5+ review passes",
+      "status": "pending",
+      "priority": 52,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase6-smart-model",
+      "objective": "[scale] Smart model selection per task - Opus for complex planning, Sonnet for standard, Haiku for trivial",
+      "status": "pending",
+      "priority": 53,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase6-parallel-questers",
+      "objective": "[scale] Add parallel quester support - spawn multiple questers working on different waypoints",
+      "status": "pending",
+      "priority": 54,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase6-waypoint-split",
+      "objective": "[scale] Implement waypoint splitting in logistics - break large tasks into independent subtasks",
+      "status": "pending",
+      "priority": 55,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase6-parallel-flag",
+      "objective": "[scale] Add a --parallel flag to control max concurrent agents (default 3, max 5)",
+      "status": "pending",
+      "priority": 56,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-phase6-file-tracking",
+      "objective": "[scale] Track which files each quester is touching to avoid conflicts between parallel agents",
+      "status": "pending",
+      "priority": 57,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-rejection-loop",
+      "objective": "[validation] Add worker/validator rejection loop - sheriff rejects -> quester fixes -> retry until approved or max retries",
+      "status": "pending",
+      "priority": 100,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-rejection-tracking",
+      "objective": "[validation] Track rejection iterations and feedback quality - what feedback leads to fastest fixes",
+      "status": "pending",
+      "priority": 101,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-add-quests",
+      "objective": "[self-improvement] Add ability for agents to add new quests - parse \"[NEW QUEST: ...]\" markers",
+      "status": "pending",
+      "priority": 102,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-sheriff-followup",
+      "objective": "[self-improvement] Have sheriff generate follow-up quests for issues found during review",
+      "status": "pending",
+      "priority": 103,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-failure-retro",
+      "objective": "[self-improvement] Add failure retrospectives - when quest fails, analyze why and generate improvement quest",
+      "status": "pending",
+      "priority": 104,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-track-interventions",
+      "objective": "[self-improvement] Track user interventions - log manual steps, auto-generate improvement quests from patterns",
+      "status": "pending",
+      "priority": 105,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-rollback",
+      "objective": "[recovery] Add rollback mechanism - auto-tag pre-merge state, easy undo if merged quest breaks things",
+      "status": "pending",
+      "priority": 106,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-dependencies",
+      "objective": "[control] Add quest dependencies - express \"Quest A needs Quest B done first\", block until satisfied",
+      "status": "pending",
+      "priority": 107,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-cancel-agent",
+      "objective": "[control] Add cancel specific agent - kill stuck quester without surrendering entire raid",
+      "status": "pending",
+      "priority": 108,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-context-summarize",
+      "objective": "[speed] Add context summarization - don't pass entire plan file to every agent, summarize relevant parts",
+      "status": "pending",
+      "priority": 109,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-timeout",
+      "objective": "[speed] Add timeout handling - if agent takes >10 minutes, log warning and consider intervention",
+      "status": "pending",
+      "priority": 110,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-json-status",
+      "objective": "[ux] Add --json flag to status command - machine-readable output for Claude Code to parse",
+      "status": "pending",
+      "priority": 111,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-attention-markers",
+      "objective": "[ux] Add clear \"needs attention\" markers in status - things Claude Code should surface to user",
+      "status": "pending",
+      "priority": 112,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-background-work",
+      "objective": "[ux] Make `undercity work` background-friendly - good exit codes, status files Claude can poll",
+      "status": "pending",
+      "priority": 113,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-tui-dashboard",
+      "objective": "[tui] Build a TUI dashboard - combine status display and streaming logs in one view",
+      "status": "pending",
+      "priority": 114,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-tui-splitpane",
+      "objective": "[tui] Show raider status, current waypoint, progress bars, and live activity in a split-pane layout",
+      "status": "pending",
+      "priority": 115,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-high-docker-isolation",
+      "objective": "[isolation] Add Docker isolation option - full sandbox mode for untrusted or risky code execution",
+      "status": "pending",
+      "priority": 116,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-budget-quota",
+      "objective": "[budget] Add quota budgeting per quest - set max token spend, fail gracefully if exceeded",
+      "status": "pending",
+      "priority": 200,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-sheriff-execute",
+      "objective": "[validation] Sheriff runs the code - not just tests, actually execute to verify behavior works",
+      "status": "pending",
+      "priority": 201,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-security-scanning",
+      "objective": "[security] Add security scanning integration - run semgrep or similar, not just prompt-based OWASP checks",
+      "status": "pending",
+      "priority": 202,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-attention-queue",
+      "objective": "[review] Add \"needs attention\" queue - failures and blocked quests queue up for batch review when you're ready",
+      "status": "pending",
+      "priority": 203,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-parse-plans",
+      "objective": "[planning] Parse plan files into discrete goals/waypoints upfront instead of re-reading whole plan each iteration",
+      "status": "pending",
+      "priority": 204,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-track-steps",
+      "objective": "[planning] Track which plan steps are complete in backlog so we don't re-check via codebase analysis",
+      "status": "pending",
+      "priority": 205,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-progress-tracking",
+      "objective": "[planning] Add plan progress tracking - show \"Step 3/7: Adding authentication\" not just \"executing\"",
+      "status": "pending",
+      "priority": 206,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-import-plan",
+      "objective": "[planning] Add \"undercity import-plan <plan.md>\" command to auto-extract quests from Claude plan files",
+      "status": "pending",
+      "priority": 207,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-quest-context",
+      "objective": "[planning] Add context field to Quest interface - allow storing relevant plan snippets per quest",
+      "status": "pending",
+      "priority": 208,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-context-sharding",
+      "objective": "[planning] Implement context sharding - pass only relevant context to each raider type (flute gets less, quester gets more)",
+      "status": "pending",
+      "priority": 209,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-fix-stream",
+      "objective": "[visibility] Fix streamAgentActivity to properly show tool calls from SDK message format",
+      "status": "pending",
+      "priority": 210,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-show-file-paths",
+      "objective": "[visibility] Show file paths when Read/Grep/Glob are called - \"Reading src/raid.ts\" not just \"Read ...\"",
+      "status": "pending",
+      "priority": 211,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-show-edit-targets",
+      "objective": "[visibility] Show Edit/Write targets - \"Editing src/cli.ts:45\" so you see what's being changed",
+      "status": "pending",
+      "priority": 212,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-progress-bar",
+      "objective": "[visibility] Add progress bar to plan command output (not just status command)",
+      "status": "pending",
+      "priority": 213,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-time-estimate",
+      "objective": "[visibility] Show estimated time remaining based on historical raid durations",
+      "status": "pending",
+      "priority": 214,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-quiet-flag",
+      "objective": "[visibility] Add a --quiet flag for minimal output (just errors and completion)",
+      "status": "pending",
+      "priority": 215,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-dual-logging",
+      "objective": "[visibility] Add dual logging - write streaming output to both terminal AND .undercity/logs/current.log",
+      "status": "pending",
+      "priority": 216,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-retry-logic",
+      "objective": "[robustness] Add retry logic for failed agents - if quester fails, retry once before giving up",
+      "status": "pending",
+      "priority": 217,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-graceful-degrade",
+      "objective": "[robustness] Implement graceful degradation - if sheriff fails, still allow manual review option",
+      "status": "pending",
+      "priority": 218,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-health-checks",
+      "objective": "[robustness] Add health checks - detect stuck agents (no activity for 5+ minutes)",
+      "status": "pending",
+      "priority": 219,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-partial-save",
+      "objective": "[robustness] Save partial work on agent failure - don't lose progress if one agent crashes",
+      "status": "pending",
+      "priority": 220,
+      "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-med-rate-limits",
+      "objective": "[robustness] Handle rate limits gracefully - detect 429 errors, pause squad, show countdown to resume",
       "status": "complete",
-      "priority": -9,
-      "createdAt": "2026-01-10T01:15:30.792Z",
-      "startedAt": "2026-01-10T04:27:51.770Z",
-      "raidId": "raid-mk7snhhi-3heh6n",
+      "priority": 221,
+      "createdAt": "2026-01-10T00:00:00.000Z",
       "completedAt": "2026-01-10T06:31:00.000Z",
       "note": "Work recovered from dangling commit fc0ae70"
     },
     {
-      "id": "quest-error-recovery",
-      "objective": "Add basic error recovery - if raider fails mid-waypoint, save partial progress and allow retry",
-      "status": "complete",
-      "priority": -8,
-      "createdAt": "2026-01-10T01:15:30.792Z",
-      "startedAt": "2026-01-10T04:48:19.342Z",
-      "raidId": "raid-mk7t0x2u-sn0b82",
-      "completedAt": "2026-01-10T06:31:00.000Z",
-      "note": "Work recovered from dangling commit 62e6ba7"
-    },
-    {
-      "id": "quest-sheriff-typecheck",
-      "objective": "Sheriff must run pnpm typecheck before approving - fail review if types do not pass",
+      "id": "quest-med-abort-command",
+      "objective": "[robustness] Add \"undercity abort\" command for emergency stop of runaway raids (kill all raiders, save state)",
       "status": "pending",
-      "priority": -7,
-      "createdAt": "2026-01-10T01:15:30.792Z"
+      "priority": 222,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-sync-txt",
-      "objective": "Parse intel.txt on raid start - add new items to quests.json, keep json as runtime state",
-      "status": "complete",
-      "priority": -10,
-      "createdAt": "2026-01-10T01:15:21.413Z",
-      "startedAt": "2026-01-10T04:17:25.047Z",
-      "raidId": "raid-mk7s7czj-d9r50w",
-      "completedAt": "2026-01-10T04:17:25.047Z"
-    },
-    {
-      "id": "quest-sheriff-typecheck",
-      "objective": "Sheriff must run pnpm typecheck before approving - fail review if types do not pass",
-      "status": "complete",
-      "priority": 1,
-      "createdAt": "2026-01-09T23:06:14.076Z",
-      "startedAt": "2026-01-10T00:20:50.573Z",
-      "raidId": "raid-mk7jxkvm-qecyso",
-      "completedAt": "2026-01-10T00:20:50.573Z"
-    },
-    {
-      "id": "quest-typefix-1",
-      "objective": "Fix 48 TypeScript errors in src/metrics.ts and src/rate-limit.ts - types do not match implementations",
-      "status": "complete",
-      "priority": -3,
-      "createdAt": "2026-01-09T23:06:08.469Z",
-      "startedAt": "2026-01-09T23:34:12.243Z",
-      "raidId": "raid-mk7i67mp-r8qh3b",
-      "completedAt": "2026-01-09T23:34:12.243Z"
-    },
-    {
-      "id": "quest-worktree-1",
-      "objective": "Use git worktrees for raid branches - keep main repo on main, create .undercity/worktrees/<raid-id>/ for each raid so main stays editable",
-      "status": "complete",
-      "priority": -2,
-      "createdAt": "2026-01-09T22:53:27.190Z",
-      "startedAt": "2026-01-09T23:20:33.457Z",
-      "raidId": "raid-mk7hgffw-psv5zd",
-      "completedAt": "2026-01-09T23:20:33.457Z"
-    },
-    {
-      "id": "quest-worktree-2",
-      "objective": "Raiders work in their worktree, elevator merges from worktree back to main",
-      "status": "complete",
-      "priority": -1,
-      "createdAt": "2026-01-09T22:53:27.190Z",
-      "startedAt": "2026-01-09T23:53:01.290Z",
-      "raidId": "raid-mk7ivhm6-6q48vj",
-      "completedAt": "2026-01-09T23:53:01.291Z"
-    },
-    {
-      "id": "quest-ratelimit-1",
-      "objective": "Add rate limit detection - catch 429 errors, pause squad, show countdown timer, auto-resume when quota resets",
-      "status": "complete",
-      "priority": 0,
-      "createdAt": "2026-01-09T22:53:27.190Z",
-      "startedAt": "2026-01-10T00:13:19.458Z",
-      "raidId": "raid-mk7jirhc-30gmqd",
-      "completedAt": "2026-01-10T00:13:19.459Z"
-    },
-    {
-      "id": "quest-mk6iulpk-wf58",
-      "objective": "Improve merge queue to auto-resolve conflicts using git merge -X theirs strategy",
-      "status": "complete",
-      "priority": 0,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T07:06:35.071Z",
-      "raidId": "raid-mk6iultt-dij4qe",
-      "completedAt": "2026-01-09T07:06:35.072Z"
-    },
-    {
-      "id": "quest-mk6iulpk-amdj",
-      "objective": "Add fallback merge strategies: try ours, then theirs, then report specific conflict files",
-      "status": "complete",
-      "priority": 1,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T07:06:35.082Z",
-      "raidId": "manual-salvage",
-      "completedAt": "2026-01-09T08:00:00.000Z"
-    },
-    {
-      "id": "quest-mk6iulpk-j7up",
-      "objective": "Make merge queue retry failed merges after other branches succeed (conflicts may resolve)",
-      "status": "complete",
-      "priority": 2,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T08:00:08.970Z",
-      "raidId": "raid-mk6ksbpg-gz65x7",
-      "completedAt": "2026-01-09T08:00:08.970Z"
-    },
-    {
-      "id": "quest-mk6iulpk-wsp2",
-      "objective": "Add parallel quester support - spawn multiple fabricators working on different tasks simultaneously",
-      "status": "complete",
-      "priority": 3,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T08:00:11.486Z",
-      "raidId": "raid-mk6l62hf-btqjg4",
-      "completedAt": "2026-01-09T08:00:11.486Z"
-    },
-    {
-      "id": "quest-mk6iulpk-avtx",
-      "objective": "Implement task splitting in logistics - break large tasks into independent subtasks for parallel execution",
-      "status": "complete",
-      "priority": 4,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T08:00:14.277Z",
-      "raidId": "raid-mk6l64f9-jelmft",
-      "completedAt": "2026-01-09T08:00:14.277Z"
-    },
-    {
-      "id": "quest-mk6iulpk-5w2i",
-      "objective": "Add a --parallel flag to control max concurrent raiders (default 3, max 5)",
-      "status": "complete",
-      "priority": 5,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T10:22:03.231Z",
-      "raidId": "raid-mk6pt57d-80sqki",
-      "completedAt": "2026-01-09T10:22:03.231Z"
-    },
-    {
-      "id": "quest-mk6iulpk-mc1a",
-      "objective": "Track which files each quester is touching to avoid conflicts between parallel raiders",
-      "status": "complete",
-      "priority": 6,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T10:36:00.046Z",
-      "raidId": "raid-mk6q8k4n-ug3mx1",
-      "completedAt": "2026-01-09T10:36:00.046Z"
-    },
-    {
-      "id": "quest-mk6iulpk-uusm",
-      "objective": "Consider using Sonnet instead of Opus for quester (faster, still good quality)",
-      "status": "complete",
-      "priority": 7,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T10:43:59.100Z",
-      "raidId": "raid-mk6qqhtg-a2ftro",
-      "completedAt": "2026-01-09T10:43:59.101Z"
-    },
-    {
-      "id": "quest-mk6iulpk-n8gf",
-      "objective": "Add context summarization - don't pass entire plan file to every raider, summarize relevant parts",
-      "status": "complete",
-      "priority": 8,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T10:55:12.110Z",
-      "raidId": "raid-mk6r0rgk-y46psb",
-      "completedAt": "2026-01-09T10:55:12.110Z"
-    },
-    {
-      "id": "quest-mk6iulpk-vpzm",
-      "objective": "Cache flute results - if codebase hasn't changed, reuse previous flute intel",
-      "status": "complete",
-      "priority": 9,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T11:06:32.651Z",
-      "raidId": "raid-mk6rf6r9-2gw2z0",
-      "completedAt": "2026-01-09T11:06:32.651Z"
-    },
-    {
-      "id": "quest-mk6iulpk-ofib",
-      "objective": "Add timeout handling - if an raider takes >10 minutes, log warning and consider intervention",
-      "status": "complete",
-      "priority": 10,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T11:15:25.718Z",
-      "raidId": "raid-mk6rtrv5-a7pf01",
-      "completedAt": "2026-01-09T11:15:25.718Z"
-    },
-    {
-      "id": "quest-mk6iulpk-vbox",
-      "objective": "Parse plan files into discrete goals/tasks upfront instead of re-reading whole plan each iteration",
-      "status": "complete",
-      "priority": 11,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T11:32:46.306Z",
-      "raidId": "raid-mk6s576k-qz0f4z",
-      "completedAt": "2026-01-09T11:32:46.307Z"
-    },
-    {
-      "id": "quest-mk6iulpk-bj1z",
-      "objective": "Track which plan steps are complete in backlog so we don't re-check via codebase analysis",
-      "status": "complete",
-      "priority": 12,
-      "createdAt": "2026-01-09T06:55:14.792Z",
-      "startedAt": "2026-01-09T11:45:52.116Z",
-      "raidId": "raid-mk6sri3t-m7oa3i",
-      "completedAt": "2026-01-09T11:45:52.116Z"
-    },
-    {
-      "id": "quest-mk6iulpk-hrbl",
-      "objective": "Add plan progress tracking - show \"Step 3/7: Adding authentication\" not just \"executing\"",
+      "id": "quest-med-compaction",
+      "objective": "[robustness] Implement conversation compaction - summarize long raider contexts to avoid token limits",
       "status": "pending",
-      "priority": 27,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 223,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-rb25",
-      "objective": "Fix streamAgentActivity to properly show tool calls from SDK message format",
+      "id": "quest-med-loadout-system",
+      "objective": "[loadout] Add loadout system - pre-raid configuration for different task types",
       "status": "pending",
-      "priority": 28,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 224,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-ogms",
-      "objective": "Add progress bar to plan command output (not just status command)",
+      "id": "quest-med-dogfood-topside",
+      "objective": "[loadout] Add dogfood vs topside modes - different defaults for self-improvement vs external projects",
       "status": "pending",
-      "priority": 29,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 225,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-e3us",
-      "objective": "Show estimated time remaining based on historical raid durations",
+      "id": "quest-med-quest-vetting",
+      "objective": "[loadout] Add quest vetting gate - quests added mid-run go to pending_review, require approval before processing",
       "status": "pending",
-      "priority": 30,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 226,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-0eha",
-      "objective": "Add a --quiet flag for minimal output (just errors and completion)",
+      "id": "quest-med-rat-check",
+      "objective": "[theme] Add \"rat check\" phase before extraction - dedicated review for hidden bugs that look harmless but will betray later",
       "status": "pending",
-      "priority": 31,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 227,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-wbns",
-      "objective": "Add retry logic for failed raiders - if quester fails, retry once before giving up",
+      "id": "quest-med-light-flag",
+      "objective": "[theme] Add --light flag for \"free loadout\" mode - Haiku-only quick runs for small tasks, minimal context, minimal loss",
       "status": "pending",
-      "priority": 32,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 228,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-5wku",
-      "objective": "Implement graceful degradation - if sheriff fails, still allow manual review option",
+      "id": "quest-med-extraction-camper",
+      "objective": "[theme] Add pre-raid \"extraction camper\" check - detect potential merge conflicts before starting work, not at the end",
       "status": "pending",
-      "priority": 33,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 229,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-jde3",
-      "objective": "Add health checks - detect stuck raiders (no activity for 5+ minutes)",
+      "id": "quest-med-verbose-flag",
+      "objective": "[verbose] Add --verbose flag to show detailed raider activity during raids (tool calls, file reads, decisions)",
       "status": "pending",
-      "priority": 34,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 230,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-fh9c",
-      "objective": "Save partial work on raider failure - don't lose progress if one raider crashes",
+      "id": "quest-med-streaming-output",
+      "objective": "[verbose] Add more streaming output for raiders - show what they're reading, writing, and deciding in real-time",
       "status": "pending",
-      "priority": 35,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 231,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-lpq0",
-      "objective": "Add \"undercity pause\" command to pause a raid without surrendering",
+      "id": "quest-med-debug-mode",
+      "objective": "[verbose] Create debug mode that logs full raider context/prompts for troubleshooting slow or stuck raiders",
       "status": "pending",
-      "priority": 36,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 232,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-pu15",
-      "objective": "Add \"undercity resume\" command to continue a paused raid",
+      "id": "quest-low-webui",
+      "objective": "[webui] Optional web dashboard - browser-based status/logs view for when you're away from terminal",
       "status": "pending",
-      "priority": 37,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 300,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-2t9i",
-      "objective": "Add \"undercity logs <raider-id>\" to see full output from a specific raider",
+      "id": "quest-low-audit-trail",
+      "objective": "[audit] Add structured audit trail - queryable log of what agents did, not just text logs",
       "status": "pending",
-      "priority": 38,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 301,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-41z7",
-      "objective": "Add config file support (.undercityrc) for default options like --stream, model choices",
+      "id": "quest-low-logistics-calibration",
+      "objective": "[planning] Add logistics calibration - feedback loop to improve plan quality (too vague vs too detailed)",
       "status": "pending",
-      "priority": 39,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 302,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-d3of",
-      "objective": "Add loadout system - pre-raid configuration for different task types",
+      "id": "quest-low-branch-strategy",
+      "objective": "[advanced] Add branch strategy options - try two approaches in parallel, pick the winner",
       "status": "pending",
-      "priority": 40,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 303,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-c53t",
-      "objective": "Add cross-raid memory in stash - remember patterns/decisions from previous raids",
+      "id": "quest-low-pause-command",
+      "objective": "[qol] Add \"undercity pause\" command to pause a raid without surrendering",
       "status": "pending",
-      "priority": 41,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 304,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-tgyh",
-      "objective": "Add \"rival raider\" mode - spawn a review raider that tries to break the quester's code",
+      "id": "quest-low-resume-command",
+      "objective": "[qol] Add \"undercity resume\" command to continue a paused raid",
       "status": "pending",
-      "priority": 42,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 305,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-h583",
-      "objective": "Implement Rule of Five verification - actually check that 5 review passes happened",
+      "id": "quest-low-logs-command",
+      "objective": "[qol] Add \"undercity logs <agent-id>\" to see full output from a specific agent",
       "status": "pending",
-      "priority": 43,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 306,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-k958",
-      "objective": "Update \"Raid extracted successfully\" to \"Extraction complete\" or \"Squad extracted\" - squads extract FROM raids",
+      "id": "quest-low-config-file",
+      "objective": "[qol] Add config file support (.undercityrc) for default options like --stream, model choices",
       "status": "pending",
-      "priority": 44,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 307,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-sbyi",
-      "objective": "Rewrite quest.test.ts tests for the new Quest/QuestBoard API (old backlog tests removed)",
+      "id": "quest-low-per-quest-model",
+      "objective": "[qol] Add per-quest model selection - allow overriding raider models for specific quests",
       "status": "pending",
-      "priority": 45,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 308,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6iulpk-u1ma",
-      "objective": "Review all log messages for ARC Raiders theme consistency",
+      "id": "quest-low-cross-raid-memory",
+      "objective": "[future] Add cross-raid memory in stash - remember patterns/decisions from previous raids",
       "status": "pending",
-      "priority": 46,
-      "createdAt": "2026-01-09T06:55:14.792Z"
+      "priority": 309,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6ksbl9-93va",
-      "objective": "Add ability for raiders to add new quests - when quester/sheriff discovers work, they should be able to queue it",
+      "id": "quest-low-rival-raider",
+      "objective": "[future] Add \"rival raider\" mode - spawn a review agent that tries to break the quester's code",
       "status": "pending",
-      "priority": 47,
-      "createdAt": "2026-01-09T07:49:27.597Z"
+      "priority": 310,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6ksbl9-7pnl",
-      "objective": "Parse raider output for \"[NEW QUEST: ...]\" markers and auto-add to quest board",
+      "id": "quest-low-rule-of-five",
+      "objective": "[future] Implement Rule of Five verification - actually check that 5 review passes happened",
       "status": "pending",
-      "priority": 48,
-      "createdAt": "2026-01-09T07:49:27.597Z"
+      "priority": 311,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6ksbl9-6vkd",
-      "objective": "Have sheriff generate follow-up quests for issues found during review",
+      "id": "quest-low-market-intel",
+      "objective": "[future] Add market intelligence agent - search online for competitor tools, emerging patterns in LLM orchestration",
       "status": "pending",
-      "priority": 49,
-      "createdAt": "2026-01-09T07:49:27.597Z"
+      "priority": 312,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6ksbl9-2yf1",
-      "objective": "Implement optimal merge strategy: rebase from fresh main first, then try clean merge, then -X ours (prefer main), only report conflicts if truly unresolvable",
+      "id": "quest-low-terminology-evolution",
+      "objective": "[future] Allow terminology/model evolution - if observations show a concept isn't useful, flag for deprecation",
       "status": "pending",
-      "priority": 50,
-      "createdAt": "2026-01-09T07:49:27.597Z"
+      "priority": 313,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     },
     {
-      "id": "quest-mk6ksbl9-2w6w",
-      "objective": "Ensure quester always creates branch from latest main - fetch and checkout fresh main before branching to avoid stale code conflicts",
+      "id": "quest-low-swarm-mode",
+      "objective": "[future] Add swarm squad mode - all agents from start, sheriff monitors in real-time instead of at extraction",
       "status": "pending",
-      "priority": 51,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-8a7x",
-      "objective": "Fix merge queue auto-processing - branches should auto-merge to main after sheriff approval, currently requires manual merge intervention",
-      "status": "pending",
-      "priority": 52,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-76ji",
-      "objective": "Add \"undercity import-plan <plan.md>\" command to auto-extract quests from Claude plan files",
-      "status": "pending",
-      "priority": 53,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-6efi",
-      "objective": "Add context field to Quest interface - allow storing relevant plan snippets per quest",
-      "status": "pending",
-      "priority": 54,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-16tu",
-      "objective": "Implement context sharding - pass only relevant context to each raider type (flute gets less, quester gets more)",
-      "status": "pending",
-      "priority": 55,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-5htr",
-      "objective": "Handle rate limits as \"downed\" state - detect 429/rate limit errors, save to safe pocket, show countdown timer, auto-defib (revive) when limits reset. Support hours/days of autonomous operation with minimal interaction.",
-      "status": "pending",
-      "priority": 56,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-3ri6",
-      "objective": "Add \"undercity abort\" command for emergency stop of runaway raids (kill all raiders, save state)",
-      "status": "pending",
-      "priority": 57,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-pm01",
-      "objective": "Implement conversation compaction - summarize long raider contexts to avoid token limits",
-      "status": "pending",
-      "priority": 58,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-pgiz",
-      "objective": "Add per-quest model selection - allow overriding raider models (e.g., use Opus for complex quests, Sonnet for simple)",
-      "status": "pending",
-      "priority": 59,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-bi81",
-      "objective": "Add \"rat check\" phase before extraction - dedicated review for hidden bugs that look harmless but will betray later",
-      "status": "pending",
-      "priority": 60,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-2yoi",
-      "objective": "Add --light flag for \"free loadout\" mode - Haiku-only quick runs for small tasks, minimal context, minimal loss",
-      "status": "pending",
-      "priority": 61,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-x5dj",
-      "objective": "Add \"flute\" read-only mode for scouts - like the flute player peace signal, indicates they're just looking, won't modify anything",
-      "status": "pending",
-      "priority": 62,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-2uw2",
-      "objective": "Add pre-raid \"extraction camper\" check - detect potential merge conflicts before starting work, not at the end",
-      "status": "pending",
-      "priority": 63,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-27jc",
-      "objective": "Rename raiders throughout codebase: \"flute\" → \"flute\" (peace signal, read-only), \"logistics\" → \"logistics\" (coordinates the run), \"quester\" → \"quester\" (does the quests), \"sheriff\" → \"sheriff\" (enforces quality). Update CLI output to use \"raiders\" instead of \"raiders\".",
-      "status": "pending",
-      "priority": 64,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-o13q",
-      "objective": "Use ARC Raiders CLI phrases: \"Going topside...\", \"Sheriff on patrol\", \"Rat spotted\", \"Contact! ARCs detected\"",
-      "status": "pending",
-      "priority": 65,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-elqv",
-      "objective": "Add --verbose flag to show detailed raider activity during raids (tool calls, file reads, decisions)",
-      "status": "pending",
-      "priority": 66,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-4npa",
-      "objective": "Add more streaming output for raiders - show what they're reading, writing, and deciding in real-time",
-      "status": "pending",
-      "priority": 67,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-8w80",
-      "objective": "Create debug mode that logs full raider context/prompts for troubleshooting slow or stuck raiders",
-      "status": "pending",
-      "priority": 68,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-hgaq",
-      "objective": "Build a TUI (terminal UI) dashboard to monitor parallel raiders and squads in real-time",
-      "status": "pending",
-      "priority": 69,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-t0tg",
-      "objective": "Show raider status, current task, progress bars, and live activity in a split-pane layout",
-      "status": "pending",
-      "priority": 70,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6ksbl9-l1st",
-      "objective": "Support for multiple concurrent squads with clear visual separation",
-      "status": "pending",
-      "priority": 71,
-      "createdAt": "2026-01-09T07:49:27.597Z"
-    },
-    {
-      "id": "quest-mk6lrwpy-readme",
-      "objective": "Update README.md with new raider terminology: flute (scout), logistics (planner), quester (fabricator), sheriff (auditor). Include the full squad roster and ARC Raiders cultural references.",
-      "status": "pending",
-      "priority": 72,
-      "createdAt": "2026-01-09T08:17:07.942Z"
-    },
-    {
-      "id": "quest-mk6t5cpy-9fg2",
-      "objective": "Build dashboard",
-      "status": "pending",
-      "priority": 73,
-      "createdAt": "2026-01-09T11:43:32.518Z",
-      "planContext": {
-        "filePath": "/tmp/test-plan.md",
-        "taskId": "task-mk6t5cpt-L8",
-        "section": "Phase 2: Features",
-        "lineNumber": 8
-      }
-    },
-    {
-      "id": "quest-mk75rg6o-vetting",
-      "objective": "Add quest vetting gate - when a quester adds a new quest mid-run, it goes to \"pending_review\" state. Sheriff or logistics must approve it before it can be processed. Prevents scope creep and runaway quests.",
-      "status": "pending",
-      "priority": 74,
-      "createdAt": "2026-01-09T17:36:38.832Z"
-    },
-    {
-      "id": "quest-mk76xl27-reload",
-      "objective": "Add --reload-every <n> flag to work command - after every N completed quests, re-exec the CLI process to pick up any code changes made during the run. Lets undercity benefit from its own improvements while processing the quest list.",
-      "status": "complete",
-      "priority": 13,
-      "createdAt": "2026-01-09T18:09:24.703Z",
-      "startedAt": "2026-01-09T18:27:21.710Z",
-      "raidId": "raid-mk7763o0-15t6lh",
-      "completedAt": "2026-01-09T18:27:21.710Z"
-    },
-    {
-      "id": "quest-mk76yq03-squads",
-      "objective": "Refactor parallel execution from tasks to squads - instead of N parallel tasks in one raid, run N independent squads each with their own quest and branch. Simpler isolation, natural conflict avoidance.",
-      "status": "complete",
-      "priority": 14,
-      "createdAt": "2026-01-09T18:10:17.763Z",
-      "startedAt": "2026-01-09T18:23:24.114Z",
-      "raidId": "raid-mk7763o0-15t6lh",
-      "completedAt": "2026-01-09T18:23:24.114Z"
-    },
-    {
-      "id": "quest-mk76yq04-matchmaking",
-      "objective": "Add quest matchmaking for parallel squads - analyze quest board to find non-conflicting quests (different packages, no dependencies, unlikely file overlap). Pick optimal N quests to run simultaneously.",
-      "status": "complete",
-      "priority": 15,
-      "createdAt": "2026-01-09T18:10:17.763Z",
-      "startedAt": "2026-01-09T20:06:06.546Z",
-      "raidId": "raid-mk7a8fmk-qt5xif",
-      "completedAt": "2026-01-09T20:06:06.546Z"
-    },
-    {
-      "id": "quest-mk76yq05-metrics",
-      "objective": "Add efficiency metrics tracking - record tokens used, time elapsed, and success/failure per quest. Store in stash for historical analysis. Calculate tokens-per-quest-completion ratio.",
-      "status": "complete",
-      "priority": 16,
-      "createdAt": "2026-01-09T18:10:17.763Z",
-      "startedAt": "2026-01-09T18:42:08.235Z",
-      "raidId": "raid-mk77ko3j-ooig2z",
-      "completedAt": "2026-01-09T18:42:08.235Z"
-    },
-    {
-      "id": "quest-mk76yq06-loadout-scoring",
-      "objective": "Add loadout scoring system - rate different configurations (model choices, parallelism level, context size) by efficiency metrics. Track which loadouts work best for which quest types.",
-      "status": "complete",
-      "priority": 18,
-      "createdAt": "2026-01-09T18:10:17.763Z",
-      "startedAt": "2026-01-09T19:26:25.988Z",
-      "raidId": "raid-mk78ncum-geldsj",
-      "completedAt": "2026-01-09T19:26:25.988Z"
-    },
-    {
-      "id": "quest-mk76yq07-governor",
-      "objective": "Add rate limit governor - track rolling token usage, predict rate limit windows, throttle preemptively to stay \"right under the limit\". Goal: continuous productive operation without hitting ceilings.",
-      "status": "complete",
-      "priority": 20,
-      "createdAt": "2026-01-09T18:10:17.763Z",
-      "startedAt": "2026-01-09T19:40:55.486Z",
-      "raidId": "raid-mk79omvh-u9omip",
-      "completedAt": "2026-01-09T19:40:55.486Z"
-    },
-    {
-      "id": "quest-mk771bhp-limits",
-      "objective": "Add empirical rate limit tracking - log tokens used per quest (input+output), model used, and timestamp. When 429 hit, record exact state. Build model of limit shape over time. Track both 5-hour rolling window and weekly ceiling. Calculate Sonnet-equivalent tokens (Opus ~12x multiplier).",
-      "status": "complete",
-      "priority": 17,
-      "createdAt": "2026-01-09T18:12:18.925Z",
-      "startedAt": "2026-01-09T18:57:26.724Z",
-      "raidId": "raid-mk783o50-na402y",
-      "completedAt": "2026-01-09T18:57:26.724Z"
-    },
-    {
-      "id": "quest-mk772pwx-retro",
-      "objective": "Add failure retrospectives - when a quest fails, spawn an agent to analyze why and generate an improvement quest. Track failure categories and their frequencies.",
-      "status": "pending",
-      "priority": 21,
-      "createdAt": "2026-01-09T18:13:24.273Z"
-    },
-    {
-      "id": "quest-mk772pwy-intervention",
-      "objective": "Track user interventions - log every time the user has to manually step in (merge, fix, restart). Each intervention is a signal for a missing feature or bug. Auto-generate improvement quests from intervention patterns.",
-      "status": "pending",
-      "priority": 22,
-      "createdAt": "2026-01-09T18:13:24.273Z"
-    },
-    {
-      "id": "quest-mk772pwz-obs-log",
-      "objective": "Create self-observation log - persistent record of quest outcomes, timing, token usage, model used, files touched, success/failure, and any anomalies. Store in .undercity/observations.jsonl for analysis.",
-      "status": "pending",
-      "priority": 23,
-      "createdAt": "2026-01-09T18:13:24.273Z"
-    },
-    {
-      "id": "quest-mk772px0-synth",
-      "objective": "Add roadmap synthesis command (\"undercity reflect\") - analyze observation log to detect BOTH problems (failures, slowness, interventions) AND opportunities (unexpected successes, efficiency patterns, safe parallelization candidates). Generate prioritized improvement quests from insights. Surface \"what's working and why\" not just \"what's broken\".",
-      "status": "pending",
-      "priority": 25,
-      "createdAt": "2026-01-09T18:13:24.273Z"
-    },
-    {
-      "id": "quest-mk772px1-morph",
-      "objective": "Allow terminology/model evolution - if observations show a concept isn't useful (e.g., sheriff audits don't improve outcomes), flag it for deprecation. Let empirical data override initial design assumptions.",
-      "status": "pending",
-      "priority": 26,
-      "createdAt": "2026-01-09T18:13:24.273Z"
-    },
-    {
-      "id": "quest-mk773ppn-opportunity",
-      "objective": "Add opportunity pattern detection - analyze successful quests for replicable patterns: fast completions, low token usage, zero conflicts, high quality scores. Ask \"what made this work?\" and generate quests to apply those patterns elsewhere. Look for templates, caching opportunities, and safe parallelization.",
-      "status": "pending",
-      "priority": 24,
-      "createdAt": "2026-01-09T18:14:10.667Z"
-    },
-    {
-      "id": "quest-mk77cci3-duallog",
-      "objective": "Add dual logging - write all streaming output to both terminal AND a log file (.undercity/logs/current.log). Allows monitoring from other processes. Rotate logs per raid.",
-      "status": "pending",
-      "priority": 29,
-      "createdAt": "2026-01-09T18:20:53.451Z"
-    },
-    {
-      "id": "quest-mk78vz2u-intel",
-      "objective": "Add market intelligence agent - periodically search online for competitor tools (checking licenses carefully), emerging patterns in Claude/LLM orchestration, and note promising ideas. Store findings in .undercity/intel.jsonl. Flag ideas worth exploring, with license compatibility status.",
-      "status": "pending",
-      "priority": 75,
-      "createdAt": "2026-01-09T19:04:08.790Z"
-    },
-    {
-      "id": "quest-mk79n3zy-swarm",
-      "objective": "Add swarm squad mode - instead of sequential scout→planner→fabricator→sheriff, run all agents from the start. Sheriff monitors fabricator output in real-time, catching issues during implementation rather than at extraction. More tokens but faster feedback loops.",
-      "status": "pending",
-      "priority": 76,
-      "createdAt": "2026-01-09T19:25:14.878Z"
-    },
-    {
-      "id": "quest-mk79ssvr-efficiency-study",
-      "objective": "Add A/B efficiency tracking - run some quests in linear mode (scout→planner→fabricator→sheriff) and others in swarm mode (parallel sheriff). Track: tokens used, rework rate, time to stable completion, user interventions required. Build empirical model of first-order (tokens/quest) vs second-order (total tokens including rework) efficiency.",
-      "status": "complete",
-      "priority": 7,
-      "createdAt": "2026-01-09T19:29:40.407Z",
-      "startedAt": "2026-01-09T22:40:39.219Z",
-      "raidId": "raid-mk7fvl95-t05py1",
-      "completedAt": "2026-01-09T22:40:39.220Z"
-    },
-    {
-      "id": "quest-mk79vc9l-experiments",
-      "objective": "Add experimentation framework - ability to define A/B experiments with variants (model choice, squad composition, context size, etc), randomly assign quests to variants, track outcomes per variant, and auto-analyze statistical significance. Make it easy to test any hypothesis about what works. Store experiment definitions and results in .undercity/experiments/",
-      "status": "complete",
-      "priority": 6,
-      "createdAt": "2026-01-09T19:31:38.841Z",
-      "startedAt": "2026-01-09T22:19:48.175Z",
-      "raidId": "raid-mk7f7dlf-joja1b",
-      "completedAt": "2026-01-09T22:19:48.175Z"
-    },
-    {
-      "id": "quest-mk7a48bm-build-verify",
-      "objective": "Add build verification to fabricators - run \"pnpm build\" after writing code and before committing. If build fails, fix the issues. This catches type errors, missing imports, and incomplete implementations that would otherwise break the next raid.",
-      "status": "complete",
-      "priority": 1,
-      "createdAt": "2026-01-09T19:38:33.634Z",
-      "startedAt": "2026-01-09T20:15:18.704Z",
-      "raidId": "raid-mk7b3nq4-65b6kf",
-      "completedAt": "2026-01-09T20:15:18.705Z"
-    },
-    {
-      "id": "quest-mk7a7lyy-test-verify",
-      "objective": "Add test verification to fabricators - run \"pnpm test\" after implementing code. If tests fail, fix them. Combined with build verification, this ensures code is both compilable and functionally correct before committing.",
-      "status": "complete",
-      "priority": 2,
-      "createdAt": "2026-01-09T19:41:11.290Z",
-      "startedAt": "2026-01-09T20:18:42.642Z",
-      "raidId": "raid-mk7bfhrt-c7q72e",
-      "completedAt": "2026-01-09T20:18:42.643Z"
-    },
-    {
-      "id": "quest-mk7aeq0x-persist-merge",
-      "objective": "Persist merge queue to disk - currently MergeQueue is in-memory only. When CLI restarts, pending merges are lost and branches orphan. Add persistence so: 1) queue survives restarts, 2) orphaned branches are detected and re-queued on startup, 3) processAll runs on startup to clear backlog.",
-      "status": "complete",
-      "priority": 3,
-      "createdAt": "2026-01-09T19:46:43.137Z",
-      "startedAt": "2026-01-09T20:18:45.330Z",
-      "raidId": "raid-mk7bjv4r-3x1sui",
-      "completedAt": "2026-01-09T20:18:45.330Z"
-    },
-    {
-      "id": "quest-mk7af940-merge-orphans",
-      "objective": "Add \"undercity merge-orphans\" command - detect branches matching undercity/raid-*/implement that aren't part of an active raid, and merge them to main. Useful for recovering from crashes or when merge queue persistence fails. Run rebase → test → merge for each.",
-      "status": "complete",
-      "priority": 4,
-      "createdAt": "2026-01-09T19:47:07.872Z",
-      "startedAt": "2026-01-09T20:18:48.798Z",
-      "raidId": "raid-mk7bjx7f-m62wrn",
-      "completedAt": "2026-01-09T20:18:48.799Z"
-    },
-    {
-      "id": "quest-mk7aifhq-granular-status",
-      "objective": "Add granular status output - show file reads, tool calls, and activity timestamps as they happen. Not extra AI calls, just surfacing what the SDK already streams. Show \"planner: Read src/quest.ts\" scrolling by so user sees activity. Add heartbeat/spinner for thinking periods.",
-      "status": "pending",
-      "priority": 5,
-      "createdAt": "2026-01-09T19:49:36.110Z"
-    },
-    {
-      "id": "quest-mk7ayu6v-8d97",
-      "objective": "Fix authentication bug in src/auth/login.ts",
-      "status": "pending",
-      "priority": 84,
-      "createdAt": "2026-01-09T20:02:21.655Z"
-    },
-    {
-      "id": "quest-mk7ayxpb-aeii",
-      "objective": "Update UI component styles in src/components/Button.tsx",
-      "status": "pending",
-      "priority": 85,
-      "createdAt": "2026-01-09T20:02:26.207Z"
-    },
-    {
-      "id": "quest-mk7az1kj-j2yl",
-      "objective": "Add API documentation for user endpoints",
-      "status": "pending",
-      "priority": 86,
-      "createdAt": "2026-01-09T20:02:31.219Z"
-    },
-    {
-      "id": "quest-mk7bcrtz-oracle",
-      "objective": "Add \"undercity oracle\" command - draw from a deck of oblique strategy cards for novel insights. Cards like \"What would fail spectacularly?\", \"Reverse the dependency\", \"What are you avoiding?\", \"Honor the accidental pattern\", \"What would a rival raider exploit?\". Use when stuck, during reflect, or randomly during planning. Could tie into ARC Raiders lore (scavenger wisdom, radio transmissions from other survivors). Philosophy: \"It only has to make sense for me\" (365 buttons). Cards don't need to be logically defensible, just useful.",
-      "status": "complete",
-      "priority": 8,
-      "createdAt": "2026-01-09T20:13:11.783Z",
-      "startedAt": "2026-01-09T23:04:00.036Z",
-      "raidId": "raid-mk7h0g8k-ntpa1y",
-      "completedAt": "2026-01-09T23:04:00.036Z"
-    },
-    {
-      "id": "quest-mk7br0v2-modes",
-      "objective": "Add dogfood vs topside modes - \"undercity mode dogfood\" for self-improvement (higher risk, aggressive experimentation, self-observation priority) vs \"undercity mode topside\" for external projects (conservative, stable, proven patterns only). Track metrics separately. Different default loadouts per mode.",
-      "status": "pending",
-      "priority": 9,
-      "createdAt": "2026-01-09T20:24:16.670Z"
+      "priority": 314,
+      "createdAt": "2026-01-10T00:00:00.000Z"
     }
   ],
-  "lastUpdated": "2026-01-10T04:48:19.342Z"
+  "lastUpdated": "2026-01-10T09:00:00.000Z"
 }
