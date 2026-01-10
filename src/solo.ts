@@ -242,8 +242,13 @@ export class SoloOrchestrator {
 				console.log(chalk.yellow(`  Verification failed: ${verification.issues.join(", ")}`));
 
 				if (this.shouldEscalate(verification)) {
+					const previousModel = this.currentModel;
 					const escalated = this.escalateModel();
-					if (!escalated) {
+					if (escalated) {
+						// Get post-mortem from the failed tier before moving on
+						console.log(chalk.dim(`  Getting post-mortem from ${previousModel}...`));
+						this.lastPostMortem = await this.getPostMortem(task, verification.feedback, previousModel);
+					} else {
 						// Already at max, one more try
 						console.log(chalk.yellow("  At max model tier, final attempt..."));
 					}
@@ -288,6 +293,51 @@ export class SoloOrchestrator {
 			this.log("Cleaned up dirty state after failed task");
 		} catch (error) {
 			this.log("Failed to cleanup dirty state", { error: String(error) });
+		}
+	}
+
+	/**
+	 * Get a post-mortem analysis from a failed tier before escalating.
+	 * Uses Haiku for speed/cost - the analysis doesn't need to be perfect,
+	 * just helpful context for the next tier.
+	 */
+	private async getPostMortem(task: string, feedback: string, failedModel: ModelTier): Promise<string> {
+		const prompt = `You just attempted this task and failed verification:
+
+TASK: ${task}
+
+VERIFICATION ERRORS:
+${feedback}
+
+Please provide a brief post-mortem analysis (2-4 sentences):
+1. What approach did you likely take?
+2. Why do you think it failed?
+3. What should the next attempt try differently?
+
+Be concise and specific. Focus on actionable insights.`;
+
+		try {
+			let result = "";
+			// Always use Haiku for post-mortem - it's fast and cheap
+			for await (const message of query({
+				prompt,
+				options: {
+					model: MODEL_NAMES.haiku,
+					permissionMode: "bypassPermissions",
+					allowDangerouslySkipPermissions: true,
+					maxTurns: 1, // Single response, no tool use needed
+				},
+			})) {
+				if (message.type === "result" && message.subtype === "success") {
+					result = message.result;
+				}
+			}
+
+			this.log("Post-mortem generated", { failedModel, length: result.length });
+			return result || "No post-mortem analysis available.";
+		} catch (error) {
+			this.log("Failed to generate post-mortem", { error: String(error) });
+			return "Post-mortem analysis failed - proceeding without it.";
 		}
 	}
 
@@ -360,6 +410,9 @@ export class SoloOrchestrator {
 	/** Previous verification feedback for retry context */
 	private lastFeedback?: string;
 
+	/** Post-mortem analysis from previous tier (only set on escalation) */
+	private lastPostMortem?: string;
+
 	/**
 	 * Execute the agent on current task
 	 */
@@ -387,9 +440,22 @@ ${this.lastFeedback}
 Please fix these specific issues.`;
 		}
 
+		// Add post-mortem context if escalating from a different tier
+		let postMortemContext = "";
+		if (this.lastPostMortem) {
+			postMortemContext = `
+
+POST-MORTEM FROM PREVIOUS TIER:
+${this.lastPostMortem}
+
+Use this analysis to avoid repeating the same mistakes.`;
+			// Clear after use - only applies to first attempt at new tier
+			this.lastPostMortem = undefined;
+		}
+
 		const prompt = `${contextSection}Complete this task:
 
-${task}${retryContext}
+${task}${retryContext}${postMortemContext}
 
 Guidelines:
 - Start with the target files listed in the briefing above (if provided)
