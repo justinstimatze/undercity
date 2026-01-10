@@ -160,6 +160,21 @@ export CLAUDE_CODE_OAUTH_TOKEN=...
 
 Run `undercity setup` to verify.
 
+### Local Models (Experimental)
+
+Ollama support for truly trivial tasks (not yet integrated into escalation chain):
+
+```bash
+# Check hardware and setup recommendations
+undercity setup-ollama
+
+# Models for limited hardware (CPU-only, <16GB RAM)
+ollama pull qwen2:0.5b   # tiny - ~300MB
+ollama pull qwen2:1.5b   # small - ~1GB
+```
+
+**Future vision:** local → haiku → sonnet → opus escalation chain, where trivial tasks never hit the API.
+
 ### Quest Board Location
 
 Default: `.undercity/quests.json`
@@ -185,19 +200,41 @@ undercity/
     └── logs/             # Agent activity
 ```
 
+## Roadmap: Dynamically Optimal
+
+The goal is **fully autonomous, dynamically optimal** - no human gating, no manual tuning.
+
+**Current (working):**
+- Complexity-based model routing (auto-select haiku/sonnet/opus)
+- Adaptive escalation with same-tier retries for trivial errors
+- Post-mortem analysis on tier escalation
+- Error category tracking for learning
+
+**Next:**
+- **Auto-planning**: Complex tasks get a planning phase, trivial ones skip it
+- **Local model tier**: Ollama for truly trivial tasks (free, instant)
+- **Parallel solos**: Multiple workers in git worktrees, elevator merge queue
+- **Learning from metrics**: Route better based on what's worked before
+
+**Future:**
+- **Self-improving prompts**: Analyze failures, tune prompts automatically
+- **Predictive routing**: Learn which task patterns need which models
+- **Distributed workers**: Spread load across machines
+
 ## Legacy: The Raid Model
 
-The original design used extraction shooter metaphors (raids, flutes, questers, sheriffs). While fun to build, the multi-agent coordination added complexity without proportional benefit.
+The original design used extraction shooter metaphors (raids, flutes, questers, sheriffs). While fun to build, the multi-agent coordination added complexity without proportional benefit for the solo use case.
 
 **What we kept:**
 - Quest terminology (tasks → quests)
 - GUPP principle ("If work exists, continue it")
-- Persistence (crash recovery)
+- Persistence hierarchy (crash recovery)
+- Elevator merge queue (for future parallel mode)
 
 **What we simplified:**
-- No planning/execution phases (just do the work)
-- No multiple agent types (one agent, multiple model tiers)
-- No elevator/merge queue (direct commits)
+- Planning/execution phases → auto-plan based on complexity (coming)
+- Multiple agent types → one agent, multiple model tiers
+- Human approval gates → fully autonomous
 
 The themed commands still exist (`undercity slingshot`, etc.) but `solo` and `grind` are the recommended path.
 
