@@ -3,6 +3,8 @@
 ## Available
 
 ### Critical
+[config] BUG: Questers not picking up .claude/rules/ - SDK subagents should load repo config (no-emoji, no-attribution rules being ignored)
+[elevator] BUG: Quests marked complete even when merge fails - only mark complete if work actually lands on main
 [elevator] CRITICAL BUG: Don't delete branch on merge failure - preserve work for manual recovery (we just lost 2 quests worth of work)
 [sync] Parse intel.txt on raid start - add new items to quests.json, keep json as runtime state
 [robustness] Add basic error recovery - if raider fails mid-waypoint, save partial progress and allow retry
