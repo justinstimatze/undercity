@@ -114,6 +114,9 @@ export class RateLimitTracker {
 	): void {
 		const currentUsage = this.getCurrentUsage();
 
+		// Log enhanced header information
+		this.logRateLimitHeaders(responseHeaders);
+
 		const hit: RateLimitHit = {
 			timestamp: new Date(),
 			model,
@@ -125,14 +128,18 @@ export class RateLimitTracker {
 		this.state.rateLimitHits.push(hit);
 		this.state.lastUpdated = new Date();
 
+		// Extract enhanced metadata from headers
+		const headerMetadata = RateLimitTracker.processRateLimitHeaders(responseHeaders);
+
 		console.error(`🚨 Rate limit hit for ${model}:`, {
 			timestamp: hit.timestamp,
 			usage: currentUsage,
 			error: errorMessage,
+			apiLimitInfo: headerMetadata,
 		});
 
 		// Trigger pause for this model
-		this.pauseForRateLimit(model, errorMessage);
+		this.pauseForRateLimit(model, errorMessage, undefined, responseHeaders);
 	}
 
 	/**
@@ -189,13 +196,33 @@ export class RateLimitTracker {
 	}
 
 	/**
-	 * Check if usage is approaching limits and warn
+	 * Check if usage is approaching limits and warn or prevent
 	 */
 	private checkUsageWarnings(model: string): void {
 		const fiveHourUsage = this.getUsagePercentage("5hour");
 		const weeklyUsage = this.getUsagePercentage("week");
 		const threshold = this.state.config.warningThreshold;
 
+		// Proactive prevention at 95% to avoid hitting hard limits
+		const preventionThreshold = 0.95;
+
+		if (fiveHourUsage >= preventionThreshold) {
+			console.warn(
+				`🚨 Proactive rate limit prevention: ${(fiveHourUsage * 100).toFixed(1)}% of 5-hour limit used (${model})`,
+			);
+			this.triggerProactivePause(model as "haiku" | "sonnet" | "opus", "5-hour");
+			return;
+		}
+
+		if (weeklyUsage >= preventionThreshold) {
+			console.warn(
+				`🚨 Proactive rate limit prevention: ${(weeklyUsage * 100).toFixed(1)}% of weekly limit used (${model})`,
+			);
+			this.triggerProactivePause(model as "haiku" | "sonnet" | "opus", "weekly");
+			return;
+		}
+
+		// Standard warnings
 		if (fiveHourUsage >= threshold) {
 			console.warn(`⚠️  Rate limit warning: ${(fiveHourUsage * 100).toFixed(1)}% of 5-hour limit used (${model})`);
 		}
@@ -203,6 +230,57 @@ export class RateLimitTracker {
 		if (weeklyUsage >= threshold) {
 			console.warn(`⚠️  Rate limit warning: ${(weeklyUsage * 100).toFixed(1)}% of weekly limit used (${model})`);
 		}
+	}
+
+	/**
+	 * Trigger proactive pause to prevent hitting rate limits
+	 */
+	private triggerProactivePause(model: "haiku" | "sonnet" | "opus", limitType: "5-hour" | "weekly"): void {
+		const now = new Date();
+		let resumeAt: Date;
+
+		if (limitType === "5-hour") {
+			// Calculate when oldest tokens in 5-hour window will expire
+			const fiveHoursAgo = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+			const oldestRelevantQuest = this.state.quests
+				.filter((q) => q.timestamp >= fiveHoursAgo)
+				.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())[0];
+
+			if (oldestRelevantQuest) {
+				// Resume when oldest quest ages out + 5min buffer
+				resumeAt = new Date(oldestRelevantQuest.timestamp.getTime() + 5 * 60 * 60 * 1000 + 5 * 60 * 1000);
+			} else {
+				// Default to 30 minutes if no quest data
+				resumeAt = new Date(now.getTime() + 30 * 60 * 1000);
+			}
+		} else {
+			// Weekly limit - wait until oldest weekly tokens expire
+			const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+			const oldestWeeklyQuest = this.state.quests
+				.filter((q) => q.timestamp >= weekAgo)
+				.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())[0];
+
+			if (oldestWeeklyQuest) {
+				// Resume when oldest quest ages out + 30min buffer
+				resumeAt = new Date(oldestWeeklyQuest.timestamp.getTime() + 7 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000);
+			} else {
+				// Default to 2 hours if no quest data
+				resumeAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+			}
+		}
+
+		this.pauseForRateLimit(model, `Proactive pause to prevent hitting ${limitType} rate limit`, undefined, undefined);
+
+		// Override the resume time with calculated proactive time
+		if (this.state.pause.modelPauses) {
+			this.state.pause.modelPauses[model] = {
+				...this.state.pause.modelPauses[model],
+				resumeAt,
+			};
+		}
+		this.state.pause.resumeAt = resumeAt;
+
+		console.log(`🛡️  Proactive ${limitType} pause for ${model} - resume at ${resumeAt.toISOString()}`);
 	}
 
 	/**
@@ -362,12 +440,47 @@ export class RateLimitTracker {
 	/**
 	 * Pause system due to rate limit hit
 	 */
-	pauseForRateLimit(model: "haiku" | "sonnet" | "opus", errorMessage?: string, pausedAgentCount?: number): void {
-		// Calculate resume time (5 hours for 5-hour window, longer for weekly limits)
+	pauseForRateLimit(
+		model: "haiku" | "sonnet" | "opus",
+		errorMessage?: string,
+		pausedAgentCount?: number,
+		responseHeaders?: Record<string, string>,
+	): void {
 		const now = new Date();
-		const resumeAt = new Date(now.getTime() + 5 * 60 * 60 * 1000); // Default 5 hours
 
+		// Try to extract retry-after from headers first
+		const retryAfterMs = RateLimitTracker.extractRetryAfter(responseHeaders);
+		let resumeAt: Date;
+
+		if (retryAfterMs) {
+			// Use API-provided retry-after time
+			resumeAt = new Date(now.getTime() + retryAfterMs);
+			console.log(`📡 Using API retry-after: ${retryAfterMs / 1000} seconds`);
+		} else {
+			// Fallback to intelligent estimation based on usage patterns
+			resumeAt = this.estimateResumeTime(model, now);
+		}
+
+		// Initialize modelPauses if not exists
+		if (!this.state.pause.modelPauses) {
+			this.state.pause.modelPauses = {
+				haiku: { isPaused: false },
+				sonnet: { isPaused: false },
+				opus: { isPaused: false },
+			};
+		}
+
+		// Pause the specific model
+		this.state.pause.modelPauses[model] = {
+			isPaused: true,
+			pausedAt: now,
+			resumeAt,
+			reason: errorMessage || `Rate limit hit for ${model} model`,
+		};
+
+		// Update global pause state (backward compatibility)
 		this.state.pause = {
+			...this.state.pause,
 			isPaused: true,
 			pausedAt: now,
 			resumeAt,
@@ -378,33 +491,165 @@ export class RateLimitTracker {
 
 		this.state.lastUpdated = now;
 
-		console.log(`🚨 Rate limit hit - squad paused`);
+		console.log(`🚨 Rate limit hit for ${model} model - pausing ${model} agents only`);
 		this.logPauseStatus();
+	}
+
+	/**
+	 * Estimate resume time based on usage patterns when no retry-after header
+	 */
+	private estimateResumeTime(model: "haiku" | "sonnet" | "opus", now: Date): Date {
+		const usage = this.getCurrentUsage();
+		const config = this.state.config;
+
+		// Check if we're hitting 5-hour window limit
+		const fiveHourUsagePercent = usage.last5HoursSonnet / config.maxTokensPer5Hours;
+
+		if (fiveHourUsagePercent >= 0.95) {
+			// Close to 5-hour limit, wait for oldest tokens to age out
+			const fiveHoursAgo = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+			const oldestRelevantQuest = this.state.quests
+				.filter((q) => q.timestamp >= fiveHoursAgo)
+				.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())[0];
+
+			if (oldestRelevantQuest) {
+				// Resume when oldest quest ages out of 5-hour window + 10min buffer
+				return new Date(oldestRelevantQuest.timestamp.getTime() + 5 * 60 * 60 * 1000 + 10 * 60 * 1000);
+			}
+		}
+
+		// Default fallback - wait 1 hour for temporary limits
+		return new Date(now.getTime() + 60 * 60 * 1000);
 	}
 
 	/**
 	 * Check if system should auto-resume from rate limit pause
 	 */
 	checkAutoResume(): boolean {
-		if (!this.state.pause.isPaused || !this.state.pause.resumeAt) {
+		if (!this.state.pause.isPaused) {
 			return false;
 		}
 
 		const now = new Date();
-		if (now >= this.state.pause.resumeAt) {
+		let anyResumed = false;
+
+		// Enhanced monitoring: Check if usage has naturally decreased below limits
+		if (this.shouldResumeBasedOnUsage()) {
+			console.log("📊 Usage has dropped below limits - resuming all models");
 			this.resumeFromRateLimit();
 			return true;
 		}
 
-		return false;
+		// Check per-model pauses first
+		if (this.state.pause.modelPauses) {
+			for (const [model, pause] of Object.entries(this.state.pause.modelPauses)) {
+				if (pause.isPaused && pause.resumeAt && now >= pause.resumeAt) {
+					this.resumeModel(model as "haiku" | "sonnet" | "opus");
+					anyResumed = true;
+				}
+			}
+		}
+
+		// Check global pause for backward compatibility
+		if (this.state.pause.resumeAt && now >= this.state.pause.resumeAt) {
+			this.resumeFromRateLimit();
+			anyResumed = true;
+		}
+
+		return anyResumed;
 	}
 
 	/**
-	 * Resume system from rate limit pause
+	 * Check if usage has naturally decreased below rate limits
+	 */
+	private shouldResumeBasedOnUsage(): boolean {
+		const usage = this.getCurrentUsage();
+		const config = this.state.config;
+
+		// Allow 10% buffer below limit to avoid oscillation
+		const resumeThreshold = 0.9;
+
+		const fiveHourUsagePercent = usage.last5HoursSonnet / config.maxTokensPer5Hours;
+		const weeklyUsagePercent = usage.currentWeekSonnet / config.maxTokensPerWeek;
+
+		// Resume if both windows are safely below limits
+		return fiveHourUsagePercent < resumeThreshold && weeklyUsagePercent < resumeThreshold;
+	}
+
+	/**
+	 * Enhanced monitoring - call this frequently to check quota resets
+	 */
+	continuousMonitoring(): {
+		shouldResume: boolean;
+		currentUsage: ReturnType<RateLimitTracker["getCurrentUsage"]>;
+		timeUntilResume?: number;
+	} {
+		const currentUsage = this.getCurrentUsage();
+		const shouldResume = this.checkAutoResume();
+
+		let timeUntilResume: number | undefined;
+		if (this.state.pause.isPaused && !shouldResume) {
+			timeUntilResume = this.getRemainingPauseTime();
+		}
+
+		return {
+			shouldResume,
+			currentUsage,
+			timeUntilResume,
+		};
+	}
+
+	/**
+	 * Resume a specific model from rate limit pause
+	 */
+	resumeModel(model: "haiku" | "sonnet" | "opus"): void {
+		if (!this.state.pause.modelPauses?.[model]?.isPaused) {
+			return;
+		}
+
+		// Ensure modelPauses exists
+		if (!this.state.pause.modelPauses) {
+			return;
+		}
+
+		// Resume the specific model
+		this.state.pause.modelPauses[model] = {
+			...this.state.pause.modelPauses[model],
+			isPaused: false,
+		};
+
+		// Check if all models are now unpaused
+		const stillPaused = Object.values(this.state.pause.modelPauses).some((pause) => pause.isPaused);
+
+		if (!stillPaused) {
+			// No models are paused, resume globally
+			this.state.pause.isPaused = false;
+		}
+
+		this.state.lastUpdated = new Date();
+
+		console.log(`✅ ${model} model resumed from rate limit pause`);
+		if (!stillPaused) {
+			console.log(`✅ All models resumed - squad fully operational`);
+		}
+	}
+
+	/**
+	 * Resume system from rate limit pause (legacy method)
 	 */
 	resumeFromRateLimit(): void {
 		if (!this.state.pause.isPaused) {
 			return;
+		}
+
+		// Clear all model pauses
+		if (this.state.pause.modelPauses) {
+			for (const model of Object.keys(this.state.pause.modelPauses) as Array<"haiku" | "sonnet" | "opus">) {
+				this.state.pause.modelPauses[model] = {
+					...this.state.pause.modelPauses[model],
+					isPaused: false,
+				};
+			}
 		}
 
 		this.state.pause = { isPaused: false };
@@ -425,6 +670,20 @@ export class RateLimitTracker {
 	 */
 	isPaused(): boolean {
 		return this.state.pause.isPaused;
+	}
+
+	/**
+	 * Check if a specific model is currently paused
+	 */
+	isModelPaused(model: "haiku" | "sonnet" | "opus"): boolean {
+		return this.state.pause.modelPauses?.[model]?.isPaused ?? false;
+	}
+
+	/**
+	 * Get pause state for a specific model
+	 */
+	getModelPauseState(model: "haiku" | "sonnet" | "opus") {
+		return this.state.pause.modelPauses?.[model];
 	}
 
 	/**
@@ -461,7 +720,7 @@ export class RateLimitTracker {
 	}
 
 	/**
-	 * Log current pause status with countdown
+	 * Log current pause status with enhanced countdown
 	 */
 	logPauseStatus(): void {
 		if (!this.state.pause.isPaused) {
@@ -472,7 +731,53 @@ export class RateLimitTracker {
 		const agentCount = this.state.pause.pausedAgentCount || 0;
 		const model = this.state.pause.limitedModel || "unknown";
 
+		// Enhanced display with actual resume time
+		const resumeTime = this.state.pause.resumeAt;
+		const resumeTimeStr = resumeTime ? resumeTime.toLocaleString() : "unknown";
+
 		console.log(`⏳ Rate limit pause: ${remaining} remaining (${agentCount} agents paused, ${model} model)`);
+		console.log(`🕒 Resume at: ${resumeTimeStr}`);
+
+		// Show per-model status if available
+		if (this.state.pause.modelPauses) {
+			const pausedModels = Object.entries(this.state.pause.modelPauses)
+				.filter(([_, pause]) => pause.isPaused)
+				.map(([model, pause]) => {
+					const modelResume = pause.resumeAt ? pause.resumeAt.toLocaleString() : "unknown";
+					const modelRemaining = pause.resumeAt
+						? this.formatTimeRemaining(pause.resumeAt.getTime() - Date.now())
+						: "unknown";
+					return `  ${model}: ${modelRemaining} (until ${modelResume})`;
+				});
+
+			if (pausedModels.length > 0) {
+				console.log("📊 Per-model status:");
+				for (const status of pausedModels) {
+					console.log(status);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Format time remaining in a human-readable way
+	 */
+	private formatTimeRemaining(remainingMs: number): string {
+		if (remainingMs <= 0) return "0:00";
+
+		const totalMinutes = Math.ceil(remainingMs / (60 * 1000));
+		const hours = Math.floor(totalMinutes / 60);
+		const minutes = totalMinutes % 60;
+
+		if (hours > 24) {
+			const days = Math.floor(hours / 24);
+			const remainingHours = hours % 24;
+			return `${days}d ${remainingHours}h`;
+		} else if (hours > 0) {
+			return `${hours}:${minutes.toString().padStart(2, "0")}`;
+		} else {
+			return `0:${minutes.toString().padStart(2, "0")}`;
+		}
 	}
 
 	/**
@@ -503,5 +808,84 @@ export class RateLimitTracker {
 
 		const seconds = parseInt(retryAfter, 10);
 		return Number.isNaN(seconds) ? null : seconds * 1000; // Convert to milliseconds
+	}
+
+	/**
+	 * Enhanced header processing to extract more rate limit metadata
+	 */
+	static processRateLimitHeaders(responseHeaders?: Record<string, string>): {
+		retryAfter?: number; // milliseconds
+		limit?: number;
+		remaining?: number;
+		reset?: Date;
+		resetEpoch?: number;
+		windowSize?: string;
+	} {
+		if (!responseHeaders) return {};
+
+		const result: any = {};
+
+		// Retry-After (RFC 7231)
+		const retryAfter = responseHeaders["retry-after"] || responseHeaders["Retry-After"];
+		if (retryAfter) {
+			const seconds = parseInt(retryAfter, 10);
+			if (!Number.isNaN(seconds)) {
+				result.retryAfter = seconds * 1000;
+			}
+		}
+
+		// Common rate limit headers (Anthropic/OpenAI style)
+		const limit = responseHeaders["x-ratelimit-limit"] || responseHeaders["X-RateLimit-Limit"];
+		if (limit) {
+			const limitNum = parseInt(limit, 10);
+			if (!Number.isNaN(limitNum)) {
+				result.limit = limitNum;
+			}
+		}
+
+		const remaining = responseHeaders["x-ratelimit-remaining"] || responseHeaders["X-RateLimit-Remaining"];
+		if (remaining) {
+			const remainingNum = parseInt(remaining, 10);
+			if (!Number.isNaN(remainingNum)) {
+				result.remaining = remainingNum;
+			}
+		}
+
+		// Rate limit reset time
+		const reset = responseHeaders["x-ratelimit-reset"] || responseHeaders["X-RateLimit-Reset"];
+		if (reset) {
+			const resetEpoch = parseInt(reset, 10);
+			if (!Number.isNaN(resetEpoch)) {
+				result.resetEpoch = resetEpoch;
+				result.reset = new Date(resetEpoch * 1000); // Convert from seconds to milliseconds
+			}
+		}
+
+		// Window size information
+		const window = responseHeaders["x-ratelimit-window"] || responseHeaders["X-RateLimit-Window"];
+		if (window) {
+			result.windowSize = window;
+		}
+
+		return result;
+	}
+
+	/**
+	 * Log detailed rate limit information from headers
+	 */
+	private logRateLimitHeaders(headers?: Record<string, string>): void {
+		if (!headers) return;
+
+		const metadata = RateLimitTracker.processRateLimitHeaders(headers);
+
+		if (Object.keys(metadata).length > 0) {
+			console.log("📡 Rate limit headers received:", {
+				limit: metadata.limit,
+				remaining: metadata.remaining,
+				reset: metadata.reset?.toISOString(),
+				windowSize: metadata.windowSize,
+				retryAfterMs: metadata.retryAfter,
+			});
+		}
 	}
 }

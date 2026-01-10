@@ -791,7 +791,22 @@ export class RaidOrchestrator {
 	 * Spawn an agent to work on a waypoint
 	 */
 	private async spawnAgent(type: AgentType, waypoint: Waypoint): Promise<SquadMember> {
-		// Check if system is paused due to rate limits
+		const agentDef = SQUAD_AGENTS[type];
+		const model = agentDef.model;
+
+		// Check if the specific model for this agent is paused
+		if (this.rateLimitTracker.isModelPaused(model)) {
+			this.log(`Cannot spawn ${type} agent - ${model} model paused due to rate limits`);
+			const modelPauseState = this.rateLimitTracker.getModelPauseState(model);
+			if (modelPauseState?.resumeAt) {
+				const remainingMs = modelPauseState.resumeAt.getTime() - Date.now();
+				const remainingMin = Math.ceil(remainingMs / (60 * 1000));
+				this.log(`${model} model resume in ~${remainingMin} minutes`);
+			}
+			throw new Error(`${model} model paused due to rate limits`);
+		}
+
+		// Also check global pause for backward compatibility
 		if (this.rateLimitTracker.isPaused()) {
 			this.log("Cannot spawn agent - system paused due to rate limits");
 			this.rateLimitTracker.logPauseStatus();
@@ -1008,10 +1023,10 @@ export class RaidOrchestrator {
 					undefined, // TODO: Extract headers if available
 				);
 
-				// Update pause with agent count
+				// Update pause with agent count (pass undefined headers for now)
 				const pauseState = this.rateLimitTracker.getPauseState();
 				if (pauseState.isPaused) {
-					this.rateLimitTracker.pauseForRateLimit(agentDef.model, errorMessage, activeAgents);
+					this.rateLimitTracker.pauseForRateLimit(agentDef.model, errorMessage, activeAgents, undefined);
 				}
 
 				// Persist the rate limit state
@@ -1527,21 +1542,68 @@ export class RaidOrchestrator {
 	}
 
 	/**
-	 * Get current rate limit status
+	 * Get current rate limit status with enhanced per-model information
 	 */
 	getRateLimitStatus(): {
 		isPaused: boolean;
 		pauseState?: ReturnType<RateLimitTracker["getPauseState"]>;
 		remainingTime?: string;
 		usage: ReturnType<RateLimitTracker["getUsageSummary"]>;
+		modelStatus?: Record<
+			string,
+			{
+				isPaused: boolean;
+				pauseState?: any;
+				remainingTime?: string;
+			}
+		>;
+		monitoring: ReturnType<RateLimitTracker["continuousMonitoring"]>;
 	} {
 		const isPaused = this.rateLimitTracker.isPaused();
+		const monitoring = this.rateLimitTracker.continuousMonitoring();
+
+		// Get per-model status
+		const modelStatus: Record<string, any> = {};
+		for (const model of ["haiku", "sonnet", "opus"] as const) {
+			const isModelPaused = this.rateLimitTracker.isModelPaused(model);
+			const modelPauseState = this.rateLimitTracker.getModelPauseState(model);
+
+			modelStatus[model] = {
+				isPaused: isModelPaused,
+				pauseState: isModelPaused ? modelPauseState : undefined,
+				remainingTime:
+					isModelPaused && modelPauseState?.resumeAt
+						? this.formatModelRemainingTime(modelPauseState.resumeAt)
+						: undefined,
+			};
+		}
+
 		return {
 			isPaused,
 			pauseState: isPaused ? this.rateLimitTracker.getPauseState() : undefined,
 			remainingTime: isPaused ? this.rateLimitTracker.formatRemainingTime() : undefined,
 			usage: this.rateLimitTracker.getUsageSummary(),
+			modelStatus,
+			monitoring,
 		};
+	}
+
+	/**
+	 * Format remaining time for a specific model
+	 */
+	private formatModelRemainingTime(resumeAt: Date): string {
+		const remainingMs = resumeAt.getTime() - Date.now();
+		if (remainingMs <= 0) return "0:00";
+
+		const totalMinutes = Math.ceil(remainingMs / (60 * 1000));
+		const hours = Math.floor(totalMinutes / 60);
+		const minutes = totalMinutes % 60;
+
+		if (hours > 0) {
+			return `${hours}:${minutes.toString().padStart(2, "0")}`;
+		} else {
+			return `0:${minutes.toString().padStart(2, "0")}`;
+		}
 	}
 
 	/**

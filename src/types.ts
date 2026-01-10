@@ -545,6 +545,16 @@ export interface RateLimitPause {
 	pausedAgentCount?: number;
 	/** Reason for the pause */
 	reason?: string;
+	/** Per-model pause states for granular control */
+	modelPauses?: Record<
+		ModelChoice,
+		{
+			isPaused: boolean;
+			pausedAt?: Date;
+			resumeAt?: Date;
+			reason?: string;
+		}
+	>;
 }
 
 /**
