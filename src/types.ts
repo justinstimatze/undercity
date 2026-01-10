@@ -915,3 +915,31 @@ export interface ExperimentResult {
 	duration: number;
 	details: unknown;
 }
+
+/**
+ * Task-level metrics for detailed tracking
+ */
+export interface TaskMetrics {
+	/** Unique identifier for the task */
+	taskId: string;
+	/** Timestamp when task started */
+	startTime: Date;
+	/** Timestamp when task completed */
+	endTime?: Date;
+	/** Whether the task was successful */
+	success: boolean;
+	/** Total tokens used */
+	tokens: number;
+	/** Model used for task execution */
+	model: ModelChoice;
+	/** Number of escalations/user interventions */
+	escalations: number;
+	/** Specific reasons for escalations */
+	escalationReasons?: string[];
+	/** Total time taken for task completion (in milliseconds) */
+	timeTakenMs?: number;
+	/** Raid or experiment context */
+	raidId?: string;
+	/** Associated experiment ID */
+	experimentId?: string;
+}
