@@ -108,9 +108,37 @@ export function addQuests(objectives: string[]): Quest[] {
  */
 export function getNextQuest(): Quest | undefined {
 	const board = loadQuestBoard();
-	return board.quests
-		.filter((quest) => quest.status === "pending")
-		.sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))[0];
+	const pendingQuests = board.quests.filter((quest) => quest.status === "pending");
+
+	// Compute priority with more sophisticated scoring
+	const scoredQuests = pendingQuests.map(quest => {
+		let score = quest.priority ?? 999;
+
+		// Boost priority based on tags
+		const boostTags: { [key: string]: number } = {
+			"critical": -50,  // Highest priority
+			"bugfix": -30,
+			"security": -25,
+			"performance": -20,
+			"refactor": -10,
+		};
+
+		if (quest.tags) {
+			for (const tag of quest.tags) {
+				if (boostTags[tag.toLowerCase()]) {
+					score += boostTags[tag.toLowerCase()];
+				}
+			}
+		}
+
+		// Penalize old quests
+		const daysSinceCreation = (Date.now() - new Date(quest.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+		score += Math.min(daysSinceCreation * 0.5, 30);
+
+		return { quest, score };
+	});
+
+	return scoredQuests.sort((a, b) => a.score - b.score)[0]?.quest;
 }
 
 /**
@@ -191,10 +219,64 @@ export function getAllQuests(): Quest[] {
  */
 export function getReadyQuestsForBatch(count: number = 3): Quest[] {
 	const board = loadQuestBoard();
-	return board.quests
-		.filter((quest) => quest.status === "pending")
-		.sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
-		.slice(0, count);
+	const pendingQuests = board.quests.filter((quest) => quest.status === "pending");
+
+	// Compute priority with more sophisticated scoring
+	const scoredQuests = pendingQuests.map(quest => {
+		let score = quest.priority ?? 999;
+
+		// Boost priority based on tags
+		const boostTags: { [key: string]: number } = {
+			"critical": -50,  // Highest priority
+			"bugfix": -30,
+			"security": -25,
+			"performance": -20,
+			"refactor": -10,
+		};
+
+		if (quest.tags) {
+			for (const tag of quest.tags) {
+				if (boostTags[tag.toLowerCase()]) {
+					score += boostTags[tag.toLowerCase()];
+				}
+			}
+		}
+
+		// Penalize old quests
+		const daysSinceCreation = (Date.now() - new Date(quest.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+		score += Math.min(daysSinceCreation * 0.5, 30);
+
+		return { quest, score };
+	});
+
+	// Sort by score
+	const sortedQuests = scoredQuests.sort((a, b) => a.score - b.score);
+
+	// Select compatible quests with minimal file/package overlap
+	const selectedQuests: Quest[] = [];
+	const usedPackages = new Set<string>();
+	const usedFiles = new Set<string>();
+
+	for (const { quest } of sortedQuests) {
+		if (selectedQuests.length >= count) break;
+
+		// Check package and file conflicts
+		const questPackages = quest.computedPackages ?? quest.packageHints ?? [];
+		const questFiles = quest.estimatedFiles ?? [];
+
+		const hasConflict = questPackages.some(pkg => usedPackages.has(pkg)) ||
+			questFiles.some(file => usedFiles.has(file));
+
+		if (!hasConflict) {
+			selectedQuests.push(quest);
+
+			// Mark packages and files as used
+			questPackages.forEach(pkg => usedPackages.add(pkg));
+			questFiles.forEach(file => usedFiles.add(file));
+		}
+	}
+
+	return selectedQuests;
 }
 
 /**

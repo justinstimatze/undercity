@@ -9,6 +9,8 @@ import fs from "fs/promises";
 import path from "path";
 import { RateLimitTracker } from "./rate-limit.js";
 import type { AgentType, EfficiencyAnalytics, QuestMetrics, TokenUsage } from "./types.js";
+import type { ComplexityLevel } from "./complexity.js";
+import { assessComplexityFast } from "./complexity.js";
 
 const METRICS_DIR = path.join(process.cwd(), ".undercity");
 const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl");
@@ -234,6 +236,13 @@ export class MetricsTracker {
 				avgAgentsSpawned: 0,
 				mostEfficientAgentType: null,
 				tokensByAgentType: {} as Record<AgentType, { total: number; avgPerQuest: number }>,
+				successRateByComplexity: {
+					trivial: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0 },
+					simple: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.1 },
+					standard: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.3 },
+					complex: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.5 },
+					critical: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.8 },
+				},
 				analysisPeriod: {
 					from: new Date(),
 					to: new Date(),
@@ -244,6 +253,19 @@ export class MetricsTracker {
 		const completedQuests = questMetrics.filter((m) => m.success);
 		const totalQuests = questMetrics.length;
 		const successRate = (completedQuests.length / totalQuests) * 100;
+
+		// Calculate complexity breakdowns
+		const complexityBreakdown: Record<string, {
+			totalQuests: number;
+			successfulQuests: number;
+			totalTokens: number;
+		}> = {
+			trivial: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
+			simple: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
+			standard: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
+			complex: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
+			critical: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
+		};
 
 		// Calculate averages from completed quests only
 		const avgTokensPerCompletion =
@@ -272,14 +294,26 @@ export class MetricsTracker {
 			sheriff: 0,
 		};
 
+		// Process metrics for different dimensions
 		for (const metrics of questMetrics) {
+			// Complexity tracking
+			const complexity = assessComplexityFast(metrics.objective).level;
+			const complexityData = complexityBreakdown[complexity];
+			complexityData.totalQuests++;
+			complexityData.totalTokens += metrics.totalTokens;
+
+			if (metrics.success) {
+				complexityData.successfulQuests++;
+			}
+
+			// Agent type tracking
 			for (const agentType of metrics.agentTypes) {
 				tokensByAgentType[agentType].total += metrics.totalTokens;
 				agentTypeQuests[agentType]++;
 			}
 		}
 
-		// Calculate averages
+		// Calculate agent type averages
 		for (const agentType of Object.keys(tokensByAgentType) as AgentType[]) {
 			const questCount = agentTypeQuests[agentType];
 			if (questCount > 0) {
@@ -298,6 +332,22 @@ export class MetricsTracker {
 			}
 		}
 
+		// Compute complexity-level success rates and metrics
+		const successRateByComplexity = Object.entries(complexityBreakdown).reduce((acc, [complexity, data]) => {
+			acc[complexity] = {
+				rate: data.totalQuests > 0 ? (data.successfulQuests / data.totalQuests) * 100 : 0,
+				totalQuests: data.totalQuests,
+				avgTokensPerQuest: data.totalQuests > 0 ? data.totalTokens / data.totalQuests : 0,
+				// Escalation trigger - more aggressive for higher complexity levels
+				escalationTrigger: complexity === "trivial" ? 0 :
+					complexity === "simple" ? 0.1 :
+					complexity === "standard" ? 0.3 :
+					complexity === "complex" ? 0.5 :
+					0.8,
+			};
+			return acc;
+		}, {} as any);
+
 		// Analysis period
 		const dates = questMetrics.map((m) => m.startedAt);
 		const analysisPeriod = {
@@ -313,6 +363,7 @@ export class MetricsTracker {
 			avgAgentsSpawned,
 			mostEfficientAgentType,
 			tokensByAgentType,
+			successRateByComplexity,
 			analysisPeriod,
 		};
 	}

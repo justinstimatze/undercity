@@ -4,6 +4,7 @@
  * Core type definitions for the multi-agent orchestrator.
  * Inspired by Gas Town (Steve Yegge) and ARC Raiders extraction mechanics.
  */
+import type { ComplexityLevel } from "./complexity.js";
 
 /**
  * Raid status - the overall state of a work session
@@ -636,13 +637,32 @@ export interface EfficiencyMetrics {
  * Efficiency analytics aggregation
  */
 export interface EfficiencyAnalytics {
+	/** Total quests processed */
 	totalQuests: number;
+	/** Overall success rate across all quests */
 	successRate: number;
+	/** Average tokens used per successful completion */
 	avgTokensPerCompletion: number;
+	/** Average duration of quests in milliseconds */
 	avgDurationMs: number;
+	/** Average number of agents spawned per quest */
 	avgAgentsSpawned: number;
+	/** Most efficient agent type */
 	mostEfficientAgentType: AgentType | null;
+	/** Token usage breakdown by agent type */
 	tokensByAgentType: Record<AgentType, { total: number; avgPerQuest: number }>;
+	/** Success rates per complexity level with escalation guidance */
+	successRateByComplexity: Record<ComplexityLevel, {
+		/** Success rate for this complexity level */
+		rate: number;
+		/** Total quests at this complexity level */
+		totalQuests: number;
+		/** Average tokens used per quest */
+		avgTokensPerQuest: number;
+		/** Recommended escalation trigger threshold */
+		escalationTrigger: number;
+	}>;
+	/** Analysis time period */
 	analysisPeriod: {
 		from: Date;
 		to: Date;
