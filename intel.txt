@@ -25,6 +25,10 @@
 [elevator] Fix elevator auto-processing - branches should auto-merge to main after sheriff approval, currently requires manual merge intervention
 
 ### High
+[evolution] Implement genome.json - externalize all evolvable state (prompts, models, context limits, protocols) into structured JSON
+[evolution] Load prompts from genome.json instead of hardcoded strings in squad.ts
+[evolution] Add metrics tracking per genome component - avgTime, avgTokens, successRate, rejectionRate
+[evolution] Add mutation testing infrastructure - A/B test prompt variants, track sample size and results
 [perf] Add timing logs per phase - track how long flute/logistics/quester/sheriff each take
 [perf] Log to .undercity/metrics.jsonl - queryable history of quest durations, token usage, phase breakdowns
 [perf] Surface slow phases in status - "Quester: 8m (avg 3m)" so we know what's dragging
