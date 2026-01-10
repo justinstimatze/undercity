@@ -12,8 +12,8 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { gitLogger } from "./logger.js";
 import type { WorktreeInfo } from "./types.js";
 
@@ -51,32 +51,72 @@ function execGit(args: string[], cwd?: string): string {
 }
 
 /**
- * Get the repository root directory
+ * Get the repository root directory with enhanced fallback
+ * Supports:
+ * 1. Git repositories
+ * 2. Explicitly configured roots
+ * 3. Fallback to current directory or parent directories
  */
-function getRepoRoot(): string {
+function getRepoRoot(explicitRoot?: string): string {
+	// If explicit root is provided, validate it's a directory
+	if (explicitRoot) {
+		const absoluteRoot = resolve(explicitRoot);
+		try {
+			if (!statSync(absoluteRoot).isDirectory()) {
+				throw new Error("Not a valid directory");
+			}
+			return absoluteRoot;
+		} catch (dirError) {
+			throw new WorktreeError(`Invalid repository root: ${explicitRoot}`, "root-validation", 1);
+		}
+	}
+
+	// Try git repository detection
 	try {
 		return execGit(["rev-parse", "--show-toplevel"]);
-	} catch (_error) {
-		throw new WorktreeError("Not in a git repository", "git rev-parse --show-toplevel");
+	} catch (_gitError) {
+		// If not a git repo, find first valid parent directory
+		let currentDir = process.cwd();
+		while (currentDir !== "/") {
+			try {
+				const files = statSync(currentDir);
+				if (files.isDirectory()) {
+					return currentDir;
+				}
+			} catch {
+				/* ignore */
+			}
+			currentDir = resolve(currentDir, "..");
+		}
+
+		// Fallback to current directory if all else fails
+		return process.cwd();
 	}
 }
 
 /**
  * Get the default branch (usually 'main' or 'master')
+ * Handles both git and non-git repositories
  */
-function getDefaultBranch(): string {
+function getDefaultBranch(repoRoot?: string): string {
 	try {
 		// Try to get from remote HEAD
-		const ref = execGit(["symbolic-ref", "refs/remotes/origin/HEAD"]);
+		const ref = execGit(["symbolic-ref", "refs/remotes/origin/HEAD"], repoRoot);
 		return ref.replace("refs/remotes/origin/", "");
 	} catch {
-		// Fall back to checking if 'main' exists
-		try {
-			execGit(["rev-parse", "--verify", "main"]);
-			return "main";
-		} catch {
-			return "master";
+		// Check common branch names
+		const branches = ["main", "master", "develop", "trunk"];
+		for (const branch of branches) {
+			try {
+				execGit(["rev-parse", "--verify", branch], repoRoot);
+				return branch;
+			} catch {
+				/* continue */
+			}
 		}
+
+		// Non-git or unsupported repo, return a conservative default
+		return "main";
 	}
 }
 
@@ -109,18 +149,100 @@ export class WorktreeManager {
 	private worktreesDir: string;
 	private mainBranch: string;
 
-	constructor(stateDir?: string) {
-		this.repoRoot = getRepoRoot();
-		this.undercityDir = stateDir || join(this.repoRoot, ".undercity");
-		this.worktreesDir = join(this.undercityDir, "worktrees");
-		this.mainBranch = getDefaultBranch();
-
-		// Ensure directories exist
-		if (!existsSync(this.undercityDir)) {
-			mkdirSync(this.undercityDir, { recursive: true });
+	constructor(
+		options: {
+			stateDir?: string;
+			repoRoot?: string; // Optional explicit repo root
+			defaultBranch?: string; // Optional override for default branch
+		} = {},
+	) {
+		// Determine repo root, with multiple fallback strategies
+		try {
+			this.repoRoot = getRepoRoot(options.repoRoot);
+		} catch (error) {
+			gitLogger.warn(
+				{
+					error: String(error),
+					explicitRoot: options.repoRoot,
+				},
+				"Could not determine repository root, falling back to current directory",
+			);
+			this.repoRoot = process.cwd();
 		}
-		if (!existsSync(this.worktreesDir)) {
-			mkdirSync(this.worktreesDir, { recursive: true });
+
+		// Determine undercity directory
+		this.undercityDir = options.stateDir
+			? isAbsolute(options.stateDir)
+				? resolve(options.stateDir)
+				: resolve(this.repoRoot, options.stateDir)
+			: join(this.repoRoot, ".undercity");
+
+		this.worktreesDir = join(this.undercityDir, "worktrees");
+
+		// Get main branch with multiple fallback strategies
+		try {
+			this.mainBranch = options.defaultBranch || getDefaultBranch(this.repoRoot);
+		} catch (error) {
+			gitLogger.warn({ error: String(error) }, "Could not determine default branch, using 'main'");
+			this.mainBranch = "main";
+		}
+
+		// Ensure directories exist with proper error handling
+		try {
+			if (!existsSync(this.undercityDir)) {
+				mkdirSync(this.undercityDir, { recursive: true });
+			}
+			if (!existsSync(this.worktreesDir)) {
+				mkdirSync(this.worktreesDir, { recursive: true });
+			}
+		} catch (error) {
+			gitLogger.error(
+				{
+					error: String(error),
+					undercityDir: this.undercityDir,
+					worktreesDir: this.worktreesDir,
+				},
+				"Failed to create Undercity directories",
+			);
+			throw new WorktreeError(`Could not create Undercity directories: ${String(error)}`, "directory-creation");
+		}
+
+		gitLogger.debug(
+			{
+				repoRoot: this.repoRoot,
+				undercityDir: this.undercityDir,
+				mainBranch: this.mainBranch,
+				isGitRepo: this.isGitRepo(),
+			},
+			"Worktree manager initialized",
+		);
+	}
+
+	/**
+	 * Check if the repository is a valid git repository
+	 * Supports both full git repositories and sparse checkouts
+	 */
+	isGitRepo(): boolean {
+		try {
+			// Check multiple ways to detect git repo
+			const checks = [
+				() => execGit(["rev-parse", "--is-inside-work-tree"]),
+				() => execGit(["rev-parse", "--git-dir"]),
+				() => statSync(join(this.repoRoot, ".git")).isDirectory(),
+			];
+
+			for (const check of checks) {
+				try {
+					check();
+					return true;
+				} catch {
+					/* continue */
+				}
+			}
+
+			return false;
+		} catch {
+			return false;
 		}
 	}
 

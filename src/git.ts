@@ -69,19 +69,91 @@ export function getCurrentBranch(): string {
 /**
  * Get the default branch (usually 'main' or 'master')
  */
-export function getDefaultBranch(): string {
+export function getDefaultBranch(path?: string): string {
+	const cwd = path ? { cwd: path } : undefined;
+
 	try {
 		// Try to get from remote HEAD
-		const ref = execGit(["symbolic-ref", "refs/remotes/origin/HEAD"]);
+		const ref = execGit(["symbolic-ref", "refs/remotes/origin/HEAD"], cwd?.cwd);
 		return ref.replace("refs/remotes/origin/", "");
 	} catch {
 		// Fall back to checking if 'main' exists
 		try {
-			execGit(["rev-parse", "--verify", "main"]);
+			execGit(["rev-parse", "--verify", "main"], cwd?.cwd);
 			return "main";
 		} catch {
 			return "master";
 		}
+	}
+}
+
+/**
+ * Resolve a relative path to an absolute path
+ * @param basePath Base directory to resolve relative paths against
+ * @param relativePath Path to resolve
+ * @returns Absolute resolved path
+ */
+export function resolveRepositoryPath(basePath: string, relativePath: string): string {
+	const path = require("node:path");
+	return path.isAbsolute(relativePath) ? relativePath : path.resolve(basePath, relativePath);
+}
+
+/**
+ * Check if a directory is part of a git repository
+ * @param path Directory path to check
+ * @returns true if path is part of a git repository, false otherwise
+ */
+export function isInsideGitRepo(path: string): boolean {
+	try {
+		execSync(`git -C "${path}" rev-parse --is-inside-work-tree`, {
+			encoding: "utf-8",
+			stdio: ["pipe", "pipe", "pipe"],
+		});
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Perform a shallow clone of a repository to a specified directory
+ * @param repoUrl Repository URL to clone
+ * @param targetDir Target directory for the clone
+ * @param branch Optional specific branch to clone (default is main)
+ */
+export function shallowCloneRepository(repoUrl: string, targetDir: string, branch?: string): void {
+	const args = ["clone", "--depth", "1"];
+
+	if (branch) {
+		args.push("-b", branch);
+	}
+
+	args.push(repoUrl, targetDir);
+
+	try {
+		execSync(args.join(" "), {
+			encoding: "utf-8",
+			stdio: "inherit",
+		});
+	} catch (error) {
+		throw new GitError(`Failed to clone repository: ${String(error)}`, args.join(" "));
+	}
+}
+
+/**
+ * Get repository URL for a given path
+ * @param path Directory path of the git repository
+ * @returns Repository remote URL, or null if not available
+ */
+export function getRepositoryUrl(path: string): string | null {
+	try {
+		const url = execSync(`git -C "${path}" config --get remote.origin.url`, {
+			encoding: "utf-8",
+			stdio: ["pipe", "pipe", "pipe"],
+		}).trim();
+		return url || null;
+	} catch {
+		return null;
 	}
 }
 

@@ -430,7 +430,18 @@ const AREA_KEYWORDS: Record<string, string[]> = {
  * Uses local tools to gather relevant context before agent runs.
  * This is FREE - no LLM tokens consumed.
  */
-export async function prepareContext(task: string, cwd: string = process.cwd()): Promise<ContextBriefing> {
+export async function prepareContext(
+	task: string,
+	options: {
+		/** Current working directory */
+		cwd?: string;
+		/** Optional repository root directory */
+		repoRoot?: string;
+	} = {},
+): Promise<ContextBriefing> {
+	const cwd = options.cwd || process.cwd();
+	const repoRoot = options.repoRoot || cwd;
+
 	const briefing: ContextBriefing = {
 		objective: task,
 		targetFiles: [],
@@ -456,10 +467,10 @@ export async function prepareContext(task: string, cwd: string = process.cwd()):
 		for (const term of searchTerms.slice(0, 5)) {
 			// Check if it looks like a file name - these get priority
 			if (term.match(/\.(ts|tsx|js|jsx)$/)) {
-				const files = findFilesByName(term, cwd);
+				const files = findFilesByName(term, repoRoot);
 				explicitFiles.push(...files);
 			} else {
-				const files = findFilesWithTerm(term, cwd);
+				const files = findFilesWithTerm(term, repoRoot);
 				searchedFiles.push(...files);
 			}
 		}
@@ -468,7 +479,7 @@ export async function prepareContext(task: string, cwd: string = process.cwd()):
 		briefing.targetFiles.push(...explicitFiles, ...searchedFiles);
 
 		// 4. Try ast-grep for structural patterns
-		const astPatterns = await findWithAstGrep(task, cwd);
+		const astPatterns = await findWithAstGrep(task, repoRoot);
 		briefing.relatedPatterns.push(...astPatterns);
 
 		// Deduplicate and limit files
@@ -476,34 +487,41 @@ export async function prepareContext(task: string, cwd: string = process.cwd()):
 
 		// 5. Extract type definitions from common/schema if task mentions types
 		if (task.match(/type|interface|schema|zod/i)) {
-			const types = extractTypeDefinitions(cwd);
+			const types = extractTypeDefinitions(repoRoot);
 			briefing.typeDefinitions.push(...types.slice(0, 10));
 		}
 
 		// 6. Find function signatures in target files (prefer ts-morph for accuracy)
 		for (const file of briefing.targetFiles.slice(0, 5)) {
+			// Use full path for ts-morph
+			const fullPath = path.isAbsolute(file) ? file : path.join(repoRoot, file);
+
 			// Try ts-morph first for full type info
-			let signatures = extractFunctionSignaturesWithTypes(file, cwd);
+			let signatures = extractFunctionSignaturesWithTypes(fullPath, repoRoot);
 			if (signatures.length === 0) {
 				// Fall back to regex-based extraction
-				signatures = extractFunctionSignatures(file, cwd);
+				signatures = extractFunctionSignatures(fullPath, repoRoot);
 			}
 			briefing.functionSignatures.push(...signatures);
 		}
 		briefing.functionSignatures = briefing.functionSignatures.slice(0, 15);
 
 		// 7. Find related patterns (how similar things are done)
-		const patterns = findRelatedPatterns(task, cwd);
+		const patterns = findRelatedPatterns(task, repoRoot);
 		briefing.relatedPatterns.push(...patterns.slice(0, 5));
 
-		// 8. Add any detected constraints
-		const constraints = detectConstraints(task, cwd);
+		// 8. Add repository-specific constraints
+		const constraints = [
+			...detectConstraints(task, repoRoot),
+			`Working in repository: ${repoRoot}`,
+			`Current directory: ${cwd}`,
+		];
 		briefing.constraints.push(...constraints);
 
 		// 9. Build the briefing document
 		briefing.briefingDoc = buildBriefingDoc(briefing);
 	} catch (error) {
-		raidLogger.warn({ error: String(error) }, "Context preparation had issues, using minimal briefing");
+		raidLogger.warn({ error: String(error), cwd, repoRoot }, "Context preparation had issues, using minimal briefing");
 		briefing.briefingDoc = buildMinimalBriefing(task);
 	}
 

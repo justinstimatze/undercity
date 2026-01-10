@@ -135,15 +135,24 @@ export class RaidOrchestrator {
 			parallelismLevel?: ParallelismLevel;
 			/** Model choices for efficiency tracking */
 			modelChoices?: LoadoutModelChoices;
+			/** Explicit repository root for multi-repo support */
+			repoRoot?: string;
 		} = {},
 	) {
 		this.persistence = new Persistence(options.stateDir);
 		this.elevator = new Elevator(undefined, undefined, options.retryConfig);
+
+		// Initialize worktree manager for raid isolation
+		// Pass both stateDir and optional repoRoot
+		this.worktreeManager = new WorktreeManager({
+			stateDir: options.stateDir,
+			repoRoot: options.repoRoot,
+		});
+
 		// Initialize file tracker from persisted state
 		const trackingState = this.persistence.getFileTracking();
 		this.fileTracker = new FileTracker(trackingState);
-		// Initialize worktree manager for raid isolation
-		this.worktreeManager = new WorktreeManager(options.stateDir);
+
 		this.maxSquadSize = options.maxSquadSize || 5;
 		// Clamp maxParallel to valid range: 1-5, default 3
 		this.maxParallel = Math.min(5, Math.max(1, options.maxParallel ?? 3));
@@ -154,6 +163,13 @@ export class RaidOrchestrator {
 
 		// Initialize metrics tracker
 		this.metricsTracker = new MetricsTracker();
+
+		// Log repository configuration
+		this.log("Raid configuration", {
+			repoRoot: this.worktreeManager.getMainRepoPath(),
+			isGitRepo: this.worktreeManager.isGitRepo(),
+			mainBranch: this.worktreeManager.getMainBranch(),
+		});
 
 		// Initialize rate limit tracker from persisted state
 		const rateLimitState = this.persistence.getRateLimitState();
