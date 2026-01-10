@@ -32,7 +32,8 @@ export {
 	stash,
 	stashPop,
 } from "./git.js";
-
+// Performance management
+export { getPerformanceManager } from "./performance-manager.js";
 // Persistence layer
 export { Persistence } from "./persistence.js";
 // Raid orchestration
