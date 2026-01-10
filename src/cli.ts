@@ -1607,6 +1607,7 @@ program
 	.option("--supervised", "Use supervised mode (Opus orchestrates workers)")
 	.option("--worker <tier>", "Worker model for supervised mode", "sonnet")
 	.option("--no-local", "Disable local tools and local LLM routing")
+	.option("--log <file>", "Write progress to log file")
 	.action(
 		async (options: {
 			count?: string;
@@ -1615,6 +1616,7 @@ program
 			supervised?: boolean;
 			worker?: string;
 			local?: boolean;
+			log?: string;
 		}) => {
 			const { SoloOrchestrator, SupervisedOrchestrator } = await import("./solo.js");
 			const { RateLimitTracker } = await import("./rate-limit.js");
@@ -1632,6 +1634,32 @@ program
 			let localToolsCount = 0;
 			let localLlmCount = 0;
 			const routingDecisions: RoutingDecision[] = [];
+
+			// File logging helper
+			const logFile = options.log;
+			const logToFile = async (message: string) => {
+				if (logFile) {
+					const fs = await import("node:fs/promises");
+					const timestamp = new Date().toISOString();
+					await fs.appendFile(logFile, `[${timestamp}] ${message}\n`);
+				}
+			};
+
+			// Progress file for quick status checks
+			const progressFile = ".undercity/grind-progress.json";
+			const updateProgress = async () => {
+				const fs = await import("node:fs/promises");
+				const progress = {
+					startedAt: new Date().toISOString(),
+					lastUpdated: new Date().toISOString(),
+					processed,
+					completed,
+					failed,
+					rateLimitWaits,
+					status: "running",
+				};
+				await fs.writeFile(progressFile, JSON.stringify(progress, null, 2));
+			};
 
 			// Helper to sleep with countdown display
 			const sleepWithCountdown = async (ms: number, reason: string) => {
@@ -1687,6 +1715,10 @@ program
 
 			// Track start time for summary
 			const startTime = Date.now();
+
+			// Initialize progress and log
+			await logToFile("=== Grind started ===");
+			await updateProgress();
 
 			while (true) {
 				const nextGoal = getNextGoal();
@@ -1816,17 +1848,25 @@ program
 							markComplete(nextGoal.id);
 							completed++;
 							console.log(chalk.green(`  ✓ Complete (${Math.round(result.durationMs / 1000)}s)`));
+							await logToFile(
+								`✓ COMPLETE: ${nextGoal.objective.substring(0, 60)} (${Math.round(result.durationMs / 1000)}s)`,
+							);
 						} else {
 							markFailed(nextGoal.id, result.error || "Task failed");
 							failed++;
 							console.log(chalk.red(`  ✗ Failed: ${result.error || "Unknown error"}`));
+							await logToFile(`✗ FAILED: ${nextGoal.objective.substring(0, 60)} - ${result.error || "Unknown"}`);
 						}
+						await updateProgress();
 						break; // Success or non-retryable failure, move to next quest
 					} catch (error) {
 						if (isRateLimitError(error)) {
 							retryCount++;
 							rateLimitWaits++;
 							const waitTime = getWaitTime(error);
+							await logToFile(
+								`⏳ RATE LIMITED: Attempt ${retryCount}/${maxRetries}, waiting ${Math.round(waitTime / 1000)}s`,
+							);
 
 							if (retryCount < maxRetries) {
 								await sleepWithCountdown(waitTime, `Rate limited (attempt ${retryCount}/${maxRetries})`);
@@ -1835,6 +1875,8 @@ program
 								// Max retries hit, mark as failed and move on
 								markFailed(nextGoal.id, "Rate limit exceeded after retries");
 								failed++;
+								await logToFile(`✗ FAILED: Rate limit exceeded after ${maxRetries} retries`);
+								await updateProgress();
 								// Wait before next quest anyway
 								await sleepWithCountdown(waitTime, "Rate limited, waiting before next quest");
 								break;
@@ -1844,6 +1886,8 @@ program
 							markFailed(nextGoal.id, error instanceof Error ? error.message : String(error));
 							failed++;
 							console.log(chalk.red(`  ✗ Error: ${error instanceof Error ? error.message : String(error)}`));
+							await logToFile(`✗ ERROR: ${error instanceof Error ? error.message : String(error)}`);
+							await updateProgress();
 							break;
 						}
 					}
@@ -1887,6 +1931,29 @@ program
 			}
 			console.log(`  ${chalk.yellow("⏳")} Rate limit waits: ${rateLimitWaits}`);
 			console.log(`  ${chalk.dim("⏱")}  Duration: ${elapsedMinutes}m ${elapsedSeconds}s`);
+
+			// Final log and progress update
+			await logToFile(
+				`=== Grind completed: ${completed} done, ${failed} failed, ${elapsedMinutes}m ${elapsedSeconds}s ===`,
+			);
+			const fs = await import("node:fs/promises");
+			await fs.writeFile(
+				progressFile,
+				JSON.stringify(
+					{
+						startedAt: new Date(startTime).toISOString(),
+						completedAt: new Date().toISOString(),
+						processed,
+						completed,
+						failed,
+						rateLimitWaits,
+						durationSeconds: Math.floor(elapsed / 1000),
+						status: "completed",
+					},
+					null,
+					2,
+				),
+			);
 		},
 	);
 
