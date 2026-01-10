@@ -207,18 +207,21 @@
     {
       "id": "quest-mk84jchv-ppk0",
       "objective": "[metrics] Track routing accuracy - did the routed tier succeed or need escalation? Log prediction vs actual",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 23,
       "createdAt": "2026-01-10T09:50:07.363Z",
       "startedAt": "2026-01-10T10:43:28.887Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-10T10:44:18.819Z"
     },
     {
       "id": "quest-mk84jct5-etvj",
       "objective": "[experiment] Add experiment framework - A/B test routing decisions, log variant and outcome",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 24,
-      "createdAt": "2026-01-10T09:50:07.769Z"
+      "createdAt": "2026-01-10T09:50:07.769Z",
+      "startedAt": "2026-01-10T10:44:18.821Z",
+      "raidId": ""
     },
     {
       "id": "quest-mk84jd56-os9p",
@@ -326,5 +329,5 @@
       "createdAt": "2026-01-10T10:22:44.046Z"
     }
   ],
-  "lastUpdated": "2026-01-10T10:43:28.887Z"
+  "lastUpdated": "2026-01-10T10:44:18.821Z"
 }

@@ -14,6 +14,105 @@ export class ExperimentTemplates {
   constructor(private framework: ExperimentFramework) {}
 
   /**
+   * A/B test different routing strategies for quest assignment
+   */
+  createQuestRoutingExperiment(): string {
+    const variants: Omit<ExperimentVariant, "id">[] = [
+      {
+        name: "Random Routing (Control)",
+        description: "Randomly assign quests to available agents",
+        weight: 0.33,
+        isControl: true,
+        parameters: {
+          customParameters: {
+            routingStrategy: "random",
+          },
+        },
+      },
+      {
+        name: "Skill-Based Routing",
+        description: "Route quests based on agent's historical performance",
+        weight: 0.33,
+        parameters: {
+          customParameters: {
+            routingStrategy: "skill-based",
+          },
+        },
+      },
+      {
+        name: "Load-Balanced Routing",
+        description: "Route quests to least busy agents",
+        weight: 0.34,
+        parameters: {
+          customParameters: {
+            routingStrategy: "load-balanced",
+          },
+        },
+      },
+    ];
+
+    const experiment = this.framework.createExperiment(
+      "Quest Routing Strategy Experiment",
+      "Evaluate different quest routing strategies for efficiency and success rate",
+      "Skill-based routing will improve success rate by >15% compared to random routing",
+      variants,
+      {
+        targetSampleSize: 100,
+        minimumDetectableEffect: 0.15,
+        tags: ["routing", "quest-assignment", "efficiency"],
+      }
+    );
+
+    return experiment.id;
+  }
+
+  /**
+   * A/B test dynamic vs static agent pool routing
+   */
+  createDynamicPoolRoutingExperiment(): string {
+    const variants: Omit<ExperimentVariant, "id">[] = [
+      {
+        name: "Static Agent Pool (Control)",
+        description: "Fixed agent pool with predefined composition",
+        weight: 0.5,
+        isControl: true,
+        parameters: {
+          customParameters: {
+            poolType: "static",
+            poolSize: 4,
+          },
+        },
+      },
+      {
+        name: "Dynamic Agent Pool",
+        description: "Dynamically adjust agent pool based on quest complexity",
+        weight: 0.5,
+        parameters: {
+          customParameters: {
+            poolType: "dynamic",
+            maxPoolSize: 6,
+            minPoolSize: 2,
+          },
+        },
+      },
+    ];
+
+    const experiment = this.framework.createExperiment(
+      "Dynamic vs Static Agent Pool Routing",
+      "Test whether dynamically adjusting the agent pool improves overall system efficiency",
+      "Dynamic pool will reduce quest completion time by >20% with minimal increase in complexity",
+      variants,
+      {
+        targetSampleSize: 75,
+        minimumDetectableEffect: 0.2,
+        tags: ["routing", "agent-pool", "scalability"],
+      }
+    );
+
+    return experiment.id;
+  }
+
+  /**
    * Test if using Opus for all agents improves quality vs mixed models
    */
   createOpusVsMixedExperiment(): string {
