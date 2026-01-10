@@ -251,68 +251,77 @@ export function merge(branch: string, message?: string, strategy?: MergeStrategy
 /**
  * Try to merge a branch with fallback strategies
  *
- * Attempts merge strategies in order: ours → theirs → report conflicts
- * This allows automatic resolution when possible, falling back to manual
- * intervention only when both automatic strategies fail.
+ * OPTIMAL MERGE STRATEGY:
+ * 1. Try clean merge (default) - respects all conflicts, most precise
+ * 2. Try -X ours - auto-resolve favoring main branch
+ * 3. Report only truly unresolvable conflicts
+ *
+ * This ensures we only report conflicts that can't be automatically resolved.
  *
  * @param branch - The branch to merge
  * @param message - Optional commit message
  * @returns MergeResult with success status, strategy used, and conflict details
  */
 export function mergeWithFallback(branch: string, message?: string): MergeResult {
-	const strategies: MergeStrategy[] = ["ours", "theirs"];
-
-	for (const strategy of strategies) {
-		gitLogger.debug({ branch, strategy }, "Attempting merge with strategy");
-
-		try {
-			const args = ["merge", "--no-ff", "-X", strategy, branch];
-			if (message) {
-				args.push("-m", message);
-			}
-			execGit(args);
-
-			gitLogger.info({ branch, strategy }, "Merge succeeded with strategy");
-			return {
-				success: true,
-				strategyUsed: strategy,
-			};
-		} catch {
-			// Abort the failed merge before trying next strategy
-			abortMerge();
-			gitLogger.debug({ branch, strategy }, "Merge strategy failed, trying next");
+	// Step 1: Try clean merge first (most precise, respects all conflicts)
+	gitLogger.debug({ branch, strategy: "default" }, "Attempting clean merge");
+	try {
+		const args = ["merge", "--no-ff", branch];
+		if (message) {
+			args.push("-m", message);
 		}
+		execGit(args);
+		gitLogger.info({ branch, strategy: "default" }, "Clean merge succeeded");
+		return {
+			success: true,
+			strategyUsed: "default",
+		};
+	} catch {
+		abortMerge();
+		gitLogger.debug({ branch }, "Clean merge failed, trying -X ours");
 	}
 
-	// All automatic strategies failed - try default merge to get conflict info
-	gitLogger.debug({ branch }, "All auto-strategies failed, attempting default merge for conflict info");
-
+	// Step 2: Try -X ours (favor main branch, auto-resolve conflicts)
+	gitLogger.debug({ branch, strategy: "ours" }, "Attempting merge with -X ours");
 	try {
-		// Attempt merge without strategy to see conflict files
-		execGit(["merge", "--no-ff", "--no-commit", branch]);
+		const args = ["merge", "--no-ff", "-X", "ours", branch];
+		if (message) {
+			args.push("-m", message);
+		}
+		execGit(args);
+		gitLogger.info({ branch, strategy: "ours" }, "Merge succeeded with -X ours");
+		return {
+			success: true,
+			strategyUsed: "ours",
+		};
+	} catch {
+		abortMerge();
+		gitLogger.debug({ branch }, "-X ours failed, conflicts are truly unresolvable");
+	}
 
-		// If we get here, merge succeeded (no conflicts after all)
+	// Step 3: All strategies failed - get conflict info for reporting
+	gitLogger.debug({ branch }, "All strategies failed, getting conflict info");
+	try {
+		execGit(["merge", "--no-ff", "--no-commit", branch]);
+		// If we somehow get here, commit it
 		execGit(["commit", "-m", message || `Merge ${branch}`]);
 		return {
 			success: true,
 			strategyUsed: "default",
 		};
 	} catch {
-		// Get list of conflicting files before aborting
 		const conflictFiles = getConflictFiles();
-
-		// Abort the merge
 		abortMerge();
 
 		gitLogger.warn(
 			{ branch, conflictFiles, conflictCount: conflictFiles.length },
-			"Merge failed - manual resolution required",
+			"Merge failed - truly unresolvable conflicts require manual resolution",
 		);
 
 		return {
 			success: false,
 			conflictFiles,
-			error: `Merge failed with conflicts in ${conflictFiles.length} file(s): ${conflictFiles.join(", ")}`,
+			error: `Truly unresolvable conflicts in ${conflictFiles.length} file(s): ${conflictFiles.join(", ")}`,
 		};
 	}
 }
@@ -729,18 +738,35 @@ export class Elevator {
 
 				item.status = "merging";
 				gitLogger.debug(
-					{ branch: item.branch, into: this.mainBranch, strategy: this.mergeStrategy },
-					"Merging worktree branch",
+					{ branch: item.branch, into: this.mainBranch },
+					"Merging worktree branch with optimal strategy (clean → ours → report)",
 				);
 
-				const mergeSuccess = merge(item.branch, `Merge ${item.branch} via undercity`, this.mergeStrategy);
+				// Use mergeWithFallback for optimal merge strategy:
+				// 1. Try clean merge (most precise)
+				// 2. Try -X ours (favor main)
+				// 3. Report truly unresolvable conflicts
+				const mergeResult = mergeWithFallback(item.branch, `Merge ${item.branch} via undercity`);
 
-				if (!mergeSuccess) {
+				if (!mergeResult.success) {
 					item.status = "conflict";
-					item.error = "Merge failed - manual resolution required";
+					item.error = mergeResult.error || "Merge failed - manual resolution required";
+					item.conflictFiles = mergeResult.conflictFiles;
 					item.completedAt = new Date();
-					gitLogger.warn({ branch: item.branch }, "Branch preserved for manual recovery - merge failed");
+					gitLogger.warn(
+						{ branch: item.branch, conflictFiles: mergeResult.conflictFiles },
+						"Branch preserved for manual recovery - truly unresolvable conflicts",
+					);
 					return item;
+				}
+
+				// Record which strategy succeeded
+				item.strategyUsed = mergeResult.strategyUsed;
+				if (mergeResult.strategyUsed !== "default") {
+					gitLogger.info(
+						{ branch: item.branch, strategy: mergeResult.strategyUsed },
+						"Merge succeeded with fallback strategy",
+					);
 				}
 
 				// Step 4: Push to origin - CRITICAL to save work remotely
@@ -918,22 +944,36 @@ export class Elevator {
 				return item;
 			}
 
-			// Step 4: Merge into main (using configured strategy for auto-conflict resolution)
+			// Step 4: Merge into main with optimal strategy (clean → ours → report)
 			checkoutBranch(this.mainBranch);
 			item.status = "merging";
 			gitLogger.debug(
-				{ branch: item.branch, into: this.mainBranch, strategy: this.mergeStrategy },
-				"Merging with strategy",
+				{ branch: item.branch, into: this.mainBranch },
+				"Merging with optimal strategy (clean → ours → report)",
 			);
 
-			const mergeSuccess = merge(item.branch, `Merge ${item.branch} via undercity`, this.mergeStrategy);
+			const mergeResult = mergeWithFallback(item.branch, `Merge ${item.branch} via undercity`);
 
-			if (!mergeSuccess) {
+			if (!mergeResult.success) {
 				item.status = "conflict";
-				item.error = "Merge failed - manual resolution required";
+				item.error = mergeResult.error || "Merge failed - manual resolution required";
+				item.conflictFiles = mergeResult.conflictFiles;
 				item.completedAt = new Date();
 				branchPreserved = true; // Preserve branch for manual recovery
+				gitLogger.warn(
+					{ branch: item.branch, conflictFiles: mergeResult.conflictFiles },
+					"Branch preserved for manual recovery - truly unresolvable conflicts",
+				);
 				return item;
+			}
+
+			// Record which strategy succeeded
+			item.strategyUsed = mergeResult.strategyUsed;
+			if (mergeResult.strategyUsed !== "default") {
+				gitLogger.info(
+					{ branch: item.branch, strategy: mergeResult.strategyUsed },
+					"Merge succeeded with fallback strategy",
+				);
 			}
 
 			// Step 5: Delete the branch (only on success)

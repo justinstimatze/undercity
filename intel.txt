@@ -3,7 +3,6 @@
 ## Available
 
 ### Phase 1: Stabilize (stop losing work)
-[elevator] Implement optimal merge strategy: rebase from fresh main, try clean merge, then -X ours, report only truly unresolvable conflicts
 [elevator] Add fallback merge strategies: try ours, then theirs, then report specific conflict files
 [elevator] Make elevator retry failed merges after other branches succeed (conflicts may resolve)
 
@@ -139,6 +138,7 @@
 2026-01-10: Worktree branches from origin/main after fetch - ensures fresh main even with external changes
 2026-01-10: Elevator pushes to origin after successful merge - work is saved remotely, not just locally
 2026-01-10: SDK agents now load .claude/rules/ via settingSources: ["project"] option
+2026-01-10: Optimal merge strategy: clean merge → -X ours → report truly unresolvable conflicts
 2026-01-xx: Add vitest tests for raid, cli, backlog modules (120 tests total)
 2026-01-xx: Add --dry-run flag to slingshot
 2026-01-xx: Add history command for completed raids
