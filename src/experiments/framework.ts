@@ -160,8 +160,10 @@ export class ExperimentFramework {
 
   /**
    * Start an experiment (change status from draft to active)
+   * @param experimentId The ID of the experiment to start
+   * @param trials Optional number of trials to run (defaults to target sample size)
    */
-  startExperiment(experimentId: string): void {
+  startExperiment(experimentId: string, trials?: number): void {
     const storage = this.loadStorage();
     const experiment = storage.experiments[experimentId];
 
@@ -171,6 +173,11 @@ export class ExperimentFramework {
 
     if (experiment.status !== "draft") {
       throw new Error(`Cannot start experiment in status: ${experiment.status}`);
+    }
+
+    // Override target sample size if trials is specified
+    if (trials !== undefined) {
+      experiment.targetSampleSize = trials;
     }
 
     experiment.status = "active";

@@ -158,11 +158,24 @@ export class ExperimentCLI {
 
   /**
    * Start an experiment
+   * @param experimentId The ID of the experiment to start
+   * @param trials Optional number of trials to run (default to experiment's target sample size)
    */
-  startExperiment(experimentId: string): void {
+  startExperiment(experimentId: string, trials?: number): void {
     try {
-      this.framework.startExperiment(experimentId);
-      console.log(`✅ Started experiment: ${experimentId}`);
+      const experiment = this.framework.getExperiment(experimentId);
+      if (!experiment) {
+        console.error(`❌ Experiment not found: ${experimentId}`);
+        return;
+      }
+
+      const trialCount = trials ?? experiment.targetSampleSize;
+      console.log(`🚀 Starting experiment: ${experimentId}`);
+      console.log(`   Trials to run: ${trialCount}`);
+
+      this.framework.startExperiment(experimentId, trialCount);
+
+      console.log(`✅ Experiment ${experimentId} started with ${trialCount} trials`);
     } catch (error) {
       console.error(`❌ Failed to start experiment: ${error}`);
     }
@@ -354,25 +367,26 @@ USAGE:
   experiment <command> [options]
 
 COMMANDS:
-  list [status]              List experiments (optionally filter by status)
-  show <id>                  Show detailed experiment information
-  create-template <name>     Create experiment from template
-  start <id>                 Start an experiment
-  stop <id>                  Stop an experiment
-  analyze <id>               Analyze experiment results
-  report <id> [output]       Generate experiment report
-  summary                    Show summary of active experiments
-  delete <id> [--confirm]    Delete an experiment
-  auto-analyze              Auto-analyze all active experiments
-  import <file>             Import experiment from JSON
-  export <id> <file>        Export experiment to JSON
-  templates                 List available templates
-  help                      Show this help
+  list [status]                List experiments (optionally filter by status)
+  show <id>                    Show detailed experiment information
+  create-template <name>          Create experiment from template
+  start <id> [trials]          Start an experiment (optionally specify trial count)
+  stop <id>                    Stop an experiment
+  analyze <id>                 Analyze experiment results
+  report <id> [output]         Generate experiment report
+  summary                      Show summary of active experiments
+  delete <id> [--confirm]      Delete an experiment
+  auto-analyze                 Auto-analyze all active experiments
+  import <file>                Import experiment from JSON
+  export <id> <file>           Export experiment to JSON
+  templates                    List available templates
+  help                         Show this help
 
 EXAMPLES:
   experiment list
   experiment create-template opus-vs-mixed
-  experiment start exp-123456
+  experiment start exp-123456        # Use default trials
+  experiment start exp-123456 50     # Run exactly 50 trials
   experiment analyze exp-123456
   experiment report exp-123456 report.md
 
