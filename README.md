@@ -45,33 +45,40 @@ Requires Node.js 24+ and either a Claude Max subscription or Anthropic API key.
 
 ## Quickstart
 
-The recommended setup uses three terminals:
+The simplest setup: just use Claude Code.
 
-**Terminal 1: Claude Code**
-```bash
-claude
 ```
-Your interactive Claude instance. Use it to review work, make decisions, and handle anything that needs human judgment.
+You: "Add a dark mode toggle to settings"
 
-**Terminal 2: Undercity**
+Claude: Added to intel.txt. Starting undercity...
+        [runs undercity work in background]
+
+You: "How's it going?"
+
+Claude: Quester is implementing the toggle component.
+        Sheriff review pending. Should be done in a few minutes.
+
+You: [keep working on other things]
+
+Claude: Dark mode quest complete. Merged to main.
+```
+
+Claude Code is your interface. Tell it what you want, it manages the quest board and runs undercity in the background. Ask for status when curious.
+
+**For more visibility**, run undercity in a separate terminal:
+
 ```bash
+undercity work --stream    # Watch the full pipeline in real-time
+```
+
+Or use both terminals to monitor:
+```bash
+# Terminal 1: Streaming output
 undercity work --stream
-```
-Runs autonomously through the quest board. Picks up quests from `quests.json`, runs the full flute→logistics→quester→sheriff pipeline, merges via elevator, repeats.
 
-**Terminal 3: Status monitor**
-```bash
+# Terminal 2: Status at a glance
 watch -n 5 undercity status
 ```
-Shows current raid progress, active agents, and queue status. Refreshes every 5 seconds.
-
-**The workflow:**
-1. Tell Claude Code what you want to build (it adds quests to `intel.txt`)
-2. Run `undercity work --stream` to process quests autonomously
-3. Watch progress in the status terminal
-4. Use Claude Code to intervene when needed (review failures, adjust priorities, add urgent quests)
-
-Claude Code stays interactive for high-judgment tasks while undercity handles the grind.
 
 ## Usage
 
@@ -155,6 +162,8 @@ Gas Town runs 20-30 parallel agents across multiple Claude accounts. Undercity t
 | Single account | Controlled parallelism, not swarm |
 | Context limits | On-demand loading, not everything upfront |
 | Session crashes | Persistence hierarchy for resumption |
+
+**Claude Code as coordinator**: Gas Town has "the Mayor" - an AI that distributes work to agents. In Undercity, your Claude Code session fills this role. You talk to Claude, Claude manages the quest board and monitors the autonomous workers. One interface for everything.
 
 **Looted from:**
 - **Gas Town** (Steve Yegge): GUPP principle, session persistence, agent identities
