@@ -589,9 +589,6 @@ program
 		}
 	});
 
-// Improve command - trigger performance management and quest generation
-program;
-
 // Init command
 program
 	.command("init")
