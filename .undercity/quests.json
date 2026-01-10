@@ -12,18 +12,21 @@
     {
       "id": "quest-bug-intel-parser",
       "objective": "[bug] Fix intel.txt parser - should skip Archive section and HTML comments",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 1,
       "createdAt": "2026-01-10T08:50:00.000Z",
       "startedAt": "2026-01-10T09:28:06.066Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-10T09:28:40.364Z"
     },
     {
       "id": "quest-bug-surrender",
       "objective": "[bug] Surrender should clear inventory.json so status shows 'No active raid'",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 2,
-      "createdAt": "2026-01-10T08:50:00.000Z"
+      "createdAt": "2026-01-10T08:50:00.000Z",
+      "startedAt": "2026-01-10T09:30:39.752Z",
+      "raidId": ""
     },
     {
       "id": "quest-bug-sdk-cwd",
@@ -124,5 +127,5 @@
       "createdAt": "2026-01-10T09:27:58.387Z"
     }
   ],
-  "lastUpdated": "2026-01-10T09:28:06.066Z"
+  "lastUpdated": "2026-01-10T09:30:39.752Z"
 }

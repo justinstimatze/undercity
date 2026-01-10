@@ -1925,7 +1925,7 @@ export class RaidOrchestrator {
 				}
 			}
 
-			this.persistence.clearPocket();
+			this.persistence.clearAll();
 
 			// Stop dual logging and rotate log
 			dualLogger.stop(raid.id);
