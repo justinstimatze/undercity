@@ -37,8 +37,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { Command } from "commander";
-import { EfficiencyAnalyzer } from "./efficiency-analyzer.js";
-import { EfficiencyTracker } from "./efficiency-tracker.js";
 import { UndercityOracle } from "./oracle.js";
 import { Persistence } from "./persistence.js";
 import {
@@ -544,14 +542,15 @@ program
 		console.log(chalk.dim("Identify which tasks need escalation most\n"));
 
 		// Sort complexity levels by escalation need (lowest success rate first)
-		const complexityLevels = Object.entries(analytics.successRateByComplexity)
-			.sort(([, a], [, b]) => a.rate - b.rate);
+		const complexityLevels = Object.entries(analytics.successRateByComplexity).sort(([, a], [, b]) => a.rate - b.rate);
 
 		for (const [level, data] of complexityLevels) {
 			const statusColor = data.rate >= 80 ? chalk.green : data.rate >= 60 ? chalk.yellow : chalk.red;
 			const escalationColor = data.rate < data.escalationTrigger * 100 ? chalk.red : chalk.white;
 
-			console.log(`${chalk.cyan(level.toUpperCase().padEnd(10))} ${statusColor(`${data.rate.toFixed(1)}%`)} success rate`);
+			console.log(
+				`${chalk.cyan(level.toUpperCase().padEnd(10))} ${statusColor(`${data.rate.toFixed(1)}%`)} success rate`,
+			);
 			console.log(`  ${chalk.dim(`Total quests: ${data.totalQuests}`)}`);
 			console.log(`  ${chalk.dim(`Avg tokens: ${data.avgTokensPerQuest.toFixed(0)}`)}`);
 			console.log(`  ${escalationColor(`Escalation threshold: ${(data.escalationTrigger * 100).toFixed(0)}%`)}`);
@@ -614,7 +613,7 @@ program
 		console.log(chalk.cyan("🤖 Token Distribution by Model"));
 		const modelTotal = Object.values(tokenTrends.tokensByModel).reduce((sum, count) => sum + count, 0);
 		for (const [model, tokens] of Object.entries(tokenTrends.tokensByModel)) {
-			const percentage = modelTotal > 0 ? (tokens / modelTotal * 100).toFixed(1) : "0.0";
+			const percentage = modelTotal > 0 ? ((tokens / modelTotal) * 100).toFixed(1) : "0.0";
 			const modelColor = model === "opus" ? chalk.red : model === "sonnet" ? chalk.yellow : chalk.green;
 			console.log(`  ${modelColor(model.padEnd(8))}: ${tokens.toLocaleString().padStart(10)} tokens (${percentage}%)`);
 		}
@@ -624,7 +623,7 @@ program
 		console.log(chalk.cyan("⚡ Token Distribution by Phase"));
 		const phaseTotal = Object.values(tokenTrends.tokensByPhase).reduce((sum, count) => sum + count, 0);
 		for (const [phase, tokens] of Object.entries(tokenTrends.tokensByPhase)) {
-			const percentage = phaseTotal > 0 ? (tokens / phaseTotal * 100).toFixed(1) : "0.0";
+			const percentage = phaseTotal > 0 ? ((tokens / phaseTotal) * 100).toFixed(1) : "0.0";
 			console.log(`  ${phase.padEnd(12)}: ${tokens.toLocaleString().padStart(10)} tokens (${percentage}%)`);
 		}
 		console.log();
@@ -680,8 +679,12 @@ program
 		}
 
 		// Success rate analysis
-		const successColor = analysis.escalationSuccessRate >= 0.8 ? chalk.green :
-			analysis.escalationSuccessRate >= 0.6 ? chalk.yellow : chalk.red;
+		const successColor =
+			analysis.escalationSuccessRate >= 0.8
+				? chalk.green
+				: analysis.escalationSuccessRate >= 0.6
+					? chalk.yellow
+					: chalk.red;
 
 		console.log(chalk.cyan("Overall Escalation Performance"));
 		console.log(`Total escalations: ${analysis.totalEscalations}`);
@@ -691,8 +694,7 @@ program
 
 		// Escalation path effectiveness
 		console.log(chalk.cyan("Escalation Path Effectiveness"));
-		const sortedPaths = Object.entries(analysis.escalationsByModel)
-			.sort(([, a], [, b]) => b - a);
+		const sortedPaths = Object.entries(analysis.escalationsByModel).sort(([, a], [, b]) => b - a);
 
 		for (const [path, count] of sortedPaths) {
 			console.log(`  ${path}: ${count} escalations`);
@@ -724,7 +726,7 @@ program
 		// Look for patterns in the escalation paths
 		const hasHaikuToOpus = analysis.escalationsByModel["haiku → opus"] > 0;
 		const hasHaikuToSonnet = analysis.escalationsByModel["haiku → sonnet"] > 0;
-		const hasSonnetToOpus = analysis.escalationsByModel["sonnet → opus"] > 0;
+		const _hasSonnetToOpus = analysis.escalationsByModel["sonnet → opus"] > 0;
 
 		if (hasHaikuToOpus && !hasHaikuToSonnet) {
 			console.log(chalk.yellow("  • Consider using Sonnet as intermediate step instead of jumping to Opus"));
@@ -813,7 +815,7 @@ program
 	.option("-d, --directory <path>", "Custom directory path (default: .undercity)")
 	.action((options: { directory?: string }) => {
 		const stateDir = options.directory || ".undercity";
-		const persistence = new Persistence(stateDir);
+		const _persistence = new Persistence(stateDir);
 
 		// Create initial intel.txt
 		const intelPath = join(stateDir, "intel.txt");
@@ -1739,6 +1741,8 @@ program
 	.option("--worker <tier>", "Worker model for supervised mode: haiku, sonnet", "sonnet")
 	.option("-d, --dry-run", "Show complexity assessment without executing")
 	.option("--no-local", "Disable local tools and local LLM routing")
+	.option("--review", "Enable escalating review passes before commit (haiku → sonnet → opus)")
+	.option("--annealing", "Use annealing review at opus tier (multi-angle advisory)")
 	.action(
 		async (
 			goal: string,
@@ -1752,6 +1756,8 @@ program
 				worker?: string;
 				dryRun?: boolean;
 				local?: boolean;
+				review?: boolean;
+				annealing?: boolean;
 			},
 		) => {
 			// Dynamic import to avoid loading heavy modules until needed
@@ -1829,6 +1835,12 @@ program
 					// Standard mode: adaptive escalation
 					const startingModel = (options.model || "sonnet") as "haiku" | "sonnet" | "opus";
 					console.log(chalk.dim(`Mode: Standard (${startingModel} → escalate if needed)`));
+					if (options.review) {
+						console.log(chalk.dim(`Reviews: Enabled (haiku → sonnet → opus)`));
+						if (options.annealing) {
+							console.log(chalk.dim(`Annealing: Enabled at opus tier`));
+						}
+					}
 
 					const orchestrator = new SoloOrchestrator({
 						startingModel,
@@ -1836,6 +1848,8 @@ program
 						stream: options.stream,
 						verbose: options.verbose,
 						runTypecheck: options.typecheck !== false,
+						reviewPasses: options.review,
+						annealingAtOpus: options.annealing,
 					});
 
 					const result = await orchestrator.runTask(goal);
@@ -1877,6 +1891,8 @@ program
 	.option("--worker <tier>", "Worker model for supervised mode", "sonnet")
 	.option("--no-local", "Disable local tools and local LLM routing")
 	.option("--log <file>", "Write progress to log file")
+	.option("--review", "Enable escalating review passes before commit (haiku → sonnet → opus)")
+	.option("--annealing", "Use annealing review at opus tier (multi-angle advisory)")
 	.action(
 		async (options: {
 			count?: string;
@@ -1887,6 +1903,8 @@ program
 			worker?: string;
 			local?: boolean;
 			log?: string;
+			review?: boolean;
+			annealing?: boolean;
 		}) => {
 			// Handle parallel mode separately
 			const parallelCount = Number.parseInt(options.parallel || "0", 10);
@@ -2119,6 +2137,8 @@ program
 									startingModel: routing.tier as "haiku" | "sonnet",
 									autoCommit: true,
 									stream: options.stream,
+									reviewPasses: options.review,
+									annealingAtOpus: options.annealing,
 								});
 								result = await orchestrator.runTask(nextGoal.objective);
 								break;
@@ -2143,6 +2163,8 @@ program
 									startingModel: "sonnet",
 									autoCommit: true,
 									stream: options.stream,
+									reviewPasses: options.review,
+									annealingAtOpus: options.annealing,
 								});
 								result = await orchestrator.runTask(nextGoal.objective);
 							}

@@ -389,7 +389,14 @@
       "createdAt": "2026-01-10T12:00:00.000Z",
       "note": "Only on escalation (haiku→sonnet→opus), not same-tier retries. Use Haiku for analysis (cheap). Pass structured context: approach taken, why it failed, what to try next.",
       "completedAt": "2026-01-10T19:16:52.000Z"
+    },
+    {
+      "id": "quest-mk8ykjw9-4e4x",
+      "objective": "[refactor] Split cli.ts into separate command modules - file is too large at 700+ lines, extract each command to its own file",
+      "status": "pending",
+      "priority": 42,
+      "createdAt": "2026-01-10T23:50:52.089Z"
     }
   ],
-  "lastUpdated": "2026-01-10T19:16:52.000Z"
+  "lastUpdated": "2026-01-10T23:50:52.089Z"
 }

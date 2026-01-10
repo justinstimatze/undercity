@@ -22,7 +22,8 @@
 import { execSync } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
-import { formatErrorsForAgent, getCache, parseLintErrors, parseTypeScriptErrors } from "./cache.js";
+import { AnnealingReview } from "./annealing-review.js";
+import { formatErrorsForAgent, getCache, parseTypeScriptErrors } from "./cache.js";
 import { assessComplexityFast, type ComplexityAssessment } from "./complexity.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
@@ -107,6 +108,23 @@ export interface SoloOptions {
 	runTests?: boolean;
 	/** Working directory for task execution (default: process.cwd()) */
 	workingDirectory?: string;
+	/** Enable escalating review passes before commit (haiku → sonnet → opus) */
+	reviewPasses?: boolean;
+	/** Maximum review passes per tier before escalating */
+	maxReviewPassesPerTier?: number;
+	/** Use annealing review at opus tier (multi-angle advisory review) */
+	annealingAtOpus?: boolean;
+}
+
+/**
+ * Review pass result
+ */
+export interface ReviewResult {
+	model: ModelTier;
+	foundIssues: boolean;
+	issues: string[];
+	suggestion?: string;
+	converged: boolean;
 }
 
 /**
@@ -124,6 +142,9 @@ export class SoloOrchestrator {
 	private runTypecheck: boolean;
 	private runTests: boolean;
 	private workingDirectory: string;
+	private reviewPasses: boolean;
+	private maxReviewPassesPerTier: number;
+	private annealingAtOpus: boolean;
 
 	private currentModel: ModelTier;
 	private attempts: number = 0;
@@ -151,6 +172,9 @@ export class SoloOrchestrator {
 		this.runTypecheck = options.runTypecheck ?? true;
 		this.runTests = options.runTests ?? true;
 		this.workingDirectory = options.workingDirectory ?? process.cwd();
+		this.reviewPasses = options.reviewPasses ?? false;
+		this.maxReviewPassesPerTier = options.maxReviewPassesPerTier ?? 2;
+		this.annealingAtOpus = options.annealingAtOpus ?? false;
 		this.currentModel = this.startingModel;
 		this.metricsTracker = new MetricsTracker();
 	}
@@ -237,6 +261,27 @@ export class SoloOrchestrator {
 				const errorCategories = this.categorizeErrors(verification);
 
 				if (verification.passed) {
+					// Run review passes if enabled
+					let finalVerification = verification;
+					if (this.reviewPasses) {
+						const reviewResult = await this.runEscalatingReview(task);
+						if (!reviewResult.converged) {
+							// Review fix broke verification, retry
+							console.log(chalk.yellow(`  Review fix broke verification, retrying...`));
+							this.lastFeedback = `Review found issues: ${reviewResult.issuesFound.join(", ")}`;
+							continue;
+						}
+						// Re-verify after reviews if issues were found and fixed
+						if (reviewResult.issuesFound.length > 0) {
+							finalVerification = await this.verifyWork();
+							if (!finalVerification.passed) {
+								console.log(chalk.yellow(`  Final verification failed after reviews`));
+								this.lastFeedback = finalVerification.feedback;
+								continue;
+							}
+						}
+					}
+
 					// Success! Record the attempt and clear feedback
 					this.attemptRecords.push({
 						model: this.currentModel,
@@ -246,7 +291,7 @@ export class SoloOrchestrator {
 					this.lastFeedback = undefined;
 
 					let commitSha: string | undefined;
-					if (this.autoCommit && verification.filesChanged > 0) {
+					if (this.autoCommit && finalVerification.filesChanged > 0) {
 						commitSha = await this.commitWork(task);
 					}
 
@@ -258,7 +303,7 @@ export class SoloOrchestrator {
 						status: "complete",
 						model: this.currentModel,
 						attempts: this.attempts,
-						verification,
+						verification: finalVerification,
 						commitSha,
 						durationMs: Date.now() - startTime,
 						tokenUsage: {
@@ -782,6 +827,292 @@ When done, provide a brief summary of what you changed.`;
 		}
 
 		return categories.length > 0 ? categories : ["unknown"];
+	}
+
+	/**
+	 * Run escalating review passes: haiku → sonnet → opus
+	 * Each tier reviews until it converges (finds nothing), then escalates.
+	 */
+	private async runEscalatingReview(task: string): Promise<{
+		converged: boolean;
+		issuesFound: string[];
+		reviewPasses: number;
+		finalTier: ModelTier;
+		annealingInsights?: string[];
+	}> {
+		const tiers: ModelTier[] = ["haiku", "sonnet", "opus"];
+		const allIssuesFound: string[] = [];
+		let totalPasses = 0;
+		const annealingInsights: string[] = [];
+
+		console.log(chalk.cyan("\n  ━━━ Review Passes ━━━"));
+
+		for (const tier of tiers) {
+			// At opus tier, optionally use annealing review (advisory mode)
+			if (tier === "opus" && this.annealingAtOpus) {
+				console.log(chalk.magenta(`  [opus] Annealing review (advisory mode)`));
+				const insights = await this.runAnnealingReview(task);
+				annealingInsights.push(...insights);
+
+				// Still do a final convergence check with standard review
+				const finalReview = await this.runSingleReview(task, "opus");
+				totalPasses++;
+
+				if (finalReview.foundIssues) {
+					console.log(chalk.yellow(`  [opus] Final check: Found issues`));
+					for (const issue of finalReview.issues) {
+						console.log(chalk.dim(`    - ${issue.slice(0, 80)}`));
+						allIssuesFound.push(issue);
+					}
+					if (finalReview.suggestion) {
+						await this.applyReviewFix(task, finalReview);
+						const verification = await this.verifyWork();
+						if (!verification.passed) {
+							return {
+								converged: false,
+								issuesFound: allIssuesFound,
+								reviewPasses: totalPasses,
+								finalTier: "opus",
+								annealingInsights,
+							};
+						}
+					}
+				} else {
+					console.log(chalk.green(`  [opus] Final check: Converged ✓`));
+				}
+				continue;
+			}
+
+			// Standard tier review loop
+			let tierPasses = 0;
+			let tierConverged = false;
+
+			while (tierPasses < this.maxReviewPassesPerTier && !tierConverged) {
+				tierPasses++;
+				totalPasses++;
+
+				const review = await this.runSingleReview(task, tier);
+
+				if (review.foundIssues) {
+					console.log(chalk.yellow(`  [${tier}] Pass ${tierPasses}: Found issues`));
+					for (const issue of review.issues) {
+						console.log(chalk.dim(`    - ${issue.slice(0, 80)}`));
+						allIssuesFound.push(issue);
+					}
+
+					if (review.suggestion) {
+						await this.applyReviewFix(task, review);
+						const verification = await this.verifyWork();
+						if (!verification.passed) {
+							console.log(chalk.red(`  [${tier}] Verification failed after fix`));
+							return {
+								converged: false,
+								issuesFound: allIssuesFound,
+								reviewPasses: totalPasses,
+								finalTier: tier,
+							};
+						}
+					}
+				} else {
+					console.log(chalk.green(`  [${tier}] Pass ${tierPasses}: Converged ✓`));
+					tierConverged = true;
+				}
+			}
+
+			if (!tierConverged) {
+				console.log(chalk.yellow(`  [${tier}] Max passes reached, escalating...`));
+			}
+		}
+
+		console.log(chalk.green(`  All review tiers converged (${totalPasses} passes)`));
+		return {
+			converged: true,
+			issuesFound: allIssuesFound,
+			reviewPasses: totalPasses,
+			finalTier: "opus",
+			annealingInsights: annealingInsights.length > 0 ? annealingInsights : undefined,
+		};
+	}
+
+	/**
+	 * Run annealing review - multi-angle advisory review using tarot cards
+	 */
+	private async runAnnealingReview(task: string): Promise<string[]> {
+		const annealing = new AnnealingReview({
+			passesPerTemperature: 1,
+			coolingRate: 0.4,
+		});
+
+		const schedule = annealing.generateSchedule().slice(0, 3);
+		const insights: string[] = [];
+
+		let diffOutput = "";
+		try {
+			diffOutput = execSync("git diff HEAD", {
+				encoding: "utf-8",
+				cwd: this.workingDirectory,
+				maxBuffer: 1024 * 1024,
+			});
+		} catch {
+			diffOutput = "Unable to get diff";
+		}
+
+		for (const pass of schedule) {
+			const cardName = pass.isMajor
+				? (pass.card as { name: string }).name
+				: `${(pass.card as { rank: string }).rank} of ${(pass.card as { suit: string }).suit}`;
+
+			console.log(chalk.dim(`    🃏 ${cardName}: ${pass.prompt.slice(0, 50)}...`));
+
+			const annealingPrompt = `You are reviewing code through a specific lens. Be brief.
+
+Task: ${task}
+Lens: ${pass.prompt}
+
+Changes:
+\`\`\`diff
+${diffOutput.slice(0, 6000)}
+\`\`\`
+
+Provide ONE key insight (1-2 sentences). If nothing notable, say "Nothing notable."`;
+
+			try {
+				let response = "";
+				for await (const message of query({
+					prompt: annealingPrompt,
+					options: {
+						maxTurns: 1,
+						model: MODEL_NAMES.opus,
+						permissionMode: "bypassPermissions",
+						allowDangerouslySkipPermissions: true,
+					},
+				})) {
+					if (message.type === "result" && message.subtype === "success") {
+						response = message.result;
+					}
+				}
+
+				if (response && !response.toLowerCase().includes("nothing notable")) {
+					insights.push(`${cardName}: ${response.trim()}`);
+					console.log(chalk.cyan(`      → ${response.trim().slice(0, 60)}...`));
+				}
+			} catch (error) {
+				this.log("Annealing review card failed", { card: cardName, error: String(error) });
+			}
+		}
+
+		if (insights.length > 0) {
+			console.log(chalk.magenta(`    ${insights.length} insight(s) from annealing review`));
+		}
+
+		return insights;
+	}
+
+	/**
+	 * Run a single review pass with the specified model
+	 */
+	private async runSingleReview(task: string, model: ModelTier): Promise<ReviewResult> {
+		const modelId = MODEL_NAMES[model];
+
+		let diffOutput = "";
+		try {
+			diffOutput = execSync("git diff HEAD", {
+				encoding: "utf-8",
+				cwd: this.workingDirectory,
+				maxBuffer: 1024 * 1024,
+			});
+		} catch {
+			diffOutput = "Unable to get diff";
+		}
+
+		const reviewPrompt = `You are reviewing code changes before commit. Be concise.
+
+Task: ${task}
+
+Changes:
+\`\`\`diff
+${diffOutput.slice(0, 8000)}
+\`\`\`
+
+Look for: bugs, edge cases, security issues, task mismatches.
+
+If issues found:
+ISSUES FOUND:
+- [list each]
+SUGGESTED FIX:
+[brief fix]
+
+If good:
+NO ISSUES FOUND - Ready to commit.`;
+
+		try {
+			let response = "";
+
+			for await (const message of query({
+				prompt: reviewPrompt,
+				options: {
+					maxTurns: 1,
+					model: modelId,
+					permissionMode: "bypassPermissions",
+					allowDangerouslySkipPermissions: true,
+				},
+			})) {
+				if (message.type === "result" && message.subtype === "success") {
+					response = message.result;
+				}
+			}
+
+			const foundIssues = !response.includes("NO ISSUES FOUND");
+			const issues: string[] = [];
+			let suggestion: string | undefined;
+
+			if (foundIssues) {
+				const issuesMatch = response.match(/ISSUES FOUND:([\s\S]*?)(?:SUGGESTED FIX:|$)/i);
+				if (issuesMatch) {
+					const issueLines = issuesMatch[1].split("\n").filter((l) => l.trim().startsWith("-"));
+					issues.push(...issueLines.map((l) => l.replace(/^-\s*/, "").trim()));
+				}
+				const suggestionMatch = response.match(/SUGGESTED FIX:([\s\S]*?)$/i);
+				if (suggestionMatch) {
+					suggestion = suggestionMatch[1].trim();
+				}
+			}
+
+			return { model, foundIssues, issues, suggestion, converged: !foundIssues };
+		} catch (error) {
+			this.log("Review failed", { error: String(error), model });
+			return { model, foundIssues: false, issues: [], converged: true };
+		}
+	}
+
+	/**
+	 * Apply a fix suggested by review
+	 */
+	private async applyReviewFix(_task: string, review: ReviewResult): Promise<void> {
+		const fixPrompt = `The code review found these issues:
+${review.issues.map((i) => `- ${i}`).join("\n")}
+
+Suggested fix: ${review.suggestion}
+
+Please fix these issues. Make minimal changes.`;
+
+		try {
+			for await (const message of query({
+				prompt: fixPrompt,
+				options: {
+					maxTurns: 3,
+					model: MODEL_NAMES[this.currentModel],
+					permissionMode: "bypassPermissions",
+					allowDangerouslySkipPermissions: true,
+				},
+			})) {
+				if (this.stream) {
+					this.streamMessage(message);
+				}
+			}
+		} catch (error) {
+			this.log("Failed to apply review fix", { error: String(error) });
+		}
 	}
 
 	/**
