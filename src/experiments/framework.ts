@@ -5,7 +5,7 @@
  * quest execution parameters and automatically analyzing results.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
 import { randomBytes, createHash } from "node:crypto";
 import { Quest } from "../quest.js";
 import {
@@ -93,7 +93,20 @@ export class ExperimentFramework {
    */
   private saveStorage(storage: ExperimentStorage): void {
     storage.lastUpdated = new Date();
-    writeFileSync(this.storagePath, JSON.stringify(storage, null, 2));
+    const tempPath = `${this.storagePath}.tmp`;
+
+    try {
+      writeFileSync(tempPath, JSON.stringify(storage, null, 2), {
+        encoding: "utf-8",
+        flag: "w",
+      });
+      renameSync(tempPath, this.storagePath);
+    } catch (error) {
+      if (existsSync(tempPath)) {
+        unlinkSync(tempPath);
+      }
+      throw error;
+    }
   }
 
   /**

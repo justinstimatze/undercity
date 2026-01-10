@@ -37,11 +37,20 @@ export interface Raid {
 }
 
 /**
- * Agent types in the squad
- * - Flute: Fast recon (Haiku)
- * - Logistics: BMAD-style spec writer (Sonnet)
- * - Quester: Code builder (Sonnet)
- * - Sheriff: Quality reviewer (Opus)
+ * Agent types in the raid squad, representing specialized roles in the multi-agent orchestration system.
+ * Each agent type has a specific function in the raid workflow and is assigned a particular AI model:
+ *
+ * - Flute: Fast reconnaissance agent using Haiku model
+ *   Purpose: Quick codebase exploration, initial intelligence gathering
+ *
+ * - Logistics: Strategic planning agent using Sonnet model
+ *   Purpose: Create detailed specifications, break down complex goals
+ *
+ * - Quester: Implementation agent using Sonnet model
+ *   Purpose: Build and modify code, execute detailed tasks
+ *
+ * - Sheriff: Quality assurance agent using Opus model
+ *   Purpose: Review work, validate implementations, ensure code quality
  */
 export type AgentType = "flute" | "logistics" | "quester" | "sheriff";
 

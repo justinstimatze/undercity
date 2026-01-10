@@ -135,6 +135,9 @@ export class SoloOrchestrator {
 	/** Track individual attempts for metrics */
 	private attemptRecords: AttemptRecord[] = [];
 
+	/** Track token usage for current task */
+	private tokenUsageThisTask: TokenUsage[] = [];
+
 	/** Track retries at same model tier (reset on escalation) */
 	private sameModelRetries: number = 0;
 
@@ -165,6 +168,7 @@ export class SoloOrchestrator {
 		const startTime = Date.now();
 		this.attempts = 0;
 		this.attemptRecords = [];
+		this.tokenUsageThisTask = [];
 		this.sameModelRetries = 0;
 
 		// Ensure clean state before starting (in case previous task left dirty state)
@@ -525,8 +529,7 @@ Guidelines:
 
 When done, provide a brief summary of what you changed.`;
 
-		// Stores the token usage for this attempt
-		const tokenUsageThisAttempt: TokenUsage[] = [];
+		// Token usage will be accumulated in this.tokenUsageThisTask
 
 		for await (const message of query({
 			prompt,
@@ -541,7 +544,7 @@ When done, provide a brief summary of what you changed.`;
 			const usage = this.metricsTracker.extractTokenUsage(message);
 			if (usage) {
 				this.metricsTracker.recordTokenUsage(message, this.currentModel);
-				tokenUsageThisAttempt.push(usage);
+				this.tokenUsageThisTask.push(usage);
 			}
 
 			// Stream output if enabled

@@ -10,7 +10,7 @@
  * All state is stored as JSON files in .undercity/
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { persistenceLogger } from "./logger.js";
 import type {
@@ -85,11 +85,29 @@ export class Persistence {
 
 	private writeJson<T>(filename: string, data: T): void {
 		const path = this.getPath(filename);
+		const tempPath = `${path}.tmp`;
 		const dir = dirname(path);
 		if (!existsSync(dir)) {
 			mkdirSync(dir, { recursive: true });
 		}
-		writeFileSync(path, JSON.stringify(data, null, 2));
+
+		try {
+			// Write to temporary file first
+			writeFileSync(tempPath, JSON.stringify(data, null, 2), {
+				encoding: "utf-8",
+				flag: "w",
+			});
+
+			// Atomically rename temporary file to target file
+			// This ensures the file is never in a partially written state
+			renameSync(tempPath, path);
+		} catch (error) {
+			// Clean up temporary file if it exists
+			if (existsSync(tempPath)) {
+				unlinkSync(tempPath);
+			}
+			throw error;
+		}
 	}
 
 	// ============== Safe Pocket ==============
