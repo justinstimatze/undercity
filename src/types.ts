@@ -32,6 +32,8 @@ export interface Raid {
 	planApproved: boolean;
 	planSummary?: string;
 	branch?: string;
+	/** Phase and agent timing data for performance analysis */
+	timings?: import("./raid-phase-tracker.js").RaidPhaseTimings;
 }
 
 /**

@@ -41,6 +41,7 @@ import { MetricsTracker } from "./metrics.js";
 import { Persistence } from "./persistence.js";
 import { parseIntelFile } from "./plan-parser.js";
 import { addQuests } from "./quest.js";
+import { RaidPhaseTracker } from "./raid-phase-tracker.js";
 import { RateLimitTracker } from "./rate-limit.js";
 import { RecoveryOrchestrator } from "./recovery-orchestrator.js";
 import { createSquadMember, SQUAD_AGENTS } from "./squad.js";
@@ -114,6 +115,9 @@ export class RaidOrchestrator {
 	private checkpointManager: CheckpointManager;
 	private recoveryOrchestrator: RecoveryOrchestrator;
 	private escalationManager: ErrorEscalationManager;
+
+	// Phase timing tracking
+	private phaseTracker?: RaidPhaseTracker;
 
 	constructor(
 		options: {
@@ -560,6 +564,10 @@ export class RaidOrchestrator {
 			if (existing) {
 				this.log("Resuming existing raid", { raidId: existing.id });
 
+				// Initialize timing tracker for resumed raid
+				this.phaseTracker = new RaidPhaseTracker(existing.id, existing.timings);
+				this.phaseTracker.handleResumption(existing.status);
+
 				// Start dual logging for resumed raid if not already active
 				if (!dualLogger.isActive()) {
 					dualLogger.start(existing.id);
@@ -577,6 +585,11 @@ export class RaidOrchestrator {
 			startedAt: new Date(),
 			planApproved: false,
 		};
+
+		// Initialize timing tracker for this raid
+		this.phaseTracker = new RaidPhaseTracker(raid.id);
+		this.phaseTracker.startRaid();
+		raid.timings = this.phaseTracker.getState();
 
 		this.persistence.saveRaid(raid);
 		this.log("Started raid", { raidId: raid.id, goal });
@@ -668,6 +681,13 @@ export class RaidOrchestrator {
 	 */
 	private async startPlanningPhase(raid: Raid): Promise<void> {
 		this.log("Starting planning phase...");
+
+		// Start timing the planning phase
+		if (this.phaseTracker) {
+			this.phaseTracker.startPhase("planning");
+			raid.timings = this.phaseTracker.getState();
+			this.persistence.saveRaid(raid);
+		}
 
 		// Parse intel.txt and add new quests to the quest board
 		this.parseAndAddIntelQuests();
@@ -837,6 +857,11 @@ export class RaidOrchestrator {
 			this.efficiencyTracker.recordAgentActivity(type);
 		}
 
+		// Start timing for this agent
+		if (this.phaseTracker) {
+			this.phaseTracker.startAgent(member.id, type);
+		}
+
 		squadLogger.info({ agentType: type, agentId: member.id }, "Spawned agent");
 
 		// Run the agent
@@ -988,6 +1013,16 @@ export class RaidOrchestrator {
 				this.efficiencyTracker.recordFirstAttemptCompletion(true);
 			}
 
+			// Complete timing for this agent and persist timing state
+			if (this.phaseTracker) {
+				this.phaseTracker.completeAgent(member.id);
+				const raid = this.getCurrentRaid();
+				if (raid) {
+					raid.timings = this.phaseTracker.getState();
+					this.persistence.saveRaid(raid);
+				}
+			}
+
 			// Stop file tracking for fabricators
 			if (member.type === "quester") {
 				this.fileTracker.stopTracking(member.id);
@@ -1034,6 +1069,16 @@ export class RaidOrchestrator {
 
 				// Persist the rate limit state
 				this.persistence.saveRateLimitState(this.rateLimitTracker.getState());
+			}
+
+			// Complete timing for this agent even on error and persist timing state
+			if (this.phaseTracker) {
+				this.phaseTracker.completeAgent(member.id);
+				const raid = this.getCurrentRaid();
+				if (raid) {
+					raid.timings = this.phaseTracker.getState();
+					this.persistence.saveRaid(raid);
+				}
 			}
 
 			// Stop file tracking on error
@@ -1117,8 +1162,14 @@ export class RaidOrchestrator {
 				// Logistics done - update raid with plan summary
 				raid.planSummary = result;
 				raid.status = "awaiting_approval";
-				this.persistence.saveRaid(raid);
 
+				// Complete planning phase timing
+				if (this.phaseTracker) {
+					this.phaseTracker.completePhase("planning");
+					raid.timings = this.phaseTracker.getState();
+				}
+
+				this.persistence.saveRaid(raid);
 				this.log("Planning complete. Awaiting approval...");
 
 				// If auto-approve is enabled, proceed
@@ -1133,6 +1184,14 @@ export class RaidOrchestrator {
 				// Extract review-relevant parts of the plan and quester output
 				// This provides sheriff with focused context on what to verify
 				const reviewContext = extractReviewContext(raid.planSummary || raid.goal, result);
+
+				// Complete executing phase and start reviewing phase
+				if (this.phaseTracker) {
+					this.phaseTracker.completePhase("executing");
+					this.phaseTracker.startPhase("reviewing");
+					raid.timings = this.phaseTracker.getState();
+					this.persistence.saveRaid(raid);
+				}
 
 				const auditTask: Waypoint = {
 					id: generateTaskId(),
@@ -1182,6 +1241,13 @@ export class RaidOrchestrator {
 				const approved = hasPositive && !hasNegative;
 
 				if (approved && waypoint.branch) {
+					// Complete reviewing phase before starting merging
+					if (this.phaseTracker) {
+						this.phaseTracker.completePhase("reviewing");
+						raid.timings = this.phaseTracker.getState();
+						this.persistence.saveRaid(raid);
+					}
+
 					// Add to elevator
 					this.elevator.add(waypoint.branch, waypoint.id, waypoint.agentId || "unknown");
 					this.log("Branch added to elevator", { branch: waypoint.branch });
@@ -1211,8 +1277,14 @@ export class RaidOrchestrator {
 
 		raid.planApproved = true;
 		raid.status = "executing";
-		this.persistence.saveRaid(raid);
 
+		// Start timing the executing phase
+		if (this.phaseTracker) {
+			this.phaseTracker.startPhase("executing");
+			raid.timings = this.phaseTracker.getState();
+		}
+
+		this.persistence.saveRaid(raid);
 		this.log("Plan approved. Starting execution phase...");
 
 		// Create quester waypoint with summarized context
@@ -1450,6 +1522,13 @@ export class RaidOrchestrator {
 		if (!raid) return;
 
 		raid.status = "merging";
+
+		// Start timing the merging phase
+		if (this.phaseTracker) {
+			this.phaseTracker.startPhase("merging");
+			raid.timings = this.phaseTracker.getState();
+		}
+
 		this.persistence.saveRaid(raid);
 
 		const results = await this.elevator.processAll();
@@ -1497,6 +1576,13 @@ export class RaidOrchestrator {
 			.filter((t) => t.raidId === raid.id && t.status !== "complete" && t.status !== "failed");
 
 		if (pendingTasks.length === 0 && failedMerges.length === 0) {
+			// Complete merging phase before extraction
+			if (this.phaseTracker) {
+				this.phaseTracker.completePhase("merging");
+				raid.timings = this.phaseTracker.getState();
+				this.persistence.saveRaid(raid);
+			}
+
 			await this.extract();
 		}
 	}
@@ -1510,8 +1596,27 @@ export class RaidOrchestrator {
 			throw new Error("No active raid to extract");
 		}
 
+		// Start extraction timing phase
+		if (this.phaseTracker) {
+			this.phaseTracker.startPhase("extracting");
+		}
+
 		raid.status = "complete";
 		raid.completedAt = new Date();
+
+		// Complete all timing tracking and generate final summary
+		if (this.phaseTracker) {
+			this.phaseTracker.completePhase("extracting");
+			this.phaseTracker.completeRaid();
+			raid.timings = this.phaseTracker.getState();
+
+			// Log timing summary
+			const summary = this.phaseTracker.generateSummary();
+			if (summary) {
+				raidLogger.info({ raidId: raid.id, timingSummary: summary }, "Raid timing summary");
+			}
+		}
+
 		this.persistence.saveRaid(raid);
 
 		// Record stable completion in efficiency tracker
@@ -1663,8 +1768,38 @@ export class RaidOrchestrator {
 			recoveryStats: ReturnType<RecoveryOrchestrator["getRecoveryStats"]>;
 			escalationSummary: ReturnType<ErrorEscalationManager["getEscalationSummary"]>;
 		};
+		timing?: {
+			currentPhase?: string;
+			activeAgentCount: number;
+			summary?: import("./raid-phase-tracker.js").RaidTimingSummary;
+		};
 	} {
 		const trackingSummary = this.fileTracker.getSummary();
+
+		// Get timing information if tracker is active
+		let timingInfo:
+			| {
+					currentPhase?: string;
+					activeAgentCount: number;
+					summary?: import("./raid-phase-tracker.js").RaidTimingSummary;
+			  }
+			| undefined;
+
+		if (this.phaseTracker) {
+			const raid = this.getCurrentRaid();
+			const currentPhase = (raid?.status && this.mapStatusToPhase(raid.status)) || undefined;
+			const activeAgentCount = this.persistence
+				.getSquad()
+				.filter((m) => m.status === "working" || m.status === "idle").length;
+			const summary = this.phaseTracker.generateSummary();
+
+			timingInfo = {
+				currentPhase,
+				activeAgentCount,
+				summary: summary || undefined,
+			};
+		}
+
 		return {
 			raid: this.getCurrentRaid(),
 			waypoints: this.persistence.getTasks(),
@@ -1681,7 +1816,26 @@ export class RaidOrchestrator {
 				recoveryStats: this.recoveryOrchestrator.getRecoveryStats(),
 				escalationSummary: this.escalationManager.getEscalationSummary(),
 			},
+			timing: timingInfo,
 		};
+	}
+
+	/**
+	 * Map raid status to phase name for timing tracking
+	 */
+	private mapStatusToPhase(status: import("./types.js").RaidStatus): string | null {
+		const statusToPhase: Record<import("./types.js").RaidStatus, string | null> = {
+			planning: "planning",
+			awaiting_approval: "planning",
+			executing: "executing",
+			reviewing: "reviewing",
+			merging: "merging",
+			extracting: "extracting",
+			merge_failed: "merging",
+			complete: null,
+			failed: null,
+		};
+		return statusToPhase[status];
 	}
 
 	/**
@@ -1700,6 +1854,18 @@ export class RaidOrchestrator {
 				const outcome = this.efficiencyTracker.generateOutcome();
 				this.persistence.saveEfficiencyOutcome(outcome);
 				this.log("Recorded failed efficiency outcome", { outcome });
+			}
+
+			// Complete timing tracking for failed raid
+			if (this.phaseTracker) {
+				this.phaseTracker.completeRaid();
+				raid.timings = this.phaseTracker.getState();
+
+				// Log timing summary for failed raid
+				const summary = this.phaseTracker.generateSummary();
+				if (summary) {
+					raidLogger.info({ raidId: raid.id, timingSummary: summary }, "Failed raid timing summary");
+				}
 			}
 
 			raid.status = "failed";
