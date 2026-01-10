@@ -474,10 +474,10 @@ Implement the second waypoint here
 	});
 
 	describe("real-world plan format", () => {
-		it("parses quests.txt style format", () => {
+		it("parses intel.txt style format", () => {
 			const content = `
 # Undercity quest board - the space pencil roadmap
-# Run: undercity load quests.txt && undercity work -y
+# Run: undercity load intel.txt && undercity work -y
 
 # =============================================================================
 # CRITICAL: Self-Improvement Loop (agents can't add new quests)
@@ -497,7 +497,7 @@ Implement waypoint splitting in logistics - break large waypoints into independe
 # [DONE] Add vitest tests for raid, cli, backlog modules
 # [DONE] Switch logistics from Opus to Sonnet for speed
 `;
-			const plan = parsePlanFile(content, "quests.txt");
+			const plan = parsePlanFile(content, "intel.txt");
 
 			// Should have waypoints from CRITICAL and HIGH sections
 			expect(plan.waypoints.length).toBe(4);
