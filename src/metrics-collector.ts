@@ -52,7 +52,7 @@ export class MetricsCollector {
 	 */
 	recordTaskMetrics(metrics: TaskMetrics): void {
 		try {
-			const jsonlEntry = JSON.stringify(metrics) + "\n";
+			const jsonlEntry = `${JSON.stringify(metrics)}\n`;
 			fs.appendFileSync(this.metricsFilePath, jsonlEntry);
 		} catch (error) {
 			raidLogger.error({ error: String(error), metrics }, "Failed to record task metrics");

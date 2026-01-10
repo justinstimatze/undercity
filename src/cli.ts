@@ -1807,8 +1807,32 @@ program
 
 			// Progress file for quick status checks
 			const progressFile = ".undercity/grind-progress.json";
-			const updateProgress = async () => {
+			// Atomic file write helper to prevent partial reads during watch
+			const writeFileAtomic = async (filePath: string, content: string) => {
 				const fs = await import("node:fs/promises");
+				const { existsSync } = await import("node:fs");
+				const { unlink } = await import("node:fs/promises");
+				const tempPath = `${filePath}.tmp`;
+				try {
+					await fs.writeFile(tempPath, content, { encoding: "utf-8", flag: "w" });
+					// Atomically rename temp file to target file
+					if (existsSync(tempPath)) {
+						await fs.rename(tempPath, filePath);
+					}
+				} catch (error) {
+					// Clean up temp file if it exists
+					if (existsSync(tempPath)) {
+						try {
+							await unlink(tempPath);
+						} catch {
+							// Ignore cleanup errors
+						}
+					}
+					throw error;
+				}
+			};
+
+			const updateProgress = async () => {
 				const progress = {
 					startedAt: new Date().toISOString(),
 					lastUpdated: new Date().toISOString(),
@@ -1818,7 +1842,7 @@ program
 					rateLimitWaits,
 					status: "running",
 				};
-				await fs.writeFile(progressFile, JSON.stringify(progress, null, 2));
+				await writeFileAtomic(progressFile, JSON.stringify(progress, null, 2));
 			};
 
 			// Helper to sleep with countdown display
@@ -2061,8 +2085,7 @@ program
 			await logToFile(
 				`=== Grind completed: ${completed} done, ${failed} failed, ${elapsedMinutes}m ${elapsedSeconds}s ===`,
 			);
-			const fs = await import("node:fs/promises");
-			await fs.writeFile(
+			await writeFileAtomic(
 				progressFile,
 				JSON.stringify(
 					{
