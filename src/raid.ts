@@ -901,6 +901,9 @@ export class RaidOrchestrator {
 				allowed_tools: agentDef.tools,
 				model: this.getModelName(agentDef.model),
 				permission_mode: needsFullAccess ? ("bypassPermissions" as const) : ("acceptEdits" as const),
+				// CRITICAL: Load .claude/rules/ and CLAUDE.md from the project directory
+				// Without this, agents don't pick up repo-specific configuration
+				settingSources: ["project"] as ("user" | "project" | "local")[],
 				...(needsFullAccess
 					? {
 							allowDangerouslySkipPermissions: true,
