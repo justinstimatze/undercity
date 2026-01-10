@@ -108,13 +108,20 @@ export function addQuests(objectives: string[]): Quest[] {
  */
 export function getNextQuest(): Quest | undefined {
 	const board = loadQuestBoard();
-	const pendingQuests = board.quests.filter((quest) => quest.status === "pending");
+	const pendingQuests = board.quests.filter((quest) =>
+		quest.status === "pending" &&
+		(!quest.dependsOn ||
+			quest.dependsOn.every(depId =>
+				board.quests.find(q => q.id === depId && q.status === "complete")
+			)
+		)
+	);
 
 	// Compute priority with more sophisticated scoring
 	const scoredQuests = pendingQuests.map(quest => {
 		let score = quest.priority ?? 999;
 
-		// Boost priority based on tags
+		// Boost and penalize based on various factors
 		const boostTags: { [key: string]: number } = {
 			"critical": -50,  // Highest priority
 			"bugfix": -30,
@@ -123,10 +130,25 @@ export function getNextQuest(): Quest | undefined {
 			"refactor": -10,
 		};
 
+		// Complexity-based scoring
+		const complexityScore: { [key: string]: number } = {
+			"trivial": -20,
+			"low": -10,
+			"medium": 0,
+			"high": 10,
+			"critical": 20
+		};
+
 		if (quest.tags) {
 			for (const tag of quest.tags) {
-				if (boostTags[tag.toLowerCase()]) {
-					score += boostTags[tag.toLowerCase()];
+				const tagLower = tag.toLowerCase();
+				// Boost/penalize based on tags
+				if (boostTags[tagLower]) {
+					score += boostTags[tagLower];
+				}
+				// Boost/penalize based on complexity
+				if (complexityScore[tagLower]) {
+					score += complexityScore[tagLower];
 				}
 			}
 		}
@@ -134,6 +156,11 @@ export function getNextQuest(): Quest | undefined {
 		// Penalize old quests
 		const daysSinceCreation = (Date.now() - new Date(quest.createdAt).getTime()) / (1000 * 60 * 60 * 24);
 		score += Math.min(daysSinceCreation * 0.5, 30);
+
+		// Consider dependencies
+		if (quest.dependsOn && quest.dependsOn.length > 0) {
+			score += quest.dependsOn.length * 5; // Slight penalty for more dependencies
+		}
 
 		return { quest, score };
 	});
