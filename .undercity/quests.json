@@ -72,9 +72,11 @@
     {
       "id": "quest-ux-status-flicker",
       "objective": "[ux] Fix status flicker - atomic state file writes to prevent partial reads during watch",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 20,
-      "createdAt": "2026-01-10T08:50:00.000Z"
+      "createdAt": "2026-01-10T08:50:00.000Z",
+      "startedAt": "2026-01-10T10:11:51.210Z",
+      "raidId": ""
     },
     {
       "id": "quest-portability-external",
@@ -297,7 +299,14 @@
       "status": "pending",
       "priority": 37,
       "createdAt": "2026-01-10T09:53:15.928Z"
+    },
+    {
+      "id": "quest-mk85ba7a-l6sb",
+      "objective": "fix typo - add a test comment in logger.ts",
+      "status": "pending",
+      "priority": 38,
+      "createdAt": "2026-01-10T10:11:50.758Z"
     }
   ],
-  "lastUpdated": "2026-01-10T09:59:36.641Z"
+  "lastUpdated": "2026-01-10T10:11:51.210Z"
 }
