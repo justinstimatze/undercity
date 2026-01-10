@@ -364,4 +364,23 @@ export class EfficiencyTracker {
 			totalMs: stableEnd - startTime,
 		};
 	}
+
+	/**
+	 * Analyze overall performance metrics
+	 */
+	analyzeOverallPerformance(): {
+		overallEfficiencyRatio: number;
+		reworkRate: number;
+		avgTokensPerRework: number;
+		modelSuccessRates: Record<ModelChoice, number>;
+		agentVariety: string[];
+	} {
+		return {
+			overallEfficiencyRatio: this.getEfficiencyRatio(),
+			reworkRate: this.reworkAttempts.length / (this.reworkAttempts.length + 1), // Normalize to handle 0 rework
+			avgTokensPerRework: this.getAvgTokensPerRework(),
+			modelSuccessRates: this.getModelSuccessRates(),
+			agentVariety: Array.from(this.agentsUsed),
+		};
+	}
 }

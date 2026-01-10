@@ -943,3 +943,28 @@ export interface TaskMetrics {
 	/** Associated experiment ID */
 	experimentId?: string;
 }
+
+export interface ImprovementQuest {
+	/** Unique identifier for the improvement quest */
+	id: string;
+	/** Human-readable title */
+	title: string;
+	/** Detailed description of the improvement goal */
+	description: string;
+	/** Priority of the improvement */
+	priority: "low" | "medium" | "high" | "critical";
+	/** Category of improvement */
+	category: "performance" | "quality" | "efficiency" | "reliability" | "usability";
+	/** Data source for this quest */
+	dataSource: "metrics" | "experiments" | "patterns" | "manual";
+	/** Evidence supporting this improvement quest */
+	evidence: string[];
+	/** Estimated impact (0-100 score) */
+	estimatedImpact: number;
+	/** Estimated effort required */
+	estimatedEffort: "low" | "medium" | "high";
+	/** When the quest was created */
+	createdAt: Date;
+	/** Optional associated experiment ID */
+	experimentId?: string;
+}

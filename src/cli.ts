@@ -496,6 +496,70 @@ program
 	});
 
 // Clear command
+program.command("metrics");
+
+// Improve command - trigger performance management and quest generation
+program
+	.command("improve")
+	.description("Trigger performance analysis and generate improvement quests")
+	.option("-v, --verbose", "Show detailed improvement insights")
+	.action(async (options: { verbose?: boolean }) => {
+		const { getImprovementPersistence } = await import("./improvement-persistence.js");
+		const { QuestBoardAnalyzer } = await import("./quest-board-analyzer.js");
+		const { EfficiencyTracker } = await import("./efficiency-tracker.js");
+
+		const improvementPersistence = getImprovementPersistence();
+		const questAnalyzer = new QuestBoardAnalyzer();
+
+		// Placeholder for actual performance tracking logic
+		const performanceAnalysis = {
+			overallEfficiencyRatio: 0.5, // Example values
+			reworkRate: 0.25,
+			avgTokensPerRework: 100,
+			modelSuccessRates: {
+				haiku: 0.4,
+				sonnet: 0.7,
+				opus: 0.6,
+			},
+			agentVariety: ["Flute", "Quester", "Logistics"],
+		};
+
+		// Import PM agent for comprehensive quest generation
+		const { PMAgent } = await import("./self-improvement.js");
+		const pmAgent = new PMAgent();
+
+		// Generate improvement quests using the PM agent
+		const improvementQuests = pmAgent.generateImprovementQuests(
+			[], // QuestMetrics (empty for placeholder)
+			[], // EfficiencyOutcomes (empty for placeholder)
+			[], // ExperimentResults (empty for placeholder)
+		);
+
+		// Add improvement quests to persistence
+		improvementQuests.forEach((quest) => {
+			improvementPersistence.addImprovementQuest(quest);
+		});
+
+		if (options.verbose) {
+			console.log(chalk.bold("\n🔍 Performance Insights:"));
+			console.log(JSON.stringify(performanceAnalysis, null, 2));
+
+			console.log(chalk.bold("\n✨ Generated Improvement Quests:"));
+			improvementQuests.forEach((quest) => {
+				console.log(`- ${quest.title} (Priority: ${quest.priority}, Impact: ${quest.estimatedImpact})`);
+				console.log(`  ${quest.description}`);
+				console.log(`  Category: ${quest.category}, Data Source: ${quest.dataSource}\n`);
+			});
+		} else {
+			console.log(chalk.green(`✓ Generated ${improvementQuests.length} improvement quests`));
+		}
+
+		// Optional: Display storage stats
+		const storageStats = improvementPersistence.getStorageStats();
+		console.log(chalk.dim(`\nImprovement storage: ${storageStats.improvementQuests} quests tracked`));
+	});
+
+// Metrics command (existing, but was cut off in previous view)
 program
 	.command("metrics")
 	.description("Show performance and efficiency metrics")

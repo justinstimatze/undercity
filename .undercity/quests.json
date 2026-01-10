@@ -247,18 +247,21 @@
     {
       "id": "quest-mk84jdug-a6ga",
       "objective": "[pm] PM generates quests - turn hypotheses into concrete improvement quests with expected impact",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 27,
       "createdAt": "2026-01-10T09:50:09.112Z",
       "startedAt": "2026-01-10T10:48:25.184Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-10T10:49:02.909Z"
     },
     {
       "id": "quest-mk84je6n-a1sv",
       "objective": "[pm] Add 'undercity improve' command - trigger PM analysis and quest generation on demand",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 28,
-      "createdAt": "2026-01-10T09:50:09.551Z"
+      "createdAt": "2026-01-10T09:50:09.551Z",
+      "startedAt": "2026-01-10T10:49:02.910Z",
+      "raidId": ""
     },
     {
       "id": "quest-mk84jeiu-6ko5",
@@ -345,5 +348,5 @@
       "createdAt": "2026-01-10T10:47:55.888Z"
     }
   ],
-  "lastUpdated": "2026-01-10T10:48:25.184Z"
+  "lastUpdated": "2026-01-10T10:49:02.910Z"
 }

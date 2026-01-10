@@ -5,11 +5,13 @@
  * provide insights, and support the quest matchmaking system.
  */
 
+import type { EfficiencyTracker } from "./efficiency-tracker.js";
 import { FileTracker } from "./file-tracker.js";
 import type { Quest } from "./quest.js";
 import { getAllQuests, getQuestBoardAnalytics, getReadyQuestsForBatch } from "./quest.js";
 import { QuestAnalyzer } from "./quest-analyzer.js";
 import { type CompatibilityResult, type QuestDependency, QuestScheduler, type QuestSet } from "./quest-scheduler.js";
+import type { ImprovementQuest } from "./types.js";
 
 export interface QuestBoardInsights {
 	totalQuests: number;
