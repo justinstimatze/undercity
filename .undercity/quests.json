@@ -165,10 +165,11 @@
     {
       "id": "quest-mk84h5xx-ciui",
       "objective": "[skynet] Build self-improvement loop - metrics collection, experiment framework, PM agent that generates improvement quests based on empirical data",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 19,
       "createdAt": "2026-01-10T09:48:25.557Z",
       "startedAt": "2026-01-10T09:59:36.641Z",
+      "completedAt": "2026-01-10T10:15:00.000Z",
       "raidId": ""
     },
     {

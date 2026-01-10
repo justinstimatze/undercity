@@ -5,8 +5,30 @@
  * Provides tokens-per-completion ratios and historical analytics.
  */
 
+import fs from "fs/promises";
+import path from "path";
 import { RateLimitTracker } from "./rate-limit.js";
 import type { AgentType, EfficiencyAnalytics, QuestMetrics, TokenUsage } from "./types.js";
+
+const METRICS_DIR = path.join(process.cwd(), ".undercity");
+const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl");
+
+/**
+ * Logs metrics to .undercity/metrics.jsonl
+ * Creates directory if it doesn't exist
+ */
+async function logMetricsToFile(metrics: QuestMetrics): Promise<void> {
+	try {
+		// Ensure directory exists
+		await fs.mkdir(METRICS_DIR, { recursive: true });
+
+		// Convert metrics to JSON and append to file
+		const metricsJson = JSON.stringify(metrics);
+		await fs.appendFile(METRICS_FILE, `${metricsJson}\n`);
+	} catch (error) {
+		console.error("Failed to log metrics:", error);
+	}
+}
 
 /**
  * Tracks efficiency metrics for quests and raids
@@ -171,6 +193,9 @@ export class MetricsTracker {
 			completedAt,
 			error: this.currentError,
 		};
+
+		// Log metrics to file asynchronously, without blocking
+		logMetricsToFile(metrics).catch(console.error);
 
 		return metrics;
 	}
