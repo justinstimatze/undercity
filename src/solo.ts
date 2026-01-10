@@ -29,7 +29,7 @@ import { dualLogger } from "./dual-logger.js";
 import { createAndCheckout } from "./git.js";
 import { raidLogger } from "./logger.js";
 import { MetricsTracker } from "./metrics.js";
-import type { TokenUsage } from "./types.js";
+import type { AttemptRecord, ErrorCategory, TokenUsage } from "./types.js";
 
 /**
  * Model tiers for escalation
@@ -129,6 +129,12 @@ export class SoloOrchestrator {
 	/** Metrics tracker for token usage and efficiency */
 	private metricsTracker: MetricsTracker;
 
+	/** Track individual attempts for metrics */
+	private attemptRecords: AttemptRecord[] = [];
+
+	/** Track retries at same model tier (reset on escalation) */
+	private sameModelRetries: number = 0;
+
 	constructor(options: SoloOptions = {}) {
 		this.maxAttempts = options.maxAttempts ?? 3;
 		this.startingModel = options.startingModel ?? "sonnet";
@@ -154,6 +160,8 @@ export class SoloOrchestrator {
 	async runTask(task: string): Promise<TaskResult> {
 		const startTime = Date.now();
 		this.attempts = 0;
+		this.attemptRecords = [];
+		this.sameModelRetries = 0;
 
 		// Ensure clean state before starting (in case previous task left dirty state)
 		this.cleanupDirtyState();
@@ -202,18 +210,33 @@ export class SoloOrchestrator {
 
 		while (this.attempts < this.maxAttempts) {
 			this.attempts++;
-			console.log(chalk.dim(`  Attempt ${this.attempts}/${this.maxAttempts} (${this.currentModel})`));
+			this.sameModelRetries++;
+			const attemptStart = Date.now();
+			console.log(
+				chalk.dim(
+					`  Attempt ${this.attempts}/${this.maxAttempts} (${this.currentModel}, retry ${this.sameModelRetries})`,
+				),
+			);
 
 			try {
 				// Run the agent
-				const result = await this.executeAgent(task);
+				const _result = await this.executeAgent(task);
 
 				// Verify the work
 				const verification = await this.verifyWork();
 
+				// Categorize errors for tracking
+				const errorCategories = this.categorizeErrors(verification);
+
 				if (verification.passed) {
-					// Success! Clear feedback and commit if enabled
+					// Success! Record the attempt and clear feedback
+					this.attemptRecords.push({
+						model: this.currentModel,
+						durationMs: Date.now() - attemptStart,
+						success: true,
+					});
 					this.lastFeedback = undefined;
+
 					let commitSha: string | undefined;
 					if (this.autoCommit && verification.filesChanged > 0) {
 						commitSha = await this.commitWork(task);
@@ -237,28 +260,59 @@ export class SoloOrchestrator {
 					};
 				}
 
-				// Verification failed - store feedback for next retry
+				// Verification failed - record attempt and store feedback
+				this.attemptRecords.push({
+					model: this.currentModel,
+					durationMs: Date.now() - attemptStart,
+					success: false,
+					errorCategories,
+				});
 				this.lastFeedback = verification.feedback;
-				console.log(chalk.yellow(`  Verification failed: ${verification.issues.join(", ")}`));
 
-				if (this.shouldEscalate(verification)) {
+				const errorSummary = errorCategories.length > 0 ? errorCategories.join(", ") : verification.issues.join(", ");
+				console.log(chalk.yellow(`  Verification failed: ${errorSummary}`));
+
+				// Decide: retry same tier or escalate?
+				const escalationDecision = this.shouldEscalate(verification, errorCategories);
+
+				if (escalationDecision.shouldEscalate) {
 					const previousModel = this.currentModel;
 					const escalated = this.escalateModel();
 					if (escalated) {
 						// Get post-mortem from the failed tier before moving on
 						console.log(chalk.dim(`  Getting post-mortem from ${previousModel}...`));
 						this.lastPostMortem = await this.getPostMortem(task, verification.feedback, previousModel);
+
+						// Update last attempt record with escalation info
+						const lastAttempt = this.attemptRecords[this.attemptRecords.length - 1];
+						lastAttempt.escalatedFrom = previousModel as "haiku" | "sonnet";
+						lastAttempt.postMortemGenerated = true;
+
+						// Reset same-model retry counter
+						this.sameModelRetries = 0;
 					} else {
 						// Already at max, one more try
 						console.log(chalk.yellow("  At max model tier, final attempt..."));
 					}
+				} else {
+					// Retrying at same tier - just use feedback, no post-mortem
+					console.log(chalk.dim(`  Retrying at ${this.currentModel} (${escalationDecision.reason})`));
 				}
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : String(error);
 				console.log(chalk.red(`  Error: ${errorMessage.substring(0, 100)}`));
 
-				// Escalate on errors
+				// Record failed attempt
+				this.attemptRecords.push({
+					model: this.currentModel,
+					durationMs: Date.now() - attemptStart,
+					success: false,
+					errorCategories: ["unknown"],
+				});
+
+				// Escalate on exceptions
 				this.escalateModel();
+				this.sameModelRetries = 0;
 			}
 		}
 
@@ -704,21 +758,68 @@ When done, provide a brief summary of what you changed.`;
 	}
 
 	/**
-	 * Decide whether to escalate to a better model
+	 * Categorize errors from verification for tracking
 	 */
-	private shouldEscalate(verification: VerificationResult): boolean {
-		// Always escalate on typecheck failures
-		if (!verification.typecheckPassed) {
-			return true;
+	private categorizeErrors(verification: VerificationResult): ErrorCategory[] {
+		const categories: ErrorCategory[] = [];
+
+		if (!verification.lintPassed) categories.push("lint");
+		if (!verification.spellPassed) categories.push("spell");
+		if (!verification.typecheckPassed) categories.push("typecheck");
+		if (!verification.testsPassed) categories.push("test");
+		if (verification.filesChanged === 0) categories.push("no_changes");
+
+		// Check for build issues (typecheck passed but build failed)
+		if (verification.typecheckPassed && verification.issues.some((i) => i.toLowerCase().includes("build"))) {
+			categories.push("build");
 		}
 
-		// Escalate if no changes were made
+		return categories.length > 0 ? categories : ["unknown"];
+	}
+
+	/**
+	 * Decide whether to escalate to a better model
+	 *
+	 * Strategy:
+	 * - Trivial errors (lint/spell only): retry same tier up to 2x
+	 * - Serious errors (typecheck/build): escalate after 1 retry
+	 * - No changes made: escalate immediately (agent is stuck)
+	 */
+	private shouldEscalate(
+		verification: VerificationResult,
+		errorCategories: ErrorCategory[],
+	): { shouldEscalate: boolean; reason: string } {
+		// No changes made = agent is stuck, escalate immediately
 		if (verification.filesChanged === 0) {
-			return true;
+			return { shouldEscalate: true, reason: "no changes made" };
 		}
 
-		// Escalate after first failed attempt
-		return this.attempts >= 1;
+		// Check if errors are only trivial (lint/spell)
+		const trivialOnly = errorCategories.every((c) => c === "lint" || c === "spell");
+		const hasSerious = errorCategories.some((c) => c === "typecheck" || c === "build" || c === "test");
+
+		if (trivialOnly) {
+			// Trivial errors: allow 2 retries at same tier before escalating
+			if (this.sameModelRetries < 2) {
+				return { shouldEscalate: false, reason: "trivial error, retry same tier" };
+			}
+			return { shouldEscalate: true, reason: "trivial errors persist after 2 retries" };
+		}
+
+		if (hasSerious) {
+			// Serious errors: allow 1 retry at same tier, then escalate
+			if (this.sameModelRetries < 2) {
+				return { shouldEscalate: false, reason: "serious error, one more retry" };
+			}
+			return { shouldEscalate: true, reason: "serious errors after retry" };
+		}
+
+		// Default: escalate after 2 retries
+		if (this.sameModelRetries >= 2) {
+			return { shouldEscalate: true, reason: "max retries at tier" };
+		}
+
+		return { shouldEscalate: false, reason: "retrying" };
 	}
 
 	/**

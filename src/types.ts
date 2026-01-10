@@ -574,6 +574,23 @@ export interface RateLimitState {
 }
 
 /**
+ * Error categories for tracking what causes failures
+ */
+export type ErrorCategory = "lint" | "typecheck" | "build" | "test" | "spell" | "no_changes" | "unknown";
+
+/**
+ * Single attempt within a quest
+ */
+export interface AttemptRecord {
+	model: "haiku" | "sonnet" | "opus";
+	durationMs: number;
+	success: boolean;
+	errorCategories?: ErrorCategory[];
+	escalatedFrom?: "haiku" | "sonnet";
+	postMortemGenerated?: boolean;
+}
+
+/**
  * Quest metrics for efficiency tracking
  */
 export interface QuestMetrics {
@@ -588,6 +605,10 @@ export interface QuestMetrics {
 	startedAt: Date;
 	completedAt: Date;
 	error?: string;
+	/** Individual attempt records for analyzing retry/escalation patterns */
+	attempts?: AttemptRecord[];
+	/** Final model that succeeded (or failed on last attempt) */
+	finalModel?: "haiku" | "sonnet" | "opus";
 }
 
 /**
