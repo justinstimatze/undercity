@@ -3,10 +3,9 @@
 ## Available
 
 ### Critical
+[elevator] CRITICAL BUG: Don't delete branch on merge failure - preserve work for manual recovery (we just lost 2 quests worth of work)
 [sync] Make quests.txt authoritative - parse it on raid start, deprecate quests.json
-[robustness] Add rate limit detection - catch 429 errors, pause squad, show countdown timer, auto-resume when quota resets
 [robustness] Add basic error recovery - if raider fails mid-waypoint, save partial progress and allow retry
-[robustness] Sheriff must run pnpm typecheck before approving - fail review if types do not pass
 [self-improvement] Add ability for agents to add new quests - when quester/sheriff discovers work, they should be able to queue it
 [self-improvement] Parse agent output for "[NEW QUEST: ...]" markers and auto-add to quest board
 [self-improvement] Have sheriff generate follow-up quests for issues found during review
@@ -89,6 +88,8 @@
 2026-01-09: Use git worktrees for raid branches
 2026-01-09: Raiders work in worktree, elevator merges back to main
 2026-01-09: Fix 48 TypeScript errors in metrics.ts and rate-limit.ts
+2026-01-09: Add rate limit detection - pause squad, countdown timer, auto-resume (recovered from dangling commit)
+2026-01-09: Sheriff must run pnpm typecheck before approving (recovered from dangling commit)
 2026-01-xx: Add vitest tests for raid, cli, backlog modules (120 tests total)
 2026-01-xx: Add --dry-run flag to slingshot
 2026-01-xx: Add history command for completed raids
