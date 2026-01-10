@@ -582,11 +582,11 @@ export type ErrorCategory = "lint" | "typecheck" | "build" | "test" | "spell" | 
  * Single attempt within a quest
  */
 export interface AttemptRecord {
-	model: "local" | "haiku" | "sonnet" | "opus";
+	model: "haiku" | "sonnet" | "opus";
 	durationMs: number;
 	success: boolean;
 	errorCategories?: ErrorCategory[];
-	escalatedFrom?: "local" | "haiku" | "sonnet";
+	escalatedFrom?: "haiku" | "sonnet";
 	postMortemGenerated?: boolean;
 }
 

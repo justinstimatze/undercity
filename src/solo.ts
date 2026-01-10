@@ -27,64 +27,20 @@ import { assessComplexityFast, type ComplexityAssessment } from "./complexity.js
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
 import { createAndCheckout } from "./git.js";
-import { isOllamaAvailable, queryLocal } from "./local-llm.js";
 import { raidLogger } from "./logger.js";
 import { MetricsTracker } from "./metrics.js";
 import type { AttemptRecord, ErrorCategory, TokenUsage } from "./types.js";
 
 /**
  * Model tiers for escalation
- * local → haiku → sonnet → opus
- *
- * "local" tier uses Ollama for text-only trivial tasks (no tool calls).
- * If a task needs tools (Read/Edit/Bash), it skips local and starts at haiku.
  */
-type ModelTier = "local" | "haiku" | "sonnet" | "opus";
+type ModelTier = "haiku" | "sonnet" | "opus";
 
-const MODEL_NAMES: Record<Exclude<ModelTier, "local">, string> = {
+const MODEL_NAMES: Record<ModelTier, string> = {
 	haiku: "claude-3-5-haiku-20241022",
 	sonnet: "claude-sonnet-4-20250514",
 	opus: "claude-opus-4-5-20251101",
 };
-
-/**
- * Determine if a task needs tool access (file operations)
- * Text-only tasks can be handled by local models without tools.
- */
-function needsToolAccess(task: string): boolean {
-	const lowerTask = task.toLowerCase();
-
-	// Tasks that explicitly modify files
-	const toolPatterns = [
-		/\b(fix|update|add|change|modify|edit|create|delete|remove|refactor|implement|write)\b/i,
-		/\b(in|to|from)\s+\S+\.(ts|js|tsx|jsx|json|md|css|html)\b/i,
-		/\bfile\b/i,
-		/\bcode\b.*\b(change|update|fix)\b/i,
-	];
-
-	// Tasks that are text-only (explanations, analysis, suggestions)
-	const textOnlyPatterns = [
-		/^(explain|describe|what|how|why|summarize|analyze|review|list|suggest)\b/i,
-		/\b(what does|how does|why does|what is|how to)\b/i,
-		/\bexplain\b/i,
-		/\bdescribe\b/i,
-		/\bsummarize\b/i,
-	];
-
-	// Check if it matches text-only patterns
-	for (const pattern of textOnlyPatterns) {
-		if (pattern.test(lowerTask)) {
-			// But verify it doesn't also have tool patterns
-			const hasToolPattern = toolPatterns.some((p) => p.test(lowerTask));
-			if (!hasToolPattern) {
-				return false; // Text-only, no tools needed
-			}
-		}
-	}
-
-	// Default: assume tools are needed
-	return true;
-}
 
 /**
  * Task status for tracking
@@ -219,7 +175,7 @@ export class SoloOrchestrator {
 
 		// Assess complexity to determine starting model
 		const assessment = assessComplexityFast(task);
-		this.currentModel = this.determineStartingModel(assessment, task);
+		this.currentModel = this.determineStartingModel(assessment);
 		this.metricsTracker.recordAgentSpawn(this.currentModel === "opus" ? "sheriff" : "quester");
 
 		this.log("Starting task", { task, model: this.currentModel, assessment: assessment.level });
@@ -263,49 +219,8 @@ export class SoloOrchestrator {
 			);
 
 			try {
-				// Run the agent - use local model if selected
-				let _result: string | null;
-				if (this.currentModel === "local") {
-					_result = await this.executeLocalAgent(task);
-
-					// If local failed (returned null), escalate immediately
-					if (_result === null) {
-						console.log(chalk.yellow(`  Local model failed, escalating...`));
-						this.escalateModel();
-						this.sameModelRetries = 0;
-						continue;
-					}
-
-					// For text-only tasks, we don't need file verification
-					// Just mark as success if we got a result
-					if (!needsToolAccess(task)) {
-						this.attemptRecords.push({
-							model: this.currentModel as "local" | "haiku" | "sonnet" | "opus",
-							durationMs: Date.now() - attemptStart,
-							success: true,
-						});
-						this.lastFeedback = undefined;
-						this.metricsTracker.completeQuest(true);
-
-						// Print the local result
-						console.log(chalk.green(`  ✓ Local model response:`));
-						console.log(chalk.dim(`    ${_result.substring(0, 200)}${_result.length > 200 ? "..." : ""}`));
-
-						return {
-							task,
-							status: "complete",
-							model: this.currentModel,
-							attempts: this.attempts,
-							durationMs: Date.now() - startTime,
-							tokenUsage: {
-								attempts: tokenUsageThisAttempt,
-								total: 0, // Local models don't count toward API tokens
-							},
-						};
-					}
-				} else {
-					_result = await this.executeAgent(task);
-				}
+				// Run the agent
+				const _result = await this.executeAgent(task);
 
 				// Verify the work
 				const verification = await this.verifyWork();
@@ -370,7 +285,7 @@ export class SoloOrchestrator {
 
 						// Update last attempt record with escalation info
 						const lastAttempt = this.attemptRecords[this.attemptRecords.length - 1];
-						lastAttempt.escalatedFrom = previousModel as "local" | "haiku" | "sonnet";
+						lastAttempt.escalatedFrom = previousModel as "haiku" | "sonnet";
 						lastAttempt.postMortemGenerated = true;
 
 						// Reset same-model retry counter
@@ -521,27 +436,12 @@ Be concise and specific. Focus on actionable insights.`;
 	}
 
 	/**
-	 * Determine starting model based on complexity assessment and task requirements
-	 *
-	 * Routing priority:
-	 * 1. If task is text-only (no file modifications) AND trivial → local
-	 * 2. Otherwise use complexity assessment: trivial/simple → haiku, standard/complex → sonnet, critical → opus
+	 * Determine starting model based on complexity assessment
 	 */
-	private determineStartingModel(assessment: ComplexityAssessment, task: string): ModelTier {
+	private determineStartingModel(assessment: ComplexityAssessment): ModelTier {
 		// Override with user preference if set
 		if (this.startingModel !== "sonnet") {
 			return this.startingModel;
-		}
-
-		// Check if task is text-only (no tool access needed) AND trivial
-		// These can go to local model for maximum efficiency
-		if (assessment.level === "trivial" && !needsToolAccess(task)) {
-			// Check if Ollama is available before routing to local
-			if (isOllamaAvailable()) {
-				return "local";
-			}
-			// Fall back to haiku if local not available
-			return "haiku";
 		}
 
 		// Use assessment to pick model
@@ -624,13 +524,10 @@ When done, provide a brief summary of what you changed.`;
 		// Stores the token usage for this attempt
 		const tokenUsageThisAttempt: TokenUsage[] = [];
 
-		// Get API model name (this method is only called for non-local models)
-		const apiModel = this.currentModel as Exclude<ModelTier, "local">;
-
 		for await (const message of query({
 			prompt,
 			options: {
-				model: MODEL_NAMES[apiModel],
+				model: MODEL_NAMES[this.currentModel],
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
 				settingSources: ["project"],
@@ -639,7 +536,7 @@ When done, provide a brief summary of what you changed.`;
 			// Track token usage
 			const usage = this.metricsTracker.extractTokenUsage(message);
 			if (usage) {
-				this.metricsTracker.recordTokenUsage(message, apiModel);
+				this.metricsTracker.recordTokenUsage(message, this.currentModel);
 				tokenUsageThisAttempt.push(usage);
 			}
 
@@ -672,72 +569,6 @@ When done, provide a brief summary of what you changed.`;
 
 		if (msg.type === "result" && msg.subtype === "success") {
 			dualLogger.writeLine(`${prefix} ${chalk.green("✓")} Done`);
-		}
-	}
-
-	/**
-	 * Execute task using local Ollama model
-	 * For text-only tasks that don't need file modifications.
-	 *
-	 * If the task needs file modifications, we use a diff-based approach:
-	 * 1. Ask the local model to generate a unified diff
-	 * 2. Apply the diff using the patch command
-	 *
-	 * Returns the result text, or null if local execution failed.
-	 */
-	private async executeLocalAgent(task: string): Promise<string | null> {
-		console.log(chalk.dim(`  [local] Querying Ollama...`));
-
-		// For text-only tasks, just query directly
-		if (!needsToolAccess(task)) {
-			const result = await queryLocal(
-				`You are a coding assistant. Complete this task:\n\n${task}\n\nProvide a clear, concise response.`,
-				{ tier: "small", timeout: 60000 },
-			);
-			return result;
-		}
-
-		// For tasks that need file modifications, use diff-based approach
-		// This is a simplified implementation - the local model generates a diff
-		// and we apply it with the patch command
-		const prompt = `You are a coding assistant. Generate a unified diff to complete this task:
-
-${task}
-
-Output ONLY the unified diff in this format:
---- a/path/to/file.ts
-+++ b/path/to/file.ts
-@@ -line,count +line,count @@
- context line
--old line
-+new line
- context line
-
-Do not include any explanation, just the diff.`;
-
-		const diffResult = await queryLocal(prompt, { tier: "small", timeout: 60000 });
-
-		if (!diffResult || !diffResult.includes("---")) {
-			// Local model couldn't generate a valid diff, escalate
-			return null;
-		}
-
-		// Try to apply the diff
-		try {
-			// Write diff to temp file and apply with patch
-			const tempDiff = `/tmp/undercity-local-${Date.now()}.patch`;
-			await import("fs/promises").then((fs) => fs.writeFile(tempDiff, diffResult));
-
-			execSync(`patch -p1 < ${tempDiff}`, { cwd: process.cwd(), encoding: "utf-8" });
-
-			// Clean up temp file
-			await import("fs/promises").then((fs) => fs.unlink(tempDiff).catch(() => {}));
-
-			return `Applied diff:\n${diffResult}`;
-		} catch (error) {
-			// Diff couldn't be applied, escalate
-			this.log("Local diff application failed", { error: String(error) });
-			return null;
 		}
 	}
 
@@ -993,10 +824,9 @@ Do not include any explanation, just the diff.`;
 
 	/**
 	 * Escalate to the next model tier
-	 * Chain: local → haiku → sonnet → opus
 	 */
 	private escalateModel(): boolean {
-		const tiers: ModelTier[] = ["local", "haiku", "sonnet", "opus"];
+		const tiers: ModelTier[] = ["haiku", "sonnet", "opus"];
 		const currentIndex = tiers.indexOf(this.currentModel);
 
 		if (currentIndex < tiers.length - 1) {
@@ -1063,7 +893,7 @@ export class SupervisedOrchestrator {
 	private autoCommit: boolean;
 	private stream: boolean;
 	private verbose: boolean;
-	private workerModel: "haiku" | "sonnet";
+	private workerModel: ModelTier;
 
 	constructor(
 		options: {
