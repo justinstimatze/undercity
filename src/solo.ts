@@ -28,6 +28,8 @@ import { type ContextBriefing, prepareContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
 import { createAndCheckout } from "./git.js";
 import { raidLogger } from "./logger.js";
+import { MetricsTracker } from "./metrics.js";
+import type { TokenUsage } from "./types.js";
 
 /**
  * Model tiers for escalation
@@ -74,6 +76,13 @@ interface TaskResult {
 	commitSha?: string;
 	error?: string;
 	durationMs: number;
+	/** Detailed token usage tracking */
+	tokenUsage?: {
+		/** Tokens used per attempt */
+		attempts: TokenUsage[];
+		/** Total tokens across all attempts */
+		total: number;
+	};
 }
 
 /**
@@ -117,6 +126,9 @@ export class SoloOrchestrator {
 	private attempts: number = 0;
 	private currentBriefing?: ContextBriefing;
 
+	/** Metrics tracker for token usage and efficiency */
+	private metricsTracker: MetricsTracker;
+
 	constructor(options: SoloOptions = {}) {
 		this.maxAttempts = options.maxAttempts ?? 3;
 		this.startingModel = options.startingModel ?? "sonnet";
@@ -127,6 +139,7 @@ export class SoloOrchestrator {
 		this.runTypecheck = options.runTypecheck ?? true;
 		this.runTests = options.runTests ?? true;
 		this.currentModel = this.startingModel;
+		this.metricsTracker = new MetricsTracker();
 	}
 
 	private log(message: string, data?: Record<string, unknown>): void {
@@ -142,9 +155,17 @@ export class SoloOrchestrator {
 		const startTime = Date.now();
 		this.attempts = 0;
 
+		// Start quest tracking in metrics
+		this.metricsTracker.startQuest(
+			`solo_${Date.now()}`, // Generate unique quest ID
+			task,
+			`raid_${Date.now()}`, // Generate unique raid ID
+		);
+
 		// Assess complexity to determine starting model
 		const assessment = assessComplexityFast(task);
 		this.currentModel = this.determineStartingModel(assessment);
+		this.metricsTracker.recordAgentSpawn(this.currentModel === "opus" ? "sheriff" : "quester");
 
 		this.log("Starting task", { task, model: this.currentModel, assessment: assessment.level });
 		console.log(chalk.cyan(`\n━━━ Task: ${task.substring(0, 60)}${task.length > 60 ? "..." : ""} ━━━`));
@@ -173,13 +194,16 @@ export class SoloOrchestrator {
 			}
 		}
 
+		// Prepare token usage tracking
+		const tokenUsageThisAttempt: TokenUsage[] = [];
+
 		while (this.attempts < this.maxAttempts) {
 			this.attempts++;
 			console.log(chalk.dim(`  Attempt ${this.attempts}/${this.maxAttempts} (${this.currentModel})`));
 
 			try {
 				// Run the agent
-				await this.executeAgent(task);
+				const result = await this.executeAgent(task);
 
 				// Verify the work
 				const verification = await this.verifyWork();
@@ -192,6 +216,9 @@ export class SoloOrchestrator {
 						commitSha = await this.commitWork(task);
 					}
 
+					// Complete quest tracking
+					this.metricsTracker.completeQuest(true);
+
 					return {
 						task,
 						status: "complete",
@@ -200,6 +227,10 @@ export class SoloOrchestrator {
 						verification,
 						commitSha,
 						durationMs: Date.now() - startTime,
+						tokenUsage: {
+							attempts: tokenUsageThisAttempt,
+							total: tokenUsageThisAttempt.reduce((sum, usage) => sum + usage.totalTokens, 0),
+						},
 					};
 				}
 
@@ -224,6 +255,8 @@ export class SoloOrchestrator {
 		}
 
 		// Failed after all attempts
+		this.metricsTracker.completeQuest(false);
+
 		return {
 			task,
 			status: "failed",
@@ -231,6 +264,10 @@ export class SoloOrchestrator {
 			attempts: this.attempts,
 			error: "Max attempts reached without passing verification",
 			durationMs: Date.now() - startTime,
+			tokenUsage: {
+				attempts: tokenUsageThisAttempt,
+				total: tokenUsageThisAttempt.reduce((sum, usage) => sum + usage.totalTokens, 0),
+			},
 		};
 	}
 
@@ -344,6 +381,9 @@ Guidelines:
 
 When done, provide a brief summary of what you changed.`;
 
+		// Stores the token usage for this attempt
+		const tokenUsageThisAttempt: TokenUsage[] = [];
+
 		for await (const message of query({
 			prompt,
 			options: {
@@ -353,6 +393,13 @@ When done, provide a brief summary of what you changed.`;
 				settingSources: ["project"],
 			},
 		})) {
+			// Track token usage
+			const usage = this.metricsTracker.extractTokenUsage(message);
+			if (usage) {
+				this.metricsTracker.recordTokenUsage(message, this.currentModel);
+				tokenUsageThisAttempt.push(usage);
+			}
+
 			// Stream output if enabled
 			if (this.stream) {
 				this.streamMessage(message);

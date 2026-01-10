@@ -32,18 +32,21 @@
     {
       "id": "quest-bug-sdk-cwd",
       "objective": "[bug] SDK cwd option not isolating agent file operations - agents write to process.cwd() not worktree",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 3,
       "createdAt": "2026-01-10T08:50:00.000Z",
       "startedAt": "2026-01-10T09:31:41.130Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-10T09:33:14.174Z"
     },
     {
       "id": "quest-solo-token-tracking",
       "objective": "[solo] Track token usage in solo mode - log tokens per attempt for cost visibility",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 10,
-      "createdAt": "2026-01-10T08:50:00.000Z"
+      "createdAt": "2026-01-10T08:50:00.000Z",
+      "startedAt": "2026-01-10T09:33:14.175Z",
+      "raidId": ""
     },
     {
       "id": "quest-solo-dry-run",
@@ -130,5 +133,5 @@
       "createdAt": "2026-01-10T09:27:58.387Z"
     }
   ],
-  "lastUpdated": "2026-01-10T09:31:41.130Z"
+  "lastUpdated": "2026-01-10T09:33:14.175Z"
 }
