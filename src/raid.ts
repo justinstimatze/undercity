@@ -1438,6 +1438,9 @@ export class RaidOrchestrator {
 
 	/**
 	 * Process the elevator
+	 *
+	 * CRITICAL: Only marks raid complete if ALL merges succeed.
+	 * Failed merges preserve branches for manual recovery.
 	 */
 	private async processElevator(): Promise<void> {
 		const raid = this.getCurrentRaid();
@@ -1448,20 +1451,49 @@ export class RaidOrchestrator {
 
 		const results = await this.elevator.processAll();
 
+		// Track merge outcomes
+		const successfulMerges: string[] = [];
+		const failedMerges: Array<{ branch: string; error?: string }> = [];
+
 		for (const result of results) {
 			if (result.status === "complete") {
 				this.log("Merged branch", { branch: result.branch });
+				successfulMerges.push(result.branch);
 			} else {
-				this.log("Merge failed", { branch: result.branch, error: result.error });
+				this.log("Merge failed - branch preserved for recovery", {
+					branch: result.branch,
+					error: result.error,
+					status: result.status,
+				});
+				failedMerges.push({ branch: result.branch, error: result.error });
 			}
 		}
 
-		// Check if all work is done
+		// CRITICAL: If ANY merges failed, do NOT mark raid as complete
+		if (failedMerges.length > 0) {
+			raid.status = "merge_failed";
+			this.persistence.saveRaid(raid);
+
+			raidLogger.warn(
+				{
+					raidId: raid.id,
+					failedCount: failedMerges.length,
+					successCount: successfulMerges.length,
+					failedBranches: failedMerges.map((f) => f.branch),
+				},
+				"Raid merge failed - branches preserved for manual recovery. Use 'git branch' to see preserved branches.",
+			);
+
+			// Do NOT call extract() - work is not complete
+			return;
+		}
+
+		// Check if all work is done (only if no merge failures)
 		const pendingTasks = this.persistence
 			.getTasks()
 			.filter((t) => t.raidId === raid.id && t.status !== "complete" && t.status !== "failed");
 
-		if (pendingTasks.length === 0) {
+		if (pendingTasks.length === 0 && failedMerges.length === 0) {
 			await this.extract();
 		}
 	}
@@ -1655,6 +1687,10 @@ export class RaidOrchestrator {
 	surrender(): void {
 		const raid = this.getCurrentRaid();
 		if (raid) {
+			// Capture original status BEFORE changing it
+			// This is critical for preserving branches on merge_failed
+			const originalStatus = raid.status;
+
 			// Record failure in efficiency tracker
 			if (this.efficiencyTracker) {
 				this.efficiencyTracker.recordStableCompletion(false);
@@ -1681,14 +1717,25 @@ export class RaidOrchestrator {
 			}
 
 			// Clean up worktree for this raid
-			try {
-				if (this.worktreeManager.hasWorktree(raid.id)) {
-					this.worktreeManager.removeWorktree(raid.id, true); // Force cleanup on failure
-					this.persistence.removeWorktree(raid.id);
-					this.log("Cleaned up worktree", { raidId: raid.id });
+			// CRITICAL: Do NOT clean up if merge failed - preserve branches for manual recovery!
+			if (originalStatus === "merge_failed") {
+				this.log("Preserving worktree and branches for manual recovery", {
+					raidId: raid.id,
+					originalStatus,
+				});
+				console.log(chalk.yellow("⚠ Worktree and branches preserved for manual recovery."));
+				console.log(chalk.yellow("  Use 'git branch' to see preserved branches."));
+				console.log(chalk.yellow("  Use 'git worktree list' to see preserved worktrees."));
+			} else {
+				try {
+					if (this.worktreeManager.hasWorktree(raid.id)) {
+						this.worktreeManager.removeWorktree(raid.id, true); // Force cleanup on failure
+						this.persistence.removeWorktree(raid.id);
+						this.log("Cleaned up worktree", { raidId: raid.id });
+					}
+				} catch (error) {
+					this.log("Error cleaning up worktree", { raidId: raid.id, error: String(error) });
 				}
-			} catch (error) {
-				this.log("Error cleaning up worktree", { raidId: raid.id, error: String(error) });
 			}
 
 			this.persistence.clearPocket();

@@ -3,8 +3,6 @@
 ## Available
 
 ### Phase 1: Stabilize (stop losing work)
-[elevator] CRITICAL BUG: Don't delete branch on merge failure - preserve work for manual recovery
-[elevator] BUG: Quests marked complete even when merge fails - only mark complete if work actually lands on main
 [config] BUG: Questers not picking up .claude/rules/ - SDK subagents should load repo config
 [elevator] Ensure quester always creates branch from latest main - fetch and checkout fresh main before branching
 [elevator] Fix elevator auto-processing - branches should auto-merge to main after sheriff approval
@@ -139,6 +137,8 @@
 2026-01-10: Add intel.txt parsing on raid start (recovered from dangling commit)
 2026-01-10: Add oracle command for oblique strategies (recovered from dangling commit)
 2026-01-10: Use 'raider' instead of 'agent' in user-facing output (recovered from dangling commit)
+2026-01-10: CRITICAL FIX: Don't delete branch on merge failure - preserve worktrees/branches for manual recovery
+2026-01-10: CRITICAL FIX: Don't mark quests complete when merge fails - only extract when work lands on main
 2026-01-xx: Add vitest tests for raid, cli, backlog modules (120 tests total)
 2026-01-xx: Add --dry-run flag to slingshot
 2026-01-xx: Add history command for completed raids

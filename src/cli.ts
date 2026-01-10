@@ -950,6 +950,12 @@ program
 				if (finalRaid?.status === "complete") {
 					markComplete(nextGoal.id);
 					console.log(chalk.green(`✓ Quest complete: ${nextGoal.objective.substring(0, 40)}...`));
+				} else if (finalRaid?.status === "merge_failed") {
+					// CRITICAL: Merge failed - branches preserved for recovery
+					markFailed(nextGoal.id, "Merge failed - branches preserved for manual recovery");
+					console.log(chalk.red(`✗ Quest merge failed: ${nextGoal.objective.substring(0, 40)}...`));
+					console.log(chalk.yellow("  Work branches preserved. Use 'git branch' to see them."));
+					console.log(chalk.yellow("  Manually merge or cherry-pick to recover the work."));
 				} else if (finalRaid?.status === "failed") {
 					markFailed(nextGoal.id, "Raid failed");
 					console.log(chalk.red(`✗ Quest failed: ${nextGoal.objective.substring(0, 40)}...`));

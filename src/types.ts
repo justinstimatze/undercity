@@ -14,6 +14,7 @@ export type RaidStatus =
 	| "executing" // Gas Town phase: Fabricators working
 	| "reviewing" // Sheriff checking work
 	| "merging" // Serial elevator processing
+	| "merge_failed" // Merge failed - branches preserved for manual recovery
 	| "extracting" // Final extraction in progress
 	| "complete" // Successfully extracted
 	| "failed"; // Something went wrong
