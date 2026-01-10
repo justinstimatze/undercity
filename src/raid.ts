@@ -38,6 +38,7 @@ import {
 } from "./git.js";
 import { raidLogger, squadLogger } from "./logger.js";
 import { MetricsTracker } from "./metrics.js";
+import { getMetricsCollector, type TaskMetrics } from "./metrics-collector.js";
 import { Persistence } from "./persistence.js";
 import { parseIntelFile } from "./plan-parser.js";
 import { addQuests } from "./quest.js";
@@ -102,6 +103,7 @@ export class RaidOrchestrator {
 	// Efficiency tracking
 	private efficiencyTracker?: EfficiencyTracker;
 	private metricsTracker: MetricsTracker;
+	private metricsCollector = getMetricsCollector();
 	private rateLimitTracker: RateLimitTracker;
 	private currentParallelismLevel: ParallelismLevel = "limited";
 	private currentModelChoices: LoadoutModelChoices = {
@@ -616,6 +618,9 @@ export class RaidOrchestrator {
 		// Start efficiency tracking for this raid
 		this.startEfficiencyTracking(raid.id, goal);
 
+		// Start quest metrics tracking
+		this.metricsTracker.startQuest(raid.id, goal, raid.id);
+
 		// Start planning phase
 		await this.startPlanningPhase(raid);
 
@@ -853,6 +858,9 @@ export class RaidOrchestrator {
 		const member = createSquadMember(type, waypoint);
 		this.persistence.addSquadMember(member);
 
+		// Record agent spawn in metrics tracker
+		this.metricsTracker.recordAgentSpawn(type);
+
 		// Update waypoint status
 		this.persistence.updateTask(waypoint.id, {
 			status: "assigned",
@@ -1088,6 +1096,9 @@ export class RaidOrchestrator {
 					undefined, // TODO: Extract headers if available
 				);
 
+				// Record rate limit as escalation in metrics tracker
+				this.metricsTracker.recordRateLimitHit(agentDef.model, errorMessage);
+
 				// Update pause with agent count (pass undefined headers for now)
 				const pauseState = this.rateLimitTracker.getPauseState();
 				if (pauseState.isPaused) {
@@ -1127,6 +1138,9 @@ export class RaidOrchestrator {
 					error: errorMessage,
 					completedAt: new Date(),
 				});
+
+				// Record quest failure in metrics tracker
+				this.metricsTracker.recordQuestFailure(errorMessage);
 
 				this.persistence.updateSquadMember(member.id, {
 					status: "error",
@@ -1661,6 +1675,31 @@ export class RaidOrchestrator {
 			this.log("Recorded efficiency outcome", { outcome });
 		}
 
+		// Complete quest metrics tracking and record task metrics
+		const questMetrics = this.metricsTracker.completeQuest(true);
+		if (questMetrics) {
+			// Calculate escalations from rate limit tracker
+			const rateLimitSummary = this.metricsTracker.getRateLimitSummary();
+			const escalationCount = rateLimitSummary.totalRateLimitHits;
+
+			// Create task metrics for the metrics collector
+			const taskMetrics: TaskMetrics = {
+				taskId: raid.id,
+				startTime: raid.startedAt,
+				endTime: raid.completedAt || new Date(),
+				success: true,
+				tokens: questMetrics.totalTokens,
+				model: this.determineCurrentModel(),
+				escalations: escalationCount,
+				escalationReasons: escalationCount > 0 ? ["rate_limit"] : [],
+				timeTakenMs: questMetrics.durationMs,
+			};
+
+			// Record the metrics to JSONL
+			this.metricsCollector.recordTaskMetrics(taskMetrics);
+			this.log("Recorded task metrics", { taskMetrics });
+		}
+
 		// Add to stash history
 		this.persistence.addCompletedRaid(raid, true);
 
@@ -1701,6 +1740,21 @@ export class RaidOrchestrator {
 	 */
 	getMaxParallel(): number {
 		return this.maxParallel;
+	}
+
+	/**
+	 * Determine the primary model used for this raid
+	 */
+	private determineCurrentModel(): "haiku" | "sonnet" | "opus" {
+		// Use the model of the agent with the highest priority
+		// Priority: opus > sonnet > haiku
+		if (this.currentModelChoices.logistics === "opus" || this.currentModelChoices.sheriff === "opus") {
+			return "opus";
+		}
+		if (this.currentModelChoices.quester === "sonnet") {
+			return "sonnet";
+		}
+		return "haiku";
 	}
 
 	/**
@@ -1888,6 +1942,31 @@ export class RaidOrchestrator {
 				const outcome = this.efficiencyTracker.generateOutcome();
 				this.persistence.saveEfficiencyOutcome(outcome);
 				this.log("Recorded failed efficiency outcome", { outcome });
+			}
+
+			// Complete quest metrics tracking and record failed task metrics
+			const questMetrics = this.metricsTracker.completeQuest(false);
+			if (questMetrics) {
+				// Calculate escalations from rate limit tracker
+				const rateLimitSummary = this.metricsTracker.getRateLimitSummary();
+				const escalationCount = rateLimitSummary.totalRateLimitHits;
+
+				// Create task metrics for the metrics collector
+				const taskMetrics: TaskMetrics = {
+					taskId: raid.id,
+					startTime: raid.startedAt,
+					endTime: raid.completedAt || new Date(),
+					success: false,
+					tokens: questMetrics.totalTokens,
+					model: this.determineCurrentModel(),
+					escalations: escalationCount,
+					escalationReasons: escalationCount > 0 ? ["rate_limit"] : questMetrics.error ? ["quest_failure"] : [],
+					timeTakenMs: questMetrics.durationMs,
+				};
+
+				// Record the metrics to JSONL
+				this.metricsCollector.recordTaskMetrics(taskMetrics);
+				this.log("Recorded failed task metrics", { taskMetrics });
 			}
 
 			// Complete timing tracking for failed raid

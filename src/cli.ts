@@ -499,8 +499,8 @@ program
 program
 	.command("metrics")
 	.description("Show performance metrics and analytics")
-	.action(() => {
-		const { getMetricsCollector } = require("./metrics-collector.js");
+	.action(async () => {
+		const { getMetricsCollector } = await import("./metrics-collector.js");
 		const metricsCollector = getMetricsCollector();
 		const metrics = metricsCollector.getMetricsSummary();
 
@@ -519,8 +519,8 @@ program
 	});
 
 async function runBenchmark(): Promise<void> {
-	const { RaidOrchestrator } = require("./raid.js");
-	const { getMetricsCollector } = require("./metrics-collector.js");
+	const { RaidOrchestrator } = await import("./raid.js");
+	const { getMetricsCollector } = await import("./metrics-collector.js");
 	const metricsCollector = getMetricsCollector();
 
 	const benchmarkTasks = [
