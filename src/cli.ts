@@ -1,7 +1,21 @@
 #!/usr/bin/env node
 
 /**
- * Undercity CLI
+ * Undercity CLI - Main Entry Point
+ *
+ * Comprehensive command-line interface for Undercity, a multi-raider orchestrator for Claude Max.
+ * Provides AI-driven development workflows with automated raid management, quest tracking, parallel
+ * processing capabilities, and strategic planning utilities. The tool coordinates multiple AI agents
+ * to execute complex development tasks with minimal human intervention.
+ *
+ * Core Features:
+ * - Raid Management: Automated planning, execution, and extraction of development tasks
+ * - Quest Tracking: Persistent task queues with priority management and dependency resolution
+ * - Parallel Processing: Multi-agent coordination for concurrent task execution
+ * - Strategic Planning: AI-powered planning with human approval workflows
+ * - State Persistence: Crash-resistant state management across sessions
+ * - Merge Orchestration: Automated git workflows with conflict resolution
+ * - Oracle Insights: Oblique strategy cards for creative problem-solving
  *
  * Multi-raider orchestrator for Claude Max - Gas Town for normal people.
  *
@@ -50,6 +64,7 @@ import {
 import { QuestBatchOrchestrator } from "./quest-batch-orchestrator.js";
 import { QuestBoardAnalyzer } from "./quest-board-analyzer.js";
 import { RaidOrchestrator } from "./raid.js";
+import type { ExecutionTier, RoutingDecision } from "./router.js";
 import type { RaidStatus } from "./types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1357,6 +1372,395 @@ program
 		console.log(chalk.dim("  undercity oracle -t action     - Action cards only"));
 		console.log(chalk.dim("  undercity oracle --info        - Deck information"));
 	});
+
+// Solo command - light mode with adaptive escalation
+program
+	.command("solo <goal>")
+	.description("Light mode: run a single task with verification and adaptive escalation")
+	.option("-s, --stream", "Stream raider activity")
+	.option("-v, --verbose", "Verbose logging")
+	.option("-m, --model <tier>", "Starting model tier: haiku, sonnet, opus", "sonnet")
+	.option("--no-commit", "Don't auto-commit on success")
+	.option("--no-typecheck", "Skip typecheck verification")
+	.option("--supervised", "Use supervised mode (Opus orchestrates workers)")
+	.option("--worker <tier>", "Worker model for supervised mode: haiku, sonnet", "sonnet")
+	.action(
+		async (
+			goal: string,
+			options: {
+				stream?: boolean;
+				verbose?: boolean;
+				model?: string;
+				commit?: boolean;
+				typecheck?: boolean;
+				supervised?: boolean;
+				worker?: string;
+			},
+		) => {
+			// Dynamic import to avoid loading heavy modules until needed
+			const { SoloOrchestrator, SupervisedOrchestrator } = await import("./solo.js");
+
+			console.log(chalk.cyan.bold("\n⚡ Undercity Solo Mode"));
+			console.log(chalk.dim("  Adaptive escalation • External verification • Auto-commit"));
+			console.log();
+
+			try {
+				if (options.supervised) {
+					// Supervised mode: Opus orchestrates workers
+					console.log(chalk.dim(`Mode: Supervised (Opus → ${options.worker || "sonnet"} workers)`));
+					const orchestrator = new SupervisedOrchestrator({
+						autoCommit: options.commit !== false,
+						stream: options.stream,
+						verbose: options.verbose,
+						workerModel: (options.worker || "sonnet") as "haiku" | "sonnet",
+					});
+
+					const result = await orchestrator.runSupervised(goal);
+
+					if (result.status === "complete") {
+						console.log(chalk.green.bold("\n✓ Task complete"));
+						if (result.commitSha) {
+							console.log(chalk.dim(`  Commit: ${result.commitSha.substring(0, 8)}`));
+						}
+						console.log(chalk.dim(`  Duration: ${Math.round(result.durationMs / 1000)}s`));
+					} else {
+						console.log(chalk.red.bold("\n✗ Task failed"));
+						if (result.error) {
+							console.log(chalk.dim(`  Error: ${result.error}`));
+						}
+					}
+				} else {
+					// Standard mode: adaptive escalation
+					const startingModel = (options.model || "sonnet") as "haiku" | "sonnet" | "opus";
+					console.log(chalk.dim(`Mode: Standard (${startingModel} → escalate if needed)`));
+
+					const orchestrator = new SoloOrchestrator({
+						startingModel,
+						autoCommit: options.commit !== false,
+						stream: options.stream,
+						verbose: options.verbose,
+						runTypecheck: options.typecheck !== false,
+					});
+
+					const result = await orchestrator.runTask(goal);
+
+					if (result.status === "complete") {
+						console.log(chalk.green.bold("\n✓ Task complete"));
+						if (result.commitSha) {
+							console.log(chalk.dim(`  Commit: ${result.commitSha.substring(0, 8)}`));
+						}
+						console.log(
+							chalk.dim(
+								`  Model: ${result.model}, Attempts: ${result.attempts}, Duration: ${Math.round(result.durationMs / 1000)}s`,
+							),
+						);
+					} else {
+						console.log(chalk.red.bold("\n✗ Task failed"));
+						console.log(chalk.dim(`  Model: ${result.model}, Attempts: ${result.attempts}`));
+						if (result.error) {
+							console.log(chalk.dim(`  Error: ${result.error}`));
+						}
+					}
+				}
+			} catch (error) {
+				console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+				process.exit(1);
+			}
+		},
+	);
+
+// Grind command - process quest board autonomously
+program
+	.command("grind")
+	.description("Process quest board continuously (autonomous, handles rate limits, can run for hours)")
+	.option("-n, --count <n>", "Process only N quests then stop", "0")
+	.option("-s, --stream", "Stream raider activity")
+	.option("-m, --model <tier>", "Starting model tier: haiku, sonnet, opus", "sonnet")
+	.option("--supervised", "Use supervised mode (Opus orchestrates workers)")
+	.option("--worker <tier>", "Worker model for supervised mode", "sonnet")
+	.option("--no-local", "Disable local tools and local LLM routing")
+	.action(
+		async (options: {
+			count?: string;
+			stream?: boolean;
+			model?: string;
+			supervised?: boolean;
+			worker?: string;
+			local?: boolean;
+		}) => {
+			const { SoloOrchestrator, SupervisedOrchestrator } = await import("./solo.js");
+			const { RateLimitTracker } = await import("./rate-limit.js");
+			const { routeTask, executeWithLocalTools, logRoutingStats } = await import("./router.js");
+			const { queryLocal, isOllamaAvailable } = await import("./local-llm.js");
+
+			const maxCount = Number.parseInt(options.count || "0", 10);
+			const useLocalRouting = options.local !== false;
+			let processed = 0;
+			let completed = 0;
+			let failed = 0;
+			let rateLimitWaits = 0;
+			let supervisedCount = 0;
+			let soloCount = 0;
+			let localToolsCount = 0;
+			let localLlmCount = 0;
+			const routingDecisions: RoutingDecision[] = [];
+
+			// Helper to sleep with countdown display
+			const sleepWithCountdown = async (ms: number, reason: string) => {
+				const endTime = Date.now() + ms;
+				console.log(chalk.yellow(`\n⏳ ${reason}`));
+
+				while (Date.now() < endTime) {
+					const remaining = endTime - Date.now();
+					const minutes = Math.floor(remaining / 60000);
+					const seconds = Math.floor((remaining % 60000) / 1000);
+					process.stdout.write(`\r  Resuming in ${minutes}:${seconds.toString().padStart(2, "0")}...  `);
+					await new Promise((r) => setTimeout(r, 1000));
+				}
+				console.log(chalk.green("\n  ✓ Resuming...\n"));
+			};
+
+			// Check if error is rate limit related
+			const isRateLimitError = (error: unknown): boolean => {
+				return RateLimitTracker.is429Error(error);
+			};
+
+			// Get wait time from error or default
+			const getWaitTime = (error: unknown): number => {
+				const errorStr = String(error);
+				// Try to extract retry-after from error message
+				const match = errorStr.match(/retry.?after[:\s]+(\d+)/i);
+				if (match) {
+					return parseInt(match[1], 10) * 1000;
+				}
+				// Default: 5 minutes
+				return 5 * 60 * 1000;
+			};
+
+			console.log(chalk.cyan.bold("\n⚡ Undercity Grind Mode"));
+			console.log(chalk.dim("  Autonomous • Adaptive • Rate limit aware"));
+			if (useLocalRouting) {
+				console.log(chalk.dim("  Local tools → Local LLM → Haiku → Sonnet → Opus"));
+				if (isOllamaAvailable()) {
+					console.log(chalk.green("  ✓ Ollama detected - local LLM available"));
+				} else {
+					console.log(chalk.yellow("  ⚠ Ollama not available - will skip local LLM tier"));
+				}
+			} else {
+				console.log(chalk.dim("  Simple tasks → Solo mode (fast)"));
+				console.log(chalk.dim("  Complex tasks → Supervised mode (Opus plans, workers execute)"));
+			}
+			if (maxCount > 0) {
+				console.log(chalk.dim(`  Will process ${maxCount} quest(s) then stop`));
+			} else {
+				console.log(chalk.dim("  Will process all pending quests"));
+			}
+			console.log(chalk.dim("  Press Ctrl+C to stop gracefully\n"));
+
+			// Track start time for summary
+			const startTime = Date.now();
+
+			while (true) {
+				const nextGoal = getNextGoal();
+
+				if (!nextGoal) {
+					console.log(chalk.green("\n✓ Quest board empty - all quests processed"));
+					break;
+				}
+
+				if (maxCount > 0 && processed >= maxCount) {
+					console.log(chalk.yellow(`\n✓ Processed ${maxCount} quest(s) - stopping`));
+					break;
+				}
+
+				processed++;
+				markInProgress(nextGoal.id, "");
+
+				// Route task to optimal execution tier
+				const routing = useLocalRouting
+					? await routeTask(nextGoal.objective)
+					: {
+							tier: options.supervised ? "opus" : ((options.model || "sonnet") as ExecutionTier),
+							reason: "Manual mode",
+							confidence: 1,
+							estimatedTokens: 2000,
+							canParallelize: false,
+						};
+
+				routingDecisions.push(routing);
+
+				console.log(chalk.cyan(`\n━━━ Quest ${processed} ━━━`));
+				console.log(
+					chalk.dim(`  ${nextGoal.objective.substring(0, 70)}${nextGoal.objective.length > 70 ? "..." : ""}`),
+				);
+				console.log(chalk.dim(`  Route: ${routing.tier} (${routing.reason})`));
+
+				let retryCount = 0;
+				const maxRetries = 3;
+
+				while (retryCount < maxRetries) {
+					try {
+						let result: { status: string; durationMs: number; error?: string; commitSha?: string };
+						const taskStartTime = Date.now();
+
+						// Handle each execution tier
+						switch (routing.tier) {
+							case "local-tools": {
+								// Execute with local tools only (FREE - no LLM tokens)
+								localToolsCount++;
+								const localResult = await executeWithLocalTools(nextGoal.objective);
+								result = {
+									status: localResult.success ? "complete" : "failed",
+									durationMs: Date.now() - taskStartTime,
+									error: localResult.success ? undefined : localResult.output,
+								};
+								if (localResult.success) {
+									console.log(chalk.green(`  ✓ Local tool: ${localResult.output.substring(0, 50)}...`));
+								}
+								break;
+							}
+
+							case "local-llm": {
+								// Try local LLM first (FREE - no API tokens)
+								localLlmCount++;
+								const llmResult = await queryLocal(
+									`Complete this coding task and explain what you did:\n\n${nextGoal.objective}`,
+									{ tier: "small", timeout: 60000 },
+								);
+								if (llmResult) {
+									result = {
+										status: "complete",
+										durationMs: Date.now() - taskStartTime,
+									};
+									console.log(chalk.green(`  ✓ Local LLM handled`));
+								} else {
+									// Local LLM failed, fall back to haiku
+									console.log(chalk.yellow("  Local LLM unavailable, falling back to Haiku"));
+									soloCount++;
+									const orchestrator = new SoloOrchestrator({
+										startingModel: "haiku",
+										autoCommit: true,
+										stream: options.stream,
+									});
+									result = await orchestrator.runTask(nextGoal.objective);
+								}
+								break;
+							}
+
+							case "haiku":
+							case "sonnet": {
+								// Standard solo mode with specified model
+								soloCount++;
+								const orchestrator = new SoloOrchestrator({
+									startingModel: routing.tier as "haiku" | "sonnet",
+									autoCommit: true,
+									stream: options.stream,
+								});
+								result = await orchestrator.runTask(nextGoal.objective);
+								break;
+							}
+
+							case "opus": {
+								// Supervised mode with Opus orchestrating
+								supervisedCount++;
+								const orchestrator = new SupervisedOrchestrator({
+									autoCommit: true,
+									stream: options.stream,
+									workerModel: (options.worker || "sonnet") as "haiku" | "sonnet",
+								});
+								result = await orchestrator.runSupervised(nextGoal.objective);
+								break;
+							}
+
+							default: {
+								// Fallback to sonnet
+								soloCount++;
+								const orchestrator = new SoloOrchestrator({
+									startingModel: "sonnet",
+									autoCommit: true,
+									stream: options.stream,
+								});
+								result = await orchestrator.runTask(nextGoal.objective);
+							}
+						}
+
+						if (result.status === "complete") {
+							markComplete(nextGoal.id);
+							completed++;
+							console.log(chalk.green(`  ✓ Complete (${Math.round(result.durationMs / 1000)}s)`));
+						} else {
+							markFailed(nextGoal.id, result.error || "Task failed");
+							failed++;
+							console.log(chalk.red(`  ✗ Failed: ${result.error || "Unknown error"}`));
+						}
+						break; // Success or non-retryable failure, move to next quest
+					} catch (error) {
+						if (isRateLimitError(error)) {
+							retryCount++;
+							rateLimitWaits++;
+							const waitTime = getWaitTime(error);
+
+							if (retryCount < maxRetries) {
+								await sleepWithCountdown(waitTime, `Rate limited (attempt ${retryCount}/${maxRetries})`);
+								// Don't break, will retry same quest
+							} else {
+								// Max retries hit, mark as failed and move on
+								markFailed(nextGoal.id, "Rate limit exceeded after retries");
+								failed++;
+								// Wait before next quest anyway
+								await sleepWithCountdown(waitTime, "Rate limited, waiting before next quest");
+								break;
+							}
+						} else {
+							// Non-rate-limit error
+							markFailed(nextGoal.id, error instanceof Error ? error.message : String(error));
+							failed++;
+							console.log(chalk.red(`  ✗ Error: ${error instanceof Error ? error.message : String(error)}`));
+							break;
+						}
+					}
+				}
+			}
+
+			// Summary
+			const elapsed = Date.now() - startTime;
+			const elapsedMinutes = Math.floor(elapsed / 60000);
+			const elapsedSeconds = Math.floor((elapsed % 60000) / 1000);
+
+			// Log routing statistics
+			if (routingDecisions.length > 0) {
+				logRoutingStats(routingDecisions);
+			}
+
+			// Calculate token savings from local execution
+			const localSavings = localToolsCount + localLlmCount;
+			const estimatedTokensSaved = routingDecisions
+				.filter((d) => d.tier === "local-tools" || d.tier === "local-llm")
+				.reduce((sum, d) => sum + (d.tier === "local-tools" ? 500 : 1000), 0);
+
+			console.log(chalk.bold("\n━━━ Grind Summary ━━━"));
+			console.log(`  ${chalk.green("✓")} Completed: ${completed}`);
+			console.log(`  ${chalk.red("✗")} Failed: ${failed}`);
+			console.log();
+			console.log(chalk.dim("  Execution tiers:"));
+			if (localToolsCount > 0) {
+				console.log(`    ${chalk.green("🔧")} Local tools: ${localToolsCount} (FREE)`);
+			}
+			if (localLlmCount > 0) {
+				console.log(`    ${chalk.green("🤖")} Local LLM: ${localLlmCount} (FREE)`);
+			}
+			console.log(`    ${chalk.dim("⚡")} Solo (Haiku/Sonnet): ${soloCount}`);
+			console.log(`    ${chalk.dim("🎯")} Supervised (Opus): ${supervisedCount}`);
+			console.log();
+			if (localSavings > 0) {
+				console.log(
+					`  ${chalk.green("💰")} Token savings: ~${estimatedTokensSaved} tokens from ${localSavings} local executions`,
+				);
+			}
+			console.log(`  ${chalk.yellow("⏳")} Rate limit waits: ${rateLimitWaits}`);
+			console.log(`  ${chalk.dim("⏱")}  Duration: ${elapsedMinutes}m ${elapsedSeconds}s`);
+		},
+	);
 
 // Parse and run
 program.parse();

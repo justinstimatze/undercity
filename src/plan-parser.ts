@@ -389,7 +389,16 @@ export function parseIntelFile(
 	// Filter out quests from "Extracted" and "Abandoned" sections
 	const availableWaypoints = plan.waypoints.filter((waypoint) => {
 		const section = waypoint.section?.toLowerCase() || "";
-		return !section.includes("extracted") && !section.includes("abandoned") && !waypoint.completed;
+		const content = waypoint.content.trim();
+
+		// Skip sections like "Extracted", "Abandoned", and "Archive"
+		const skippedSections = ["extracted", "abandoned", "archive"];
+		const isSkippedSection = skippedSections.some((s) => section.includes(s));
+
+		// Skip HTML comments and their content
+		const isHtmlComment = content.startsWith("<!--") && content.endsWith("-->");
+
+		return !isSkippedSection && !isHtmlComment && !waypoint.completed;
 	});
 
 	// Sort by section priority, then by line number to maintain order
