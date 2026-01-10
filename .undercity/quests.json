@@ -145,18 +145,21 @@
     {
       "id": "quest-mk84e1cj-vvso",
       "objective": "[setup] Add 'undercity setup-ollama' command - detect hardware, recommend models, pull them, test they work",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 17,
       "createdAt": "2026-01-10T09:45:59.635Z",
       "startedAt": "2026-01-10T09:54:05.243Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-10T09:55:54.945Z"
     },
     {
       "id": "quest-mk84gfvr-1klk",
       "objective": "[parallel] Add parallel-by-tier execution - batch local-tools, run 2-3 local LLM, serialize Claude API calls for max throughput",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 18,
-      "createdAt": "2026-01-10T09:47:51.783Z"
+      "createdAt": "2026-01-10T09:47:51.783Z",
+      "startedAt": "2026-01-10T09:55:54.945Z",
+      "raidId": ""
     },
     {
       "id": "quest-mk84h5xx-ciui",
@@ -292,5 +295,5 @@
       "createdAt": "2026-01-10T09:53:15.928Z"
     }
   ],
-  "lastUpdated": "2026-01-10T09:54:05.243Z"
+  "lastUpdated": "2026-01-10T09:55:54.945Z"
 }

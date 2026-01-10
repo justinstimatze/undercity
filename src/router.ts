@@ -256,19 +256,165 @@ export async function executeWithLocalTools(task: string): Promise<{
 }
 
 /**
- * Batch similar tasks for efficiency
+ * Enhanced batch allocation for tier-based parallel execution
+ * Optimizes task distribution across tiers considering parallelizability and resource constraints
  */
 export async function batchTasks(tasks: string[]): Promise<Map<ExecutionTier, string[]>> {
 	const batches = new Map<ExecutionTier, string[]>();
+	const tierDecisions = new Map<ExecutionTier, RoutingDecision[]>();
+	const tierTokens = new Map<ExecutionTier, number>();
 
-	for (const task of tasks) {
-		const decision = await routeTask(task);
-		const existing = batches.get(decision.tier) || [];
-		existing.push(task);
-		batches.set(decision.tier, existing);
+	const tierOrder: ExecutionTier[] = ["local-tools", "local-llm", "haiku", "sonnet", "opus"];
+	const tierParallelLimits: Record<ExecutionTier, number> = {
+		"local-tools": 10, // High parallelism for low-cost local operations
+		"local-llm": 5, // Moderate local LLM processing
+		haiku: 3, // Limited cheap cloud model tasks
+		sonnet: 2, // Careful allocation for standard complexity
+		opus: 1, // Strict limit for most expensive, critical tasks
+	};
+
+	const dynamicTierBudgets: Record<ExecutionTier, number> = {
+		"local-tools": 1000, // Minimal token budget for local tools
+		"local-llm": 5000, // Generous budget for local models
+		haiku: 10000, // Moderate budget for Haiku cloud tasks
+		sonnet: 15000, // Higher budget for more complex tasks
+		opus: 25000, // Maximum budget for critical tasks
+	};
+
+	const globalTokenBudget = 50000; // Total global token allocation
+	let currentTokenUsage = 0;
+
+	// Prioritize and optimize task routing
+	const routedTasks = await Promise.all(
+		tasks.map(async (task) => {
+			const decision = await routeTask(task);
+			return { task, decision };
+		}),
+	);
+
+	// Sort tasks by tier preference and parallelizability
+	routedTasks.sort((a, b) => {
+		const tierPriority = tierOrder.indexOf(a.decision.tier) - tierOrder.indexOf(b.decision.tier);
+		const parallelizableBonus = (b.decision.canParallelize ? 1 : 0) - (a.decision.canParallelize ? 1 : 0);
+		return tierPriority + parallelizableBonus;
+	});
+
+	// Process tasks with intelligent allocation
+	for (const { task, decision } of routedTasks) {
+		const tierCurrentDecisions = tierDecisions.get(decision.tier) || [];
+		const tierCurrentTokens = tierTokens.get(decision.tier) || 0;
+		const tierLimit = tierParallelLimits[decision.tier];
+		const tierBudget = dynamicTierBudgets[decision.tier];
+
+		// Smart allocation checks
+		const hasRoomInTier = tierCurrentDecisions.length < tierLimit;
+		const hasBudgetRemaining = tierCurrentTokens + decision.estimatedTokens <= tierBudget;
+		const hasGlobalBudget = currentTokenUsage + decision.estimatedTokens <= globalTokenBudget;
+		const isParallelizable = decision.canParallelize;
+
+		if (hasRoomInTier && hasBudgetRemaining && hasGlobalBudget && isParallelizable) {
+			tierDecisions.set(decision.tier, [...tierCurrentDecisions, decision]);
+			tierTokens.set(decision.tier, tierCurrentTokens + decision.estimatedTokens);
+			currentTokenUsage += decision.estimatedTokens;
+
+			// Lazy initialization of batch for this tier
+			if (!batches.has(decision.tier)) {
+				batches.set(decision.tier, []);
+			}
+			batches.get(decision.tier)!.push(task);
+		}
 	}
 
 	return batches;
+}
+
+/**
+ * Optimize parallel task distribution
+ * Ensures efficient use of resources across different execution tiers
+ */
+export async function optimizeParallelExecution(tasks: string[]): Promise<{
+	parallelPlan: Map<ExecutionTier, string[]>;
+	tokenUsage: Map<ExecutionTier, number>;
+	parallelizationScore: number;
+	executionRecommendation: {
+		optimalTier: ExecutionTier;
+		recommendedBatchSize: number;
+		estimatedOverhead: number;
+	};
+}> {
+	const batches = await batchTasks(tasks);
+	const tokenUsage = new Map<ExecutionTier, number>();
+	let totalParallelizableTasks = 0;
+	let totalTasks = 0;
+	let maxTokenUsageTier: ExecutionTier = "sonnet";
+	let maxTokenUsage = 0;
+
+	// Dynamic batch analysis and tracking
+	const tierBatchAnalysis = new Map<
+		ExecutionTier,
+		{
+			parallelizable: boolean;
+			averageTokens: number;
+			maxParallelTasks: number;
+		}
+	>();
+
+	for (const [tier, tierTasks] of batches.entries()) {
+		const tierDecisionPromises = tierTasks.map(async (task) => {
+			const decision = await routeTask(task);
+			return decision;
+		});
+
+		const tierDecisions = await Promise.all(tierDecisionPromises);
+		const tierTokens = tierDecisions.reduce((acc, decision) => acc + decision.estimatedTokens, 0);
+
+		const isParallelizable = tierDecisions.some((d) => d.canParallelize);
+
+		tierBatchAnalysis.set(tier, {
+			parallelizable: isParallelizable,
+			averageTokens: tierTokens / tierTasks.length,
+			maxParallelTasks: tierDecisions.filter((d) => d.canParallelize).length,
+		});
+
+		// Track token usage and stats
+		tokenUsage.set(tier, tierTokens);
+		totalTasks += tierTasks.length;
+
+		if (isParallelizable) {
+			totalParallelizableTasks += tierTasks.length;
+		}
+
+		// Track tier with max token usage for optimization
+		if (tierTokens > maxTokenUsage) {
+			maxTokenUsageTier = tier;
+			maxTokenUsage = tierTokens;
+		}
+	}
+
+	const parallelizationScore = totalParallelizableTasks / totalTasks;
+
+	// Estimate execution overhead and optimal batch configuration
+	const tierAnalysis = tierBatchAnalysis.get(maxTokenUsageTier) || {
+		parallelizable: false,
+		averageTokens: 2000,
+		maxParallelTasks: 1,
+	};
+
+	const executionRecommendation = {
+		optimalTier: maxTokenUsageTier,
+		recommendedBatchSize: tierAnalysis.maxParallelTasks,
+		estimatedOverhead: Math.max(
+			tierAnalysis.averageTokens * 0.1, // Model overhead
+			2000, // Baseline overhead
+		),
+	};
+
+	return {
+		parallelPlan: batches,
+		tokenUsage,
+		parallelizationScore,
+		executionRecommendation,
+	};
 }
 
 /**
