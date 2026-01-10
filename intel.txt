@@ -17,6 +17,9 @@
 [elevator] Fix elevator auto-processing - branches should auto-merge to main after sheriff approval, currently requires manual merge intervention
 
 ### High
+[perf] Add timing logs per phase - track how long flute/logistics/quester/sheriff each take
+[perf] Log to .undercity/metrics.jsonl - queryable history of quest durations, token usage, phase breakdowns
+[perf] Surface slow phases in status - "Quester: 8m (avg 3m)" so we know what's dragging
 [validation] Add worker/validator rejection loop - when sheriff rejects, send feedback to quester, quester fixes, sheriff reviews again (loop until approved or max retries)
 [validation] Track rejection iterations and feedback quality - measure how many loops typically needed, what feedback leads to fastest fixes
 [complexity] Add task complexity classification - auto-classify quests as trivial/simple/standard/critical based on scope, files touched, risk
