@@ -6,7 +6,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
 
 export interface PromptKnowledge {
 	/** Unique hash identifier for this prompt/approach */
@@ -115,7 +115,25 @@ export class KnowledgeTracker {
 	 */
 	private saveStorage(storage: { version: string; lastUpdated: Date; knowledge: PromptKnowledge[] }): void {
 		storage.lastUpdated = new Date();
-		writeFileSync(this.storagePath, JSON.stringify(storage, null, 2));
+		const tempPath = `${this.storagePath}.tmp`;
+
+		try {
+			// Write to temporary file first
+			writeFileSync(tempPath, JSON.stringify(storage, null, 2), {
+				encoding: "utf-8",
+				flag: "w",
+			});
+
+			// Atomically rename temporary file to target file
+			// This ensures the file is never in a partially written state
+			renameSync(tempPath, this.storagePath);
+		} catch (error) {
+			// Clean up temporary file if it exists
+			if (existsSync(tempPath)) {
+				unlinkSync(tempPath);
+			}
+			throw error;
+		}
 	}
 
 	/**

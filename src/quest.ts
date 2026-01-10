@@ -5,7 +5,7 @@
  * Quests are processed sequentially in full-auto mode.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
 
 export interface Quest {
 	id: string;
@@ -66,7 +66,25 @@ export function loadQuestBoard(path: string = DEFAULT_QUEST_BOARD_PATH): QuestBo
  */
 export function saveQuestBoard(board: QuestBoard, path: string = DEFAULT_QUEST_BOARD_PATH): void {
 	board.lastUpdated = new Date();
-	writeFileSync(path, JSON.stringify(board, null, 2));
+	const tempPath = `${path}.tmp`;
+
+	try {
+		// Write to temporary file first
+		writeFileSync(tempPath, JSON.stringify(board, null, 2), {
+			encoding: "utf-8",
+			flag: "w",
+		});
+
+		// Atomically rename temporary file to target file
+		// This ensures the file is never in a partially written state
+		renameSync(tempPath, path);
+	} catch (error) {
+		// Clean up temporary file if it exists
+		if (existsSync(tempPath)) {
+			unlinkSync(tempPath);
+		}
+		throw error;
+	}
 }
 
 /**
