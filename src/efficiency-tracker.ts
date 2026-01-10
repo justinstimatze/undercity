@@ -10,6 +10,7 @@ import type {
 	EfficiencyOutcome,
 	FirstOrderEfficiency,
 	LoadoutModelChoices,
+	ModelChoice,
 	ParallelismLevel,
 	ReworkAttempt,
 	SecondOrderEfficiency,
@@ -25,6 +26,11 @@ export class EfficiencyTracker {
 	private objective: string;
 	private parallelismLevel: ParallelismLevel;
 	private modelChoices: LoadoutModelChoices;
+	private modelSuccessRates: Record<ModelChoice, { attempts: number; successes: number }> = {
+		haiku: { attempts: 0, successes: 0 },
+		sonnet: { attempts: 0, successes: 0 },
+		opus: { attempts: 0, successes: 0 },
+	};
 	private experimentId?: string;
 	private variantName?: string;
 
@@ -142,10 +148,64 @@ export class EfficiencyTracker {
 		this.questCompleted = true;
 		this.questSuccessful = successful;
 
+		// Update model success rates
+		const modelChoice = this.determineModelChoice();
+		if (modelChoice) {
+			this.modelSuccessRates[modelChoice].attempts++;
+			if (successful) {
+				this.modelSuccessRates[modelChoice].successes++;
+			}
+		}
+
 		// If this is the first completion, also record it as first attempt
 		if (!this.firstSuccessTime) {
 			this.recordFirstAttemptCompletion(successful);
 		}
+	}
+
+	/**
+	 * Determines the primary model choice based on most tokens used
+	 */
+	private determineModelChoice(): ModelChoice | null {
+		const modelTokens: Record<ModelChoice, number> = {
+			haiku: 0,
+			sonnet: 0,
+			opus: 0,
+		};
+
+		this.reworkAttempts.forEach((attempt) => {
+			modelTokens[this.modelChoices[attempt.agentType]] += attempt.tokensUsed;
+		});
+
+		let primaryModel: ModelChoice | null = null;
+		let maxTokens = 0;
+
+		(Object.keys(modelTokens) as ModelChoice[]).forEach((model) => {
+			if (modelTokens[model] > maxTokens) {
+				maxTokens = modelTokens[model];
+				primaryModel = model;
+			}
+		});
+
+		return primaryModel;
+	}
+
+	/**
+	 * Get current model success rates
+	 */
+	getModelSuccessRates(): Record<ModelChoice, number> {
+		const successRates: Record<ModelChoice, number> = {
+			haiku: 0,
+			sonnet: 0,
+			opus: 0,
+		};
+
+		(Object.keys(this.modelSuccessRates) as ModelChoice[]).forEach((model) => {
+			const { attempts, successes } = this.modelSuccessRates[model];
+			successRates[model] = attempts > 0 ? successes / attempts : 0;
+		});
+
+		return successRates;
 	}
 
 	/**
@@ -200,6 +260,8 @@ export class EfficiencyTracker {
 			modelChoices: this.modelChoices,
 			finalSuccess: this.questSuccessful,
 			recordedAt: new Date(),
+			// Track model success rates
+			modelSuccessRates: this.getModelSuccessRates(),
 		};
 
 		return outcome;

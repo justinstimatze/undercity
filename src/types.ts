@@ -691,6 +691,8 @@ export interface EfficiencyOutcome {
 	finalSuccess: boolean;
 	/** When this outcome was recorded */
 	recordedAt: Date;
+	/** Success rates per model complexity level */
+	modelSuccessRates: Record<ModelChoice, number>;
 }
 
 /**
