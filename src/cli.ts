@@ -1384,6 +1384,7 @@ program
 	.option("--no-typecheck", "Skip typecheck verification")
 	.option("--supervised", "Use supervised mode (Opus orchestrates workers)")
 	.option("--worker <tier>", "Worker model for supervised mode: haiku, sonnet", "sonnet")
+	.option("-d, --dry-run", "Show complexity assessment without executing")
 	.action(
 		async (
 			goal: string,
@@ -1395,6 +1396,7 @@ program
 				typecheck?: boolean;
 				supervised?: boolean;
 				worker?: string;
+				dryRun?: boolean;
 			},
 		) => {
 			// Dynamic import to avoid loading heavy modules until needed
@@ -1405,6 +1407,19 @@ program
 			console.log();
 
 			try {
+				// Early dry-run complexity assessment
+				if (options.dryRun) {
+					const { assessComplexityFast } = await import("./complexity.js");
+					const assessment = assessComplexityFast(goal);
+					console.log(chalk.bold("Complexity Assessment (Dry Run)"));
+					console.log(chalk.dim(`  Complexity: ${assessment.level}`));
+					console.log(chalk.dim(`  Estimated Scope: ${assessment.estimatedScope}`));
+					console.log(chalk.dim(`  Recommended Model: ${assessment.model}`));
+					console.log(chalk.dim(`  Confidence: ${(assessment.confidence * 100).toFixed(1)}%`));
+					console.log(chalk.dim(`  Signals: ${assessment.signals.join(", ")}`));
+					return;
+				}
+
 				if (options.supervised) {
 					// Supervised mode: Opus orchestrates workers
 					console.log(chalk.dim(`Mode: Supervised (Opus → ${options.worker || "sonnet"} workers)`));

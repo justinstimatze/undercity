@@ -42,18 +42,21 @@
     {
       "id": "quest-solo-token-tracking",
       "objective": "[solo] Track token usage in solo mode - log tokens per attempt for cost visibility",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 10,
       "createdAt": "2026-01-10T08:50:00.000Z",
       "startedAt": "2026-01-10T09:33:14.175Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-10T09:36:45.250Z"
     },
     {
       "id": "quest-solo-dry-run",
       "objective": "[solo] Add --dry-run flag to solo command - show complexity assessment without executing",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 11,
-      "createdAt": "2026-01-10T08:50:00.000Z"
+      "createdAt": "2026-01-10T08:50:00.000Z",
+      "startedAt": "2026-01-10T09:36:45.250Z",
+      "raidId": ""
     },
     {
       "id": "quest-solo-spell-check",
@@ -133,5 +136,5 @@
       "createdAt": "2026-01-10T09:27:58.387Z"
     }
   ],
-  "lastUpdated": "2026-01-10T09:33:14.175Z"
+  "lastUpdated": "2026-01-10T09:36:45.250Z"
 }
