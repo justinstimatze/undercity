@@ -1,7 +1,21 @@
 #!/usr/bin/env node
 
 /**
- * Undercity CLI
+ * Undercity CLI - Main Entry Point
+ *
+ * Comprehensive command-line interface for Undercity, a multi-raider orchestrator for Claude Max.
+ * Provides AI-driven development workflows with automated raid management, quest tracking, parallel
+ * processing capabilities, and strategic planning utilities. The tool coordinates multiple AI agents
+ * to execute complex development tasks with minimal human intervention.
+ *
+ * Core Features:
+ * - Raid Management: Automated planning, execution, and extraction of development tasks
+ * - Quest Tracking: Persistent task queues with priority management and dependency resolution
+ * - Parallel Processing: Multi-agent coordination for concurrent task execution
+ * - Strategic Planning: AI-powered planning with human approval workflows
+ * - State Persistence: Crash-resistant state management across sessions
+ * - Merge Orchestration: Automated git workflows with conflict resolution
+ * - Oracle Insights: Oblique strategy cards for creative problem-solving
  *
  * Multi-raider orchestrator for Claude Max - Gas Town for normal people.
  *
@@ -18,11 +32,14 @@
  *   oracle [situation] Draw oblique strategy cards for novel insights
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { Command } from "commander";
+import { EfficiencyAnalyzer } from "./efficiency-analyzer.js";
+import { EfficiencyTracker } from "./efficiency-tracker.js";
+import { getAvailableModels, isOllamaAvailable, LOCAL_MODELS } from "./local-llm.js";
 import { UndercityOracle } from "./oracle.js";
 import { Persistence } from "./persistence.js";
 import {
@@ -50,6 +67,7 @@ import {
 import { QuestBatchOrchestrator } from "./quest-batch-orchestrator.js";
 import { QuestBoardAnalyzer } from "./quest-board-analyzer.js";
 import { RaidOrchestrator } from "./raid.js";
+import type { ExecutionTier, RoutingDecision } from "./router.js";
 import type { RaidStatus } from "./types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -479,13 +497,100 @@ program
 
 // Clear command
 program
-	.command("clear")
-	.description("Clear all state (use with caution)")
+	.command("metrics")
+	.description("Show performance metrics and analytics")
 	.action(() => {
-		const persistence = new Persistence();
-		persistence.clearAll();
-		console.log(chalk.yellow("All state cleared"));
+		const { getMetricsCollector } = require("./metrics-collector.js");
+		const metricsCollector = getMetricsCollector();
+		const metrics = metricsCollector.getMetricsSummary();
+
+		console.log(chalk.bold("Performance Metrics"));
+		console.log(`Total Tasks: ${metrics.totalTasks}`);
+		console.log(`Success Rate: ${(metrics.successRate * 100).toFixed(2)}%`);
+		console.log(`Average Tokens Used: ${metrics.avgTokens.toFixed(2)}`);
+		console.log(`Average Time per Task: ${(metrics.avgTimeTakenMs / 1000).toFixed(2)}s`);
+		console.log("\nModel Distribution:");
+		for (const [model, count] of Object.entries(metrics.modelDistribution)) {
+			console.log(
+				`  ${model}: ${count as number} tasks (${(((count as number) / metrics.totalTasks) * 100).toFixed(2)}%)`,
+			);
+		}
+		console.log(`\nEscalation Rate: ${(metrics.escalationRate * 100).toFixed(2)}%`);
 	});
+
+async function runBenchmark(): Promise<void> {
+	const { RaidOrchestrator } = require("./raid.js");
+	const { getMetricsCollector } = require("./metrics-collector.js");
+	const metricsCollector = getMetricsCollector();
+
+	const benchmarkTasks = [
+		"Type generation: Create complex TypeScript type definitions",
+		"Zod schema: Define a multi-layer validation schema",
+		"Performance test: Measure array processing speed",
+		"Error handling: Create a robust error handling module",
+		"Logging: Implement structured logging with detailed tracing",
+	];
+
+	console.log(chalk.cyan("🚀 Starting Undercity Benchmark"));
+	console.log(chalk.dim("Running standard set of performance tasks"));
+
+	const orchestrator = new RaidOrchestrator({
+		verbose: true,
+		streamOutput: true,
+		autoApprove: true,
+		maxSquadSize: 3,
+		maxParallel: 2,
+	});
+
+	const startTime = Date.now();
+	console.log();
+
+	try {
+		for (const task of benchmarkTasks) {
+			console.log(chalk.blue(`\n📋 Task: ${task}`));
+
+			try {
+				await orchestrator.start(task);
+				await orchestrator.approvePlan();
+				await orchestrator.extract();
+			} catch (taskError) {
+				console.error(chalk.red(`Task failed: ${task}`));
+				console.error(chalk.dim(String(taskError)));
+			}
+		}
+
+		const endTime = Date.now();
+		const totalDuration = endTime - startTime;
+
+		console.log(chalk.green("\n✅ Benchmark Completed"));
+		console.log(chalk.dim(`Total Duration: ${(totalDuration / 1000).toFixed(2)} seconds`));
+
+		const metrics = metricsCollector.getMetricsSummary(new Date(startTime), new Date(endTime));
+		console.log(chalk.bold("\nBenchmark Summary:"));
+		console.log(`Total Tasks: ${metrics.totalTasks}`);
+		console.log(`Success Rate: ${(metrics.successRate * 100).toFixed(2)}%`);
+		console.log(`Average Tokens Used: ${metrics.avgTokens.toFixed(2)}`);
+		console.log(`Average Task Duration: ${(metrics.avgTimeTakenMs / 1000).toFixed(2)} seconds`);
+	} catch (error) {
+		console.error(chalk.red("Benchmark failed:"), error);
+		process.exit(1);
+	}
+}
+
+program
+	.command("benchmark")
+	.description("Run a standard set of performance benchmark tasks")
+	.action(async () => {
+		try {
+			await runBenchmark();
+		} catch (error) {
+			console.error(chalk.red("Benchmark error:"), error);
+			process.exit(1);
+		}
+	});
+
+// Improve command - trigger performance management and quest generation
+program;
 
 // Init command
 program
@@ -509,8 +614,9 @@ program
 Undercity initialized at: ${new Date().toISOString()}
 `;
 
-		if (!existsSync(intelPath)) {
-			writeFileSync(intelPath, defaultIntelContent);
+		const fs = require("node:fs");
+		if (!fs.existsSync(intelPath)) {
+			fs.writeFileSync(intelPath, defaultIntelContent);
 		}
 
 		console.log(chalk.green(`✓ Undercity initialized in ${stateDir}`));
@@ -522,7 +628,7 @@ program
 	.command("setup")
 	.description("Check authentication setup for Claude Max")
 	.action(() => {
-		console.log(chalk.bold("Undercity Authentication Setup"));
+		console.log(chalk.bold("UNDERCITY Authentication Setup"));
 		console.log();
 
 		// Check for OAuth token (Claude Max)
@@ -548,6 +654,74 @@ program
 			console.log();
 			console.log("Or for API tokens (costs money):");
 			console.log('  Set: export ANTHROPIC_API_KEY="your-key"');
+		}
+	});
+
+// Setup Ollama command
+program
+	.command("setup-ollama")
+	.description("Check and setup local Ollama models")
+	.action(async () => {
+		console.log(chalk.bold("Undercity Ollama Setup"));
+		console.log();
+
+		// Check Ollama availability
+		if (!isOllamaAvailable()) {
+			console.log(chalk.red("✗ Ollama not installed or not running"));
+			console.log();
+			console.log("To set up Ollama:");
+			console.log("1. Install Ollama from https://ollama.com/");
+			console.log("2. Start Ollama: ollama serve");
+			console.log();
+			return;
+		}
+
+		// Get available models
+		const available = getAvailableModels();
+
+		console.log(chalk.green("✓ Ollama detected and running"));
+		console.log(`  ${available.length} model(s) available`);
+		console.log();
+
+		// Recommended models
+		const recommendedModels = Object.values(LOCAL_MODELS)
+			.flatMap((m) => [m.name, m.fallback])
+			.filter(Boolean);
+		const missingModels = recommendedModels.filter((model) => !available.includes(model));
+
+		if (missingModels.length > 0) {
+			console.log(chalk.yellow("⚠ Some recommended models are missing:"));
+			for (const model of missingModels) {
+				console.log(`  • ${model}`);
+			}
+			console.log();
+			console.log("Recommended models for code tasks:");
+			Object.entries(LOCAL_MODELS).forEach(([tier, models]) => {
+				console.log(`  ${tier} tier: ${models.name} (fallback: ${models.fallback})`);
+			});
+			console.log();
+			console.log("To install a model, run:");
+			console.log("  ollama pull <model-name>");
+			console.log("Example: ollama pull qwen2:0.5b");
+		} else {
+			console.log(chalk.green("✓ All recommended models are available"));
+		}
+
+		// Test basic functionality
+		try {
+			console.log();
+			console.log(chalk.cyan("Testing local LLM query..."));
+			const { queryLocal } = await import("./local-llm.js");
+			const result = await queryLocal("Hello, can you help me with a coding task?", { tier: "tiny", timeout: 10000 });
+
+			if (result) {
+				console.log(chalk.green("✓ Local LLM is working correctly"));
+			} else {
+				console.log(chalk.yellow("⚠ Could not query local LLM"));
+			}
+		} catch (error) {
+			console.log(chalk.red("✗ Error testing local LLM"));
+			console.log(String(error));
 		}
 	});
 
@@ -1386,6 +1560,679 @@ program
 		console.log(chalk.dim("  undercity oracle -c 2          - Draw 2 cards"));
 		console.log(chalk.dim("  undercity oracle -t action     - Action cards only"));
 		console.log(chalk.dim("  undercity oracle --info        - Deck information"));
+	});
+
+// Solo command - light mode with adaptive escalation
+program
+	.command("solo <goal>")
+	.description("Light mode: run a single task with verification and adaptive escalation")
+	.option("-s, --stream", "Stream raider activity")
+	.option("-v, --verbose", "Verbose logging")
+	.option("-m, --model <tier>", "Starting model tier: haiku, sonnet, opus", "sonnet")
+	.option("--no-commit", "Don't auto-commit on success")
+	.option("--no-typecheck", "Skip typecheck verification")
+	.option("--supervised", "Use supervised mode (Opus orchestrates workers)")
+	.option("--worker <tier>", "Worker model for supervised mode: haiku, sonnet", "sonnet")
+	.option("-d, --dry-run", "Show complexity assessment without executing")
+	.option("--no-local", "Disable local tools and local LLM routing")
+	.action(
+		async (
+			goal: string,
+			options: {
+				stream?: boolean;
+				verbose?: boolean;
+				model?: string;
+				commit?: boolean;
+				typecheck?: boolean;
+				supervised?: boolean;
+				worker?: string;
+				dryRun?: boolean;
+				local?: boolean;
+			},
+		) => {
+			// Dynamic import to avoid loading heavy modules until needed
+			const { SoloOrchestrator, SupervisedOrchestrator } = await import("./solo.js");
+
+			console.log(chalk.cyan.bold("\n⚡ Undercity Solo Mode"));
+			console.log(chalk.dim("  Adaptive escalation • External verification • Auto-commit"));
+			console.log();
+
+			try {
+				// Early dry-run complexity assessment
+				if (options.dryRun) {
+					const { assessComplexityFast } = await import("./complexity.js");
+					const assessment = assessComplexityFast(goal);
+					console.log(chalk.bold("Complexity Assessment (Dry Run)"));
+					console.log(chalk.dim(`  Complexity: ${assessment.level}`));
+					console.log(chalk.dim(`  Estimated Scope: ${assessment.estimatedScope}`));
+					console.log(chalk.dim(`  Recommended Model: ${assessment.model}`));
+					console.log(chalk.dim(`  Confidence: ${(assessment.confidence * 100).toFixed(1)}%`));
+					console.log(chalk.dim(`  Signals: ${assessment.signals.join(", ")}`));
+					return;
+				}
+
+				if (options.supervised) {
+					// Supervised mode: Opus orchestrates workers
+					console.log(chalk.dim(`Mode: Supervised (Opus → ${options.worker || "sonnet"} workers)`));
+					const orchestrator = new SupervisedOrchestrator({
+						autoCommit: options.commit !== false,
+						stream: options.stream,
+						verbose: options.verbose,
+						workerModel: (options.worker || "sonnet") as "haiku" | "sonnet",
+					});
+
+					const result = await orchestrator.runSupervised(goal);
+
+					if (result.status === "complete") {
+						console.log(chalk.green.bold("\n✓ Task complete"));
+						if (result.commitSha) {
+							console.log(chalk.dim(`  Commit: ${result.commitSha.substring(0, 8)}`));
+						}
+						console.log(chalk.dim(`  Duration: ${Math.round(result.durationMs / 1000)}s`));
+					} else {
+						console.log(chalk.red.bold("\n✗ Task failed"));
+						if (result.error) {
+							console.log(chalk.dim(`  Error: ${result.error}`));
+						}
+					}
+				} else {
+					// Check smart routing first (unless disabled with --no-local)
+					const useLocalRouting = options.local !== false;
+
+					if (useLocalRouting) {
+						const { routeTask, executeWithLocalTools } = await import("./router.js");
+						const { queryLocal } = await import("./local-llm.js");
+
+						const routing = await routeTask(goal);
+
+						if (routing.tier === "local-tools") {
+							console.log(chalk.dim(`Route: local-tools (${routing.reason})`));
+							console.log();
+
+							const toolResult = await executeWithLocalTools(goal);
+							if (toolResult.success) {
+								console.log(chalk.green.bold("\n✓ Task complete (local tools)"));
+								console.log(
+									chalk.dim(
+										`  Output: ${toolResult.output.substring(0, 200)}${toolResult.output.length > 200 ? "..." : ""}`,
+									),
+								);
+								return;
+							}
+							console.log(chalk.yellow("  Local tool failed, falling back to LLM"));
+						}
+
+						if (routing.tier === "local-llm") {
+							console.log(chalk.dim(`Route: local-llm (${routing.reason})`));
+							console.log();
+
+							const localResult = await queryLocal(goal, { tier: "small", timeout: 30000 });
+							if (localResult) {
+								console.log(chalk.green.bold("\n✓ Task complete (local LLM)"));
+								console.log(
+									chalk.dim(`  Response: ${localResult.substring(0, 200)}${localResult.length > 200 ? "..." : ""}`),
+								);
+								return;
+							}
+							console.log(chalk.yellow("  Local LLM unavailable, falling back to Haiku"));
+						}
+					}
+
+					// Standard mode: adaptive escalation
+					const startingModel = (options.model || "sonnet") as "haiku" | "sonnet" | "opus";
+					console.log(chalk.dim(`Mode: Standard (${startingModel} → escalate if needed)`));
+
+					const orchestrator = new SoloOrchestrator({
+						startingModel,
+						autoCommit: options.commit !== false,
+						stream: options.stream,
+						verbose: options.verbose,
+						runTypecheck: options.typecheck !== false,
+					});
+
+					const result = await orchestrator.runTask(goal);
+
+					if (result.status === "complete") {
+						console.log(chalk.green.bold("\n✓ Task complete"));
+						if (result.commitSha) {
+							console.log(chalk.dim(`  Commit: ${result.commitSha.substring(0, 8)}`));
+						}
+						console.log(
+							chalk.dim(
+								`  Model: ${result.model}, Attempts: ${result.attempts}, Duration: ${Math.round(result.durationMs / 1000)}s`,
+							),
+						);
+					} else {
+						console.log(chalk.red.bold("\n✗ Task failed"));
+						console.log(chalk.dim(`  Model: ${result.model}, Attempts: ${result.attempts}`));
+						if (result.error) {
+							console.log(chalk.dim(`  Error: ${result.error}`));
+						}
+					}
+				}
+			} catch (error) {
+				console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+				process.exit(1);
+			}
+		},
+	);
+
+// Grind command - process quest board autonomously
+program
+	.command("grind")
+	.description("Process quest board continuously (autonomous, handles rate limits, can run for hours)")
+	.option("-n, --count <n>", "Process only N quests then stop", "0")
+	.option("-s, --stream", "Stream raider activity")
+	.option("-m, --model <tier>", "Starting model tier: haiku, sonnet, opus", "sonnet")
+	.option("--supervised", "Use supervised mode (Opus orchestrates workers)")
+	.option("--worker <tier>", "Worker model for supervised mode", "sonnet")
+	.option("--no-local", "Disable local tools and local LLM routing")
+	.option("--log <file>", "Write progress to log file")
+	.action(
+		async (options: {
+			count?: string;
+			stream?: boolean;
+			model?: string;
+			supervised?: boolean;
+			worker?: string;
+			local?: boolean;
+			log?: string;
+		}) => {
+			const { SoloOrchestrator, SupervisedOrchestrator } = await import("./solo.js");
+			const { RateLimitTracker } = await import("./rate-limit.js");
+			const { routeTask, executeWithLocalTools, logRoutingStats } = await import("./router.js");
+			const { queryLocal, isOllamaAvailable } = await import("./local-llm.js");
+
+			const maxCount = Number.parseInt(options.count || "0", 10);
+			const useLocalRouting = options.local !== false;
+			let processed = 0;
+			let completed = 0;
+			let failed = 0;
+			let rateLimitWaits = 0;
+			let supervisedCount = 0;
+			let soloCount = 0;
+			let localToolsCount = 0;
+			let localLlmCount = 0;
+			const routingDecisions: RoutingDecision[] = [];
+
+			// File logging helper
+			const logFile = options.log;
+			const logToFile = async (message: string) => {
+				if (logFile) {
+					const fs = await import("node:fs/promises");
+					const timestamp = new Date().toISOString();
+					await fs.appendFile(logFile, `[${timestamp}] ${message}\n`);
+				}
+			};
+
+			// Progress file for quick status checks
+			const progressFile = ".undercity/grind-progress.json";
+			const updateProgress = async () => {
+				const fs = await import("node:fs/promises");
+				const progress = {
+					startedAt: new Date().toISOString(),
+					lastUpdated: new Date().toISOString(),
+					processed,
+					completed,
+					failed,
+					rateLimitWaits,
+					status: "running",
+				};
+				await fs.writeFile(progressFile, JSON.stringify(progress, null, 2));
+			};
+
+			// Helper to sleep with countdown display
+			const sleepWithCountdown = async (ms: number, reason: string) => {
+				const endTime = Date.now() + ms;
+				console.log(chalk.yellow(`\n⏳ ${reason}`));
+
+				while (Date.now() < endTime) {
+					const remaining = endTime - Date.now();
+					const minutes = Math.floor(remaining / 60000);
+					const seconds = Math.floor((remaining % 60000) / 1000);
+					process.stdout.write(`\r  Resuming in ${minutes}:${seconds.toString().padStart(2, "0")}...  `);
+					await new Promise((r) => setTimeout(r, 1000));
+				}
+				console.log(chalk.green("\n  ✓ Resuming...\n"));
+			};
+
+			// Check if error is rate limit related
+			const isRateLimitError = (error: unknown): boolean => {
+				return RateLimitTracker.is429Error(error);
+			};
+
+			// Get wait time from error or default
+			const getWaitTime = (error: unknown): number => {
+				const errorStr = String(error);
+				// Try to extract retry-after from error message
+				const match = errorStr.match(/retry.?after[:\s]+(\d+)/i);
+				if (match) {
+					return parseInt(match[1], 10) * 1000;
+				}
+				// Default: 5 minutes
+				return 5 * 60 * 1000;
+			};
+
+			console.log(chalk.cyan.bold("\n⚡ Undercity Grind Mode"));
+			console.log(chalk.dim("  Autonomous • Adaptive • Rate limit aware"));
+			if (useLocalRouting) {
+				console.log(chalk.dim("  Local tools → Local LLM → Haiku → Sonnet → Opus"));
+				if (isOllamaAvailable()) {
+					console.log(chalk.green("  ✓ Ollama detected - local LLM available"));
+				} else {
+					console.log(chalk.yellow("  ⚠ Ollama not available - will skip local LLM tier"));
+				}
+			} else {
+				console.log(chalk.dim("  Simple tasks → Solo mode (fast)"));
+				console.log(chalk.dim("  Complex tasks → Supervised mode (Opus plans, workers execute)"));
+			}
+			if (maxCount > 0) {
+				console.log(chalk.dim(`  Will process ${maxCount} quest(s) then stop`));
+			} else {
+				console.log(chalk.dim("  Will process all pending quests"));
+			}
+			console.log(chalk.dim("  Press Ctrl+C to stop gracefully\n"));
+
+			// Track start time for summary
+			const startTime = Date.now();
+
+			// Initialize progress and log
+			await logToFile("=== Grind started ===");
+			await updateProgress();
+
+			while (true) {
+				const nextGoal = getNextGoal();
+
+				if (!nextGoal) {
+					console.log(chalk.green("\n✓ Quest board empty - all quests processed"));
+					break;
+				}
+
+				if (maxCount > 0 && processed >= maxCount) {
+					console.log(chalk.yellow(`\n✓ Processed ${maxCount} quest(s) - stopping`));
+					break;
+				}
+
+				processed++;
+				markInProgress(nextGoal.id, "");
+
+				// Route task to optimal execution tier
+				const routing = useLocalRouting
+					? await routeTask(nextGoal.objective)
+					: {
+							tier: options.supervised ? "opus" : ((options.model || "sonnet") as ExecutionTier),
+							reason: "Manual mode",
+							confidence: 1,
+							estimatedTokens: 2000,
+							canParallelize: false,
+						};
+
+				routingDecisions.push(routing);
+
+				console.log(chalk.cyan(`\n━━━ Quest ${processed} ━━━`));
+				console.log(
+					chalk.dim(`  ${nextGoal.objective.substring(0, 70)}${nextGoal.objective.length > 70 ? "..." : ""}`),
+				);
+				console.log(chalk.dim(`  Route: ${routing.tier} (${routing.reason})`));
+
+				let retryCount = 0;
+				const maxRetries = 3;
+
+				while (retryCount < maxRetries) {
+					try {
+						let result: { status: string; durationMs: number; error?: string; commitSha?: string };
+						const taskStartTime = Date.now();
+
+						// Handle each execution tier
+						switch (routing.tier) {
+							case "local-tools": {
+								// Execute with local tools only (FREE - no LLM tokens)
+								localToolsCount++;
+								const localResult = await executeWithLocalTools(nextGoal.objective);
+								result = {
+									status: localResult.success ? "complete" : "failed",
+									durationMs: Date.now() - taskStartTime,
+									error: localResult.success ? undefined : localResult.output,
+								};
+								if (localResult.success) {
+									console.log(chalk.green(`  ✓ Local tool: ${localResult.output.substring(0, 50)}...`));
+								}
+								break;
+							}
+
+							case "local-llm": {
+								// Try local LLM first (FREE - no API tokens)
+								localLlmCount++;
+								const llmResult = await queryLocal(
+									`Complete this coding task and explain what you did:\n\n${nextGoal.objective}`,
+									{ tier: "small", timeout: 60000 },
+								);
+								if (llmResult) {
+									result = {
+										status: "complete",
+										durationMs: Date.now() - taskStartTime,
+									};
+									console.log(chalk.green(`  ✓ Local LLM handled`));
+								} else {
+									// Local LLM failed, fall back to haiku
+									console.log(chalk.yellow("  Local LLM unavailable, falling back to Haiku"));
+									soloCount++;
+									const orchestrator = new SoloOrchestrator({
+										startingModel: "haiku",
+										autoCommit: true,
+										stream: options.stream,
+									});
+									result = await orchestrator.runTask(nextGoal.objective);
+								}
+								break;
+							}
+
+							case "haiku":
+							case "sonnet": {
+								// Standard solo mode with specified model
+								soloCount++;
+								const orchestrator = new SoloOrchestrator({
+									startingModel: routing.tier as "haiku" | "sonnet",
+									autoCommit: true,
+									stream: options.stream,
+								});
+								result = await orchestrator.runTask(nextGoal.objective);
+								break;
+							}
+
+							case "opus": {
+								// Supervised mode with Opus orchestrating
+								supervisedCount++;
+								const orchestrator = new SupervisedOrchestrator({
+									autoCommit: true,
+									stream: options.stream,
+									workerModel: (options.worker || "sonnet") as "haiku" | "sonnet",
+								});
+								result = await orchestrator.runSupervised(nextGoal.objective);
+								break;
+							}
+
+							default: {
+								// Fallback to sonnet
+								soloCount++;
+								const orchestrator = new SoloOrchestrator({
+									startingModel: "sonnet",
+									autoCommit: true,
+									stream: options.stream,
+								});
+								result = await orchestrator.runTask(nextGoal.objective);
+							}
+						}
+
+						if (result.status === "complete") {
+							markComplete(nextGoal.id);
+							completed++;
+							console.log(chalk.green(`  ✓ Complete (${Math.round(result.durationMs / 1000)}s)`));
+							await logToFile(
+								`✓ COMPLETE: ${nextGoal.objective.substring(0, 60)} (${Math.round(result.durationMs / 1000)}s)`,
+							);
+						} else {
+							markFailed(nextGoal.id, result.error || "Task failed");
+							failed++;
+							console.log(chalk.red(`  ✗ Failed: ${result.error || "Unknown error"}`));
+							await logToFile(`✗ FAILED: ${nextGoal.objective.substring(0, 60)} - ${result.error || "Unknown"}`);
+						}
+						await updateProgress();
+						break; // Success or non-retryable failure, move to next quest
+					} catch (error) {
+						if (isRateLimitError(error)) {
+							retryCount++;
+							rateLimitWaits++;
+							const waitTime = getWaitTime(error);
+							await logToFile(
+								`⏳ RATE LIMITED: Attempt ${retryCount}/${maxRetries}, waiting ${Math.round(waitTime / 1000)}s`,
+							);
+
+							if (retryCount < maxRetries) {
+								await sleepWithCountdown(waitTime, `Rate limited (attempt ${retryCount}/${maxRetries})`);
+								// Don't break, will retry same quest
+							} else {
+								// Max retries hit, mark as failed and move on
+								markFailed(nextGoal.id, "Rate limit exceeded after retries");
+								failed++;
+								await logToFile(`✗ FAILED: Rate limit exceeded after ${maxRetries} retries`);
+								await updateProgress();
+								// Wait before next quest anyway
+								await sleepWithCountdown(waitTime, "Rate limited, waiting before next quest");
+								break;
+							}
+						} else {
+							// Non-rate-limit error
+							markFailed(nextGoal.id, error instanceof Error ? error.message : String(error));
+							failed++;
+							console.log(chalk.red(`  ✗ Error: ${error instanceof Error ? error.message : String(error)}`));
+							await logToFile(`✗ ERROR: ${error instanceof Error ? error.message : String(error)}`);
+							await updateProgress();
+							break;
+						}
+					}
+				}
+			}
+
+			// Summary
+			const elapsed = Date.now() - startTime;
+			const elapsedMinutes = Math.floor(elapsed / 60000);
+			const elapsedSeconds = Math.floor((elapsed % 60000) / 1000);
+
+			// Log routing statistics
+			if (routingDecisions.length > 0) {
+				logRoutingStats(routingDecisions);
+			}
+
+			// Calculate token savings from local execution
+			const localSavings = localToolsCount + localLlmCount;
+			const estimatedTokensSaved = routingDecisions
+				.filter((d) => d.tier === "local-tools" || d.tier === "local-llm")
+				.reduce((sum, d) => sum + (d.tier === "local-tools" ? 500 : 1000), 0);
+
+			console.log(chalk.bold("\n━━━ Grind Summary ━━━"));
+			console.log(`  ${chalk.green("✓")} Completed: ${completed}`);
+			console.log(`  ${chalk.red("✗")} Failed: ${failed}`);
+			console.log();
+			console.log(chalk.dim("  Execution tiers:"));
+			if (localToolsCount > 0) {
+				console.log(`    ${chalk.green("🔧")} Local tools: ${localToolsCount} (FREE)`);
+			}
+			if (localLlmCount > 0) {
+				console.log(`    ${chalk.green("🤖")} Local LLM: ${localLlmCount} (FREE)`);
+			}
+			console.log(`    ${chalk.dim("⚡")} Solo (Haiku/Sonnet): ${soloCount}`);
+			console.log(`    ${chalk.dim("🎯")} Supervised (Opus): ${supervisedCount}`);
+			console.log();
+			if (localSavings > 0) {
+				console.log(
+					`  ${chalk.green("💰")} Token savings: ~${estimatedTokensSaved} tokens from ${localSavings} local executions`,
+				);
+			}
+			console.log(`  ${chalk.yellow("⏳")} Rate limit waits: ${rateLimitWaits}`);
+			console.log(`  ${chalk.dim("⏱")}  Duration: ${elapsedMinutes}m ${elapsedSeconds}s`);
+
+			// Final log and progress update
+			await logToFile(
+				`=== Grind completed: ${completed} done, ${failed} failed, ${elapsedMinutes}m ${elapsedSeconds}s ===`,
+			);
+			const fs = await import("node:fs/promises");
+			await fs.writeFile(
+				progressFile,
+				JSON.stringify(
+					{
+						startedAt: new Date(startTime).toISOString(),
+						completedAt: new Date().toISOString(),
+						processed,
+						completed,
+						failed,
+						rateLimitWaits,
+						durationSeconds: Math.floor(elapsed / 1000),
+						status: "completed",
+					},
+					null,
+					2,
+				),
+			);
+		},
+	);
+
+// ===== Self-Improvement Commands =====
+
+program
+	.command("experiments")
+	.description("Manage A/B experiments for self-improvement")
+	.option("--list", "List active experiments")
+	.option("--start", "Start a new experiment (interactive)")
+	.option("--stop <id>", "Stop an experiment")
+	.option("--status <id>", "Show experiment status")
+	.action(async (options) => {
+		try {
+			const { getImprovementPersistence } = await import("./improvement-persistence.js");
+			const { selfImprovementAgent } = await import("./self-improvement.js");
+
+			const persistence = getImprovementPersistence();
+
+			if (options.list) {
+				const experiments = persistence.getActiveExperiments();
+				const experimentIds = Object.keys(experiments);
+
+				console.log(chalk.cyan.bold("\n🧪 Active Experiments"));
+
+				if (experimentIds.length === 0) {
+					console.log(chalk.yellow("  No active experiments"));
+					return;
+				}
+
+				for (const id of experimentIds) {
+					const config = experiments[id];
+					const status = selfImprovementAgent.getExperimentStatus(id);
+
+					console.log(`\n  ${chalk.bold(id)}`);
+					console.log(`    Hypothesis: ${config.hypothesis}`);
+					console.log(
+						`    Progress: ${status.resultsCount}/${config.targetSampleSize} (${(status.completionRate * 100).toFixed(1)}%)`,
+					);
+					console.log(`    Variants: ${config.variants.map((v) => v.name).join(", ")}`);
+				}
+			} else if (options.start) {
+				console.log(chalk.cyan.bold("\n🧪 Starting New Experiment"));
+				console.log(chalk.yellow("  Interactive experiment creation not yet implemented"));
+				console.log(chalk.dim("  Use the API to create experiments programmatically"));
+			} else if (options.stop) {
+				const removed = selfImprovementAgent.stopExperiment(options.stop);
+				persistence.removeActiveExperiment(options.stop);
+
+				if (removed) {
+					console.log(chalk.green(`\n  ✓ Stopped experiment: ${options.stop}`));
+				} else {
+					console.log(chalk.red(`\n  ✗ Experiment not found: ${options.stop}`));
+				}
+			} else if (options.status) {
+				const status = selfImprovementAgent.getExperimentStatus(options.status);
+
+				if (!status.config) {
+					console.log(chalk.red(`\n  ✗ Experiment not found: ${options.status}`));
+					return;
+				}
+
+				console.log(chalk.cyan.bold(`\n🧪 Experiment Status: ${options.status}`));
+				console.log(`  Hypothesis: ${status.config.hypothesis}`);
+				console.log(
+					`  Progress: ${status.resultsCount}/${status.config.targetSampleSize} (${(status.completionRate * 100).toFixed(1)}%)`,
+				);
+
+				if (status.preliminaryResults) {
+					const { EfficiencyAnalyzer } = await import("./efficiency-analyzer.js");
+					const analyzer = new EfficiencyAnalyzer();
+					const insights = analyzer.generateInsights(status.preliminaryResults);
+
+					console.log(chalk.bold("\n  Preliminary Results:"));
+					insights.slice(0, 3).forEach((insight) => {
+						console.log(`    ${insight}`);
+					});
+				} else {
+					console.log(chalk.yellow("\n  Not enough data for preliminary analysis"));
+				}
+			} else {
+				// Default: show summary
+				const experiments = persistence.getActiveExperiments();
+				console.log(chalk.cyan.bold("\n🧪 Experiments Overview"));
+				console.log(`  Active experiments: ${Object.keys(experiments).length}`);
+				console.log(chalk.dim("  Use --list to see details, --start to create, or --stop <id> to stop"));
+			}
+		} catch (error) {
+			console.error(chalk.red("Failed to manage experiments:"), error instanceof Error ? error.message : String(error));
+		}
+	});
+
+program
+	.command("improve")
+	.description("Generate and show improvement quests based on empirical data")
+	.option("--generate", "Generate new improvement quests from current metrics")
+	.option("--add", "Add generated quests to the quest board")
+	.action(async (options: { generate?: boolean; add?: boolean }) => {
+		try {
+			const { selfImprovementAgent } = await import("./self-improvement.js");
+
+			console.log(chalk.dim("  Analyzing metrics and generating improvement quests..."));
+			const quests = await selfImprovementAgent.generateImprovementQuests();
+
+			if (options.add && quests.length > 0) {
+				for (const quest of quests.slice(0, 5)) {
+					addGoal(`[${quest.category}] ${quest.title}`);
+				}
+				console.log(chalk.green(`  ✓ Added ${Math.min(5, quests.length)} improvement quests to the board`));
+			}
+
+			console.log(chalk.cyan.bold("\n🎯 Improvement Quests"));
+
+			if (quests.length === 0) {
+				console.log(chalk.yellow("  No improvement quests available"));
+				if (!options.generate) {
+					console.log(chalk.dim("  Use --generate to create quests from current data"));
+				}
+				return;
+			}
+
+			// Show top 10 quests
+			const topQuests = quests.slice(0, 10);
+
+			for (const quest of topQuests) {
+				const priorityColors: Record<string, typeof chalk.red> = {
+					critical: chalk.red,
+					high: chalk.yellow,
+					medium: chalk.blue,
+					low: chalk.gray,
+				};
+				const priorityColor = priorityColors[quest.priority] || chalk.white;
+
+				const categoryEmojis: Record<string, string> = {
+					performance: "⚡",
+					quality: "✨",
+					efficiency: "🔧",
+					reliability: "🛡️",
+					usability: "👤",
+				};
+				const categoryEmoji = categoryEmojis[quest.category] || "📌";
+
+				console.log(
+					`\n  ${categoryEmoji} ${priorityColor(quest.priority.toUpperCase())} - Impact: ${quest.estimatedImpact}`,
+				);
+				console.log(`    ${chalk.bold(quest.title)}`);
+				console.log(`    ${chalk.dim(quest.description.slice(0, 100))}${quest.description.length > 100 ? "..." : ""}`);
+				console.log(`    ${chalk.dim(`Data: ${quest.dataSource} | Effort: ${quest.estimatedEffort}`)}`);
+			}
+
+			if (quests.length > 10) {
+				console.log(chalk.dim(`\n  ... and ${quests.length - 10} more quests`));
+			}
+		} catch (error) {
+			console.error(
+				chalk.red("Failed to show improvement quests:"),
+				error instanceof Error ? error.message : String(error),
+			);
+		}
 	});
 
 // Parse and run

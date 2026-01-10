@@ -155,6 +155,9 @@ export class SoloOrchestrator {
 		const startTime = Date.now();
 		this.attempts = 0;
 
+		// Ensure clean state before starting (in case previous task left dirty state)
+		this.cleanupDirtyState();
+
 		// Start quest tracking in metrics
 		this.metricsTracker.startQuest(
 			`solo_${Date.now()}`, // Generate unique quest ID
@@ -254,8 +257,9 @@ export class SoloOrchestrator {
 			}
 		}
 
-		// Failed after all attempts
+		// Failed after all attempts - clean up dirty state
 		this.metricsTracker.completeQuest(false);
+		this.cleanupDirtyState();
 
 		return {
 			task,
@@ -269,6 +273,22 @@ export class SoloOrchestrator {
 				total: tokenUsageThisAttempt.reduce((sum, usage) => sum + usage.totalTokens, 0),
 			},
 		};
+	}
+
+	/**
+	 * Clean up any uncommitted changes after a failed task
+	 * This prevents dirty state from affecting subsequent tasks
+	 */
+	private cleanupDirtyState(): void {
+		try {
+			// Reset any staged and unstaged changes
+			execSync("git checkout -- . 2>/dev/null || true", { encoding: "utf-8", cwd: process.cwd() });
+			// Remove any untracked files created during the attempt
+			execSync("git clean -fd 2>/dev/null || true", { encoding: "utf-8", cwd: process.cwd() });
+			this.log("Cleaned up dirty state after failed task");
+		} catch (error) {
+			this.log("Failed to cleanup dirty state", { error: String(error) });
+		}
 	}
 
 	/**
