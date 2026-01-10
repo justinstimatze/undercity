@@ -67,7 +67,7 @@ interface VerificationResult {
 /**
  * Task execution result
  */
-interface TaskResult {
+export interface TaskResult {
 	task: string;
 	status: TaskStatus;
 	model: ModelTier;
@@ -105,6 +105,8 @@ export interface SoloOptions {
 	runTypecheck?: boolean;
 	/** Whether to run tests as verification */
 	runTests?: boolean;
+	/** Working directory for task execution (default: process.cwd()) */
+	workingDirectory?: string;
 }
 
 /**
@@ -121,6 +123,7 @@ export class SoloOrchestrator {
 	private branch?: string;
 	private runTypecheck: boolean;
 	private runTests: boolean;
+	private workingDirectory: string;
 
 	private currentModel: ModelTier;
 	private attempts: number = 0;
@@ -144,6 +147,7 @@ export class SoloOrchestrator {
 		this.branch = options.branch;
 		this.runTypecheck = options.runTypecheck ?? true;
 		this.runTests = options.runTests ?? true;
+		this.workingDirectory = options.workingDirectory ?? process.cwd();
 		this.currentModel = this.startingModel;
 		this.metricsTracker = new MetricsTracker();
 	}

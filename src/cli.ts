@@ -1647,6 +1647,7 @@ program
 	.option("-n, --count <n>", "Process only N quests then stop", "0")
 	.option("-s, --stream", "Stream raider activity")
 	.option("-m, --model <tier>", "Starting model tier: haiku, sonnet, opus", "sonnet")
+	.option("-p, --parallel <n>", "Run N quests in parallel using worktrees", "0")
 	.option("--supervised", "Use supervised mode (Opus orchestrates workers)")
 	.option("--worker <tier>", "Worker model for supervised mode", "sonnet")
 	.option("--no-local", "Disable local tools and local LLM routing")
@@ -1656,11 +1657,56 @@ program
 			count?: string;
 			stream?: boolean;
 			model?: string;
+			parallel?: string;
 			supervised?: boolean;
 			worker?: string;
 			local?: boolean;
 			log?: string;
 		}) => {
+			// Handle parallel mode separately
+			const parallelCount = Number.parseInt(options.parallel || "0", 10);
+			if (parallelCount > 0) {
+				const { ParallelSoloOrchestrator } = await import("./parallel-solo.js");
+				const { getAllQuests, markQuestInProgress, markQuestComplete, markQuestFailed } = await import("./quest.js");
+
+				const allQuests = getAllQuests();
+				const pendingQuests = allQuests.filter((q) => q.status === "pending").slice(0, parallelCount);
+
+				if (pendingQuests.length === 0) {
+					console.log(chalk.gray("No pending quests to process"));
+					return;
+				}
+
+				// Mark quests as in-progress
+				const batchId = `parallel-${Date.now()}`;
+				for (const quest of pendingQuests) {
+					markQuestInProgress(quest.id, batchId);
+				}
+
+				const orchestrator = new ParallelSoloOrchestrator({
+					maxConcurrent: parallelCount,
+					startingModel: (options.model as "haiku" | "sonnet" | "opus") || "sonnet",
+					autoCommit: true,
+					stream: options.stream,
+					verbose: options.stream,
+				});
+
+				const result = await orchestrator.runParallel(pendingQuests.map((q) => q.objective));
+
+				// Update quest statuses based on results
+				for (let i = 0; i < result.results.length; i++) {
+					const taskResult = result.results[i];
+					const quest = pendingQuests[i];
+					if (taskResult.result?.status === "complete" && taskResult.merged) {
+						markQuestComplete(quest.id);
+					} else {
+						markQuestFailed(quest.id, taskResult.mergeError || taskResult.result?.error || "Unknown error");
+					}
+				}
+
+				return;
+			}
+
 			const { SoloOrchestrator, SupervisedOrchestrator } = await import("./solo.js");
 			const { RateLimitTracker } = await import("./rate-limit.js");
 			const { routeTask, executeWithLocalTools, logRoutingStats } = await import("./router.js");
