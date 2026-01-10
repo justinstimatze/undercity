@@ -60,6 +60,8 @@
 [planning] Add context field to Quest interface - allow storing relevant plan snippets per quest
 [planning] Implement context sharding - pass only relevant context to each raider type (flute gets less, quester gets more)
 [visibility] Fix streamAgentActivity to properly show tool calls from SDK message format
+[visibility] Show file paths when Read/Grep/Glob are called - "Reading src/raid.ts" not just "Read ..."
+[visibility] Show Edit/Write targets - "Editing src/cli.ts:45" so you see what's being changed
 [visibility] Add progress bar to plan command output (not just status command)
 [visibility] Show estimated time remaining based on historical raid durations
 [visibility] Add a --quiet flag for minimal output (just errors and completion)

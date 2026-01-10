@@ -3,18 +3,19 @@
 /**
  * Undercity CLI
  *
- * Multi-agent orchestrator for Claude Max - Gas Town for normal people.
+ * Multi-raider orchestrator for Claude Max - Gas Town for normal people.
  *
  * Commands:
  *   slingshot <goal>  Launch a new raid via the Tubes (or resume existing)
  *   status            Show current raid status
  *   approve           Approve the current plan
  *   squad             Show active squad members
- *   waypoints             Show pending/complete waypoints
+ *   waypoints         Show pending/complete waypoints
  *   elevator          Show elevator queue status
  *   extract           Complete the current raid
  *   surrender         Surrender the current raid
  *   clear             Clear all state
+ *   oracle [situation] Draw oblique strategy cards for novel insights
  */
 
 import { readFileSync } from "node:fs";
@@ -22,6 +23,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { Command } from "commander";
+import { UndercityOracle } from "./oracle.js";
 import { Persistence } from "./persistence.js";
 import {
 	generateTaskContext,
@@ -92,7 +94,7 @@ const program = new Command();
 
 program
 	.name("undercity")
-	.description("Multi-agent orchestrator for Claude Max - Gas Town for budget extraction")
+	.description("Multi-raider orchestrator for Claude Max - Gas Town for budget extraction")
 	.version(getVersion());
 
 // Slingshot command - launch a raid via the Tubes
@@ -102,7 +104,7 @@ program
 	.option("-a, --auto-approve", "Auto-approve plans without human review")
 	.option("-y, --yes", "Full auto mode: auto-approve and auto-commit (walk away)")
 	.option("-v, --verbose", "Enable verbose logging")
-	.option("-s, --stream", "Stream agent activity to console")
+	.option("-s, --stream", "Stream raider activity to console")
 	.option("-m, --max-squad <n>", "Maximum squad size", "5")
 	.option("-p, --parallel <n>", "Maximum concurrent raiders (1-5)", "3")
 	.option("-d, --dry-run", "Show the plan but don't execute (planning phase only)")
@@ -285,7 +287,7 @@ program
 program
 	.command("approve")
 	.description("Approve the current plan and start execution")
-	.option("-s, --stream", "Stream agent activity to console")
+	.option("-s, --stream", "Stream raider activity to console")
 	.action(async (options: { stream?: boolean }) => {
 		const orchestrator = new RaidOrchestrator({ verbose: true, streamOutput: options.stream ?? true });
 		const raid = orchestrator.getCurrentRaid();
@@ -720,7 +722,7 @@ program
 program
 	.command("plan <file>")
 	.description("Execute a plan file with good judgment (uses logistics to determine next steps)")
-	.option("-s, --stream", "Stream agent activity")
+	.option("-s, --stream", "Stream raider activity")
 	.option("-c, --continuous", "Keep executing until plan is complete")
 	.option("-n, --steps <n>", "Max steps to execute (default: unlimited in continuous mode)")
 	.option("--legacy", "Use legacy mode (re-read whole plan each iteration)")
@@ -902,7 +904,7 @@ program
 	.command("work")
 	.description("Process the backlog continuously (run in separate terminal)")
 	.option("-n, --count <n>", "Process only N goals then stop", "0")
-	.option("-s, --stream", "Stream agent activity")
+	.option("-s, --stream", "Stream raider activity")
 	.action(async (options: { count?: string; stream?: boolean }) => {
 		const maxCount = Number.parseInt(options.count || "0", 10);
 		let processed = 0;
@@ -989,7 +991,7 @@ program
 	.option("--analyze-only", "Analyze quests and show compatibility matrix")
 	.option("-a, --auto-approve", "Auto-approve plans without human review")
 	.option("-y, --yes", "Auto-approve and auto-commit")
-	.option("-s, --stream", "Stream agent activity")
+	.option("-s, --stream", "Stream raider activity")
 	.option("-v, --verbose", "Verbose logging")
 	.option("--risk-threshold <n>", "Risk threshold for parallel execution (0-1)", "0.7")
 	.option("--conflict-resolution <strategy>", "Conflict resolution strategy", "balanced")
@@ -1246,6 +1248,108 @@ program
 
 		console.log(chalk.dim("Run 'undercity quest-analyze' for detailed parallelization analysis"));
 		console.log(chalk.dim("Run 'undercity quest-batch' to process quests in parallel"));
+	});
+
+// Undercity Oracle command - draw oblique strategy cards for novel insights
+program
+	.command("oracle [situation]")
+	.description("Draw from the oracle deck for novel insights and fresh perspectives")
+	.option("-c, --count <number>", "Number of cards to draw (1-5)", "1")
+	.option("-t, --category <type>", "Filter by card category: questioning, action, perspective, disruption, exploration")
+	.option("-s, --spread", "Draw a 3-card spread for broader insight")
+	.option("-r, --reset", "Reset the oracle deck (make all cards available again)")
+	.option("--info", "Show oracle deck information")
+	.action((situation, options) => {
+		const oracle = new UndercityOracle();
+
+		// Show deck info
+		if (options.info) {
+			const info = oracle.getDeckInfo();
+			console.log(chalk.cyan.bold("🔮 UNDERCITY ORACLE DECK 🔮"));
+			console.log();
+			console.log(chalk.gray("═".repeat(40)));
+			console.log(`Total cards: ${info.total}`);
+			console.log(`Cards used: ${info.used}`);
+			console.log(`Cards remaining: ${info.remaining}`);
+			console.log(`Categories: ${info.categories.join(", ")}`);
+			console.log(chalk.gray("═".repeat(40)));
+			console.log();
+			console.log(chalk.dim('Philosophy: "It only has to make sense for me" (365 buttons)'));
+			console.log(chalk.dim("Cards don't need to be logically defensible, just useful."));
+			console.log();
+			console.log(chalk.dim("Use cases:"));
+			console.log(chalk.dim("  • When stuck on a problem"));
+			console.log(chalk.dim("  • During reflection phases"));
+			console.log(chalk.dim("  • Randomly during planning"));
+			console.log(chalk.dim("  • For fresh perspectives"));
+			return;
+		}
+
+		// Reset deck if requested
+		if (options.reset) {
+			oracle.resetDeck();
+			console.log(chalk.green("🔄 Oracle deck reset - all cards are available again"));
+			console.log();
+		}
+
+		// Determine situation context
+		const situationContext = situation || "random";
+		const situationMessages = {
+			stuck: "You're stuck and need a breakthrough perspective:",
+			planning: "You're planning and need strategic insight:",
+			reflecting: "You're reflecting and need deeper understanding:",
+			debugging: "You're debugging and need a fresh angle:",
+			deciding: "You're deciding and need clarity:",
+			random: "The oracle offers guidance:",
+		};
+
+		// Handle spread option
+		if (options.spread) {
+			const cards = oracle.drawSpread(3, options.category);
+			console.log(
+				chalk.cyan(
+					`Situation: ${situationMessages[situationContext as keyof typeof situationMessages] || situationMessages.random}`,
+				),
+			);
+			console.log();
+			console.log(oracle.formatSpread(cards));
+			return;
+		}
+
+		// Parse count
+		const count = Math.min(Math.max(parseInt(options.count, 10) || 1, 1), 5);
+
+		// Draw cards
+		if (count === 1) {
+			const card = oracle.drawCard(options.category);
+			console.log(
+				chalk.cyan(
+					`Situation: ${situationMessages[situationContext as keyof typeof situationMessages] || situationMessages.random}`,
+				),
+			);
+			console.log();
+			console.log(chalk.cyan.bold("🔮 ORACLE GUIDANCE 🔮"));
+			console.log(chalk.gray("═".repeat(40)));
+			console.log();
+			console.log(oracle.formatCard(card));
+		} else {
+			const cards = oracle.drawSpread(count, options.category);
+			console.log(
+				chalk.cyan(
+					`Situation: ${situationMessages[situationContext as keyof typeof situationMessages] || situationMessages.random}`,
+				),
+			);
+			console.log();
+			console.log(oracle.formatSpread(cards));
+		}
+
+		// Show quick tips
+		console.log(chalk.dim("💡 Quick tips:"));
+		console.log(chalk.dim("  undercity oracle stuck        - Get unstuck"));
+		console.log(chalk.dim("  undercity oracle -s            - 3-card spread"));
+		console.log(chalk.dim("  undercity oracle -c 2          - Draw 2 cards"));
+		console.log(chalk.dim("  undercity oracle -t action     - Action cards only"));
+		console.log(chalk.dim("  undercity oracle --info        - Deck information"));
 	});
 
 // Parse and run

@@ -25,7 +25,7 @@ export const DEFAULT_LOADOUTS: LoadoutConfiguration[] = [
 	{
 		id: "speed-demon",
 		name: "Speed Demon",
-		description: "Fastest execution with Haiku for all non-critical agents",
+		description: "Fastest execution with Haiku for all non-critical raiders",
 		maxSquadSize: 3,
 		enabledAgentTypes: ["flute", "quester", "sheriff"],
 		modelChoices: {

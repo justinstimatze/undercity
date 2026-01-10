@@ -108,6 +108,12 @@ If you hit a blocker not covered by the spec:
 - Minor: Handle sensibly, note it
 - Major: Report and stop
 
+GIT COMMITS:
+- Write clear, concise commit messages
+- NO emojis in commit messages - keep them plain and professional
+- Format: "Short description of what changed"
+- Don't add attribution lines (Co-Authored-By, etc.)
+
 When done, summarize what you changed and confirm build status.`,
 		tools: ["Read", "Edit", "Write", "Bash", "Grep", "Glob"],
 		model: "sonnet",

@@ -605,7 +605,7 @@ export class RaidOrchestrator {
 		};
 		this.persistence.addTask(plannerTask);
 
-		// Check flute cache before spawning agent
+		// Check flute cache before spawning raider
 		const cachedResult = this.checkFluteCache(raid.goal);
 		if (cachedResult) {
 			this.log("Using cached flute intel", { goal: raid.goal });
@@ -624,7 +624,7 @@ export class RaidOrchestrator {
 		}
 
 		// Cache miss - spawn flute agent
-		this.log("Flute cache miss, spawning agent", { goal: raid.goal });
+		this.log("Flute cache miss, spawning raider", { goal: raid.goal });
 		await this.spawnAgent("flute", fluteTask);
 	}
 
