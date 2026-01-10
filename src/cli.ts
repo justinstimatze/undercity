@@ -508,7 +508,7 @@ program
 	.command("setup")
 	.description("Check authentication setup for Claude Max")
 	.action(() => {
-		console.log(chalk.bold("Undercity Authentication Setup"));
+		console.log(chalk.bold("UNDERCITY Authentication Setup"));
 		console.log();
 
 		// Check for OAuth token (Claude Max)
