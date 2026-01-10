@@ -43,6 +43,36 @@ ln -sf $(pwd)/bin/undercity.js ~/.local/bin/undercity
 
 Requires Node.js 24+ and either a Claude Max subscription or Anthropic API key.
 
+## Quickstart
+
+The recommended setup uses three terminals:
+
+**Terminal 1: Claude Code**
+```bash
+claude
+```
+Your interactive Claude instance. Use it to review work, make decisions, and handle anything that needs human judgment.
+
+**Terminal 2: Undercity**
+```bash
+undercity work --stream
+```
+Runs autonomously through the quest board. Picks up quests from `quests.json`, runs the full flute→logistics→quester→sheriff pipeline, merges via elevator, repeats.
+
+**Terminal 3: Status monitor**
+```bash
+watch -n 5 undercity status
+```
+Shows current raid progress, active agents, and queue status. Refreshes every 5 seconds.
+
+**The workflow:**
+1. Tell Claude Code what you want to build (it adds quests to `intel.txt`)
+2. Run `undercity work --stream` to process quests autonomously
+3. Watch progress in the status terminal
+4. Use Claude Code to intervene when needed (review failures, adjust priorities, add urgent quests)
+
+Claude Code stays interactive for high-judgment tasks while undercity handles the grind.
+
 ## Usage
 
 ### Launch a Raid
