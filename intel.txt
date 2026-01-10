@@ -6,7 +6,10 @@ quests.json is the source of truth for status and priority.
 ## Available
 
 <!-- Add new ideas below this line - one per line, starting with [tag] -->
-
+[ux] Fix status flicker - atomic state file writes to prevent partial reads during watch
+[bug] Surrender should clear inventory.json so status shows "No active raid"
+[bug] Investigate merge_failed when work is on main - quester may have worked on main instead of worktree branch
+[bug] SDK cwd option not isolating agent file operations - agents write to process.cwd() not the specified worktree path
 
 ## Archive
 

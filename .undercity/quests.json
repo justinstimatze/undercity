@@ -675,7 +675,385 @@
       "status": "pending",
       "priority": 314,
       "createdAt": "2026-01-10T00:00:00.000Z"
+    },
+    {
+      "id": "quest-mk803htl-ug0b",
+      "objective": "Add new quest ideas here. They get synced to quests.json on raid start.",
+      "status": "pending",
+      "priority": 96,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-ks95",
+      "objective": "quests.json is the source of truth for status and priority.",
+      "status": "pending",
+      "priority": 97,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-on3d",
+      "objective": "<!-- Add new ideas below this line - one per line, starting with [tag] -->",
+      "status": "pending",
+      "priority": 98,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-gjrj",
+      "objective": "<!-- Historical record of completed work - not parsed, just for reference -->",
+      "status": "pending",
+      "priority": 99,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-1gpp",
+      "objective": "2026-01-09: Standardize agent terminology (flute/logistics/quester/sheriff)",
+      "status": "pending",
+      "priority": 100,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-t997",
+      "objective": "2026-01-09: Rename MergeQueue to Elevator",
+      "status": "pending",
+      "priority": 101,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-8oc6",
+      "objective": "2026-01-09: Add Philosophy section to README",
+      "status": "pending",
+      "priority": 102,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-ezxz",
+      "objective": "2026-01-09: Fix quester model (Opus → Sonnet) in docs",
+      "status": "pending",
+      "priority": 103,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-xir4",
+      "objective": "2026-01-09: Add cspell dictionary",
+      "status": "pending",
+      "priority": 104,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-s98f",
+      "objective": "2026-01-09: Add experimentation framework - A/B testing for quest execution",
+      "status": "pending",
+      "priority": 105,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-a2hl",
+      "objective": "2026-01-09: Add A/B efficiency tracking (linear vs swarm modes)",
+      "status": "pending",
+      "priority": 106,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-ohn5",
+      "objective": "2026-01-09: Use git worktrees for raid branches",
+      "status": "pending",
+      "priority": 107,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-b3my",
+      "objective": "2026-01-09: Raiders work in worktree, elevator merges back to main",
+      "status": "pending",
+      "priority": 108,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-zoko",
+      "objective": "2026-01-09: Fix 48 TypeScript errors in metrics.ts and rate-limit.ts",
+      "status": "pending",
+      "priority": 109,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-krzl",
+      "objective": "2026-01-09: Add rate limit detection - pause squad, countdown timer, auto-resume",
+      "status": "pending",
+      "priority": 110,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-t578",
+      "objective": "2026-01-09: Sheriff must run pnpm typecheck before approving",
+      "status": "pending",
+      "priority": 111,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-hptd",
+      "objective": "2026-01-10: Add comprehensive error recovery system - checkpoints, recovery orchestrator, escalation",
+      "status": "pending",
+      "priority": 112,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-o0sg",
+      "objective": "2026-01-10: Add enhanced rate limit detection - Retry-After headers, per-model limiting, proactive prevention",
+      "status": "pending",
+      "priority": 113,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-d1vf",
+      "objective": "2026-01-10: Add intel.txt parsing on raid start",
+      "status": "pending",
+      "priority": 114,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-o8up",
+      "objective": "2026-01-10: Add oracle command for oblique strategies",
+      "status": "pending",
+      "priority": 115,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-tt2g",
+      "objective": "2026-01-10: Use 'raider' instead of 'agent' in user-facing output",
+      "status": "pending",
+      "priority": 116,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-admf",
+      "objective": "2026-01-10: CRITICAL FIX: Don't delete branch on merge failure - preserve worktrees/branches for manual recovery",
+      "status": "pending",
+      "priority": 117,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-vip9",
+      "objective": "2026-01-10: CRITICAL FIX: Don't mark quests complete when merge fails - only extract when work lands on main",
+      "status": "pending",
+      "priority": 118,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-mydj",
+      "objective": "2026-01-10: Worktree branches from origin/main after fetch - ensures fresh main even with external changes",
+      "status": "pending",
+      "priority": 119,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-cbff",
+      "objective": "2026-01-10: Elevator pushes to origin after successful merge - work is saved remotely, not just locally",
+      "status": "pending",
+      "priority": 120,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-rx54",
+      "objective": "2026-01-10: SDK agents now load .claude/rules/ via settingSources: [\"project\"] option",
+      "status": "pending",
+      "priority": 121,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk803htl-0lt6",
+      "objective": "2026-01-10: Optimal merge strategy: clean merge → -X ours → report truly unresolvable conflicts",
+      "status": "pending",
+      "priority": 122,
+      "createdAt": "2026-01-10T07:45:49.305Z"
+    },
+    {
+      "id": "quest-mk807zvv-fffi",
+      "objective": "Add new quest ideas here. They get synced to quests.json on raid start.",
+      "status": "pending",
+      "priority": 123,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-m6w6",
+      "objective": "quests.json is the source of truth for status and priority.",
+      "status": "pending",
+      "priority": 124,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-j79v",
+      "objective": "<!-- Add new ideas below this line - one per line, starting with [tag] -->",
+      "status": "pending",
+      "priority": 125,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-6rbg",
+      "objective": "<!-- Historical record of completed work - not parsed, just for reference -->",
+      "status": "pending",
+      "priority": 126,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-16tx",
+      "objective": "2026-01-09: Standardize agent terminology (flute/logistics/quester/sheriff)",
+      "status": "pending",
+      "priority": 127,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-goq0",
+      "objective": "2026-01-09: Rename MergeQueue to Elevator",
+      "status": "pending",
+      "priority": 128,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-1i1d",
+      "objective": "2026-01-09: Add Philosophy section to README",
+      "status": "pending",
+      "priority": 129,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-lzh4",
+      "objective": "2026-01-09: Fix quester model (Opus → Sonnet) in docs",
+      "status": "pending",
+      "priority": 130,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-aczs",
+      "objective": "2026-01-09: Add cspell dictionary",
+      "status": "pending",
+      "priority": 131,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-zitc",
+      "objective": "2026-01-09: Add experimentation framework - A/B testing for quest execution",
+      "status": "pending",
+      "priority": 132,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-pra8",
+      "objective": "2026-01-09: Add A/B efficiency tracking (linear vs swarm modes)",
+      "status": "pending",
+      "priority": 133,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-9o6r",
+      "objective": "2026-01-09: Use git worktrees for raid branches",
+      "status": "pending",
+      "priority": 134,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-tbig",
+      "objective": "2026-01-09: Raiders work in worktree, elevator merges back to main",
+      "status": "pending",
+      "priority": 135,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-gr7e",
+      "objective": "2026-01-09: Fix 48 TypeScript errors in metrics.ts and rate-limit.ts",
+      "status": "pending",
+      "priority": 136,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-5ken",
+      "objective": "2026-01-09: Add rate limit detection - pause squad, countdown timer, auto-resume",
+      "status": "pending",
+      "priority": 137,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-aunm",
+      "objective": "2026-01-09: Sheriff must run pnpm typecheck before approving",
+      "status": "pending",
+      "priority": 138,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-x5gn",
+      "objective": "2026-01-10: Add comprehensive error recovery system - checkpoints, recovery orchestrator, escalation",
+      "status": "pending",
+      "priority": 139,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-55vr",
+      "objective": "2026-01-10: Add enhanced rate limit detection - Retry-After headers, per-model limiting, proactive prevention",
+      "status": "pending",
+      "priority": 140,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-gxvi",
+      "objective": "2026-01-10: Add intel.txt parsing on raid start",
+      "status": "pending",
+      "priority": 141,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-3h7u",
+      "objective": "2026-01-10: Add oracle command for oblique strategies",
+      "status": "pending",
+      "priority": 142,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-kik4",
+      "objective": "2026-01-10: Use 'raider' instead of 'agent' in user-facing output",
+      "status": "pending",
+      "priority": 143,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-71nv",
+      "objective": "2026-01-10: CRITICAL FIX: Don't delete branch on merge failure - preserve worktrees/branches for manual recovery",
+      "status": "pending",
+      "priority": 144,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-c2jc",
+      "objective": "2026-01-10: CRITICAL FIX: Don't mark quests complete when merge fails - only extract when work lands on main",
+      "status": "pending",
+      "priority": 145,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-m0kf",
+      "objective": "2026-01-10: Worktree branches from origin/main after fetch - ensures fresh main even with external changes",
+      "status": "pending",
+      "priority": 146,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-xxp9",
+      "objective": "2026-01-10: Elevator pushes to origin after successful merge - work is saved remotely, not just locally",
+      "status": "pending",
+      "priority": 147,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-xg2y",
+      "objective": "2026-01-10: SDK agents now load .claude/rules/ via settingSources: [\"project\"] option",
+      "status": "pending",
+      "priority": 148,
+      "createdAt": "2026-01-10T07:49:19.339Z"
+    },
+    {
+      "id": "quest-mk807zvv-o7np",
+      "objective": "2026-01-10: Optimal merge strategy: clean merge → -X ours → report truly unresolvable conflicts",
+      "status": "pending",
+      "priority": 149,
+      "createdAt": "2026-01-10T07:49:19.339Z"
     }
   ],
-  "lastUpdated": "2026-01-10T09:00:00.000Z"
+  "lastUpdated": "2026-01-10T07:49:19.339Z"
 }
