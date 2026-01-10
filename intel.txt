@@ -24,6 +24,9 @@
 [complexity] Critical tasks get extra validators - scale Rule of Five literally with 5+ review passes for high-risk changes
 [complexity] Smart model selection per task - use Opus for complex planning, Sonnet for standard work, Haiku for trivial
 [isolation] Add Docker isolation option - full sandbox mode for untrusted or risky code execution
+[recovery] Add rollback mechanism - auto-tag pre-merge state, easy undo if merged quest breaks things
+[control] Add quest dependencies - express "Quest A needs Quest B done first", block until satisfied
+[control] Add cancel specific agent - kill stuck quester without surrendering entire raid
 [parallelism] Add parallel quester support - spawn multiple questers working on different waypoints simultaneously
 [parallelism] Implement waypoint splitting in logistics - break large tasks into independent subtasks for parallel execution
 [parallelism] Add a --parallel flag to control max concurrent agents (default 3, max 5)
@@ -37,6 +40,10 @@
 [self-improvement] Add roadmap synthesis command ("undercity reflect") - analyze observation log to detect problems AND opportunities
 
 ### Medium
+[budget] Add quota budgeting per quest - set max token spend, fail gracefully if exceeded
+[validation] Sheriff runs the code - not just tests, actually execute to verify behavior works
+[security] Add security scanning integration - run semgrep or similar, not just prompt-based OWASP checks
+[notify] Add notification system - webhook/desktop notification when quest completes or needs attention
 [planning] Parse plan files into discrete goals/waypoints upfront instead of re-reading whole plan each iteration
 [planning] Track which plan steps are complete in backlog so we don't re-check via codebase analysis
 [planning] Add plan progress tracking - show "Step 3/7: Adding authentication" not just "executing"
@@ -69,6 +76,9 @@
 [tui] Support for multiple concurrent squads with clear visual separation
 
 ### Low
+[audit] Add structured audit trail - queryable log of what agents did, not just text logs
+[planning] Add logistics calibration - feedback loop to improve plan quality (too vague vs too detailed)
+[advanced] Add branch strategy options - try two approaches in parallel, pick the winner
 [qol] Add "undercity pause" command to pause a raid without surrendering
 [qol] Add "undercity resume" command to continue a paused raid
 [qol] Add "undercity logs <agent-id>" to see full output from a specific agent
