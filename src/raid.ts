@@ -19,7 +19,7 @@
  * Implements GUPP: if there's work in progress, continue it.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
 import { CheckpointManager } from "./checkpoint-manager.js";
@@ -913,10 +913,21 @@ export class RaidOrchestrator {
 					const worktreeInfo = this.persistence.getWorktreeForRaid(raid.id);
 					if (worktreeInfo) {
 						workingDir = worktreeInfo.path;
+						// Verify worktree still exists before using it
+						const worktreeStillExists = existsSync(worktreeInfo.path);
+						console.log(chalk.cyan(`[DEBUG] Agent ${member.type} using worktree: ${worktreeInfo.path}`));
+						console.log(chalk.cyan(`[DEBUG] Worktree still exists: ${worktreeStillExists}`));
+						if (!worktreeStillExists) {
+							console.log(chalk.red(`[ERROR] Worktree was cleaned up prematurely! Falling back to process.cwd()`));
+							workingDir = process.cwd();
+						}
 						this.log("Using worktree for agent", {
 							agentType: member.type,
 							worktreePath: worktreeInfo.path,
+							stillExists: worktreeStillExists,
 						});
+					} else {
+						console.log(chalk.yellow(`[DEBUG] No worktree info found for raid ${raid.id}, using process.cwd()`));
 					}
 				}
 			}
@@ -1313,10 +1324,17 @@ export class RaidOrchestrator {
 			// Save worktree info to persistence
 			this.persistence.addWorktree(worktreeInfo);
 
+			// Verify worktree was actually created
+			const worktreeExists = existsSync(worktreeInfo.path);
+			console.log(chalk.cyan(`[DEBUG] Worktree created: ${worktreeInfo.path}`));
+			console.log(chalk.cyan(`[DEBUG] Worktree exists on disk: ${worktreeExists}`));
+			console.log(chalk.cyan(`[DEBUG] Worktree branch: ${worktreeInfo.branch}`));
+
 			this.log("Created worktree for raid", {
 				raidId: raid.id,
 				worktreePath: worktreeInfo.path,
 				branch: worktreeInfo.branch,
+				existsOnDisk: worktreeExists,
 			});
 		} catch (error) {
 			const errorMessage = error instanceof WorktreeError ? error.message : String(error);
