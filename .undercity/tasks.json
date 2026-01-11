@@ -635,7 +635,14 @@
       "status": "pending",
       "priority": 63,
       "createdAt": "2026-01-11T23:43:43.245Z"
+    },
+    {
+      "id": "task-mkadtxcu-cn6i",
+      "objective": "[cli] Add 'undercity update' command - update task objective, priority, tags, or status. Usage: undercity update <task-id> --objective '...' --priority N --tags tag1,tag2",
+      "status": "pending",
+      "priority": 64,
+      "createdAt": "2026-01-11T23:45:49.854Z"
     }
   ],
-  "lastUpdated": "2026-01-11T23:45:23.890Z"
+  "lastUpdated": "2026-01-11T23:45:49.854Z"
 }
