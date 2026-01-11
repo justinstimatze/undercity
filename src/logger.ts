@@ -30,3 +30,4 @@ export const agentLogger = logger.child({ module: "squad" });
 export const gitLogger = logger.child({ module: "git" });
 export const persistenceLogger = logger.child({ module: "persistence" });
 export const cacheLogger = logger.child({ module: "cache" });
+export const serverLogger = logger.child({ module: "server" });

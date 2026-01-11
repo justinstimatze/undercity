@@ -46,6 +46,17 @@ export { ParallelSoloOrchestrator } from "./parallel-solo.js";
 export { getPerformanceManager } from "./performance-manager.js";
 // Persistence layer
 export { Persistence } from "./persistence.js";
+// HTTP Server
+export {
+	clearDaemonState,
+	type DaemonState,
+	getDaemonState,
+	isDaemonRunning,
+	queryDaemon,
+	type ServerConfig,
+	saveDaemonState,
+	UndercityServer,
+} from "./server.js";
 export { SoloOrchestrator } from "./solo.js";
 // Squad management
 export {

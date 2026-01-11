@@ -538,6 +538,159 @@ export const mixedCommands: CommandModule = {
 				}
 			});
 
+		// Serve command - HTTP daemon for external control
+		program
+			.command("serve")
+			.description("Start HTTP daemon for external control (Claude Code, curl, etc)")
+			.option("-p, --port <port>", "Port to listen on", "7331")
+			.option("--grind", "Also run grind loop (daemon + grind in one)")
+			.action(async (options: { port?: string; grind?: boolean }) => {
+				const { UndercityServer, isDaemonRunning, getDaemonState } = await import("../server.js");
+
+				const port = Number.parseInt(options.port || "7331", 10);
+
+				// Check if already running
+				if (isDaemonRunning()) {
+					const state = getDaemonState();
+					console.log(chalk.yellow(`Daemon already running on port ${state?.port} (PID ${state?.pid})`));
+					console.log(chalk.dim("Use 'undercity daemon stop' to stop it first"));
+					process.exit(1);
+				}
+
+				const server = new UndercityServer({
+					port,
+					onStop: () => {
+						console.log(chalk.dim("\nShutdown requested via API"));
+					},
+				});
+
+				try {
+					await server.start();
+					console.log(chalk.cyan.bold("\n🌐 Undercity Daemon"));
+					console.log(chalk.dim(`  Port: ${port}`));
+					console.log(chalk.dim(`  PID: ${process.pid}`));
+					console.log();
+					console.log("Endpoints:");
+					console.log(chalk.dim("  GET  /status   - Session, agents, tasks summary"));
+					console.log(chalk.dim("  GET  /tasks    - Full task board"));
+					console.log(chalk.dim("  POST /tasks    - Add task { objective, priority? }"));
+					console.log(chalk.dim("  GET  /metrics  - Metrics summary"));
+					console.log(chalk.dim("  POST /pause    - Pause grind"));
+					console.log(chalk.dim("  POST /resume   - Resume grind"));
+					console.log(chalk.dim("  POST /stop     - Stop daemon"));
+					console.log();
+					console.log("Examples:");
+					console.log(chalk.dim(`  curl localhost:${port}/status`));
+					console.log(chalk.dim(`  curl -X POST localhost:${port}/tasks -d '{"objective":"Fix bug"}'`));
+					console.log();
+					console.log(chalk.green("Daemon running. Press Ctrl+C to stop."));
+
+					// If --grind flag, also start grind loop
+					if (options.grind) {
+						console.log(chalk.cyan("\nStarting grind loop..."));
+						// TODO: Wire up grind loop with daemon pause/resume
+					}
+
+					// Handle graceful shutdown
+					process.on("SIGINT", async () => {
+						console.log(chalk.dim("\nShutting down..."));
+						await server.stop();
+						process.exit(0);
+					});
+
+					process.on("SIGTERM", async () => {
+						await server.stop();
+						process.exit(0);
+					});
+				} catch (error) {
+					console.error(chalk.red(`Failed to start daemon: ${error}`));
+					process.exit(1);
+				}
+			});
+
+		// Daemon status/control command
+		program
+			.command("daemon [action]")
+			.description("Check or control the daemon (status, stop)")
+			.action(async (action?: string) => {
+				const { isDaemonRunning, queryDaemon } = await import("../server.js");
+
+				if (!action || action === "status") {
+					if (!isDaemonRunning()) {
+						console.log(chalk.gray("Daemon not running"));
+						console.log(chalk.dim("Start with: undercity serve"));
+						return;
+					}
+
+					try {
+						const status = (await queryDaemon("/status")) as Record<string, unknown>;
+						const daemon = status.daemon as Record<string, unknown>;
+						const session = status.session as Record<string, unknown> | null;
+						const agents = status.agents as Array<Record<string, unknown>>;
+						const tasks = status.tasks as Record<string, number>;
+
+						console.log(chalk.green.bold("✓ Daemon Running"));
+						console.log(chalk.dim(`  Port: ${daemon.port} | PID: ${daemon.pid}`));
+						console.log(chalk.dim(`  Uptime: ${Math.round(daemon.uptime as number)}s`));
+						console.log(chalk.dim(`  State: ${daemon.paused ? chalk.yellow("PAUSED") : chalk.green("active")}`));
+
+						if (session) {
+							console.log();
+							console.log(chalk.bold("Session:"));
+							console.log(chalk.dim(`  ${session.id}: ${session.goal}`));
+						}
+
+						if (agents && agents.length > 0) {
+							console.log();
+							console.log(chalk.bold(`Agents (${agents.length}):`));
+							for (const a of agents) {
+								console.log(chalk.dim(`  ${a.type}: ${a.status}`));
+							}
+						}
+
+						console.log();
+						console.log(chalk.bold("Tasks:"));
+						console.log(
+							chalk.dim(`  ${tasks.pending} pending, ${tasks.inProgress} in progress, ${tasks.complete} complete`),
+						);
+					} catch (error) {
+						console.error(chalk.red(`Failed to query daemon: ${error}`));
+					}
+				} else if (action === "stop") {
+					if (!isDaemonRunning()) {
+						console.log(chalk.gray("Daemon not running"));
+						return;
+					}
+
+					try {
+						await queryDaemon("/stop", "POST");
+						console.log(chalk.green("Daemon stopping..."));
+					} catch {
+						// Expected - daemon shuts down
+						console.log(chalk.green("Daemon stopped"));
+					}
+				} else if (action === "pause") {
+					if (!isDaemonRunning()) {
+						console.log(chalk.gray("Daemon not running"));
+						return;
+					}
+
+					await queryDaemon("/pause", "POST");
+					console.log(chalk.yellow("Grind paused"));
+				} else if (action === "resume") {
+					if (!isDaemonRunning()) {
+						console.log(chalk.gray("Daemon not running"));
+						return;
+					}
+
+					await queryDaemon("/resume", "POST");
+					console.log(chalk.green("Grind resumed"));
+				} else {
+					console.log(chalk.red(`Unknown action: ${action}`));
+					console.log(chalk.dim("Available: status, stop, pause, resume"));
+				}
+			});
+
 		// Experiment command (simplified)
 		program
 			.command("experiment")
