@@ -1,5 +1,5 @@
 /**
- * Mixed commands (solo, grind, utility, experiment commands)
+ * Mixed commands (solo, grind, utility commands)
  * These are combined due to their varied nature and to complete the refactoring efficiently.
  */
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -1023,21 +1023,6 @@ export const mixedCommands: CommandModule = {
 				console.log(
 					`  Queued: ${status.tasksQueued} | Started: ${status.tasksStarted} | Complete: ${status.tasksComplete} | Failed: ${status.tasksFailed}`,
 				);
-			});
-
-		// Experiment command (simplified)
-		program
-			.command("experiment")
-			.description("Run A/B experiments on session configurations")
-			.argument("<action>", "Action to perform (list, show, start, analyze)")
-			.argument("[idOrTemplate]", "Experiment ID or template name")
-			.action(async (action: string, idOrTemplate: string | undefined) => {
-				console.log(chalk.bold("Experiment System"));
-				console.log(chalk.yellow("⚠️ Experiment functionality not yet implemented"));
-				console.log(chalk.dim(`Requested action: ${action}`));
-				if (idOrTemplate) {
-					console.log(chalk.dim(`Target: ${idOrTemplate}`));
-				}
 			});
 	},
 };
