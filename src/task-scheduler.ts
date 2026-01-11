@@ -40,12 +40,10 @@ export interface CompatibilityResult {
 
 export class TaskScheduler {
 	private analyzer: TaskAnalyzer;
-	private fileTracker: FileTracker;
 	private maxParallelTasks: number;
 
-	constructor(analyzer: TaskAnalyzer, fileTracker: FileTracker, maxParallelTasks: number = 3) {
+	constructor(analyzer: TaskAnalyzer, _fileTracker: FileTracker, maxParallelTasks: number = 3) {
 		this.analyzer = analyzer;
-		this.fileTracker = fileTracker;
 		this.maxParallelTasks = maxParallelTasks;
 	}
 

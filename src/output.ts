@@ -51,7 +51,7 @@ interface OutputConfig {
 }
 
 // Global configuration - can be set once at startup
-let globalConfig: OutputConfig = {
+const globalConfig: OutputConfig = {
 	mode: detectMode(),
 	verbose: false,
 };
@@ -228,7 +228,12 @@ export function taskComplete(taskId: string, message: string, data?: Record<stri
 /**
  * Output task failure notification
  */
-export function taskFailed(taskId: string, message: string, errorDetails?: string, data?: Record<string, unknown>): void {
+export function taskFailed(
+	taskId: string,
+	message: string,
+	errorDetails?: string,
+	data?: Record<string, unknown>,
+): void {
 	outputEvent({
 		type: "task_failed",
 		message,
@@ -292,16 +297,14 @@ export function section(title: string): void {
 /**
  * Print a summary block
  */
-export function summary(title: string, items: Array<{ label: string; value: string | number; status?: "good" | "bad" | "neutral" }>): void {
+export function summary(
+	title: string,
+	items: Array<{ label: string; value: string | number; status?: "good" | "bad" | "neutral" }>,
+): void {
 	if (globalConfig.mode === "human") {
 		console.log(chalk.bold(`\n${title}`));
 		for (const item of items) {
-			const statusColor =
-				item.status === "good"
-					? chalk.green
-					: item.status === "bad"
-						? chalk.red
-						: chalk.white;
+			const statusColor = item.status === "good" ? chalk.green : item.status === "bad" ? chalk.red : chalk.white;
 			console.log(`  ${item.label}: ${statusColor(String(item.value))}`);
 		}
 		console.log();
@@ -394,9 +397,7 @@ class ProgressTracker {
 		const elapsed = Math.round((Date.now() - this.startTime) / 1000);
 		const display = message || this.label;
 		const truncated = display.length > 40 ? `${display.substring(0, 37)}...` : display;
-		process.stdout.write(
-			`\r${chalk.cyan("→")} ${truncated} [${this.current}/${this.total}] ${percent}% (${elapsed}s)`,
-		);
+		process.stdout.write(`\r${chalk.cyan("→")} ${truncated} [${this.current}/${this.total}] ${percent}% (${elapsed}s)`);
 	}
 }
 
@@ -414,6 +415,7 @@ export const compat = {
 			console.log(message);
 		} else {
 			// Strip ANSI codes for agent mode
+			// biome-ignore lint/suspicious/noControlCharactersInRegex: Intentional - stripping ANSI escape sequences
 			const stripped = message.replace(/\x1b\[[0-9;]*m/g, "");
 			outputEvent({ type: "info", message: stripped, timestamp: now() });
 		}

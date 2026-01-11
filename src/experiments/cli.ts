@@ -9,7 +9,7 @@ import { writeFileAtomic } from "../file-utils.js";
 import { ExperimentTemplates } from "./examples.js";
 import { ExperimentFramework } from "./framework.js";
 import { TaskExperimentIntegrator } from "./integration.js";
-import { Experiment, type ExperimentStatus } from "./types.js";
+import type { ExperimentStatus } from "./types.js";
 
 export class ExperimentCLI {
 	private framework: ExperimentFramework;

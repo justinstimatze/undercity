@@ -2,7 +2,7 @@
  * Mixed commands (solo, grind, utility, experiment commands)
  * These are combined due to their varied nature and to complete the refactoring efficiently.
  */
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
@@ -172,7 +172,6 @@ export const mixedCommands: CommandModule = {
 				) => {
 					const { ParallelSoloOrchestrator } = await import("../parallel-solo.js");
 					const { startGrindProgress, updateGrindProgress, clearGrindProgress } = await import("../live-metrics.js");
-					const grindEvents = await import("../grind-events.js");
 
 					const maxCount = Number.parseInt(options.count || "0", 10);
 					const parallelism = Math.min(5, Math.max(1, Number.parseInt(options.parallel || "1", 10)));

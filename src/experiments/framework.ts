@@ -7,7 +7,6 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { Task } from "../task.js";
 import type {
 	Experiment,
 	ExperimentAnalysis,
