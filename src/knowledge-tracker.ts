@@ -589,9 +589,11 @@ export class KnowledgeTracker {
 				: 0;
 
 		const allErrorCategories = new Set<string>();
-		allKnowledge.forEach((k) => {
-			k.metrics.errorCategories?.forEach((cat) => allErrorCategories.add(cat));
-		});
+		for (const k of allKnowledge) {
+			for (const cat of k.metrics.errorCategories ?? []) {
+				allErrorCategories.add(cat);
+			}
+		}
 		const errorPatternDiversity = allErrorCategories.size;
 
 		const legacyMetrics = {
@@ -626,7 +628,7 @@ export class KnowledgeTracker {
 			}
 
 			// Add evidence from bottleneck analysis
-			bottleneckAnalysis.evidence.forEach((e) => rationale.push(e));
+			rationale.push(...bottleneckAnalysis.evidence);
 
 			// Success rate analysis
 			if (metricsAnalysis && metricsAnalysis.successRate < 0.7) {
