@@ -2,6 +2,9 @@
  * Mixed commands (solo, grind, utility, experiment commands)
  * These are combined due to their varied nature and to complete the refactoring efficiently.
  */
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { getConfigSource, loadConfig, mergeWithConfig } from "../config.js";
 import { type OracleCard, UndercityOracle } from "../oracle.js";
@@ -9,6 +12,9 @@ import * as output from "../output.js";
 import { Persistence } from "../persistence.js";
 import { RateLimitTracker } from "../rate-limit.js";
 import type { CommandModule } from "./types.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export const mixedCommands: CommandModule = {
 	register(program) {
@@ -218,8 +224,7 @@ export const mixedCommands: CommandModule = {
 
 							if (recoveryTasks.length > 0) {
 								// Apply -n limit to recovery tasks if specified
-								const tasksToResume =
-									maxCount > 0 ? recoveryTasks.slice(0, maxCount) : recoveryTasks;
+								const tasksToResume = maxCount > 0 ? recoveryTasks.slice(0, maxCount) : recoveryTasks;
 
 								const result = await orchestrator.runParallel(tasksToResume);
 								tasksProcessed += result.results.length;
@@ -247,14 +252,11 @@ export const mixedCommands: CommandModule = {
 						const allTasks = getAllItems();
 						// Include both "pending" and "in_progress" tasks
 						// in_progress tasks may be stale from a previous crashed session
-						const pendingTasks = allTasks.filter(
-							(q) => q.status === "pending" || q.status === "in_progress",
-						);
+						const pendingTasks = allTasks.filter((q) => q.status === "pending" || q.status === "in_progress");
 
 						// Account for tasks already processed during recovery
 						const remainingCount = maxCount > 0 ? maxCount - tasksProcessed : 0;
-						const tasksToProcess =
-							maxCount > 0 ? pendingTasks.slice(0, remainingCount) : pendingTasks;
+						const tasksToProcess = maxCount > 0 ? pendingTasks.slice(0, remainingCount) : pendingTasks;
 
 						// Skip if no tasks to process (either none pending or -n limit reached)
 						if (tasksToProcess.length === 0) {
@@ -367,16 +369,61 @@ export const mixedCommands: CommandModule = {
 				output.info("For live monitoring, run: undercity watch");
 			});
 
-		// Init command
+		// Init command - set up undercity in a new topside repo
 		program
 			.command("init")
-			.description("Initialize Undercity state directory")
+			.description("Initialize undercity in a repository (creates .undercity/ and installs Claude skill)")
 			.option("-d, --directory <path>", "Custom directory path (default: .undercity)")
-			.action((options: { directory?: string }) => {
+			.option("-f, --force", "Overwrite existing skill file")
+			.action((options: { directory?: string; force?: boolean }) => {
+				console.log(chalk.bold("Initializing Undercity"));
+
+				// Initialize .undercity directory
 				const persistence = new Persistence(options.directory);
+				const undercityDir = options.directory || ".undercity";
 				persistence.initializeUndercity(options.directory);
-				console.log(chalk.green(`✓ Initialized Undercity state directory: ${options.directory || ".undercity"}`));
-				console.log(chalk.dim("  Ready to launch sessions and manage tasks"));
+				console.log(chalk.green(`  Created ${undercityDir}/`));
+
+				// Find the templates directory (relative to compiled output)
+				const templatesDir = join(__dirname, "..", "..", "templates");
+				const skillTemplatePath = join(templatesDir, "undercity-skill.md");
+
+				// Install skill file if template exists
+				if (existsSync(skillTemplatePath)) {
+					// Create .claude/skills directory
+					const skillsDir = ".claude/skills";
+					if (!existsSync(skillsDir)) {
+						mkdirSync(skillsDir, { recursive: true });
+						console.log(chalk.green(`  Created ${skillsDir}/`));
+					}
+
+					// Copy skill file
+					const skillPath = join(skillsDir, "undercity.md");
+					if (existsSync(skillPath) && !options.force) {
+						console.log(chalk.yellow(`  ${skillPath} already exists (use --force to overwrite)`));
+					} else {
+						copyFileSync(skillTemplatePath, skillPath);
+						console.log(chalk.green(`  Installed ${skillPath}`));
+					}
+				} else {
+					console.log(chalk.dim("  Skill template not found, skipping skill installation"));
+				}
+
+				// Add .undercity to .gitignore if not already present
+				const gitignorePath = ".gitignore";
+				if (existsSync(gitignorePath)) {
+					const gitignore = readFileSync(gitignorePath, "utf-8");
+					if (!gitignore.includes(".undercity")) {
+						appendFileSync(gitignorePath, "\n# Undercity runtime state\n.undercity/\n");
+						console.log(chalk.green("  Added .undercity/ to .gitignore"));
+					}
+				}
+
+				console.log();
+				console.log(chalk.green.bold("Undercity initialized!"));
+				console.log(chalk.dim("Run 'undercity tasks' to view the task board"));
+				console.log(chalk.dim("Run 'undercity tasks add <task>' to add tasks"));
+				console.log(chalk.dim("Run 'undercity grind' to process tasks"));
 			});
 
 		// Setup command
@@ -715,6 +762,5 @@ export const mixedCommands: CommandModule = {
 					console.log(chalk.dim(`Target: ${idOrTemplate}`));
 				}
 			});
-
 	},
 };
