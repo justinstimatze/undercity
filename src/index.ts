@@ -40,24 +40,6 @@ export {
 	resetLiveMetrics,
 	saveLiveMetrics,
 } from "./live-metrics.js";
-// Orchestration
-export { ParallelSoloOrchestrator } from "./parallel-solo.js";
-// Performance management
-export { getPerformanceManager } from "./performance-manager.js";
-// Persistence layer
-export { Persistence } from "./persistence.js";
-// HTTP Server
-export {
-	clearDaemonState,
-	type DaemonState,
-	getDaemonState,
-	isDaemonRunning,
-	queryDaemon,
-	type ServerConfig,
-	saveDaemonState,
-	UndercityServer,
-} from "./server.js";
-export { SoloOrchestrator } from "./solo.js";
 // Output system
 export {
 	configureOutput,
@@ -83,6 +65,24 @@ export {
 	taskStart,
 	warning,
 } from "./output.js";
+// Orchestration
+export { ParallelSoloOrchestrator } from "./parallel-solo.js";
+// Performance management
+export { getPerformanceManager } from "./performance-manager.js";
+// Persistence layer
+export { Persistence } from "./persistence.js";
+// HTTP Server
+export {
+	clearDaemonState,
+	type DaemonState,
+	getDaemonState,
+	isDaemonRunning,
+	queryDaemon,
+	type ServerConfig,
+	saveDaemonState,
+	UndercityServer,
+} from "./server.js";
+export { SoloOrchestrator } from "./solo.js";
 // Squad management
 export {
 	createAgent,

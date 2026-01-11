@@ -643,8 +643,6 @@ export class ParallelSoloOrchestrator {
 
 		// Merge worktree changes into local main
 		// Since worktree already rebased onto local main, this should fast-forward
-		const worktreeBranch = execInDir(`git rev-parse --abbrev-ref HEAD`, worktreePath).trim();
-
 		try {
 			// Get the current commit SHA before detaching
 			const commitSha = execInDir(`git rev-parse HEAD`, worktreePath).trim();

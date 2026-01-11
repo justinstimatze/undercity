@@ -128,19 +128,6 @@ function worktreePathExists(worktreePath: string): boolean {
 }
 
 /**
- * Fetch latest from origin to ensure we have up-to-date refs
- */
-function fetchOrigin(): void {
-	try {
-		gitLogger.debug("Fetching latest from origin");
-		execGit(["fetch", "origin"]);
-	} catch (error) {
-		// Log but don't fail - we can still work with local refs
-		gitLogger.warn({ error: String(error) }, "Failed to fetch from origin, using local refs");
-	}
-}
-
-/**
  * Manages git worktrees for session isolation
  */
 export class WorktreeManager {
