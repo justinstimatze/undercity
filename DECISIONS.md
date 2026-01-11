@@ -1,6 +1,16 @@
-# Undercity Decision Framework
+# Undercity Decision Matrix
 
-**When to use what, when to escalate, and how routing works.**
+Comprehensive guide for when to use solo vs grind, escalation strategies, model routing logic, and parallel execution decisions.
+
+## Quick Reference
+
+| Task Type | Complexity | Command | Model | Parallelism | Review |
+|-----------|------------|---------|--------|-------------|--------|
+| Trivial (format, lint) | Local Tool | `pnpm format` | None | N/A | No |
+| Single file fix | Simple | `grind "goal"` | haiku/sonnet | 1 | No |
+| Feature implementation | Standard | `grind` | sonnet | 1-3 | Yes |
+| Multi-package refactor | Complex | `grind --parallel 1` | opus | 1 | Yes |
+| Security/Auth changes | Critical | `grind --parallel 1 --review` | opus | 1 | Yes |
 
 ## Command Selection
 
@@ -39,30 +49,87 @@ undercity grind  # Process all queued tasks
 
 ## Model Selection & Routing
 
-### Complexity Assessment → Model Assignment
+### Complexity Assessment Pipeline
 
-The system uses quantitative metrics + keyword analysis to route tasks:
+Undercity uses a multi-stage assessment pipeline to route tasks to the optimal model tier:
 
-#### Trivial/Simple → Haiku (Fast, Cheap: ~$0.01 per 1K tokens)
-- **Score: 0-3 points**
-- **Examples:** typos, comments, version bumps, small edits
-- **File scope:** Single file, 1-3 files max
-- **Keywords:** "typo", "comment", "rename", "add log", "minor"
-- **Quantitative:** <500 lines, <10 functions, healthy code
+```
+Task Description → Local Tool Check → Fast Assessment → Quantitative Assessment → Model Selection
+```
 
-#### Standard → Sonnet (Balanced: ~$0.15 per 1K tokens)
-- **Score: 3-6 points**
-- **Examples:** features, bug fixes, tests, moderate changes
-- **File scope:** 2-5 files typically
-- **Keywords:** "implement", "add feature", "fix bug", "create"
-- **Quantitative:** 500-1000 lines, 10-20 functions, good health
+#### Stage 1: Local Tool Detection (FREE - No Tokens)
 
-#### Complex/Critical → Opus (Expensive, Capable: ~$0.75 per 1K tokens)
-- **Score: 6+ points**
-- **Examples:** refactoring, security, auth, migrations, architecture
+**Pattern matching for zero-cost operations:**
+```typescript
+const LOCAL_TOOL_PATTERNS = [
+  { pattern: /^(run\s+)?(format|prettier|biome\s+format)/i, command: "pnpm format" },
+  { pattern: /^(run\s+)?(lint|biome\s+lint)/i, command: "pnpm lint:fix" },
+  { pattern: /^(run\s+)?typecheck/i, command: "pnpm typecheck" },
+  { pattern: /^(run\s+)?test($|\s)/i, command: "pnpm test" },
+  { pattern: /^(run\s+)?build($|\s)/i, command: "pnpm build" }
+]
+```
+
+**Key insight:** These operations are handled directly by shell commands with no AI involvement.
+
+#### Stage 2: Fast Complexity Assessment (assessComplexityFast - No Tokens)
+
+**Keyword-based scoring:**
+- **Trivial keywords:** "typo", "comment", "rename", "version bump" → 0 points
+- **Simple keywords:** "add log", "minor", "tweak", "adjust" → 1 point
+- **Standard keywords:** "implement", "create", "fix bug", "add feature" → 2 points
+- **Complex keywords:** "refactor", "migrate", "integrate", "cross-package" → 3 points
+- **Critical keywords:** "security", "auth", "payment", "production" → 4+ points
+
+**Scope assessment:**
+- Single-file indicators: "in file", "this file", "the function" → 0 points
+- Multi-file indicators: "multiple files", "across files" → +2 points
+- Cross-package indicators: "cross-package", "common and server" → +3 points
+
+#### Stage 3: Quantitative Assessment (When Target Files Known)
+
+**File metrics scoring:**
+```typescript
+// File count scoring
+1 file = 0 points, 2-3 files = +1, 4-7 files = +2, 8+ files = +3
+
+// Lines of code scoring
+>500 lines = +1, >1000 lines = +2
+
+// Function complexity
+>10 functions = +1, >20 functions = +2
+
+// Cross-package penalty
+Multiple packages = +3
+
+// Code health (from CodeScene)
+Health < 5 = +3, Health 5-7 = +2, Healthy = 0
+
+// Git history signals
+Change hotspots (>10 commits) = +1 per file
+Bug-prone files (>2 fix commits) = +2 per file
+High churn (avg >5 changes) = +1
+```
+
+#### Model Tier Assignment
+
+**Haiku (Fast + Cheap: ~$0.25 per 1K input tokens):**
+- **Score:** 0-1 points
+- **Examples:** typos, comments, version bumps, single-file fixes
+- **File scope:** Single file, healthy code
+- **Best for:** Trivial maintenance tasks
+
+**Sonnet (Balanced: ~$3 per 1K input tokens):**
+- **Score:** 2-6 points
+- **Examples:** feature implementation, bug fixes, test additions
+- **File scope:** 2-5 files, standard complexity
+- **Best for:** Most development tasks
+
+**Opus (Capable: ~$15 per 1K input tokens):**
+- **Score:** 7+ points
+- **Examples:** refactoring, security changes, architecture work
 - **File scope:** 5+ files, cross-package changes
-- **Keywords:** "refactor", "security", "auth", "migrate", "architecture"
-- **Quantitative:** >1000 lines, >20 functions, hotspots, unhealthy code
+- **Best for:** Complex reasoning, critical systems
 
 #### Scoring System (from `complexity.ts`):
 ```typescript
@@ -75,75 +142,55 @@ The system uses quantitative metrics + keyword analysis to route tasks:
 // Bug-prone files = +2 per file
 ```
 
-### Model Routing Logic
+### Task Decomposition & Model Assignment
 
-1. **Free Local Tool Detection** (0 tokens)
-   ```typescript
-   // Patterns checked first - no LLM needed
-   /^(run\s+)?(format|prettier)/i → "pnpm format"
-   /^(run\s+)?(lint|biome)/i → "pnpm lint:fix"
-   /^(run\s+)?typecheck/i → "pnpm typecheck"
-   /^(run\s+)?test/i → "pnpm test"
-   ```
+**Atomicity Check (`checkAndDecompose` - uses Haiku):**
+- Assesses if task is atomic or needs breaking down
+- **Decomposition triggers:**
+  * Multiple distinct objectives in description
+  * Cross-package changes detected
+  * >5 estimated files affected
+  * Complex compound tasks
 
-2. **Fast Complexity Assessment** (`assessComplexityFast` - 0 tokens)
-   - Keyword and pattern matching
-   - Instant results for initial triage
-   - **Scoring system:**
-     * File count: 1 file = 0 pts, 3+ files = +2 pts
-     * Keywords: "security" = +4 pts, "refactor" = +3 pts, "typo" = 0 pts
-     * Scope: cross-package = +3 pts, single-file = 0 pts
+**Execution Order (Cost Optimization):**
+```typescript
+// Process tasks by model tier for cost efficiency
+modelOrder = ["haiku", "sonnet", "opus"]
+for (tier of modelOrder) {
+  await processTasksWithModel(tier)
+}
+```
 
-3. **Quantitative Assessment** (when target files known)
-   - Uses actual code metrics: LOC, function count, git hotspots
-   - Code health scores from CodeScene
-   - Git history analysis (bug-prone files, change frequency)
-   - **More accurate than keyword matching**
-
-4. **Task Decomposition Check** (`checkAndDecompose` - ~500 tokens)
-   - Uses Haiku to assess atomicity
-   - **Decomposition triggers:**
-     * Multiple distinct objectives
-     * Cross-package changes
-     * >5 estimated files affected
-   - Creates subtasks with individual model recommendations
-
-5. **Adaptive Routing Override** (`applyAdaptiveRouting`)
-   - Historical success rate tracking
-   - **Override triggers:**
-     * Haiku success rate < 70% for "simple" → route to sonnet
-     * Sonnet success rate < 60% for assigned level → route to opus
-   - Requires minimum 5 samples before overriding defaults
-
-6. **Execution Order** (in `grind` mode)
-   ```typescript
-   // Process by model tier for cost efficiency
-   modelOrder = ["haiku", "sonnet", "opus"]
-   for (tier of modelOrder) {
-     await processTasksWithModel(tier)
-   }
-   ```
+**Grind mode task flow:**
+1. Load all pending tasks from task board
+2. Run decomposition check on each task
+3. Group tasks by recommended model tier
+4. Execute haiku tasks first (cheapest)
+5. Then sonnet tasks (moderate cost)
+6. Finally opus tasks (most expensive)
 
 ## Escalation Strategy
 
-### When Tasks Escalate (SoloOrchestrator logic)
+### Automatic Escalation Triggers
 
-**Escalation decision factors (`shouldEscalate`):**
-
-1. **No changes made** → escalate immediately (agent is stuck)
-2. **Error type affects retry count:**
-   - **Trivial errors** (lint/spell only): Full `maxRetriesPerTier` attempts (default: 3)
-   - **Serious errors** (typecheck/build/test): Faster escalation (`maxRetriesPerTier - 1`)
-3. **Scope underestimation:**
-   - Single-file task → touches 3+ files
-   - Few-files task → touches 10+ files
+**Within-task escalation (SoloOrchestrator):**
+1. **No Changes Made:** Immediate escalation (agent is stuck)
+2. **Verification Failures:**
+   - TypeScript errors → escalate after 1-2 retries
+   - Test failures → escalate after 1-2 retries
+   - Build errors → escalate after 1-2 retries
+   - Lint-only errors → allow full retries (often fixable)
+3. **Scope Underestimation:**
+   - Single-file assessment → task touches 3+ files
+   - Few-files assessment → task touches 10+ files
+4. **Max Retries Exceeded:** Escalate to next tier
 
 **Escalation path:** `haiku → sonnet → opus → fail`
 
-### Retry vs Escalation Strategy
+### Retry vs Escalation Configuration
 
 ```typescript
-// Configuration (SoloOrchestrator)
+// From SoloOrchestrator options
 {
   maxRetriesPerTier: 3,        // Retries at same tier before escalating
   maxReviewPassesPerTier: 2,   // Review passes per tier
@@ -152,19 +199,49 @@ The system uses quantitative metrics + keyword analysis to route tasks:
 ```
 
 **Decision logic:**
-- **No progress**: Immediate escalation (agent stuck)
-- **Trivial errors**: Allow full retries (lint often fixable by same model)
-- **Serious errors**: Escalate faster (type errors usually need smarter model)
+```typescript
+function shouldEscalate(attempt: AttemptResult): boolean {
+  // No changes made → immediate escalation
+  if (attempt.filesChanged === 0) return true;
 
-### Manual Escalation
+  // Error type determines retry strategy
+  if (attempt.hasTypeErrors || attempt.hasBuildErrors || attempt.hasTestFailures) {
+    return attempt.retryCount >= maxRetriesPerTier - 1; // Faster escalation
+  }
+
+  // Lint-only errors get full retries
+  return attempt.retryCount >= maxRetriesPerTier;
+}
+```
+
+### Manual Escalation Options
 
 ```bash
-# Force specific model for task
+# Force specific starting model
 undercity grind "complex task" --model opus
 
-# Enable escalating review passes
-undercity grind --review  # haiku → sonnet → opus review chain
+# Enable escalating review passes (default: enabled)
+undercity grind --review
+
+# Disable review (for quick iteration)
+undercity grind --no-review
+
+# Use supervised mode (Opus orchestrates workers)
+undercity solo --supervised --worker sonnet
 ```
+
+### Post-Completion Escalation
+
+**shouldEscalateToFullChain() triggers:**
+- Type or build errors remain
+- Scope was significantly underestimated
+- Large changes (>200 lines) without tests
+- Task complexity was "complex" or "critical"
+
+**Review passes (when --review enabled):**
+1. **Haiku Review:** Quick syntax/style check
+2. **Sonnet Review:** Comprehensive logic review
+3. **Opus Review:** Architectural review + edge cases
 
 ## Verification & Quality Gates
 
@@ -221,33 +298,61 @@ Use only for rapid prototyping or known-safe changes.
 
 ## Parallel vs Sequential Execution
 
+### Parallelism Decision Matrix
+
+| Task Characteristics | Recommended Parallelism | Reasoning |
+|----------------------|------------------------|-----------|
+| Independent bug fixes | `--parallel 3-5` | No file conflicts expected |
+| Different packages | `--parallel 3-5` | Isolated changes |
+| Documentation updates | `--parallel 5` | No code conflicts |
+| Feature development | `--parallel 1-3` | Moderate risk of conflicts |
+| Refactoring tasks | `--parallel 1` | High conflict probability |
+| Database migrations | `--parallel 1` | Sequential dependency |
+| Security changes | `--parallel 1` | Critical, needs careful review |
+| Breaking changes | `--parallel 1` | System-wide impact |
+
 ### Parallelism Configuration
 
 ```bash
-undercity grind --parallel 1   # Sequential (safe)
-undercity grind --parallel 3   # Moderate parallelism (default)
-undercity grind --parallel 5   # Maximum parallelism
+# Conservative (sequential)
+undercity grind --parallel 1
+
+# Moderate (default)
+undercity grind --parallel 3
+
+# Aggressive (maximum throughput)
+undercity grind --parallel 5
+
+# Direct task (always parallel=1)
+undercity grind "specific goal"
 ```
 
-### When to Use Each Level
+### Conflict Detection & Resolution
 
-| Level | Use Case | Risk | Throughput |
-|-------|----------|------|------------|
-| 1 | Conflicting tasks, critical changes | Lowest | Lowest |
-| 3 | Standard development batch | Moderate | Good |
-| 5 | Independent tasks, non-critical | Highest | Highest |
+**Pre-merge conflict detection (FileTracker):**
+```typescript
+// Detects file conflicts before merge attempt
+interface FileConflict {
+  path: string;
+  touchedBy: Array<{
+    agentId: string;
+    stepId: string;
+    operation: FileOperation;
+    timestamp: Date;
+  }>;
+}
+```
 
-### Conflict Detection
+**Conflict resolution strategies:**
+- **Warning level:** Log conflict, proceed with caution
+- **Error level:** Serialize conflicting tasks
+- **Critical level:** Fail task, require manual intervention
 
-**Pre-merge conflict detection** via `FileTracker`:
-- Detects when parallel tasks modify same files
-- Fails conflicting tasks early (before merge)
-- Requires manual resolution
-
-**Safe parallelism indicators:**
-- Tasks modify different packages
-- Different feature areas
-- Tests vs implementation vs docs
+**Safe parallel execution indicators:**
+- Tasks target different packages (`src/common` vs `src/pyserver`)
+- Different file types (tests vs implementation vs docs)
+- Independent feature areas (auth vs billing vs UI)
+- Pure additions (no modifications)
 
 ## Recovery & State Management
 
@@ -434,7 +539,7 @@ Need to run a task?
 **Model misalignment:**
 ```bash
 # BAD: Forcing opus for simple tasks
-undercity grind "fix typo" --model opus  # Waste $1+ on $0.01 task
+undercity grind "fix typo" --model opus  # Waste $15+ on $0.25 task
 
 # GOOD: Let system choose
 undercity grind "fix typo"  # Auto-routes to haiku
@@ -457,3 +562,80 @@ undercity grind "add feature" --model opus
 # GOOD: Let escalation happen naturally
 undercity grind "add feature" --review  # Escalates as needed
 ```
+
+## Decision Tree Summary
+
+```
+Task Input
+    ↓
+Local Tool Check (canHandleWithLocalTools)
+    ↓ (if no match)
+Fast Complexity Assessment (assessComplexityFast)
+    ↓
+High confidence? → Use assessment
+    ↓ (if low confidence)
+Deep Assessment (assessComplexityDeep - uses Haiku)
+    ↓
+Target Files Known? → Quantitative Assessment
+    ↓
+Decomposition Check (checkAndDecompose)
+    ↓
+Route to Model Tier:
+    Score 0-1: haiku
+    Score 2-6: sonnet
+    Score 7+:  opus
+    ↓
+Parallelism Decision:
+    Single task → maxConcurrent = 1
+    Multiple tasks → Check conflicts → Set parallelism
+    ↓
+Execute with Verification Pipeline
+    ↓
+Escalate on failures (haiku → sonnet → opus)
+    ↓
+Review if enabled (--review flag)
+    ↓
+Merge via Elevator (serial queue)
+    ↓
+Manual push when ready
+```
+
+## Usage Examples by Scenario
+
+### Single Task Execution
+```bash
+# Quick fix
+undercity grind "fix authentication timeout"
+
+# Complex architectural work
+undercity grind "refactor auth system for multi-tenant" --model opus --review
+
+# Force specific model (override complexity assessment)
+undercity grind "simple task" --model opus  # Usually not recommended
+```
+
+### Task Board Processing
+```bash
+# Add multiple tasks
+undercity add "fix user profile bug"
+undercity add "add email validation"
+undercity add "update documentation"
+
+# Process with moderate parallelism
+undercity grind --parallel 3
+
+# Conservative batch processing
+undercity grind --parallel 1 --review
+```
+
+### Emergency Workflows
+```bash
+# Production hotfix (force opus, sequential)
+undercity grind "fix critical security vulnerability" --model opus --parallel 1
+
+# Bulk maintenance (high parallelism)
+undercity add "fix all TypeScript strict errors"
+undercity grind --parallel 5 --no-decompose
+```
+
+This decision matrix provides comprehensive guidance for routing decisions in Undercity, optimizing for efficiency, safety, and code quality while minimizing costs.
