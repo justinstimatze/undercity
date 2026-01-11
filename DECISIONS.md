@@ -4,17 +4,16 @@
 
 ## Command Selection
 
-### `solo` vs `grind` vs `work`
+### `solo` vs `grind`
 
-| Command | Use Case | Execution Mode | Status |
-|---------|----------|----------------|---------|
-| `solo <goal>` | **DEPRECATED** - single task with adaptive escalation | Sequential | Use `grind` instead |
-| `grind [goal]` | **RECOMMENDED** - autonomous task processing | Parallel | Main production command |
-| `grind <goal>` | Single task execution (direct goal) | Parallel (concurrency=1) | Quick single-task execution |
-| `grind` | Process task board | Parallel | Batch processing mode |
-| `work` | **LEGACY** - continuous backlog processing | Sequential | Use `grind` instead |
+| Command | Use Case | Execution Mode | Infrastructure | Status |
+|---------|----------|----------------|---------------|---------|
+| `solo <goal>` | **DEPRECATED** - single task with adaptive escalation | Sequential | Basic (LiveMetrics only) | Use `grind` instead |
+| `grind [goal]` | **RECOMMENDED** - autonomous task processing | Parallel | Full (Worktree, Elevator, RateLimit, FileTracker, Recovery) | Main production command |
+| `grind <goal>` | Single task execution (direct goal) | Parallel (concurrency=1) | Full infrastructure | Quick single-task execution |
+| `grind` | Process task board | Parallel | Full infrastructure | Batch processing mode |
 
-**Decision rule:** Always use `grind`. It handles both single tasks and batches with superior infrastructure.
+**Decision rule:** Always use `grind`. It's the main production orchestrator (`ParallelSoloOrchestrator`) with full infrastructure even for single tasks.
 
 ### When to Add to Task Board vs Direct Execution
 
@@ -44,68 +43,118 @@ undercity grind  # Process all queued tasks
 
 The system uses quantitative metrics + keyword analysis to route tasks:
 
-#### Haiku (Fast, Cheap: ~$0.01 per 1K tokens)
-- **File deletions, moves, renames**
-- **Simple edits (typos, comments, formatting)**
-- **Documentation updates**
-- **Import organization**
-- **Test additions (non-complex)**
+#### Trivial/Simple → Haiku (Fast, Cheap: ~$0.01 per 1K tokens)
+- **Score: 0-3 points**
+- **Examples:** typos, comments, version bumps, small edits
+- **File scope:** Single file, 1-3 files max
+- **Keywords:** "typo", "comment", "rename", "add log", "minor"
+- **Quantitative:** <500 lines, <10 functions, healthy code
 
-**Signals:** Single file, clear objective, `fix typo`, `update comment`, `format code`
+#### Standard → Sonnet (Balanced: ~$0.15 per 1K tokens)
+- **Score: 3-6 points**
+- **Examples:** features, bug fixes, tests, moderate changes
+- **File scope:** 2-5 files typically
+- **Keywords:** "implement", "add feature", "fix bug", "create"
+- **Quantitative:** 500-1000 lines, 10-20 functions, good health
 
-#### Sonnet (Balanced: ~$0.15 per 1K tokens)
-- **Feature implementation**
-- **Bug fixes with logic changes**
-- **Moderate refactoring**
-- **Most standard development tasks**
-- **Multi-file changes (2-5 files)**
+#### Complex/Critical → Opus (Expensive, Capable: ~$0.75 per 1K tokens)
+- **Score: 6+ points**
+- **Examples:** refactoring, security, auth, migrations, architecture
+- **File scope:** 5+ files, cross-package changes
+- **Keywords:** "refactor", "security", "auth", "migrate", "architecture"
+- **Quantitative:** >1000 lines, >20 functions, hotspots, unhealthy code
 
-**Signals:** `implement`, `add feature`, `fix bug`, moderate scope
-
-#### Opus (Expensive, Capable: ~$0.75 per 1K tokens)
-- **Architectural changes**
-- **Cross-package integration**
-- **Security-sensitive code**
-- **Complex debugging**
-- **Breaking API changes**
-- **Database migrations**
-
-**Signals:** `refactor`, `architecture`, `security`, `auth`, `migration`, cross-package scope
+#### Scoring System (from `complexity.ts`):
+```typescript
+// File count: 1 file = 0, 3 files = +1, 7+ files = +2
+// Lines: >500 = +1, >1000 = +2
+// Functions: >10 = +1, >20 = +2
+// Cross-package = +3
+// Code health < 7 = +2, < 5 = +3
+// Git hotspots = +1 per file
+// Bug-prone files = +2 per file
+```
 
 ### Model Routing Logic
 
-1. **Task Decomposition Check** (`task-decomposer.ts`)
-   - Uses Haiku for fast complexity assessment (~500 tokens)
-   - If task is **atomic** → proceed with recommended model
-   - If task is **complex** → decompose into subtasks
+1. **Free Local Tool Detection** (0 tokens)
+   ```typescript
+   // Patterns checked first - no LLM needed
+   /^(run\s+)?(format|prettier)/i → "pnpm format"
+   /^(run\s+)?(lint|biome)/i → "pnpm lint:fix"
+   /^(run\s+)?typecheck/i → "pnpm typecheck"
+   /^(run\s+)?test/i → "pnpm test"
+   ```
 
-2. **Quantitative Assessment** (`complexity.ts`)
-   - Analyzes target files when available
-   - Considers: file count, LOC, function count, Git history
-   - Overrides keyword-based assessment with hard metrics
+2. **Fast Complexity Assessment** (`assessComplexityFast` - 0 tokens)
+   - Keyword and pattern matching
+   - Instant results for initial triage
+   - **Scoring system:**
+     * File count: 1 file = 0 pts, 3+ files = +2 pts
+     * Keywords: "security" = +4 pts, "refactor" = +3 pts, "typo" = 0 pts
+     * Scope: cross-package = +3 pts, single-file = 0 pts
 
-3. **Execution Order**
-   - Tasks grouped by model tier: **haiku → sonnet → opus**
-   - Cheapest models run first for cost efficiency
+3. **Quantitative Assessment** (when target files known)
+   - Uses actual code metrics: LOC, function count, git hotspots
+   - Code health scores from CodeScene
+   - Git history analysis (bug-prone files, change frequency)
+   - **More accurate than keyword matching**
+
+4. **Task Decomposition Check** (`checkAndDecompose` - ~500 tokens)
+   - Uses Haiku to assess atomicity
+   - **Decomposition triggers:**
+     * Multiple distinct objectives
+     * Cross-package changes
+     * >5 estimated files affected
+   - Creates subtasks with individual model recommendations
+
+5. **Adaptive Routing Override** (`applyAdaptiveRouting`)
+   - Historical success rate tracking
+   - **Override triggers:**
+     * Haiku success rate < 70% for "simple" → route to sonnet
+     * Sonnet success rate < 60% for assigned level → route to opus
+   - Requires minimum 5 samples before overriding defaults
+
+6. **Execution Order** (in `grind` mode)
+   ```typescript
+   // Process by model tier for cost efficiency
+   modelOrder = ["haiku", "sonnet", "opus"]
+   for (tier of modelOrder) {
+     await processTasksWithModel(tier)
+   }
+   ```
 
 ## Escalation Strategy
 
-### When Tasks Escalate
+### When Tasks Escalate (SoloOrchestrator logic)
 
-**Automatic escalation triggers:**
-- Verification failures (typecheck, test, lint, build)
-- High error count from current model
-- Scope underestimation (single-file task touches 5+ files)
+**Escalation decision factors (`shouldEscalate`):**
 
-**Escalation path:** `haiku → sonnet → opus`
+1. **No changes made** → escalate immediately (agent is stuck)
+2. **Error type affects retry count:**
+   - **Trivial errors** (lint/spell only): Full `maxRetriesPerTier` attempts (default: 3)
+   - **Serious errors** (typecheck/build/test): Faster escalation (`maxRetriesPerTier - 1`)
+3. **Scope underestimation:**
+   - Single-file task → touches 3+ files
+   - Few-files task → touches 10+ files
 
-### Escalation Decision Matrix
+**Escalation path:** `haiku → sonnet → opus → fail`
 
-| Current Model | Escalate When | Next Model |
-|---------------|---------------|------------|
-| Haiku | Type errors, test failures, touches 3+ files | Sonnet |
-| Sonnet | Architecture errors, complex bugs, integration failures | Opus |
-| Opus | **No escalation** - human intervention required | Manual review |
+### Retry vs Escalation Strategy
+
+```typescript
+// Configuration (SoloOrchestrator)
+{
+  maxRetriesPerTier: 3,        // Retries at same tier before escalating
+  maxReviewPassesPerTier: 2,   // Review passes per tier
+  maxOpusReviewPasses: 6       // Opus gets more attempts (final tier)
+}
+```
+
+**Decision logic:**
+- **No progress**: Immediate escalation (agent stuck)
+- **Trivial errors**: Allow full retries (lint often fixable by same model)
+- **Serious errors**: Escalate faster (type errors usually need smarter model)
 
 ### Manual Escalation
 
@@ -132,16 +181,33 @@ Every task goes through (in order):
 - Repeated failures → escalate to next model tier
 - Max retries exceeded → task marked failed
 
-### Review Passes (Optional)
+### Review Passes (Escalating Review System)
 
 ```bash
-undercity grind --review  # Enable escalating review
+undercity grind --review  # Enable escalating review (default: enabled)
+undercity grind --annealing  # Enable annealing review at opus tier
 ```
 
 **Review chain:** haiku review → sonnet review → opus review
-- Independent agents review code without writing it
-- Inspired by Zeroshot paper: reviewers can't lie about test results
-- Higher-tier models provide architectural feedback
+
+**Team Composition (inspired by Zeroshot):**
+```typescript
+// From getTeamComposition() in complexity.ts
+{
+  trivial: { validators: 0, independentValidators: false },
+  simple: { validators: 1, independentValidators: true },
+  standard: { validators: 2, independentValidators: true },
+  complex: { validators: 3, independentValidators: true },
+  critical: { validators: 5, independentValidators: true }
+}
+```
+
+**Key insight from Zeroshot:** Independent validators who didn't write the code can't lie about whether tests pass - they catch bugs the original agent missed.
+
+**Review convergence:**
+- Each tier reviews until it finds no issues (converges)
+- If tier exhausted without convergence → escalate to next tier
+- At opus tier: generate tickets for unresolved issues
 
 ### When to Skip Verification
 
@@ -283,8 +349,9 @@ All execution events logged to `.undercity/grind-events.jsonl`:
 | Architectural | 1-2 | High review needs |
 | Mixed batch | 5-10 | Balanced approach |
 
-### When to Use Supervised Mode
+### Supervised Mode & Advanced Review Techniques
 
+#### Supervised Execution
 ```bash
 undercity solo --supervised --worker sonnet
 ```
@@ -298,6 +365,40 @@ undercity solo --supervised --worker sonnet
 - Routine development tasks
 - Well-defined feature work
 - Bug fixes with clear scope
+
+#### Annealing Review System (Advanced)
+
+**Tarot-card based multi-angle analysis:**
+```bash
+undercity grind --annealing  # Enable annealing at opus tier
+```
+
+**How it works (`AnnealingReview` class):**
+```typescript
+// Uses tarot cards to examine code from different angles
+const schedule = generateSchedule().slice(0, 3)  // 3 random perspectives
+for (const pass of schedule) {
+  const cardName = pass.isMajor ? pass.card.name : `${pass.card.rank} of ${pass.card.suit}`
+  // Each card provides a unique lens for analysis
+}
+```
+
+**Example review angles:**
+- **The Tower**: "What would break under sudden load?"
+- **Seven of Swords**: "Where are the security vulnerabilities?"
+- **The Fool**: "What would a newcomer find confusing?"
+- **Three of Pentacles**: "How does this affect team collaboration?"
+
+**Advisory mode only:**
+- Provides insights, doesn't make direct changes
+- Complements standard review passes
+- Uses opus model for creative analysis
+- Triggered automatically for complex/critical tasks
+
+**Benefits:**
+- Catches issues traditional review might miss
+- Creative perspective on code quality
+- Low-cost addition to standard review pipeline
 
 ## Command Decision Tree
 
