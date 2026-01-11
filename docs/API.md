@@ -17,7 +17,11 @@
   - `options.include?`: Optional array of file globs to include
   - `options.exclude?`: Optional array of file globs to exclude
 - **Returns**: Promise resolving to comprehensive `SemanticReport`
-- **Error Handling**: Silently handles file read errors
+- **Error Handling**:
+  - Silently handles file read errors
+  - Returns partial report if some files cannot be read
+  - Logs warnings for inaccessible files
+  - Will return an empty report if root directory is invalid
 - **Example Usage**:
 ```typescript
 const analyzer = new SemanticAnalyzer();
@@ -75,7 +79,11 @@ const assessment = assessComplexityFast(
 - **Parameters**:
   - `task`: Task description string
 - **Returns**: Detailed complexity assessment
-- **Error Handling**: Falls back to fast assessment on failure
+- **Error Handling**:
+  - Falls back to fast assessment on LLM failure
+  - Returns `{ complexity: 'unknown', confidence: 0 }` if all assessment methods fail
+  - Logs warning when fallback occurs
+  - Timeout set to 10 seconds for deep assessment
 - **Example Usage**:
 ```typescript
 const deepAssessment = await assessComplexityDeep(
@@ -92,7 +100,12 @@ const deepAssessment = await assessComplexityDeep(
   - `options.cwd?`: Current working directory
   - `options.repoRoot?`: Repository root path
 - **Returns**: Context briefing with file/type details
-- **Error Handling**: Logs warnings, silently handles failures
+- **Error Handling**:
+  - Logs warnings for context preparation failures
+  - Returns minimal context if critical files are inaccessible
+  - Timeout set to 15 seconds for context gathering
+  - Skips processing for unreadable or malformed files
+  - Will return an empty context if no relevant files found
 - **Example Usage**:
 ```typescript
 const context = await prepareContext(
