@@ -1,6 +1,38 @@
 {
   "tasks": [
     {
+      "id": "task-docs-readme-agent-format",
+      "objective": "[docs] Rewrite README.md for agent consumption - remove prose/marketing, use tables and key-value structure, explicit command→behavior mappings",
+      "status": "pending",
+      "priority": 0,
+      "createdAt": "2026-01-11T07:05:00.000Z",
+      "tags": ["docs", "agent-optimization"]
+    },
+    {
+      "id": "task-docs-architecture-agent-format",
+      "objective": "[docs] Rewrite ARCHITECTURE.md for agent consumption - file→function→behavior mappings, decision trees for when to use what, no redundancy",
+      "status": "pending",
+      "priority": 0,
+      "createdAt": "2026-01-11T07:05:00.000Z",
+      "tags": ["docs", "agent-optimization"]
+    },
+    {
+      "id": "task-docs-api-reference",
+      "objective": "[docs] Create API.md - every exported function with signature, params, return type, error conditions, example usage",
+      "status": "pending",
+      "priority": 0,
+      "createdAt": "2026-01-11T07:05:00.000Z",
+      "tags": ["docs", "agent-optimization"]
+    },
+    {
+      "id": "task-docs-decision-tree",
+      "objective": "[docs] Create DECISIONS.md - when to use solo vs grind, when to escalate, which model for which task type, routing logic explained",
+      "status": "pending",
+      "priority": 0,
+      "createdAt": "2026-01-11T07:05:00.000Z",
+      "tags": ["docs", "agent-optimization"]
+    },
+    {
       "id": "task-feedback-metrics-reader",
       "objective": "[feedback] Create metrics reader - load metrics.jsonl, parse outcomes, compute success rates by model/complexity",
       "status": "pending",
