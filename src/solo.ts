@@ -735,6 +735,8 @@ When done, provide a brief summary of what you changed.`;
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
 				settingSources: ["project"],
+				// Defense-in-depth: explicitly block git push even if settings fail to load
+				disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
 			},
 		})) {
 			// Track token usage
@@ -1358,6 +1360,8 @@ After reviewing:
 					permissionMode: "bypassPermissions",
 					allowDangerouslySkipPermissions: true,
 					settingSources: ["project"],
+					// Defense-in-depth: explicitly block git push even if settings fail to load
+					disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
 				},
 			})) {
 				if (message.type === "result" && message.subtype === "success") {
@@ -1741,6 +1745,8 @@ CRITICAL - GIT RULES:
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
 				settingSources: ["project"],
+				// Defense-in-depth: explicitly block git push even if settings fail to load
+				disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
 			},
 		})) {
 			if (this.stream) {
@@ -1780,6 +1786,8 @@ Fix any issues to complete the original goal. Run typecheck to verify.`;
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
 				settingSources: ["project"],
+				// Defense-in-depth: explicitly block git push even if settings fail to load
+				disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
 			},
 		})) {
 			if (this.stream) {
@@ -1799,6 +1807,8 @@ Fix any issues to complete the original goal. Run typecheck to verify.`;
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
 				settingSources: ["project"],
+				// Defense-in-depth: explicitly block git push even if settings fail to load
+				disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
 			},
 		})) {
 			if (this.stream) {
