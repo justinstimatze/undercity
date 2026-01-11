@@ -127,7 +127,10 @@ export function createImplementationPrompt(
 			"Skip typecheck verification",
 			"Use any types",
 		],
-		context: patterns ? `Existing patterns to follow:\n${patterns.map((p) => `- ${p}`).join("\n")}` : undefined,
+		context: [
+			`## Spec\n${spec}`,
+			...(patterns ? [`## Existing patterns to follow\n${patterns.map((p) => `- ${p}`).join("\n")}`] : []),
+		].join("\n\n"),
 	};
 }
 
