@@ -5,8 +5,29 @@
  * that the dashboard can easily read.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
+/**
+ * Get the main git worktree path (not a linked worktree).
+ * This ensures metrics always write to the main repo's .undercity/
+ */
+function getMainWorktreePath(): string {
+	try {
+		// Get main worktree from git
+		const result = execSync("git worktree list --porcelain 2>/dev/null | head -1 | cut -d' ' -f2", {
+			encoding: "utf-8",
+			stdio: ["pipe", "pipe", "pipe"],
+		}).trim();
+		if (result && existsSync(result)) {
+			return result;
+		}
+	} catch {
+		// Fall back to cwd if git command fails
+	}
+	return process.cwd();
+}
 
 export interface LiveMetrics {
 	/** Last update timestamp */
@@ -46,7 +67,8 @@ export interface LiveMetrics {
 	};
 }
 
-const METRICS_DIR = join(process.cwd(), ".undercity");
+// Use main worktree so metrics aggregate from all worktrees
+const METRICS_DIR = join(getMainWorktreePath(), ".undercity");
 const METRICS_FILE = join(METRICS_DIR, "live-metrics.json");
 
 function createEmptyMetrics(): LiveMetrics {
@@ -105,8 +127,24 @@ export function saveLiveMetrics(metrics: LiveMetrics): void {
 	try {
 		mkdirSync(METRICS_DIR, { recursive: true });
 		metrics.updatedAt = Date.now();
-		writeFileSync(METRICS_FILE, JSON.stringify(metrics, null, 2));
+
+		const tempPath = `${METRICS_FILE}.tmp`;
+
+		// Write to temporary file first
+		writeFileSync(tempPath, JSON.stringify(metrics, null, 2), {
+			encoding: "utf-8",
+			flag: "w",
+		});
+
+		// Atomically rename temporary file to target file
+		// This ensures the file is never in a partially written state
+		renameSync(tempPath, METRICS_FILE);
 	} catch (err) {
+		// Clean up temporary file if it exists
+		const tempPath = `${METRICS_FILE}.tmp`;
+		if (existsSync(tempPath)) {
+			unlinkSync(tempPath);
+		}
 		console.error("Failed to save live metrics:", err);
 	}
 }
