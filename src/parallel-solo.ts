@@ -623,21 +623,25 @@ export class ParallelSoloOrchestrator {
 			throw new Error(`Verification failed for ${taskId}: ${verifyError}`);
 		}
 
-		// Push the rebased branch to main
+		// Push from main repo (worktree push URLs are blocked to prevent agent bypass)
+		const mainRepo = this.worktreeManager.getMainRepoPath();
+		const worktreeBranch = execInDir(`git rev-parse --abbrev-ref HEAD`, worktreePath).trim();
+
 		try {
-			execInDir(`git push origin HEAD:${mainBranch}`, worktreePath);
+			// Fetch the worktree branch into main repo, then push from there
+			execInDir(`git fetch ${worktreePath} ${worktreeBranch}:${worktreeBranch}`, mainRepo);
+			execInDir(`git push origin ${worktreeBranch}:${mainBranch}`, mainRepo);
 		} catch (pushError) {
 			throw new Error(`Push failed for ${taskId}: ${pushError}`);
 		}
 
-		// Update the main repo to reflect the pushed changes
-		const mainRepo = this.worktreeManager.getMainRepoPath();
+		// Update local main branch to reflect the pushed changes
 		try {
 			execInDir(`git fetch origin`, mainRepo);
 			execInDir(`git checkout ${mainBranch}`, mainRepo);
 			execInDir(`git pull origin ${mainBranch}`, mainRepo);
 		} catch {
-			// Non-fatal - main repo update failed but push succeeded
+			// Non-fatal - local update failed but remote push succeeded
 			output.debug("Local main branch not updated, but push succeeded");
 		}
 	}
