@@ -1,7 +1,7 @@
 /**
  * Persistence Module Tests
  *
- * Tests for SafePocket, Inventory, and Raid persistence operations.
+ * Tests for SafePocket persistence operations.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -42,14 +42,7 @@ vi.mock("node:fs", () => ({
 
 // Import after mocking
 import { Persistence } from "../persistence.js";
-import type { RaidStatus } from "../types.js";
-import {
-	ACTIVE_RAID_STATUSES,
-	createMockInventory,
-	createMockPocket,
-	createMockRaid,
-	INACTIVE_RAID_STATUSES,
-} from "./helpers.js";
+import { createMockPocket } from "./helpers.js";
 
 describe("Persistence", () => {
 	let persistence: Persistence;
@@ -168,137 +161,6 @@ describe("Persistence", () => {
 
 			expect(pocketDate.getTime()).toBeGreaterThanOrEqual(beforeClear.getTime());
 			expect(pocketDate.getTime()).toBeLessThanOrEqual(afterClear.getTime());
-		});
-	});
-
-	describe("getRaid", () => {
-		it("returns raid from inventory when present", () => {
-			const raid = createMockRaid({
-				id: "raid-abc",
-				goal: "Implement tests",
-				status: "planning",
-			});
-			const inventory = createMockInventory({ raid });
-			mockFiles.set(".undercity/inventory.json", JSON.stringify(inventory));
-
-			const result = persistence.getRaid();
-
-			expect(result).toBeDefined();
-			expect(result?.id).toBe("raid-abc");
-			expect(result?.goal).toBe("Implement tests");
-			expect(result?.status).toBe("planning");
-		});
-
-		it("returns undefined when no raid in inventory", () => {
-			const inventory = createMockInventory(); // No raid
-			mockFiles.set(".undercity/inventory.json", JSON.stringify(inventory));
-
-			const result = persistence.getRaid();
-
-			expect(result).toBeUndefined();
-		});
-	});
-
-	describe("saveRaid", () => {
-		it("saves raid to inventory", () => {
-			const raid = createMockRaid({
-				id: "new-raid",
-				goal: "New feature",
-				status: "executing",
-			});
-
-			persistence.saveRaid(raid);
-
-			const inventory = JSON.parse(mockFiles.get(".undercity/inventory.json") ?? "{}");
-			expect(inventory.raid.id).toBe("new-raid");
-			expect(inventory.raid.goal).toBe("New feature");
-			expect(inventory.raid.status).toBe("executing");
-		});
-
-		it("updates pocket with raid critical info", () => {
-			const raid = createMockRaid({
-				id: "critical-raid",
-				goal: "Critical goal",
-				status: "reviewing",
-			});
-
-			persistence.saveRaid(raid);
-
-			const pocket = persistence.getPocket();
-			expect(pocket.raidId).toBe("critical-raid");
-			expect(pocket.raidGoal).toBe("Critical goal");
-			expect(pocket.raidStatus).toBe("reviewing");
-		});
-
-		it("preserves existing inventory data", () => {
-			// Set up inventory with existing waypoints and squad
-			const existingInventory = createMockInventory({
-				waypoints: [
-					{
-						id: "waypoint-1",
-						raidId: "old-raid",
-						type: "flute",
-						description: "Explore codebase",
-						status: "complete",
-						createdAt: new Date(),
-					},
-				],
-				squad: [
-					{
-						id: "agent-1",
-						type: "flute",
-						status: "idle",
-						spawnedAt: new Date(),
-						lastActivityAt: new Date(),
-					},
-				],
-			});
-			mockFiles.set(".undercity/inventory.json", JSON.stringify(existingInventory));
-
-			const raid = createMockRaid({ id: "new-raid" });
-			persistence.saveRaid(raid);
-
-			const inventory = JSON.parse(mockFiles.get(".undercity/inventory.json") ?? "{}");
-			expect(inventory.waypoints).toHaveLength(1);
-			expect(inventory.waypoints[0].id).toBe("waypoint-1");
-			expect(inventory.squad).toHaveLength(1);
-			expect(inventory.squad[0].id).toBe("agent-1");
-		});
-	});
-
-	describe("hasActiveRaid", () => {
-		it.each(ACTIVE_RAID_STATUSES)("returns true when raid status is %s", (status: RaidStatus) => {
-			const pocket = createMockPocket({
-				raidId: "active-raid",
-				raidStatus: status,
-			});
-			mockFiles.set(".undercity/pocket.json", JSON.stringify(pocket));
-
-			const result = persistence.hasActiveRaid();
-
-			expect(result).toBe(true);
-		});
-
-		it.each(INACTIVE_RAID_STATUSES)("returns false when raid status is %s", (status: RaidStatus) => {
-			const pocket = createMockPocket({
-				raidId: "inactive-raid",
-				raidStatus: status,
-			});
-			mockFiles.set(".undercity/pocket.json", JSON.stringify(pocket));
-
-			const result = persistence.hasActiveRaid();
-
-			expect(result).toBe(false);
-		});
-
-		it("returns false when no raid exists", () => {
-			// Empty pocket (no raidId)
-			const pocket = createMockPocket();
-			mockFiles.set(".undercity/pocket.json", JSON.stringify(pocket));
-
-			const result = persistence.hasActiveRaid();
-
-			expect(result).toBe(false);
 		});
 	});
 });

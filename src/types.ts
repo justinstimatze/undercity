@@ -21,21 +21,6 @@ export type RaidStatus =
 	| "failed"; // Something went wrong
 
 /**
- * A Raid is a work session with a goal.
- * Raiders (agents) go topside (into the codebase) to complete waypoints.
- */
-export interface Raid {
-	id: string;
-	goal: string;
-	status: RaidStatus;
-	startedAt: Date;
-	completedAt?: Date;
-	planApproved: boolean;
-	planSummary?: string;
-	branch?: string;
-}
-
-/**
  * Agent types in the raid squad, representing specialized roles in the multi-agent orchestration system.
  * Each agent type has a specific function in the raid workflow and is assigned a particular AI model:
  *
@@ -124,7 +109,6 @@ export interface SafePocket {
 }
 
 export interface Inventory {
-	raid?: Raid;
 	waypoints: Waypoint[];
 	squad: SquadMember[];
 	lastUpdated: Date;

@@ -534,26 +534,6 @@ export const mixedCommands: CommandModule = {
 				console.log(chalk.dim("Use --init to create a sample configuration file"));
 			});
 
-		// Dashboard command
-		program
-			.command("dashboard")
-			.description("Live TUI dashboard with status display and streaming logs")
-			.option("-r, --refresh <ms>", "Refresh interval in milliseconds", "1000")
-			.action(async (options: { refresh?: string }) => {
-				const refreshInterval = Number.parseInt(options.refresh || "1000", 10);
-
-				console.log(chalk.cyan("Starting Undercity Dashboard..."));
-				console.log(chalk.dim(`Refresh interval: ${refreshInterval}ms`));
-
-				try {
-					const { startDashboard } = await import("../tui-dashboard.js");
-					await startDashboard({ refreshInterval });
-				} catch (error) {
-					console.error(chalk.red("Dashboard failed to start:"), error);
-					process.exit(1);
-				}
-			});
-
 		// Watch command - Matrix-style visualization
 		program
 			.command("watch")

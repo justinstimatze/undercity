@@ -64,7 +64,6 @@ export type {
 	Inventory,
 	Loadout,
 	MergeStatus,
-	Raid,
 	RaidStatus,
 	SafePocket,
 	SquadMember,

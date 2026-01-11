@@ -4,7 +4,7 @@
  * Type-safe mock factories for testing Undercity persistence.
  */
 
-import type { AgentType, Inventory, Raid, RaidStatus, SafePocket, Waypoint, WaypointStatus } from "../types.js";
+import type { AgentType, SafePocket, Waypoint, WaypointStatus } from "../types.js";
 
 /**
  * All agent types for parametrized testing
@@ -28,28 +28,6 @@ export const createMockTask = (overrides: Partial<Waypoint> = {}): Waypoint => (
  * Create a mock SafePocket with sensible defaults
  */
 export const createMockPocket = (overrides: Partial<SafePocket> = {}): SafePocket => ({
-	lastUpdated: new Date("2024-01-01T00:00:00.000Z"),
-	...overrides,
-});
-
-/**
- * Create a mock Raid with sensible defaults
- */
-export const createMockRaid = (overrides: Partial<Raid> = {}): Raid => ({
-	id: "test-raid-1",
-	goal: "Test goal",
-	status: "planning",
-	startedAt: new Date("2024-01-01T00:00:00.000Z"),
-	planApproved: false,
-	...overrides,
-});
-
-/**
- * Create a mock Inventory with sensible defaults
- */
-export const createMockInventory = (overrides: Partial<Inventory> = {}): Inventory => ({
-	waypoints: [],
-	squad: [],
 	lastUpdated: new Date("2024-01-01T00:00:00.000Z"),
 	...overrides,
 });
@@ -94,41 +72,3 @@ export const createMockFs = (state: MockFsState) => ({
 		state.directories.add(path);
 	},
 });
-
-/**
- * Helper to check if a raid status is considered "active"
- */
-export const isActiveRaidStatus = (status: RaidStatus): boolean => {
-	return status !== "complete" && status !== "failed";
-};
-
-/**
- * All raid statuses for parametrized testing
- */
-export const ALL_RAID_STATUSES: RaidStatus[] = [
-	"planning",
-	"awaiting_approval",
-	"executing",
-	"reviewing",
-	"merging",
-	"extracting",
-	"complete",
-	"failed",
-];
-
-/**
- * Active raid statuses (should return true for hasActiveRaid)
- */
-export const ACTIVE_RAID_STATUSES: RaidStatus[] = [
-	"planning",
-	"awaiting_approval",
-	"executing",
-	"reviewing",
-	"merging",
-	"extracting",
-];
-
-/**
- * Inactive raid statuses (should return false for hasActiveRaid)
- */
-export const INACTIVE_RAID_STATUSES: RaidStatus[] = ["complete", "failed"];

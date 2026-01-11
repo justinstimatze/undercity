@@ -28,7 +28,6 @@ import type {
 	ParallelRecoveryState,
 	PromptKnowledge,
 	QuestMetrics,
-	Raid,
 	RateLimitState,
 	SafePocket,
 	SquadMember,
@@ -148,24 +147,6 @@ export class Persistence {
 	}
 
 	// Convenience methods for inventory
-	getRaid(): Raid | undefined {
-		return this.getInventory().raid;
-	}
-
-	saveRaid(raid: Raid): void {
-		const inventory = this.getInventory();
-		inventory.raid = raid;
-		this.saveInventory(inventory);
-
-		// Also update pocket with critical info
-		this.savePocket({
-			raidId: raid.id,
-			raidGoal: raid.goal,
-			raidStatus: raid.status,
-			lastUpdated: new Date(),
-		});
-	}
-
 	getTasks(): Waypoint[] {
 		return this.getInventory().waypoints;
 	}
@@ -251,17 +232,6 @@ export class Persistence {
 	saveStash(stash: Stash): void {
 		stash.lastUpdated = new Date();
 		this.writeJson("stash.json", stash);
-	}
-
-	addCompletedRaid(raid: Raid, success: boolean): void {
-		const stash = this.getStash();
-		stash.completedRaids.push({
-			id: raid.id,
-			goal: raid.goal,
-			completedAt: new Date(),
-			success,
-		});
-		this.saveStash(stash);
 	}
 
 	// ============== Loadout Configurations ==============
@@ -429,14 +399,6 @@ export class Persistence {
 	}
 
 	// ============== Utilities ==============
-
-	/**
-	 * Check if there's an active raid (GUPP principle)
-	 */
-	hasActiveRaid(): boolean {
-		const pocket = this.getPocket();
-		return pocket.raidId !== undefined && pocket.raidStatus !== "complete" && pocket.raidStatus !== "failed";
-	}
 
 	/**
 	 * Clear all state for a fresh start
