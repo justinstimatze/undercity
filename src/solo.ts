@@ -521,6 +521,9 @@ Be concise and specific. Focus on actionable insights.`;
 
 	/**
 	 * Determine review level based on complexity assessment
+	 *
+	 * Always does at least escalating review - even trivial changes can have bugs.
+	 * Annealing (multi-angle advisory review) is added for complex/critical tasks.
 	 */
 	private determineReviewLevel(assessment: ComplexityAssessment): { review: boolean; annealing: boolean } {
 		// If user explicitly set review options, respect them
@@ -528,14 +531,13 @@ Be concise and specific. Focus on actionable insights.`;
 			return { review: this.reviewPasses, annealing: this.annealingAtOpus };
 		}
 
-		// Auto-determine based on complexity
+		// Always review - even trivial changes can have bugs
+		// Only question is whether to add annealing for complex/critical tasks
 		switch (assessment.level) {
 			case "trivial":
 			case "simple":
-				// Fast path - no review overhead for simple tasks
-				return { review: false, annealing: false };
 			case "standard":
-				// Standard tasks get escalating review
+				// Escalating review only
 				return { review: true, annealing: false };
 			case "complex":
 			case "critical":
