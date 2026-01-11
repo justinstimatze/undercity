@@ -4,11 +4,11 @@
  * Command line interface for managing experiments
  */
 
-import { writeFileSync, existsSync, renameSync, unlinkSync } from "node:fs";
 import { ExperimentFramework } from "./framework.js";
 import { QuestExperimentIntegrator } from "./integration.js";
 import { ExperimentTemplates } from "./examples.js";
 import { Experiment, ExperimentStatus } from "./types.js";
+import { writeFileAtomic } from "../file-utils.js";
 
 export class ExperimentCLI {
   private framework: ExperimentFramework;
@@ -21,29 +21,6 @@ export class ExperimentCLI {
     this.templates = new ExperimentTemplates(this.framework);
   }
 
-  /**
-   * Atomic file write helper to prevent partial reads during watch
-   */
-  private writeFileAtomic(filePath: string, content: string): void {
-    const tempPath = `${filePath}.tmp`;
-    try {
-      // Write to temporary file first
-      writeFileSync(tempPath, content, {
-        encoding: "utf-8",
-        flag: "w",
-      });
-
-      // Atomically rename temporary file to target file
-      // This ensures the file is never in a partially written state
-      renameSync(tempPath, filePath);
-    } catch (error) {
-      // Clean up temporary file if it exists
-      if (existsSync(tempPath)) {
-        unlinkSync(tempPath);
-      }
-      throw error;
-    }
-  }
 
   /**
    * List all experiments with their status
