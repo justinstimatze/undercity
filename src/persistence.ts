@@ -639,13 +639,6 @@ export class Persistence {
 	}
 
 	/**
-	 * Get efficiency outcomes filtered by experiment ID
-	 */
-	getEfficiencyOutcomesByExperiment(experimentId: string): EfficiencyOutcome[] {
-		return this.getEfficiencyOutcomes().filter((o) => o.experimentId === experimentId);
-	}
-
-	/**
 	 * Get efficiency outcomes filtered by parallelism level
 	 */
 	getEfficiencyOutcomesByParallelism(parallelismLevel: string): EfficiencyOutcome[] {

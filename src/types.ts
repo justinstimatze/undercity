@@ -707,7 +707,7 @@ export interface SecondOrderEfficiency {
 }
 
 /**
- * Efficiency outcome for A/B testing
+ * Efficiency outcome for tracking execution metrics
  */
 export interface EfficiencyOutcome {
 	/** Unique identifier for this outcome */
@@ -716,10 +716,6 @@ export interface EfficiencyOutcome {
 	taskId: string;
 	/** Session ID this outcome relates to */
 	sessionId: string;
-	/** Experiment ID if part of an A/B test */
-	experimentId?: string;
-	/** Variant name if part of an A/B test */
-	variantName?: string;
 	/** Parallelism level used (linear vs swarm mode) */
 	parallelismLevel: ParallelismLevel;
 	/** Task objective/description */
@@ -903,16 +899,8 @@ export interface CompletionMetrics {
 	agentsInvolved: AgentType[];
 	success: boolean;
 }
-
-export interface ExperimentResult {
-	hypothesis: string;
-	success: boolean;
-	duration: number;
-	details: unknown;
-}
-
 /**
- * Task execution metrics for experiment tracking
+ * Task execution metrics
  */
 export interface TaskExecutionMetrics {
 	/** Unique identifier for the task */
@@ -935,8 +923,6 @@ export interface TaskExecutionMetrics {
 	timeTakenMs?: number;
 	/** Session context */
 	sessionId?: string;
-	/** Associated experiment ID */
-	experimentId?: string;
 }
 
 export interface ImprovementTask {
@@ -951,7 +937,7 @@ export interface ImprovementTask {
 	/** Category of improvement */
 	category: "performance" | "quality" | "efficiency" | "reliability" | "usability";
 	/** Data source for this task */
-	dataSource: "metrics" | "experiments" | "patterns" | "manual";
+	dataSource: "metrics" | "patterns" | "manual";
 	/** Evidence supporting this improvement task */
 	evidence: string[];
 	/** Estimated impact (0-100 score) */
@@ -960,8 +946,6 @@ export interface ImprovementTask {
 	estimatedEffort: "low" | "medium" | "high";
 	/** When the task was created */
 	createdAt: Date;
-	/** Optional associated experiment ID */
-	experimentId?: string;
 }
 
 /**
