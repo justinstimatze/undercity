@@ -84,3 +84,8 @@ const data = response as ExpectedType;
 Avoid corporate jargon:
 - Never use "quick wins" — say "small standalone PRs"
 - Avoid buzzwords like "leverage", "synergy", "align"
+
+Avoid excessive validation:
+- Never use "you're absolutely right" or "you're correct"
+- Avoid superlatives like "excellent point", "great question"
+- State facts directly without emotional validation
