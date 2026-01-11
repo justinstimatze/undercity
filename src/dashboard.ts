@@ -153,13 +153,13 @@ export function launchDashboard(): void {
 		style: { border: { fg: "cyan" } },
 	}) as GaugeWidget;
 
-	// RIGHT BOTTOM - COST GAUGE
-	const costGauge = grid.set(4, 9, 3, 3, contrib.gauge, {
-		label: " SESSION $ ",
-		stroke: "yellow",
+	// RIGHT BOTTOM - CACHE EFFICIENCY GAUGE
+	const cacheGauge = grid.set(4, 9, 3, 3, contrib.gauge, {
+		label: " CACHE % ",
+		stroke: "green",
 		fill: "black",
 		border: { type: "line" },
-		style: { border: { fg: "yellow" } },
+		style: { border: { fg: "green" } },
 	}) as GaugeWidget;
 
 	// MIDDLE - GIT
@@ -322,9 +322,10 @@ export function launchDashboard(): void {
 			const burnPct = Math.min(100, (burnRate / 10000) * 100);
 			burnGauge.setPercent(Math.round(burnPct));
 
-			// COST GAUGE - scaled to $1 = 100%
-			const costPct = Math.min(100, metrics.cost.total * 100);
-			costGauge.setPercent(Math.round(costPct));
+			// CACHE GAUGE - cache read tokens as % of total input
+			const totalInput = metrics.tokens.cacheRead + metrics.tokens.input;
+			const cachePct = totalInput > 0 ? (metrics.tokens.cacheRead / totalInput) * 100 : 0;
+			cacheGauge.setPercent(Math.round(cachePct));
 
 			// BY MODEL
 			const opus = metrics.byModel.opus;
@@ -351,7 +352,7 @@ export function launchDashboard(): void {
 			metricsBox.setContent(`{gray-fg}No metrics yet{/}\n\n{gray-fg}Waiting for SDK data...{/}`);
 			modelBox.setContent(`{gray-fg}No model data{/}`);
 			burnGauge.setPercent(0);
-			costGauge.setPercent(0);
+			cacheGauge.setPercent(0);
 		}
 
 		// OUTPUT FILE
