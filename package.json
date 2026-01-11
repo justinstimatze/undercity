@@ -34,6 +34,7 @@
     "daemon:status": "pm2 status",
     "daemon:logs": "pm2 logs undercity",
     "daemon:kill": "pm2 kill",
+    "cleanup": "bash ./scripts/cleanup-state.sh",
     "lint": "biome lint ./src",
     "lint:fix": "biome lint --write ./src",
     "format": "biome format ./src",

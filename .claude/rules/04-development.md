@@ -77,6 +77,21 @@ pnpm daemon:kill     # Kill PM2 entirely
 
 PM2 config in `ecosystem.config.cjs`.
 
+## State Cleanup
+
+```bash
+pnpm cleanup         # Clean stale state files before fresh grind
+```
+
+Clears:
+- Stale recovery state (parallel-recovery.json)
+- File tracking entries (file-tracking.json)
+- Worktree state (worktree-state.json)
+- Grind progress (grind-progress.json)
+- Optionally archives large event logs
+
+Creates timestamped backups before cleaning. Run before starting a fresh grind to prevent stale state interference.
+
 ## Code Quality Targets
 
 - Cyclomatic complexity: ≤10 per function
