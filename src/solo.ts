@@ -24,7 +24,11 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
 import { AnnealingReview } from "./annealing-review.js";
 import { formatErrorsForAgent, getCache, parseTypeScriptErrors } from "./cache.js";
-import { assessComplexityFast, type ComplexityAssessment } from "./complexity.js";
+import {
+	assessComplexityFast,
+	assessComplexityQuantitative,
+	type ComplexityAssessment,
+} from "./complexity.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
 import { createAndCheckout } from "./git.js";
@@ -205,30 +209,54 @@ export class SoloOrchestrator {
 			`raid_${Date.now()}`, // Generate unique raid ID
 		);
 
-		// Assess complexity to determine starting model and review level
-		const assessment = assessComplexityFast(task);
+		console.log(chalk.cyan(`\n━━━ Task: ${task.substring(0, 60)}${task.length > 60 ? "..." : ""} ━━━`));
+
+		// Pre-flight: Prepare context briefing (FREE - no LLM tokens)
+		// Do this FIRST so we can use target files for quantitative complexity assessment
+		console.log(chalk.dim("  Analyzing codebase..."));
+		let targetFiles: string[] = [];
+		try {
+			this.currentBriefing = await prepareContext(task);
+			targetFiles = this.currentBriefing.targetFiles;
+			const sigCount = this.currentBriefing.functionSignatures.length;
+			console.log(chalk.dim(`  Found ${targetFiles.length} target files, ${sigCount} signatures`));
+		} catch (error) {
+			this.log("Context preparation failed", { error: String(error) });
+			// Continue without briefing - agent will explore
+		}
+
+		// Assess complexity using quantitative metrics when we have target files
+		let assessment: ComplexityAssessment;
+		if (targetFiles.length > 0) {
+			assessment = assessComplexityQuantitative(task, targetFiles, this.workingDirectory);
+			const metricsInfo = assessment.metrics
+				? ` (${assessment.metrics.totalLines} lines, ${assessment.metrics.functionCount} functions)`
+				: "";
+			console.log(chalk.dim(`  Complexity: ${assessment.level}${metricsInfo}`));
+			if (assessment.metrics?.crossPackage) {
+				console.log(chalk.dim(`  Cross-package: ${assessment.metrics.packages.join(", ")}`));
+			}
+			if (assessment.metrics?.avgCodeHealth !== undefined) {
+				console.log(chalk.dim(`  Code health: ${assessment.metrics.avgCodeHealth.toFixed(1)}/10`));
+			}
+			if (assessment.metrics?.git.hotspots.length) {
+				console.log(chalk.dim(`  Git hotspots: ${assessment.metrics.git.hotspots.length} files`));
+			}
+		} else {
+			// Fall back to keyword-based assessment
+			assessment = assessComplexityFast(task);
+			console.log(chalk.dim(`  Complexity: ${assessment.level} (keyword-based)`));
+		}
+
 		this.currentModel = this.determineStartingModel(assessment);
 		const reviewLevel = this.determineReviewLevel(assessment);
 		this.metricsTracker.recordAgentSpawn(this.currentModel === "opus" ? "sheriff" : "quester");
 
 		this.log("Starting task", { task, model: this.currentModel, assessment: assessment.level, reviewLevel });
-		console.log(chalk.cyan(`\n━━━ Task: ${task.substring(0, 60)}${task.length > 60 ? "..." : ""} ━━━`));
-		console.log(chalk.dim(`  Model: ${this.currentModel}, Complexity: ${assessment.level}`));
+		console.log(chalk.dim(`  Model: ${this.currentModel}`));
 		if (reviewLevel.review) {
 			const reviewMode = reviewLevel.annealing ? "escalating + annealing" : "escalating";
-			console.log(chalk.dim(`  Reviews: ${reviewMode} (auto-selected)`));
-		}
-
-		// Pre-flight: Prepare context briefing (FREE - no LLM tokens)
-		console.log(chalk.dim("  Preparing context briefing..."));
-		try {
-			this.currentBriefing = await prepareContext(task);
-			const fileCount = this.currentBriefing.targetFiles.length;
-			const sigCount = this.currentBriefing.functionSignatures.length;
-			console.log(chalk.dim(`  Briefing: ${fileCount} files, ${sigCount} signatures identified`));
-		} catch (error) {
-			this.log("Context preparation failed", { error: String(error) });
-			// Continue without briefing - agent will explore
+			console.log(chalk.dim(`  Reviews: ${reviewMode}`));
 		}
 
 		// Set up branch if specified

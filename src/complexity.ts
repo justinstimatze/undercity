@@ -6,9 +6,18 @@
  * - Whether to use solo mode or full agent chain
  * - How much verification is needed
  *
- * Uses heuristics + optional LLM assessment for complex cases.
+ * Uses quantitative code analysis when possible:
+ * - File metrics (line count, function count)
+ * - CodeScene code health scores
+ * - Git history (change frequency, bug density)
+ * - Cross-package detection
+ *
+ * Falls back to heuristics + LLM for uncertain cases.
  */
 
+import { execSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { raidLogger } from "./logger.js";
 
@@ -37,6 +46,295 @@ export interface ComplexityAssessment {
 	signals: string[];
 	/** Raw score used for assessment */
 	score: number;
+	/** Quantitative metrics used (if available) */
+	metrics?: QuantitativeMetrics;
+}
+
+/**
+ * Quantitative code metrics for complexity assessment
+ */
+export interface QuantitativeMetrics {
+	/** Number of files likely to be affected */
+	fileCount: number;
+	/** Total lines of code in target files */
+	totalLines: number;
+	/** Number of functions/methods in target files */
+	functionCount: number;
+	/** Average CodeScene health score (1-10, lower = worse) */
+	avgCodeHealth?: number;
+	/** Files with health score < 7 (problematic) */
+	unhealthyFiles: string[];
+	/** Whether task spans multiple packages */
+	crossPackage: boolean;
+	/** Packages involved */
+	packages: string[];
+	/** Git metrics */
+	git: {
+		/** Average commits per file in last 90 days */
+		avgChangeFrequency: number;
+		/** Files with > 10 commits (hotspots) */
+		hotspots: string[];
+		/** Files with "fix" commits (bug-prone) */
+		bugProneFiles: string[];
+	};
+}
+
+/**
+ * File metrics for a single file
+ */
+interface FileMetrics {
+	path: string;
+	lines: number;
+	functions: number;
+	codeHealth?: number;
+	recentCommits: number;
+	bugFixes: number;
+}
+
+/**
+ * Get quantitative metrics for a set of target files
+ */
+export function getFileMetrics(files: string[], repoRoot: string = process.cwd()): QuantitativeMetrics {
+	const metrics: QuantitativeMetrics = {
+		fileCount: files.length,
+		totalLines: 0,
+		functionCount: 0,
+		unhealthyFiles: [],
+		crossPackage: false,
+		packages: [],
+		git: {
+			avgChangeFrequency: 0,
+			hotspots: [],
+			bugProneFiles: [],
+		},
+	};
+
+	if (files.length === 0) {
+		return metrics;
+	}
+
+	const fileMetricsList: FileMetrics[] = [];
+	const packageSet = new Set<string>();
+
+	for (const file of files) {
+		const fullPath = path.isAbsolute(file) ? file : path.join(repoRoot, file);
+
+		// Detect package from path
+		const pkg = detectPackage(file);
+		if (pkg) packageSet.add(pkg);
+
+		const fm: FileMetrics = {
+			path: file,
+			lines: 0,
+			functions: 0,
+			recentCommits: 0,
+			bugFixes: 0,
+		};
+
+		// Count lines and functions
+		try {
+			if (fs.existsSync(fullPath)) {
+				const content = fs.readFileSync(fullPath, "utf-8");
+				fm.lines = content.split("\n").length;
+				// Simple function detection - count function/method declarations
+				const funcMatches = content.match(/(?:function\s+\w+|(?:async\s+)?(?:\w+\s*)?(?:=>|\(.*\)\s*(?:=>|{))|\w+\s*\([^)]*\)\s*{)/g);
+				fm.functions = funcMatches?.length || 0;
+			}
+		} catch {
+			// File not readable
+		}
+
+		// Get git history for this file
+		try {
+			// Commits in last 90 days
+			const commitCount = execSync(
+				`git log --oneline --since="90 days ago" -- "${file}" 2>/dev/null | wc -l`,
+				{ encoding: "utf-8", cwd: repoRoot }
+			).trim();
+			fm.recentCommits = parseInt(commitCount, 10) || 0;
+
+			// Bug fix commits (contain "fix" in message)
+			const fixCount = execSync(
+				`git log --oneline --since="90 days ago" --grep="fix" -i -- "${file}" 2>/dev/null | wc -l`,
+				{ encoding: "utf-8", cwd: repoRoot }
+			).trim();
+			fm.bugFixes = parseInt(fixCount, 10) || 0;
+		} catch {
+			// Git command failed
+		}
+
+		// Try to get CodeScene health score
+		try {
+			const csOutput = execSync(`cs check "${fullPath}" 2>/dev/null || true`, {
+				encoding: "utf-8",
+				cwd: repoRoot,
+				timeout: 5000,
+			});
+			const healthMatch = csOutput.match(/Code Health:\s*(\d+(?:\.\d+)?)/i);
+			if (healthMatch) {
+				fm.codeHealth = parseFloat(healthMatch[1]);
+			}
+		} catch {
+			// CodeScene not available or failed
+		}
+
+		fileMetricsList.push(fm);
+	}
+
+	// Aggregate metrics
+	metrics.packages = [...packageSet];
+	metrics.crossPackage = packageSet.size > 1;
+
+	let totalCommits = 0;
+	let healthSum = 0;
+	let healthCount = 0;
+
+	for (const fm of fileMetricsList) {
+		metrics.totalLines += fm.lines;
+		metrics.functionCount += fm.functions;
+		totalCommits += fm.recentCommits;
+
+		if (fm.codeHealth !== undefined) {
+			healthSum += fm.codeHealth;
+			healthCount++;
+			if (fm.codeHealth < 7) {
+				metrics.unhealthyFiles.push(fm.path);
+			}
+		}
+
+		if (fm.recentCommits > 10) {
+			metrics.git.hotspots.push(fm.path);
+		}
+
+		if (fm.bugFixes > 2) {
+			metrics.git.bugProneFiles.push(fm.path);
+		}
+	}
+
+	metrics.git.avgChangeFrequency = fileMetricsList.length > 0
+		? totalCommits / fileMetricsList.length
+		: 0;
+
+	if (healthCount > 0) {
+		metrics.avgCodeHealth = healthSum / healthCount;
+	}
+
+	return metrics;
+}
+
+/**
+ * Detect which package a file belongs to
+ */
+function detectPackage(filePath: string): string | null {
+	const parts = filePath.split(path.sep);
+
+	// Common package directories
+	const packageDirs = ["next-client", "express-server", "common", "pyserver", "pipeline-worker", "utils", "undercity"];
+
+	for (const dir of packageDirs) {
+		if (parts.includes(dir)) {
+			return dir;
+		}
+	}
+
+	// Check for src/ pattern (might be in root package)
+	if (parts[0] === "src") {
+		return "root";
+	}
+
+	return null;
+}
+
+/**
+ * Calculate complexity score from quantitative metrics
+ */
+export function scoreFromMetrics(metrics: QuantitativeMetrics): {
+	score: number;
+	signals: string[];
+} {
+	let score = 0;
+	const signals: string[] = [];
+
+	// File count scoring
+	if (metrics.fileCount === 0) {
+		// No files identified - uncertain
+		signals.push("no-files-identified");
+	} else if (metrics.fileCount === 1) {
+		score += 0;
+		signals.push(`files:1`);
+	} else if (metrics.fileCount <= 3) {
+		score += 1;
+		signals.push(`files:${metrics.fileCount}`);
+	} else if (metrics.fileCount <= 7) {
+		score += 2;
+		signals.push(`files:${metrics.fileCount}`);
+	} else {
+		score += 3;
+		signals.push(`files:${metrics.fileCount}(many)`);
+	}
+
+	// Lines of code scoring
+	if (metrics.totalLines > 1000) {
+		score += 2;
+		signals.push(`lines:${metrics.totalLines}(large)`);
+	} else if (metrics.totalLines > 500) {
+		score += 1;
+		signals.push(`lines:${metrics.totalLines}`);
+	}
+
+	// Function count scoring
+	if (metrics.functionCount > 20) {
+		score += 2;
+		signals.push(`functions:${metrics.functionCount}(many)`);
+	} else if (metrics.functionCount > 10) {
+		score += 1;
+		signals.push(`functions:${metrics.functionCount}`);
+	}
+
+	// Cross-package scoring
+	if (metrics.crossPackage) {
+		score += 3;
+		signals.push(`cross-package:${metrics.packages.join(",")}`);
+	}
+
+	// Code health scoring
+	if (metrics.avgCodeHealth !== undefined) {
+		if (metrics.avgCodeHealth < 5) {
+			score += 3;
+			signals.push(`code-health:${metrics.avgCodeHealth.toFixed(1)}(poor)`);
+		} else if (metrics.avgCodeHealth < 7) {
+			score += 2;
+			signals.push(`code-health:${metrics.avgCodeHealth.toFixed(1)}(fair)`);
+		} else {
+			signals.push(`code-health:${metrics.avgCodeHealth.toFixed(1)}(good)`);
+		}
+	}
+
+	// Unhealthy files
+	if (metrics.unhealthyFiles.length > 0) {
+		score += metrics.unhealthyFiles.length;
+		signals.push(`unhealthy-files:${metrics.unhealthyFiles.length}`);
+	}
+
+	// Git hotspots (frequently changed = risky)
+	if (metrics.git.hotspots.length > 0) {
+		score += metrics.git.hotspots.length;
+		signals.push(`git-hotspots:${metrics.git.hotspots.length}`);
+	}
+
+	// Bug-prone files
+	if (metrics.git.bugProneFiles.length > 0) {
+		score += metrics.git.bugProneFiles.length * 2;
+		signals.push(`bug-prone:${metrics.git.bugProneFiles.length}`);
+	}
+
+	// High change frequency
+	if (metrics.git.avgChangeFrequency > 5) {
+		score += 1;
+		signals.push(`high-churn:${metrics.git.avgChangeFrequency.toFixed(1)}`);
+	}
+
+	return { score, signals };
 }
 
 /**
@@ -305,6 +603,141 @@ Complexity guide:
 
 	// Fall back to fast assessment
 	return fastAssessment;
+}
+
+/**
+ * Assess complexity using quantitative code analysis
+ *
+ * This is the preferred method - uses actual code metrics instead of keyword matching.
+ * Requires target files to be identified first (via prepareContext or explicit list).
+ *
+ * @param task - Task description
+ * @param targetFiles - Files likely to be affected (from context briefing)
+ * @param repoRoot - Repository root directory
+ */
+export function assessComplexityQuantitative(
+	task: string,
+	targetFiles: string[],
+	repoRoot: string = process.cwd(),
+): ComplexityAssessment {
+	// Get quantitative metrics from target files
+	const metrics = getFileMetrics(targetFiles, repoRoot);
+	const { score: metricsScore, signals: metricsSignals } = scoreFromMetrics(metrics);
+
+	// Also get keyword-based signals (for critical/security detection)
+	const keywordAssessment = assessComplexityFast(task);
+
+	// Combine scores - metrics are primary, keywords add critical signals
+	let combinedScore = metricsScore;
+	const combinedSignals = [...metricsSignals];
+
+	// Add critical keyword signals (security, auth, payment, etc.)
+	const criticalSignals = keywordAssessment.signals.filter(
+		(s) => s.startsWith("critical:") || s.includes("security") || s.includes("auth") || s.includes("payment")
+	);
+	if (criticalSignals.length > 0) {
+		combinedScore += criticalSignals.length * 2;
+		combinedSignals.push(...criticalSignals);
+	}
+
+	// Determine level from combined score
+	let level: ComplexityLevel;
+	if (combinedScore <= 1) {
+		level = "trivial";
+	} else if (combinedScore <= 3) {
+		level = "simple";
+	} else if (combinedScore <= 6) {
+		level = "standard";
+	} else if (combinedScore <= 10) {
+		level = "complex";
+	} else {
+		level = "critical";
+	}
+
+	// Determine scope from metrics
+	let estimatedScope: ComplexityAssessment["estimatedScope"];
+	if (metrics.crossPackage) {
+		estimatedScope = "cross-package";
+	} else if (metrics.fileCount > 5) {
+		estimatedScope = "many-files";
+	} else if (metrics.fileCount > 1) {
+		estimatedScope = "few-files";
+	} else {
+		estimatedScope = "single-file";
+	}
+
+	// Map level to configuration
+	const levelConfig: Record<
+		ComplexityLevel,
+		{
+			model: "haiku" | "sonnet" | "opus";
+			useFullChain: boolean;
+			needsReview: boolean;
+		}
+	> = {
+		trivial: { model: "haiku", useFullChain: false, needsReview: false },
+		simple: { model: "sonnet", useFullChain: false, needsReview: false },
+		standard: { model: "sonnet", useFullChain: false, needsReview: true },
+		complex: { model: "opus", useFullChain: true, needsReview: true },
+		critical: { model: "opus", useFullChain: true, needsReview: true },
+	};
+
+	const config = levelConfig[level];
+
+	// Confidence is higher when we have good metrics
+	const confidence = metrics.fileCount > 0
+		? Math.min(0.95, 0.7 + (metricsSignals.length * 0.05))
+		: 0.5; // Low confidence if no files found
+
+	return {
+		level,
+		confidence,
+		model: config.model,
+		useFullChain: config.useFullChain,
+		needsReview: config.needsReview,
+		estimatedScope,
+		signals: combinedSignals,
+		score: combinedScore,
+		metrics,
+	};
+}
+
+/**
+ * Full complexity assessment pipeline
+ *
+ * 1. Run prepareContext to identify target files
+ * 2. Get quantitative metrics from those files
+ * 3. Combine with keyword signals for critical detection
+ *
+ * This is async because prepareContext may do file I/O
+ */
+export async function assessComplexityFull(
+	task: string,
+	repoRoot: string = process.cwd(),
+): Promise<ComplexityAssessment> {
+	// Import prepareContext dynamically to avoid circular deps
+	const { prepareContext } = await import("./context.js");
+
+	try {
+		// Get target files from context preparation
+		const briefing = await prepareContext(task, { repoRoot });
+		const targetFiles = briefing.targetFiles;
+
+		if (targetFiles.length > 0) {
+			// Use quantitative assessment
+			const assessment = assessComplexityQuantitative(task, targetFiles, repoRoot);
+			raidLogger.debug(
+				{ task: task.slice(0, 50), files: targetFiles.length, score: assessment.score },
+				"Quantitative complexity assessment"
+			);
+			return assessment;
+		}
+	} catch (error) {
+		raidLogger.warn({ error: String(error) }, "Context preparation failed, falling back to keyword assessment");
+	}
+
+	// Fall back to keyword-based assessment if no files found
+	return assessComplexityFast(task);
 }
 
 /**
