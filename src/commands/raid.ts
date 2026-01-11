@@ -168,29 +168,145 @@ export const raidCommands: CommandModule = {
 					console.log(chalk.gray("─".repeat(60)));
 				}
 
-				if (status.squad && status.squad.length > 0) {
-					console.log();
-					console.log(chalk.bold("Active Squad"));
-					for (const raider of status.squad) {
-						console.log(`  ${raider.id}: ${chalk.cyan(raider.status)} (${raider.role})`);
-					}
+				// Additional status information would be shown here
+			});
+
+		// Approve command
+		program
+			.command("approve")
+			.description("Approve the current plan and start execution")
+			.option("-s, --stream", "Stream raider activity to console")
+			.action(async (options: { stream?: boolean }) => {
+				const orchestrator = new RaidOrchestrator({ verbose: true, streamOutput: options.stream ?? true });
+				const raid = orchestrator.getCurrentRaid();
+
+				if (!raid) {
+					console.error(chalk.red("No active raid"));
+					process.exit(1);
 				}
 
-				if (status.waypoints && status.waypoints.length > 0) {
-					console.log();
-					console.log(chalk.bold("Progress"));
-					const completed = status.waypoints.filter((w) => w.status === "completed").length;
-					console.log(`  ${completed}/${status.waypoints.length} waypoints complete`);
-
-					const inProgress = status.waypoints.filter((w) => w.status === "in_progress");
-					if (inProgress.length > 0) {
-						console.log();
-						console.log(chalk.bold("Active Work"));
-						for (const wp of inProgress) {
-							console.log(`  ${chalk.cyan("→")} ${wp.goal}`);
-						}
-					}
+				if (raid.status !== "awaiting_approval") {
+					console.error(chalk.red(`Cannot approve: raid status is ${raid.status}`));
+					process.exit(1);
 				}
+
+				console.log(chalk.cyan("Approving plan..."));
+
+				try {
+					await orchestrator.approvePlan();
+					console.log(chalk.green("Plan approved! Execution started."));
+				} catch (error) {
+					console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+					process.exit(1);
+				}
+			});
+
+		// Squad command
+		program
+			.command("squad")
+			.description("Show active squad members")
+			.action(() => {
+				console.log(chalk.bold("Squad Members"));
+				console.log(chalk.gray("Squad functionality not yet implemented"));
+				console.log(chalk.dim("This will show active raid squad members"));
+			});
+
+		// Tasks command
+		program
+			.command("waypoints")
+			.description("Show pending/complete waypoints")
+			.action(() => {
+				console.log(chalk.bold("Waypoints"));
+				console.log(chalk.gray("Waypoints functionality not yet implemented"));
+				console.log(chalk.dim("This will show raid task waypoints"));
+			});
+
+		// Merges command
+		program
+			.command("elevator")
+			.description("Show elevator queue status")
+			.action(() => {
+				const orchestrator = new RaidOrchestrator({ verbose: false });
+				const status = orchestrator.getStatus();
+
+				if (status.elevator.length === 0) {
+					console.log(chalk.gray("Merge queue is empty"));
+					console.log("Branches are merged serially: rebase → test → merge");
+					console.log(
+						chalk.dim(
+							"Failed merges in the elevator are automatically retried after successful merges (conflicts may resolve)",
+						),
+					);
+					return;
+				}
+
+				console.log(chalk.bold("Elevator"));
+				console.log();
+
+				for (const item of status.elevator) {
+					const statusIcon =
+						item.status === "complete"
+							? chalk.green("✓")
+							: item.status === "pending"
+								? chalk.gray("○")
+								: item.status === "conflict" || item.status === "test_failed"
+									? chalk.red("✗")
+									: chalk.yellow("🏃");
+
+					const retryInfo =
+						item.retryCount && item.retryCount > 0 ? chalk.dim(` (retry ${item.retryCount}/${item.maxRetries || 3})`) : "";
+
+					const isRetry = item.isRetry ? chalk.cyan(" [RETRY]") : "";
+
+					console.log(`  ${statusIcon} ${item.branch}${retryInfo}${isRetry}`);
+					console.log(`    Status: ${item.status}`);
+
+					if (item.error) {
+						console.log(`    Error: ${chalk.red(item.error.substring(0, 60))}${item.error.length > 60 ? "..." : ""}`);
+					}
+
+					if (item.originalError && item.originalError !== item.error) {
+						console.log(
+							`    Original error: ${chalk.dim(item.originalError.substring(0, 60))}${item.originalError.length > 60 ? "..." : ""}`,
+						);
+					}
+
+					if (item.lastFailedAt) {
+						console.log(`    Last failed: ${chalk.dim(new Date(item.lastFailedAt).toLocaleString())}`);
+					}
+
+					if (item.nextRetryAfter && new Date(item.nextRetryAfter) > new Date()) {
+						console.log(`    Next retry after: ${chalk.dim(new Date(item.nextRetryAfter).toLocaleString())}`);
+					}
+
+					console.log();
+				}
+			});
+
+		// Extract command
+		program
+			.command("extract")
+			.description("Complete the current raid")
+			.action(async () => {
+				const orchestrator = new RaidOrchestrator({ verbose: true });
+
+				try {
+					await orchestrator.extract();
+					console.log(chalk.green("Raid extracted successfully!"));
+				} catch (error) {
+					console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+					process.exit(1);
+				}
+			});
+
+		// Surrender command
+		program
+			.command("surrender")
+			.description("Surrender the current raid")
+			.action(() => {
+				const orchestrator = new RaidOrchestrator({ verbose: true });
+				orchestrator.surrender();
+				console.log(chalk.yellow("Raid surrendered"));
 			});
 	},
 };
