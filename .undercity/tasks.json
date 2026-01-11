@@ -631,11 +631,11 @@
     },
     {
       "id": "task-mkadr7nx-xo41",
-      "objective": "[efficiency] Make review escalation selective - skip review for simple tasks (docs, cleanup, refactor). Add task metadata to indicate if review needed",
+      "objective": "[efficiency] Cap review escalation by task complexity - simple tasks (docs, cleanup, refactor) should get haiku/sonnet review but not escalate to Opus. Only complex tasks escalate to Opus when needed",
       "status": "pending",
       "priority": 63,
       "createdAt": "2026-01-11T23:43:43.245Z"
     }
   ],
-  "lastUpdated": "2026-01-11T23:43:43.245Z"
+  "lastUpdated": "2026-01-11T23:45:23.890Z"
 }
