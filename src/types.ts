@@ -66,12 +66,6 @@ export interface Waypoint {
 	error?: string;
 	createdAt: Date;
 	completedAt?: Date;
-	/** Checkpoint data for recovery */
-	checkpoint?: WaypointCheckpoint;
-	/** Recovery attempt count */
-	recoveryAttempts?: number;
-	/** Maximum recovery attempts allowed */
-	maxRecoveryAttempts?: number;
 }
 
 /**
@@ -901,108 +895,6 @@ export interface ParallelRecoveryState {
 }
 
 // ============== Error Recovery Types ==============
-
-/**
- * Failure severity levels for escalation
- */
-export type FailureSeverity = "low" | "medium" | "high" | "critical";
-
-/**
- * Recovery strategy types
- */
-export type RecoveryStrategy =
-	| "retry" // Simple retry with same agent
-	| "different_agent" // Retry with different agent type
-	| "checkpoint_restore" // Restore from checkpoint
-	| "escalate" // Human intervention needed
-	| "abandon"; // Give up on waypoint
-
-/**
- * Error classification for recovery decisions
- */
-export interface ErrorClassification {
-	/** Error type category */
-	type: "rate_limit" | "timeout" | "tool_error" | "validation_error" | "crash" | "unknown";
-	/** Severity assessment */
-	severity: FailureSeverity;
-	/** Whether error is likely temporary */
-	isTransient: boolean;
-	/** Whether error affects other agents */
-	affectsOthers: boolean;
-	/** Recommended recovery strategy */
-	recommendedStrategy: RecoveryStrategy;
-}
-
-/**
- * Checkpoint data for waypoint recovery
- */
-export interface WaypointCheckpoint {
-	/** When checkpoint was created */
-	createdAt: Date;
-	/** Partial progress description */
-	progressDescription: string;
-	/** Files modified so far */
-	modifiedFiles: string[];
-	/** Agent session data if available */
-	agentSessionData?: string;
-	/** Work completed percentage (0-100) */
-	completionPercent: number;
-	/** Important context to preserve */
-	context: string;
-	/** Risk level assessment */
-	riskLevel: "low" | "medium" | "high";
-}
-
-/**
- * Recovery attempt record
- */
-export interface RecoveryAttempt {
-	/** Attempt number */
-	attemptNumber: number;
-	/** When recovery was attempted */
-	attemptedAt: Date;
-	/** Strategy used */
-	strategy: RecoveryStrategy;
-	/** Agent type used for recovery */
-	agentType: AgentType;
-	/** Whether attempt succeeded */
-	successful: boolean;
-	/** Error if attempt failed */
-	error?: string;
-	/** Time spent on recovery */
-	durationMs: number;
-}
-
-/**
- * Agent-specific recovery configuration
- */
-export interface AgentRecoveryConfig {
-	/** Maximum retry attempts */
-	maxRetries: number;
-	/** Whether checkpoints are enabled */
-	checkpointsEnabled: boolean;
-	/** Checkpoint interval in minutes */
-	checkpointIntervalMinutes: number;
-	/** Timeout before considering agent stuck (minutes) */
-	timeoutMinutes: number;
-}
-
-/**
- * Recovery orchestrator state
- */
-export interface RecoveryState {
-	/** Active recovery attempts by waypoint ID */
-	activeRecoveries: Record<string, RecoveryAttempt[]>;
-	/** Agent-specific recovery configurations */
-	agentConfigs: Record<AgentType, AgentRecoveryConfig>;
-	/** Global recovery statistics */
-	stats: {
-		totalRecoveries: number;
-		successfulRecoveries: number;
-		escalations: number;
-		lastUpdated: Date;
-	};
-}
 
 // Self-Improvement Loop Types
 export interface CompletionMetrics {

@@ -78,6 +78,8 @@ export interface ComplexityAssessment {
 	metrics?: QuantitativeMetrics;
 	/** Team composition for this complexity level */
 	team: TeamComposition;
+	/** If set, task can be handled by local tools alone (no LLM) */
+	localTool?: LocalToolResult;
 }
 
 /**
@@ -119,6 +121,44 @@ interface FileMetrics {
 	codeHealth?: number;
 	recentCommits: number;
 	bugFixes: number;
+}
+
+/**
+ * Result when a task can be handled by local tools (no LLM needed)
+ */
+export interface LocalToolResult {
+	/** The shell command to execute */
+	command: string;
+	/** Human-readable description */
+	description: string;
+}
+
+/**
+ * Patterns for tasks that can be handled by local tools alone (no LLM)
+ * These are FREE - no tokens consumed
+ */
+const LOCAL_TOOL_PATTERNS: Array<{ pattern: RegExp; command: string; description: string }> = [
+	{ pattern: /^(run\s+)?(format|prettier|biome\s+format)/i, command: "pnpm format", description: "Format code" },
+	{ pattern: /^(run\s+)?(lint|biome\s+lint)/i, command: "pnpm lint:fix", description: "Lint and fix" },
+	{ pattern: /^(run\s+)?typecheck/i, command: "pnpm typecheck", description: "Run type checking" },
+	{ pattern: /^(run\s+)?test($|\s)/i, command: "pnpm test", description: "Run tests" },
+	{ pattern: /^(run\s+)?build($|\s)/i, command: "pnpm build", description: "Build project" },
+	{ pattern: /^organize\s+imports/i, command: "pnpm check:fix", description: "Organize imports" },
+	{ pattern: /^sort\s+imports/i, command: "pnpm check:fix", description: "Sort imports" },
+	{ pattern: /^(run\s+)?spell\s*check/i, command: "pnpm spell", description: "Run spell check" },
+];
+
+/**
+ * Check if a task can be handled by local tools alone (no LLM needed)
+ * Returns the command to run if so, null otherwise
+ */
+export function canHandleWithLocalTools(task: string): LocalToolResult | null {
+	for (const { pattern, command, description } of LOCAL_TOOL_PATTERNS) {
+		if (pattern.test(task)) {
+			return { command, description };
+		}
+	}
+	return null;
 }
 
 /**
@@ -519,6 +559,24 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 			team: getTeamComposition("simple"),
 		};
 	}
+
+	// Check if local tools can handle it (FREE - no LLM needed)
+	const localTool = canHandleWithLocalTools(task);
+	if (localTool) {
+		return {
+			level: "trivial",
+			confidence: 1.0,
+			model: "haiku", // Not used, but required field
+			useFullChain: false,
+			needsReview: false,
+			estimatedScope: "single-file",
+			score: 0,
+			signals: [`local-tool:${localTool.command}`],
+			team: getTeamComposition("trivial"),
+			localTool,
+		};
+	}
+
 	const taskLower = task.toLowerCase();
 	const signals: string[] = [];
 	let score = 0;

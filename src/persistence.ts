@@ -772,42 +772,6 @@ export class Persistence {
 		return this.getQuestMetrics().filter((m) => m.raidId === raidId);
 	}
 
-	// ============== Recovery System ==============
-
-	/**
-	 * Save recovery state to persistence
-	 */
-	saveRecoveryState(state: import("./types.js").RecoveryState): void {
-		this.writeJson("recovery-state.json", state);
-	}
-
-	/**
-	 * Load recovery state from persistence
-	 */
-	getRecoveryState(): import("./types.js").RecoveryState | null {
-		try {
-			return this.readJson<import("./types.js").RecoveryState>("recovery-state.json", null as any);
-		} catch {
-			return null;
-		}
-	}
-
-	/**
-	 * Clear recovery state
-	 */
-	clearRecoveryState(): void {
-		this.writeJson<import("./types.js").RecoveryState>("recovery-state.json", {
-			activeRecoveries: {},
-			agentConfigs: {} as any,
-			stats: {
-				totalRecoveries: 0,
-				successfulRecoveries: 0,
-				escalations: 0,
-				lastUpdated: new Date(),
-			},
-		});
-	}
-
 	// ============== Parallel Recovery System ==============
 
 	/**
