@@ -395,7 +395,11 @@ export function getAllTasks(): Task[] {
 export function getReadyTasksForBatch(count: number = 3): Task[] {
 	const board = loadTaskBoard();
 	const pendingTasks = board.tasks.filter(
-		(task) => task.status === "pending" && !task.isDecomposed, // Skip decomposed tasks
+		(task) =>
+			task.status === "pending" &&
+			!task.isDecomposed && // Skip decomposed tasks - execute subtasks instead
+			(!task.dependsOn ||
+				task.dependsOn.every((depId) => board.tasks.find((t) => t.id === depId && t.status === "complete"))),
 	);
 
 	// Compute priority with more sophisticated scoring
