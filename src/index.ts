@@ -58,6 +58,31 @@ export {
 	UndercityServer,
 } from "./server.js";
 export { SoloOrchestrator } from "./solo.js";
+// Output system
+export {
+	configureOutput,
+	createProgressTracker,
+	debug,
+	error,
+	getOutputMode,
+	header,
+	info,
+	isHumanMode,
+	keyValue,
+	list,
+	metrics,
+	type OutputEvent,
+	type OutputMode,
+	progress,
+	section,
+	status,
+	success,
+	summary,
+	taskComplete,
+	taskFailed,
+	taskStart,
+	warning,
+} from "./output.js";
 // Squad management
 export {
 	createAgent,

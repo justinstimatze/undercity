@@ -3,10 +3,26 @@
     {
       "id": "task-cleanup-test-vocabulary",
       "objective": "[cleanup] Update test files vocabulary - replace 'raid' with 'session' in test data (helpers.ts, persistence.test.ts, dual-logger.test.ts, cli.test.ts)",
-      "status": "pending",
+      "status": "completed",
       "priority": 0,
       "createdAt": "2026-01-11T07:40:00.000Z",
       "tags": ["cleanup", "tests"]
+    },
+    {
+      "id": "task-cleanup-dead-code",
+      "objective": "[cleanup] Remove dead code - enhanced-metrics.ts (no imports), knowledge-tracker.ts (unused), src/examples/ (dead demos)",
+      "status": "completed",
+      "priority": 1,
+      "createdAt": "2026-01-11T07:15:00.000Z",
+      "tags": ["cleanup"]
+    },
+    {
+      "id": "task-fix-worktree-deps",
+      "objective": "[critical] Fix worktree dependency installation - run 'pnpm install' in worktrees before verification so tests can run. Currently worktrees have no node_modules and verification fails with 'vitest not found'",
+      "status": "pending",
+      "priority": 4,
+      "createdAt": "2026-01-11T08:00:00.000Z",
+      "tags": ["critical", "worktree", "verification"]
     },
     {
       "id": "task-fix-watch-dashboard",
@@ -25,12 +41,12 @@
       "tags": ["review", "escalation"]
     },
     {
-      "id": "task-cleanup-dead-code",
-      "objective": "[cleanup] Remove dead code - enhanced-metrics.ts (no imports), knowledge-tracker.ts (unused), src/examples/ (dead demos)",
+      "id": "task-improve-streaming-output",
+      "objective": "[output] Improve terminal streaming output - JSON format should be default (for agent consumption), add --human flag for human-readable output. Current streaming is noisy and not optimized for either use case",
       "status": "pending",
-      "priority": 1,
-      "createdAt": "2026-01-11T07:15:00.000Z",
-      "tags": ["cleanup"]
+      "priority": 7,
+      "createdAt": "2026-01-11T08:00:00.000Z",
+      "tags": ["output", "cli"]
     },
     {
       "id": "task-cleanup-local-llm",
@@ -287,5 +303,5 @@
       "tags": ["agent-optimization", "prompts"]
     }
   ],
-  "lastUpdated": "2026-01-11T07:40:00.000Z"
+  "lastUpdated": "2026-01-11T08:15:00.000Z"
 }

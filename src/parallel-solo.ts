@@ -15,6 +15,7 @@
 import { execSync } from "node:child_process";
 import chalk from "chalk";
 import { FileTracker } from "./file-tracker.js";
+import * as output from "./output.js";
 import { Persistence } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
 import { SoloOrchestrator, type TaskResult } from "./solo.js";
@@ -144,9 +145,10 @@ export class ParallelSoloOrchestrator {
 		if (this.rateLimitTracker.isPaused()) {
 			const pauseState = this.rateLimitTracker.getPauseState();
 			const remaining = this.rateLimitTracker.formatRemainingTime();
-			console.log(chalk.yellow.bold(`\n⏳ Rate Limit Pause Active`));
-			console.log(chalk.yellow(`  Reason: ${pauseState.reason || "Rate limit hit"}`));
-			console.log(chalk.yellow(`  Remaining: ${remaining}`));
+			output.warning("Rate limit pause active", {
+				reason: pauseState.reason || "Rate limit hit",
+				remaining,
+			});
 
 			return {
 				results: [],
@@ -158,9 +160,7 @@ export class ParallelSoloOrchestrator {
 			};
 		}
 
-		console.log(chalk.cyan.bold(`\n⚡ Solo Mode (Direct)`));
-		console.log(chalk.dim(`  Running task directly without worktree`));
-		console.log(chalk.dim(`  Model: ${this.startingModel} → escalate if needed\n`));
+		output.header("Solo Mode (Direct)", `Model: ${this.startingModel} → escalate if needed`);
 
 		const taskId = generateTaskId();
 
@@ -208,8 +208,8 @@ export class ParallelSoloOrchestrator {
 				mergeFailed: 0,
 				durationMs: Date.now() - startTime,
 			};
-		} catch (error) {
-			console.log(chalk.red(`  Error: ${error}`));
+		} catch (err) {
+			output.error(`Task execution failed: ${err}`);
 
 			return {
 				results: [
@@ -220,7 +220,7 @@ export class ParallelSoloOrchestrator {
 						worktreePath: process.cwd(),
 						branch: "current",
 						merged: false,
-						mergeError: String(error),
+						mergeError: String(err),
 					},
 				],
 				successful: 0,
@@ -252,11 +252,12 @@ export class ParallelSoloOrchestrator {
 		if (this.rateLimitTracker.isPaused()) {
 			const pauseState = this.rateLimitTracker.getPauseState();
 			const remaining = this.rateLimitTracker.formatRemainingTime();
-			console.log(chalk.yellow.bold(`\n⏳ Rate Limit Pause Active`));
-			console.log(chalk.yellow(`  Reason: ${pauseState.reason || "Rate limit hit"}`));
-			console.log(chalk.yellow(`  Remaining: ${remaining}`));
-			console.log(chalk.yellow(`  Resume at: ${pauseState.resumeAt?.toLocaleString() || "unknown"}`));
-			console.log(chalk.dim(`\n  Run 'undercity limits' to check rate limit state.`));
+			output.warning("Rate limit pause active", {
+				reason: pauseState.reason || "Rate limit hit",
+				remaining,
+				resumeAt: pauseState.resumeAt?.toISOString() || "unknown",
+			});
+			output.info("Run 'undercity limits' to check rate limit state");
 
 			return {
 				results: [],
@@ -271,17 +272,16 @@ export class ParallelSoloOrchestrator {
 		// Limit to maxConcurrent
 		const tasksToRun = tasks.slice(0, this.maxConcurrent);
 
-		console.log(chalk.cyan.bold(`\n⚡ Parallel Solo Mode`));
-		console.log(chalk.dim(`  Running ${tasksToRun.length} tasks concurrently`));
-		console.log(chalk.dim(`  Model: ${this.startingModel} → escalate if needed\n`));
+		output.header(
+			"Parallel Solo Mode",
+			`${tasksToRun.length} tasks concurrently • Model: ${this.startingModel} → escalate if needed`,
+		);
 
 		// Show rate limit usage if approaching threshold
 		const usageSummary = this.rateLimitTracker.getUsageSummary();
 		if (usageSummary.percentages.fiveHour > 0.5 || usageSummary.percentages.weekly > 0.5) {
-			console.log(
-				chalk.yellow(
-					`  ⚠ Rate limit usage: ${(usageSummary.percentages.fiveHour * 100).toFixed(0)}% (5h) / ${(usageSummary.percentages.weekly * 100).toFixed(0)}% (week)`,
-				),
+			output.warning(
+				`Rate limit usage: ${(usageSummary.percentages.fiveHour * 100).toFixed(0)}% (5h) / ${(usageSummary.percentages.weekly * 100).toFixed(0)}% (week)`,
 			);
 		}
 
@@ -304,9 +304,9 @@ export class ParallelSoloOrchestrator {
 					worktreePath: worktreeInfo.path,
 					branch: worktreeInfo.branch,
 				});
-				console.log(chalk.green(`  ✓ Created worktree: ${taskId}`));
-			} catch (error) {
-				console.log(chalk.red(`  ✗ Failed to create worktree: ${error}`));
+				output.success(`Created worktree: ${taskId}`);
+			} catch (err) {
+				output.error(`Failed to create worktree: ${err}`);
 				results.push({
 					task,
 					taskId,
@@ -314,7 +314,7 @@ export class ParallelSoloOrchestrator {
 					worktreePath: "",
 					branch: "",
 					merged: false,
-					mergeError: `Worktree creation failed: ${error}`,
+					mergeError: `Worktree creation failed: ${err}`,
 				});
 			}
 		}
@@ -323,11 +323,11 @@ export class ParallelSoloOrchestrator {
 		if (preparedTasks.length > 0) {
 			const recoveryState = this.createRecoveryState(batchId, preparedTasks);
 			this.persistence.saveParallelRecoveryState(recoveryState);
-			console.log(chalk.dim(`  Recovery state saved: ${batchId}`));
+			output.debug(`Recovery state saved: ${batchId}`);
 		}
 
 		// Phase 2: Run tasks in parallel
-		console.log(chalk.cyan(`\n━━━ Executing ${preparedTasks.length} tasks in parallel ━━━\n`));
+		output.section(`Executing ${preparedTasks.length} tasks in parallel`);
 
 		// Get main branch for file tracking
 		const mainBranch = this.worktreeManager.getMainBranch();
@@ -345,7 +345,7 @@ export class ParallelSoloOrchestrator {
 			this.updateTaskStatus(taskId, "running");
 
 			try {
-				console.log(chalk.dim(`  [${taskId}] Starting: ${task.substring(0, 50)}...`));
+				output.taskStart(taskId, task.substring(0, 50));
 
 				// Create orchestrator that runs in the worktree directory
 				const orchestrator = new SoloOrchestrator({
@@ -371,11 +371,14 @@ export class ParallelSoloOrchestrator {
 				// Stop tracking for this task
 				this.fileTracker.stopTaskTracking(taskId);
 
-				const status = result.status === "complete" ? chalk.green("✓") : chalk.red("✗");
-				console.log(chalk.dim(`  [${taskId}] ${status} ${result.status}`));
+				if (result.status === "complete") {
+					output.taskComplete(taskId, "Task completed", { modifiedFiles: modifiedFiles.length });
+				} else {
+					output.taskFailed(taskId, "Task failed", result.error);
+				}
 
 				if (modifiedFiles.length > 0 && this.verbose) {
-					console.log(chalk.dim(`  [${taskId}] Modified ${modifiedFiles.length} files`));
+					output.debug(`[${taskId}] Modified ${modifiedFiles.length} files`);
 				}
 
 				// Update recovery state
@@ -391,14 +394,14 @@ export class ParallelSoloOrchestrator {
 					merged: false,
 					modifiedFiles,
 				};
-			} catch (error) {
+			} catch (err) {
 				// Stop tracking even on error
 				this.fileTracker.stopTaskTracking(taskId);
 
 				// Update recovery state
-				this.updateTaskStatus(taskId, "failed", { error: String(error) });
+				this.updateTaskStatus(taskId, "failed", { error: String(err) });
 
-				console.log(chalk.red(`  [${taskId}] Error: ${error}`));
+				output.taskFailed(taskId, "Task error", String(err));
 				return {
 					task,
 					taskId,
@@ -406,7 +409,7 @@ export class ParallelSoloOrchestrator {
 					worktreePath,
 					branch,
 					merged: false,
-					mergeError: String(error),
+					mergeError: String(err),
 				};
 			}
 		});
@@ -445,14 +448,15 @@ export class ParallelSoloOrchestrator {
 			// Detect file conflicts between tasks before merging
 			const fileConflicts = this.detectFileConflicts(successfulTasks);
 			if (fileConflicts.size > 0) {
-				console.log(chalk.yellow(`\n⚠ Potential file conflicts detected:`));
+				const conflictMap: Record<string, string[]> = {};
 				for (const [file, taskIds] of fileConflicts) {
-					console.log(chalk.yellow(`  ${file}: ${taskIds.join(", ")}`));
+					conflictMap[file] = taskIds;
 				}
-				console.log(chalk.dim(`  Serial merge will handle these (later tasks may need rebase)\n`));
+				output.warning("Potential file conflicts detected", { conflicts: conflictMap });
+				output.info("Serial merge will handle these (later tasks may need rebase)");
 			}
 
-			console.log(chalk.cyan(`\n━━━ Merging ${successfulTasks.length} successful branches ━━━\n`));
+			output.section(`Merging ${successfulTasks.length} successful branches`);
 
 			for (const taskResult of successfulTasks) {
 				try {
@@ -460,7 +464,7 @@ export class ParallelSoloOrchestrator {
 					const { existsSync } = await import("node:fs");
 					const worktreeExists = existsSync(taskResult.worktreePath);
 					if (this.verbose) {
-						console.log(chalk.dim(`    Worktree exists: ${worktreeExists} at ${taskResult.worktreePath}`));
+						output.debug(`Worktree exists: ${worktreeExists} at ${taskResult.worktreePath}`);
 					}
 					if (!worktreeExists) {
 						throw new Error(`Worktree directory missing: ${taskResult.worktreePath}`);
@@ -468,23 +472,23 @@ export class ParallelSoloOrchestrator {
 					await this.mergeBranch(taskResult.branch, taskResult.taskId, taskResult.worktreePath);
 					taskResult.merged = true;
 					this.updateTaskStatus(taskResult.taskId, "merged");
-					console.log(chalk.green(`  ✓ Merged: ${taskResult.taskId}`));
-				} catch (error) {
-					taskResult.mergeError = String(error);
-					console.log(chalk.red(`  ✗ Merge failed: ${taskResult.taskId} - ${error}`));
+					output.success(`Merged: ${taskResult.taskId}`);
+				} catch (err) {
+					taskResult.mergeError = String(err);
+					output.error(`Merge failed: ${taskResult.taskId}`, { error: String(err) });
 				}
 			}
 		}
 
 		// Phase 4: Cleanup worktrees
-		console.log(chalk.dim(`\n  Cleaning up worktrees...`));
-		for (const result of results) {
-			if (result.taskId && result.worktreePath) {
+		output.progress("Cleaning up worktrees...");
+		for (const r of results) {
+			if (r.taskId && r.worktreePath) {
 				try {
-					this.worktreeManager.removeWorktree(result.taskId, true);
-				} catch (error) {
+					this.worktreeManager.removeWorktree(r.taskId, true);
+				} catch (err) {
 					if (this.verbose) {
-						console.log(chalk.dim(`  Warning: Failed to cleanup ${result.taskId}: ${error}`));
+						output.debug(`Warning: Failed to cleanup ${r.taskId}: ${err}`);
 					}
 				}
 			}
@@ -497,14 +501,17 @@ export class ParallelSoloOrchestrator {
 		const merged = results.filter((r) => r.merged).length;
 		const mergeFailed = successfulTasks.length - merged;
 
-		console.log(chalk.bold(`\n━━━ Parallel Solo Summary ━━━`));
-		console.log(`  ${chalk.green("✓")} Successful: ${successful}`);
-		console.log(`  ${chalk.red("✗")} Failed: ${failed}`);
-		console.log(`  ${chalk.blue("⎇")} Merged: ${merged}`);
+		const summaryItems: Array<{ label: string; value: string | number; status?: "good" | "bad" | "neutral" }> = [
+			{ label: "Successful", value: successful, status: successful > 0 ? "good" : "neutral" },
+			{ label: "Failed", value: failed, status: failed > 0 ? "bad" : "neutral" },
+			{ label: "Merged", value: merged },
+			{ label: "Duration", value: `${Math.round(durationMs / 1000)}s` },
+		];
 		if (mergeFailed > 0) {
-			console.log(`  ${chalk.yellow("⚠")} Merge failed: ${mergeFailed}`);
+			summaryItems.push({ label: "Merge failed", value: mergeFailed, status: "bad" });
 		}
-		console.log(`  ${chalk.dim("⏱")}  Duration: ${Math.round(durationMs / 1000)}s`);
+
+		output.summary("Parallel Solo Summary", summaryItems);
 
 		// Save rate limit state and file tracking state
 		this.persistence.saveRateLimitState(this.rateLimitTracker.getState());
@@ -515,11 +522,10 @@ export class ParallelSoloOrchestrator {
 
 		// Show updated rate limit usage
 		const finalUsage = this.rateLimitTracker.getUsageSummary();
-		console.log(
-			chalk.dim(
-				`  📊 Rate limit: ${(finalUsage.percentages.fiveHour * 100).toFixed(0)}% (5h) / ${(finalUsage.percentages.weekly * 100).toFixed(0)}% (week)`,
-			),
-		);
+		output.metrics("Rate limit usage", {
+			fiveHourPercent: (finalUsage.percentages.fiveHour * 100).toFixed(0),
+			weeklyPercent: (finalUsage.percentages.weekly * 100).toFixed(0),
+		});
 
 		return {
 			results,
@@ -610,18 +616,18 @@ export class ParallelSoloOrchestrator {
 
 		// Run verification after rebase (catches any merge issues)
 		try {
-			console.log(chalk.dim(`    Running verification for ${taskId}...`));
+			output.progress(`Running verification for ${taskId}...`);
 			execInDir(`pnpm typecheck`, worktreePath);
 			execInDir(`pnpm test --run`, worktreePath);
-		} catch (error) {
-			throw new Error(`Verification failed for ${taskId}: ${error}`);
+		} catch (verifyError) {
+			throw new Error(`Verification failed for ${taskId}: ${verifyError}`);
 		}
 
 		// Push the rebased branch to main
 		try {
 			execInDir(`git push origin HEAD:${mainBranch}`, worktreePath);
-		} catch (error) {
-			throw new Error(`Push failed for ${taskId}: ${error}`);
+		} catch (pushError) {
+			throw new Error(`Push failed for ${taskId}: ${pushError}`);
 		}
 
 		// Update the main repo to reflect the pushed changes
@@ -632,7 +638,7 @@ export class ParallelSoloOrchestrator {
 			execInDir(`git pull origin ${mainBranch}`, mainRepo);
 		} catch {
 			// Non-fatal - main repo update failed but push succeeded
-			console.log(chalk.dim(`    Note: Local main branch not updated, but push succeeded`));
+			output.debug("Local main branch not updated, but push succeeded");
 		}
 	}
 
@@ -685,14 +691,14 @@ export class ParallelSoloOrchestrator {
 			return [];
 		}
 
-		console.log(chalk.yellow.bold(`\n🔄 Resuming interrupted batch: ${state.batchId}`));
+		output.progress(`Resuming interrupted batch: ${state.batchId}`);
 
 		// Clean up any stale worktrees from the previous run
 		for (const task of state.tasks) {
 			if (task.status === "running" && task.worktreePath) {
 				try {
 					this.worktreeManager.removeWorktree(task.taskId, true);
-					console.log(chalk.dim(`  Cleaned up stale worktree: ${task.taskId}`));
+					output.debug(`Cleaned up stale worktree: ${task.taskId}`);
 				} catch {
 					// Ignore cleanup errors
 				}
@@ -702,7 +708,7 @@ export class ParallelSoloOrchestrator {
 		// Get tasks that need to be re-run
 		const pendingTasks = state.tasks.filter((t) => t.status === "pending" || t.status === "running").map((t) => t.task);
 
-		console.log(chalk.dim(`  ${pendingTasks.length} tasks to resume\n`));
+		output.info(`${pendingTasks.length} tasks to resume`);
 
 		// Clear the old state - runParallel will create new state
 		this.persistence.clearParallelRecoveryState();
@@ -719,7 +725,7 @@ export class ParallelSoloOrchestrator {
 			return;
 		}
 
-		console.log(chalk.yellow(`\n⚠ Abandoning batch: ${state.batchId}`));
+		output.warning(`Abandoning batch: ${state.batchId}`);
 
 		// Clean up any worktrees
 		for (const task of state.tasks) {
@@ -733,7 +739,7 @@ export class ParallelSoloOrchestrator {
 		}
 
 		this.persistence.clearParallelRecoveryState();
-		console.log(chalk.dim(`  Batch abandoned and cleaned up\n`));
+		output.info("Batch abandoned and cleaned up");
 	}
 
 	/**

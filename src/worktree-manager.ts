@@ -287,6 +287,23 @@ export class WorktreeManager {
 			gitLogger.debug({ baseBranch }, "Creating worktree from latest origin");
 			execGit(["worktree", "add", "-b", branchName, worktreePath, baseBranch]);
 
+			// Install dependencies in the worktree so verification can run
+			gitLogger.info({ sessionId, worktreePath }, "Installing dependencies in worktree");
+			try {
+				execSync("pnpm install --frozen-lockfile", {
+					cwd: worktreePath,
+					encoding: "utf-8",
+					stdio: ["pipe", "pipe", "pipe"],
+				});
+				gitLogger.info({ sessionId }, "Dependencies installed successfully");
+			} catch (installError) {
+				gitLogger.warn(
+					{ sessionId, error: String(installError) },
+					"Failed to install dependencies in worktree - verification may fail",
+				);
+				// Don't throw - let the task continue and fail at verification stage with clearer error
+			}
+
 			const worktreeInfo: WorktreeInfo = {
 				sessionId,
 				path: worktreePath,
