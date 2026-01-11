@@ -643,8 +643,15 @@ export class ParallelSoloOrchestrator {
 		const worktreeBranch = execInDir(`git rev-parse --abbrev-ref HEAD`, worktreePath).trim();
 
 		try {
+			// Get the current commit SHA before detaching
+			const commitSha = execInDir(`git rev-parse HEAD`, worktreePath).trim();
+
+			// Detach HEAD in worktree to release the branch lock
+			// This prevents "refusing to fetch into branch checked out" error
+			execInDir(`git checkout --detach`, worktreePath);
+
 			// Fetch the worktree branch into main repo, then push from there
-			execInDir(`git fetch ${worktreePath} ${worktreeBranch}:${worktreeBranch}`, mainRepo);
+			execInDir(`git fetch ${worktreePath} ${commitSha}:${worktreeBranch}`, mainRepo);
 			execInDir(`git push origin ${worktreeBranch}:${mainBranch}`, mainRepo);
 		} catch (pushError) {
 			throw new Error(`Push failed for ${taskId}: ${pushError}`);
