@@ -621,7 +621,21 @@
       "status": "pending",
       "priority": 61,
       "createdAt": "2026-01-11T22:47:41.005Z"
+    },
+    {
+      "id": "task-mkadr4x3-g1d4",
+      "objective": "[critical] Disable automatic Opus reviews - only escalate to Opus if sonnet review finds critical issues. Default reviewPasses to false or skip Opus tier. 95% of tokens currently wasted on unnecessary Opus reviews",
+      "status": "pending",
+      "priority": 62,
+      "createdAt": "2026-01-11T23:43:39.687Z"
+    },
+    {
+      "id": "task-mkadr7nx-xo41",
+      "objective": "[efficiency] Make review escalation selective - skip review for simple tasks (docs, cleanup, refactor). Add task metadata to indicate if review needed",
+      "status": "pending",
+      "priority": 63,
+      "createdAt": "2026-01-11T23:43:43.245Z"
     }
   ],
-  "lastUpdated": "2026-01-11T22:55:40.005Z"
+  "lastUpdated": "2026-01-11T23:43:43.245Z"
 }
