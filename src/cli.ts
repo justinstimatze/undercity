@@ -2409,8 +2409,8 @@ program
 	.description("Show current configuration from .undercityrc files")
 	.option("--init", "Create a sample .undercityrc file in current directory")
 	.option("--defaults", "Show default configuration values")
-	.action((options: { init?: boolean; defaults?: boolean }) => {
-		const { getDefaultConfig, clearConfigCache } = require("./config.js");
+	.action(async (options: { init?: boolean; defaults?: boolean }) => {
+		const { getDefaultConfig, clearConfigCache } = await import("./config.js");
 
 		if (options.defaults) {
 			console.log(chalk.bold("Default Configuration"));
@@ -2421,7 +2421,7 @@ program
 		}
 
 		if (options.init) {
-			const fs = require("node:fs");
+			const fs = await import("node:fs");
 			const configPath = ".undercityrc";
 
 			if (fs.existsSync(configPath)) {
@@ -2439,7 +2439,7 @@ program
 				annealing: false,
 			};
 
-			fs.writeFileSync(configPath, JSON.stringify(sampleConfig, null, 2) + "\n");
+			fs.writeFileSync(configPath, `${JSON.stringify(sampleConfig, null, 2)}\n`);
 			console.log(chalk.green(`Created config file: ${configPath}`));
 			console.log(chalk.dim("Edit this file to customize your defaults."));
 			return;
