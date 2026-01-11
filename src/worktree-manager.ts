@@ -277,14 +277,13 @@ export class WorktreeManager {
 			);
 		}
 
-		// CRITICAL: Fetch latest from origin before creating worktree
-		// This ensures we branch from the latest main, not a stale local copy
-		fetchOrigin();
-		const baseBranch = `origin/${this.mainBranch}`;
+		// Branch from local main HEAD (not origin/main)
+		// This ensures worktrees see all local commits, including unpushed work
+		const baseBranch = this.mainBranch;
 
 		try {
-			// Create the worktree with a new branch from origin/main (latest)
-			gitLogger.debug({ baseBranch }, "Creating worktree from latest origin");
+			// Create the worktree with a new branch from local main HEAD
+			gitLogger.debug({ baseBranch }, "Creating worktree from local main HEAD");
 			execGit(["worktree", "add", "-b", branchName, worktreePath, baseBranch]);
 
 			// Install dependencies in the worktree so verification can run

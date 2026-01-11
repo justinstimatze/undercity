@@ -2,14 +2,16 @@
  * Parallel Solo Orchestrator
  *
  * Runs multiple SoloOrchestrator instances concurrently in isolated git worktrees.
- * Each task gets its own worktree, runs independently, then merges via serial queue.
+ * Each task gets its own worktree branched from local main, runs independently,
+ * then merges back into local main via serial queue.
  *
  * Flow:
- * 1. Create worktrees for each task
+ * 1. Create worktrees from local main HEAD (includes unpushed commits)
  * 2. Run SoloOrchestrators in parallel (one per worktree)
  * 3. Collect results
- * 4. Merge successful branches serially (rebase → test → merge)
+ * 4. Merge successful branches serially (rebase onto local main → verify → fast-forward merge)
  * 5. Cleanup worktrees
+ * 6. User pushes local main to origin when ready
  */
 
 import { execSync } from "node:child_process";
@@ -580,10 +582,10 @@ export class ParallelSoloOrchestrator {
 	}
 
 	/**
-	 * Merge a worktree's changes into main using rebase strategy
+	 * Merge a worktree's changes into local main using rebase strategy
 	 *
-	 * Strategy: Work from within the worktree to rebase onto origin/main,
-	 * run verification, then push directly to main.
+	 * Strategy: Rebase worktree onto local main HEAD, run verification,
+	 * then fast-forward merge into local main. No automatic push to origin.
 	 */
 	private async mergeBranch(_branch: string, taskId: string, worktreePath: string): Promise<void> {
 		const { existsSync, statSync } = await import("node:fs");
@@ -607,17 +609,19 @@ export class ParallelSoloOrchestrator {
 		}
 
 		const mainBranch = this.worktreeManager.getMainBranch();
+		const mainRepo = this.worktreeManager.getMainRepoPath();
 
-		// Fetch latest main into the worktree
+		// Fetch latest local main into the worktree
+		// This ensures we rebase onto the current state of main, including unpushed commits
 		try {
-			execInDir(`git fetch origin ${mainBranch}`, worktreePath);
+			execInDir(`git fetch ${mainRepo} ${mainBranch}`, worktreePath);
 		} catch (fetchError) {
-			throw new Error(`Git fetch failed for ${taskId} in ${worktreePath}: ${fetchError}`);
+			throw new Error(`Git fetch from main repo failed for ${taskId}: ${fetchError}`);
 		}
 
-		// Rebase onto origin/main
+		// Rebase onto local main (via FETCH_HEAD from the fetch above)
 		try {
-			execInDir(`git rebase origin/${mainBranch}`, worktreePath);
+			execInDir(`git rebase FETCH_HEAD`, worktreePath);
 		} catch (error) {
 			// Abort rebase if it fails
 			try {
@@ -637,8 +641,8 @@ export class ParallelSoloOrchestrator {
 			throw new Error(`Verification failed for ${taskId}: ${verifyError}`);
 		}
 
-		// Push from main repo (worktree push URLs are blocked to prevent agent bypass)
-		const mainRepo = this.worktreeManager.getMainRepoPath();
+		// Merge worktree changes into local main
+		// Since worktree already rebased onto local main, this should fast-forward
 		const worktreeBranch = execInDir(`git rev-parse --abbrev-ref HEAD`, worktreePath).trim();
 
 		try {
@@ -649,21 +653,13 @@ export class ParallelSoloOrchestrator {
 			// This prevents "refusing to fetch into branch checked out" error
 			execInDir(`git checkout --detach`, worktreePath);
 
-			// Fetch the worktree branch into main repo, then push from there
-			execInDir(`git fetch ${worktreePath} ${commitSha}:${worktreeBranch}`, mainRepo);
-			execInDir(`git push origin ${worktreeBranch}:${mainBranch}`, mainRepo);
-		} catch (pushError) {
-			throw new Error(`Push failed for ${taskId}: ${pushError}`);
-		}
-
-		// Update local main branch to reflect the pushed changes
-		try {
-			execInDir(`git fetch origin`, mainRepo);
+			// Checkout main and fast-forward merge the worktree branch
 			execInDir(`git checkout ${mainBranch}`, mainRepo);
-			execInDir(`git pull origin ${mainBranch}`, mainRepo);
-		} catch {
-			// Non-fatal - local update failed but remote push succeeded
-			output.debug("Local main branch not updated, but push succeeded");
+			execInDir(`git merge --ff-only ${commitSha}`, mainRepo);
+
+			output.debug(`Merged ${taskId} into local main (${commitSha.slice(0, 7)})`);
+		} catch (mergeError) {
+			throw new Error(`Merge into local main failed for ${taskId}: ${mergeError}`);
 		}
 	}
 
