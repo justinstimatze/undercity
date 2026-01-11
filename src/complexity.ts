@@ -95,6 +95,9 @@ interface FileMetrics {
  * Get quantitative metrics for a set of target files
  */
 export function getFileMetrics(files: string[], repoRoot: string = process.cwd()): QuantitativeMetrics {
+	// TODO: Consider adding support for more complex function counting,
+	// potentially using an AST parser for more accurate method/function detection
+	// and to handle edge cases like arrow functions, method shorthand, etc.
 	const metrics: QuantitativeMetrics = {
 		fileCount: files.length,
 		totalLines: 0,

@@ -37,6 +37,27 @@ import { MetricsTracker } from "./metrics.js";
 import type { AttemptRecord, ErrorCategory, TokenUsage } from "./types.js";
 
 /**
+ * Extract explicitly mentioned file names from task description
+ * e.g., "Fix bug in solo.ts" → ["solo.ts"]
+ */
+function extractExplicitFiles(task: string): string[] {
+	const filePatterns = [
+		/\b([\w-]+\.(?:ts|tsx|js|jsx|py|md|json))\b/g, // filename.ext
+		/\b(src\/[\w/-]+\.(?:ts|tsx|js|jsx))\b/g, // src/path/file.ts
+	];
+
+	const files: string[] = [];
+	for (const pattern of filePatterns) {
+		const matches = task.matchAll(pattern);
+		for (const match of matches) {
+			files.push(match[1]);
+		}
+	}
+
+	return [...new Set(files)];
+}
+
+/**
  * Model tiers for escalation
  */
 type ModelTier = "haiku" | "sonnet" | "opus";
@@ -226,9 +247,16 @@ export class SoloOrchestrator {
 		}
 
 		// Assess complexity using quantitative metrics when we have target files
+		// If task mentions specific files, prioritize those for metrics (more accurate)
+		const explicitFiles = extractExplicitFiles(task);
+		const filesForMetrics =
+			explicitFiles.length > 0
+				? targetFiles.filter((t) => explicitFiles.some((f) => t.includes(f) || t.endsWith(f)))
+				: targetFiles.slice(0, 5); // Limit to 5 most relevant files
+
 		let assessment: ComplexityAssessment;
-		if (targetFiles.length > 0) {
-			assessment = assessComplexityQuantitative(task, targetFiles, this.workingDirectory);
+		if (filesForMetrics.length > 0) {
+			assessment = assessComplexityQuantitative(task, filesForMetrics, this.workingDirectory);
 			const metricsInfo = assessment.metrics
 				? ` (${assessment.metrics.totalLines} lines, ${assessment.metrics.functionCount} functions)`
 				: "";
@@ -242,6 +270,13 @@ export class SoloOrchestrator {
 			if (assessment.metrics?.git.hotspots.length) {
 				console.log(chalk.dim(`  Git hotspots: ${assessment.metrics.git.hotspots.length} files`));
 			}
+		} else if (targetFiles.length > 0) {
+			// Had target files but none matched explicit - use first 5
+			assessment = assessComplexityQuantitative(task, targetFiles.slice(0, 5), this.workingDirectory);
+			const metricsInfo = assessment.metrics
+				? ` (${assessment.metrics.totalLines} lines, ${assessment.metrics.functionCount} functions)`
+				: "";
+			console.log(chalk.dim(`  Complexity: ${assessment.level}${metricsInfo}`));
 		} else {
 			// Fall back to keyword-based assessment
 			assessment = assessComplexityFast(task);
