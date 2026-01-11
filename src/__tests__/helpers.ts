@@ -16,7 +16,7 @@ export const ALL_AGENT_TYPES: AgentType[] = ["scout", "planner", "builder", "rev
  */
 export const createMockTask = (overrides: Partial<Step> = {}): Step => ({
 	id: "step-1",
-	sessionId: "raid-1",
+	sessionId: "session-1",
 	type: "builder",
 	description: "Test step",
 	status: "pending" as StepStatus,

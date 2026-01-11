@@ -69,7 +69,7 @@ describe("Persistence", () => {
 
 		it("parses existing pocket file correctly", () => {
 			const existingPocket = createMockPocket({
-				sessionId: "raid-123",
+				sessionId: "session-123",
 				goal: "Build feature X",
 				status: "executing",
 			});
@@ -77,7 +77,7 @@ describe("Persistence", () => {
 
 			const pocket = persistence.getPocket();
 
-			expect(pocket.sessionId).toBe("raid-123");
+			expect(pocket.sessionId).toBe("session-123");
 			expect(pocket.goal).toBe("Build feature X");
 			expect(pocket.status).toBe("executing");
 		});
@@ -95,7 +95,7 @@ describe("Persistence", () => {
 	describe("savePocket", () => {
 		it("updates lastUpdated timestamp on save", () => {
 			const pocket = createMockPocket({
-				sessionId: "raid-456",
+				sessionId: "session-456",
 				lastUpdated: new Date("2020-01-01"),
 			});
 
@@ -111,13 +111,13 @@ describe("Persistence", () => {
 		});
 
 		it("writes to correct path", () => {
-			const pocket = createMockPocket({ sessionId: "raid-789" });
+			const pocket = createMockPocket({ sessionId: "session-789" });
 
 			persistence.savePocket(pocket);
 
 			expect(mockFiles.has(".undercity/pocket.json")).toBe(true);
 			const saved = JSON.parse(mockFiles.get(".undercity/pocket.json") ?? "{}");
-			expect(saved.sessionId).toBe("raid-789");
+			expect(saved.sessionId).toBe("session-789");
 		});
 
 		it("creates directory if it does not exist", () => {
@@ -125,7 +125,7 @@ describe("Persistence", () => {
 			mockDirs.clear();
 
 			const customPersistence = new Persistence(".custom-state");
-			const pocket = createMockPocket({ sessionId: "new-raid" });
+			const pocket = createMockPocket({ sessionId: "new-session" });
 
 			customPersistence.savePocket(pocket);
 
@@ -137,7 +137,7 @@ describe("Persistence", () => {
 		it("resets pocket to default state", () => {
 			// Set up existing pocket with data
 			const existingPocket = createMockPocket({
-				sessionId: "old-raid",
+				sessionId: "old-session",
 				goal: "Old goal",
 				status: "complete",
 			});

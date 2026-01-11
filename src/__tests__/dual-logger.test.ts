@@ -46,14 +46,14 @@ describe("DualLogger", () => {
 	});
 
 	it("should create log directory on start", () => {
-		logger.start("test-raid-123");
+		logger.start("test-session-123");
 
 		const logDir = join(TEST_DIR, "logs");
 		expect(existsSync(logDir)).toBe(true);
 	});
 
 	it("should create current.log file on start", async () => {
-		logger.start("test-raid-123");
+		logger.start("test-session-123");
 		logger.writeLine("Test content to create file");
 
 		// Wait for stream to flush
@@ -64,7 +64,7 @@ describe("DualLogger", () => {
 	});
 
 	it("should write header to log file on start", async () => {
-		logger.start("test-raid-123");
+		logger.start("test-session-123");
 		logger.writeLine("Test content"); // Force file creation
 
 		// Wait for stream to flush
@@ -72,11 +72,11 @@ describe("DualLogger", () => {
 
 		const logContent = readFileSync(logger.getCurrentLogPath(), "utf-8");
 		expect(logContent).toContain("=== Undercity Session Log ===");
-		expect(logContent).toContain("Session ID: test-raid-123");
+		expect(logContent).toContain("Session ID: test-session-123");
 	});
 
 	it("should write to both console and file", async () => {
-		logger.start("test-raid-123");
+		logger.start("test-session-123");
 
 		const testMessage = "Test message";
 		logger.writeLine(testMessage);
@@ -93,7 +93,7 @@ describe("DualLogger", () => {
 	});
 
 	it("should write footer to log file on stop", async () => {
-		logger.start("test-raid-123");
+		logger.start("test-session-123");
 		logger.writeLine("Test content");
 		logger.stop(); // Stop without rotation to keep current.log
 
@@ -105,13 +105,13 @@ describe("DualLogger", () => {
 	});
 
 	it("should rotate logs when session ends", async () => {
-		logger.start("test-raid-123");
+		logger.start("test-session-123");
 		logger.writeLine("Test content");
 
 		// Wait for stream to flush content before stopping
 		await new Promise((resolve) => setTimeout(resolve, 100));
 
-		logger.stop("test-raid-123");
+		logger.stop("test-session-123");
 
 		const logDir = join(TEST_DIR, "logs");
 
@@ -123,7 +123,7 @@ describe("DualLogger", () => {
 
 		// Archived log should exist
 		const files = require("node:fs").readdirSync(logDir);
-		const archivedLog = files.find((file: string) => file.startsWith("session-test-raid-123"));
+		const archivedLog = files.find((file: string) => file.startsWith("session-test-session-123"));
 		expect(archivedLog).toBeTruthy();
 
 		if (archivedLog) {
@@ -136,10 +136,10 @@ describe("DualLogger", () => {
 	it("should track active status correctly", () => {
 		expect(logger.isActive()).toBe(false);
 
-		logger.start("test-raid-123");
+		logger.start("test-session-123");
 		expect(logger.isActive()).toBe(true);
 
-		logger.stop("test-raid-123");
+		logger.stop("test-session-123");
 		expect(logger.isActive()).toBe(false);
 	});
 

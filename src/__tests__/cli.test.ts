@@ -65,11 +65,11 @@ describe("CLI", () => {
 			const { Command } = await import("commander");
 
 			const program = new Command();
-			program.command("status").description("Show current raid status");
+			program.command("status").description("Show current session status");
 
 			const statusCmd = program.commands[0];
 			expect(statusCmd.name()).toBe("status");
-			expect(statusCmd.description()).toBe("Show current raid status");
+			expect(statusCmd.description()).toBe("Show current session status");
 		});
 	});
 
@@ -166,7 +166,7 @@ describe("CLI", () => {
 			const { Command } = await import("commander");
 
 			const program = new Command();
-			program.command("extract").description("Complete the current raid");
+			program.command("extract").description("Complete the current session");
 
 			const extractCmd = program.commands[0];
 			expect(extractCmd.name()).toBe("extract");
@@ -176,7 +176,7 @@ describe("CLI", () => {
 			const { Command } = await import("commander");
 
 			const program = new Command();
-			program.command("surrender").description("Surrender the current raid");
+			program.command("surrender").description("Surrender the current session");
 
 			const surrenderCmd = program.commands[0];
 			expect(surrenderCmd.name()).toBe("surrender");
