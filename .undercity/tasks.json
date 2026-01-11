@@ -466,23 +466,32 @@
     {
       "id": "task-mkab29o6-im06",
       "objective": "[grind] Add pre-flight task validation - before starting task, check git history for duplicates and mark as duplicate instead of executing",
-      "status": "pending",
+      "status": "duplicate",
       "priority": 41,
-      "createdAt": "2026-01-11T22:28:20.214Z"
+      "createdAt": "2026-01-11T22:28:20.214Z",
+      "completedAt": "2026-01-11T22:43:44.671Z",
+      "duplicateOfCommit": "72cbda5",
+      "resolution": "Already implemented in commit 72cbda5"
     },
     {
       "id": "task-mkab2a0b-wlyi",
       "objective": "[grind] Auto-detect completed tasks after merge - scan tasks.json and mark matching tasks as complete when commits are merged",
-      "status": "pending",
+      "status": "duplicate",
       "priority": 42,
-      "createdAt": "2026-01-11T22:28:20.651Z"
+      "createdAt": "2026-01-11T22:28:20.651Z",
+      "completedAt": "2026-01-11T22:43:44.672Z",
+      "duplicateOfCommit": "72cbda5",
+      "resolution": "Already implemented in commit 72cbda5"
     },
     {
       "id": "task-mkab2acp-lxmz",
       "objective": "[grind] Improve task filtering in runParallel - skip tasks already completed, skip fuzzy matches against recent commits",
-      "status": "pending",
+      "status": "duplicate",
       "priority": 43,
-      "createdAt": "2026-01-11T22:28:21.097Z"
+      "createdAt": "2026-01-11T22:28:21.097Z",
+      "completedAt": "2026-01-11T22:43:44.672Z",
+      "duplicateOfCommit": "72cbda5",
+      "resolution": "Already implemented in commit 72cbda5"
     },
     {
       "id": "task-mkab2aof-ygpz",
@@ -520,5 +529,5 @@
       "createdAt": "2026-01-11T22:29:10.556Z"
     }
   ],
-  "lastUpdated": "2026-01-11T22:29:10.556Z"
+  "lastUpdated": "2026-01-11T22:43:44.672Z"
 }
