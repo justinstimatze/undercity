@@ -15,6 +15,7 @@
 import { execSync } from "node:child_process";
 import chalk from "chalk";
 import { FileTracker } from "./file-tracker.js";
+import * as grindEvents from "./grind-events.js";
 import * as output from "./output.js";
 import { Persistence } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";

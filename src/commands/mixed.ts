@@ -172,6 +172,7 @@ export const mixedCommands: CommandModule = {
 				) => {
 					const { ParallelSoloOrchestrator } = await import("../parallel-solo.js");
 					const { startGrindProgress, updateGrindProgress, clearGrindProgress } = await import("../live-metrics.js");
+					const grindEvents = await import("../grind-events.js");
 
 					const maxCount = Number.parseInt(options.count || "0", 10);
 					const parallelism = Math.min(5, Math.max(1, Number.parseInt(options.parallel || "1", 10)));
@@ -906,6 +907,53 @@ export const mixedCommands: CommandModule = {
 					console.log(chalk.red(`Unknown action: ${action}`));
 					console.log(chalk.dim("Available: status, stop, pause, resume"));
 				}
+			});
+
+		// Status command - check grind session status from event log
+		program
+			.command("status")
+			.description("Show current/recent grind status from event log (JSON default for Claude)")
+			.option("-n, --count <n>", "Number of recent events to show", "20")
+			.option("--human", "Output human-readable format instead of JSON")
+			.option("--events", "Show raw events instead of summary")
+			.action(async (options: { count?: string; human?: boolean; events?: boolean }) => {
+				const { getCurrentGrindStatus, readRecentEvents } = await import("../grind-events.js");
+
+				if (options.events) {
+					const count = Number.parseInt(options.count || "20", 10);
+					const events = readRecentEvents(count);
+
+					if (options.human) {
+						for (const event of events) {
+							const time = new Date(event.timestamp).toLocaleTimeString();
+							const taskPart = event.taskId ? ` [${event.taskId}]` : "";
+							console.log(chalk.dim(time) + taskPart + " " + chalk.bold(event.type) + " " + event.message);
+						}
+					} else {
+						console.log(JSON.stringify(events, null, 2));
+					}
+					return;
+				}
+
+				const status = getCurrentGrindStatus();
+
+				if (!options.human) {
+					console.log(JSON.stringify(status, null, 2));
+					return;
+				}
+
+				if (!status.isRunning && status.tasksQueued === 0) {
+					console.log(chalk.gray("No active or recent grind session"));
+					return;
+				}
+
+				console.log(status.isRunning ? chalk.green.bold("⚡ Grind Running") : chalk.yellow.bold("○ Grind Complete"));
+				console.log(chalk.dim(`  Batch: ${status.batchId || "unknown"}`));
+				console.log();
+				console.log(chalk.bold("Progress:"));
+				console.log(
+					`  Queued: ${status.tasksQueued} | Started: ${status.tasksStarted} | Complete: ${status.tasksComplete} | Failed: ${status.tasksFailed}`,
+				);
 			});
 
 		// Experiment command (simplified)
