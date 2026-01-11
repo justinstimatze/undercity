@@ -14,7 +14,7 @@
 import { execSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { gitLogger } from "./logger.js";
-import type { CodebaseFingerprint, ElevatorItem, ElevatorRetryConfig } from "./types.js";
+import type { CodebaseFingerprint, ElevatorConflict, ElevatorItem, ElevatorRetryConfig } from "./types.js";
 
 /**
  * Default retry configuration
@@ -610,8 +610,12 @@ export class Elevator {
 
 	/**
 	 * Add a branch to the elevator
+	 * @param branch - Branch name to queue for merge
+	 * @param waypointId - Waypoint ID associated with this branch
+	 * @param agentId - Agent ID that worked on this branch
+	 * @param modifiedFiles - Optional list of files modified by this branch for conflict detection
 	 */
-	add(branch: string, waypointId: string, agentId: string): ElevatorItem {
+	add(branch: string, waypointId: string, agentId: string, modifiedFiles?: string[]): ElevatorItem {
 		const item: ElevatorItem = {
 			branch,
 			waypointId,
@@ -621,10 +625,112 @@ export class Elevator {
 			retryCount: 0,
 			maxRetries: this.retryConfig.maxRetries,
 			isRetry: false,
+			modifiedFiles,
 		};
 		this.queue.push(item);
-		gitLogger.debug({ branch, waypointId, agentId }, "Added to elevator");
+		gitLogger.debug({ branch, waypointId, agentId, modifiedFilesCount: modifiedFiles?.length ?? 0 }, "Added to elevator");
 		return item;
+	}
+
+	/**
+	 * Detect file conflicts between branches in the elevator queue.
+	 *
+	 * This checks if any two pending branches modify the same files,
+	 * which would likely cause merge conflicts. Call this before processing
+	 * to flag potential issues early.
+	 *
+	 * @returns Array of detected conflicts between queued branches
+	 */
+	detectQueueConflicts(): ElevatorConflict[] {
+		const conflicts: ElevatorConflict[] = [];
+		const pendingItems = this.queue.filter((item) => item.status === "pending" && item.modifiedFiles?.length);
+
+		// Compare each pair of pending items
+		for (let i = 0; i < pendingItems.length; i++) {
+			const itemA = pendingItems[i];
+			const filesA = new Set(itemA.modifiedFiles ?? []);
+
+			for (let j = i + 1; j < pendingItems.length; j++) {
+				const itemB = pendingItems[j];
+				const filesB = itemB.modifiedFiles ?? [];
+
+				// Find overlapping files
+				const overlappingFiles = filesB.filter((file) => filesA.has(file));
+
+				if (overlappingFiles.length > 0) {
+					conflicts.push({
+						branch: itemA.branch,
+						conflictsWith: itemB.branch,
+						overlappingFiles,
+						severity: overlappingFiles.length > 3 ? "error" : "warning",
+					});
+
+					gitLogger.warn(
+						{
+							branchA: itemA.branch,
+							branchB: itemB.branch,
+							overlappingFiles,
+							count: overlappingFiles.length,
+						},
+						"Pre-merge conflict detected: branches modify same files",
+					);
+				}
+			}
+		}
+
+		return conflicts;
+	}
+
+	/**
+	 * Check if adding a branch with the given modified files would conflict
+	 * with any existing branches in the queue.
+	 *
+	 * Use this before adding a branch to get early warning of potential conflicts.
+	 *
+	 * @param modifiedFiles - Files that the new branch will modify
+	 * @param excludeBranch - Optional branch to exclude from conflict check
+	 * @returns Array of conflicts that would occur if this branch is added
+	 */
+	checkConflictsBeforeAdd(modifiedFiles: string[], excludeBranch?: string): ElevatorConflict[] {
+		const conflicts: ElevatorConflict[] = [];
+		const newFiles = new Set(modifiedFiles);
+
+		for (const item of this.queue) {
+			// Skip completed items and the excluded branch
+			if (item.status === "complete" || item.branch === excludeBranch) {
+				continue;
+			}
+
+			// Skip items without tracked files
+			if (!item.modifiedFiles?.length) {
+				continue;
+			}
+
+			// Find overlapping files
+			const overlappingFiles = item.modifiedFiles.filter((file) => newFiles.has(file));
+
+			if (overlappingFiles.length > 0) {
+				conflicts.push({
+					branch: "(new)",
+					conflictsWith: item.branch,
+					overlappingFiles,
+					severity: overlappingFiles.length > 3 ? "error" : "warning",
+				});
+			}
+		}
+
+		return conflicts;
+	}
+
+	/**
+	 * Get conflicts for a specific branch in the queue
+	 *
+	 * @param branch - Branch to check for conflicts
+	 * @returns Array of conflicts involving this branch
+	 */
+	getConflictsForBranch(branch: string): ElevatorConflict[] {
+		const allConflicts = this.detectQueueConflicts();
+		return allConflicts.filter((c) => c.branch === branch || c.conflictsWith === branch);
 	}
 
 	/**
@@ -968,6 +1074,34 @@ export class Elevator {
 		const item = this.queue.find((i) => i.status === "pending");
 		if (!item) {
 			return null;
+		}
+
+		// Pre-merge conflict detection: flag if this branch conflicts with other queued branches
+		const queueConflicts = this.getConflictsForBranch(item.branch);
+		if (queueConflicts.length > 0) {
+			const hasErrorSeverity = queueConflicts.some((c) => c.severity === "error");
+			const allOverlappingFiles = [...new Set(queueConflicts.flatMap((c) => c.overlappingFiles))];
+
+			gitLogger.warn(
+				{
+					branch: item.branch,
+					conflicts: queueConflicts.map((c) => ({
+						with: c.conflictsWith,
+						files: c.overlappingFiles,
+					})),
+					severity: hasErrorSeverity ? "error" : "warning",
+				},
+				"Pre-merge conflict flagged: branch modifies files touched by other queued branches",
+			);
+
+			// For severe conflicts (>3 overlapping files), mark for manual review
+			// but continue processing - the merge may still succeed with -X ours strategy
+			if (hasErrorSeverity) {
+				gitLogger.info(
+					{ branch: item.branch, overlappingFiles: allOverlappingFiles },
+					"Proceeding with merge despite file overlap - fallback strategies may resolve conflicts",
+				);
+			}
 		}
 
 		this.processing = true;

@@ -186,6 +186,23 @@ export interface ElevatorItem {
 	originalError?: string;
 	/** Whether this item is currently being retried */
 	isRetry?: boolean;
+	/** Files modified by this branch (for pre-merge conflict detection) */
+	modifiedFiles?: string[];
+}
+
+/**
+ * Pre-merge conflict detection result
+ * Flags when two queued branches modify the same files
+ */
+export interface ElevatorConflict {
+	/** Branch that would conflict */
+	branch: string;
+	/** Other branch it conflicts with */
+	conflictsWith: string;
+	/** Files touched by both branches */
+	overlappingFiles: string[];
+	/** Severity based on number of overlapping files */
+	severity: "warning" | "error";
 }
 
 /**
@@ -1055,6 +1072,12 @@ export interface PromptKnowledge {
 		executionTimeMs: number;
 		/** Success rating (1-5) */
 		successRating?: number;
+		/** Human satisfaction score (1-5) for DSPy evaluation */
+		humanSatisfactionScore?: number;
+		/** Error categories encountered (for prompt quality analysis) */
+		errorCategories?: string[];
+		/** Whether this prompt required human intervention */
+		requiredHumanIntervention?: boolean;
 	};
 	/** Metadata tags for searchability */
 	tags: string[];

@@ -6,6 +6,7 @@
 
 import { ExperimentFramework } from "./framework.js";
 import { ExperimentVariant } from "./types.js";
+import { LOCAL_MODELS } from "../local-llm.js";
 
 /**
  * Create common experiment templates
@@ -549,6 +550,165 @@ export class ExperimentTemplates {
         targetSampleSize: 90,
         minimumDetectableEffect: 0.15,
         tags: ["complexity", "strategy", "risk-reward", "optimization"],
+      }
+    );
+
+    return experiment.id;
+  }
+
+  /**
+   * Test Ollama local LLM vs Haiku for diff generation
+   */
+  createOllamaVsHaikuDiffExperiment(): string {
+    const variants: Omit<ExperimentVariant, "id">[] = [
+      {
+        name: "Haiku Cloud (Control)",
+        description: "Use Claude Haiku for diff generation via cloud API",
+        weight: 0.33,
+        isControl: true,
+        parameters: {
+          useLocalLLM: false,
+          modelChoices: {
+            quester: "haiku",
+          },
+          diffStrategy: "minimal-diff",
+          customParameters: {
+            diffProvider: "haiku",
+          },
+        },
+      },
+      {
+        name: "Ollama Qwen2 1.5B",
+        description: "Use Ollama Qwen2:1.5B for local diff generation",
+        weight: 0.33,
+        parameters: {
+          useLocalLLM: true,
+          localModel: "qwen2:1.5b" as const,
+          diffStrategy: "minimal-diff",
+          customParameters: {
+            diffProvider: "ollama",
+          },
+        },
+      },
+      {
+        name: "Ollama DeepSeek Coder",
+        description: "Use Ollama DeepSeek Coder for local diff generation",
+        weight: 0.34,
+        parameters: {
+          useLocalLLM: true,
+          localModel: "deepseek-coder:6.7b-instruct" as const,
+          diffStrategy: "minimal-diff",
+          customParameters: {
+            diffProvider: "ollama",
+          },
+        },
+      },
+    ];
+
+    const experiment = this.framework.createExperiment(
+      "Ollama vs Haiku Diff Generation",
+      "Test local LLM diff generation against cloud models for simple code edits",
+      "Ollama local models will have similar success rates to Haiku but significantly faster response times and zero API costs",
+      variants,
+      {
+        targetSampleSize: 30,
+        minimumDetectableEffect: 0.2,
+        tags: ["ollama", "local-llm", "diff-generation", "cost-efficiency", "latency"],
+      }
+    );
+
+    return experiment.id;
+  }
+
+  /**
+   * Test different local models for code generation quality
+   */
+  createLocalModelComparisonExperiment(): string {
+    const variants: Omit<ExperimentVariant, "id">[] = [
+      {
+        name: "Qwen2 0.5B (Control)",
+        description: "Smallest fast model for baseline comparison",
+        weight: 0.2,
+        isControl: true,
+        parameters: {
+          useLocalLLM: true,
+          localModel: "qwen2:0.5b" as const,
+          diffStrategy: "minimal-diff",
+          customParameters: {
+            modelSize: "0.5B",
+            expectedLatency: "very-fast",
+          },
+        },
+      },
+      {
+        name: "Qwen2 1.5B",
+        description: "Medium size model balancing speed and quality",
+        weight: 0.2,
+        parameters: {
+          useLocalLLM: true,
+          localModel: "qwen2:1.5b" as const,
+          diffStrategy: "minimal-diff",
+          customParameters: {
+            modelSize: "1.5B",
+            expectedLatency: "fast",
+          },
+        },
+      },
+      {
+        name: "Qwen2 3B",
+        description: "Larger model for better code understanding",
+        weight: 0.2,
+        parameters: {
+          useLocalLLM: true,
+          localModel: "qwen2:3b" as const,
+          diffStrategy: "minimal-diff",
+          customParameters: {
+            modelSize: "3B",
+            expectedLatency: "medium",
+          },
+        },
+      },
+      {
+        name: "CodeLlama 7B",
+        description: "Code-specialized model for comparison",
+        weight: 0.2,
+        parameters: {
+          useLocalLLM: true,
+          localModel: "codellama:7b-code" as const,
+          diffStrategy: "minimal-diff",
+          customParameters: {
+            modelSize: "7B",
+            expectedLatency: "slower",
+            specialization: "code",
+          },
+        },
+      },
+      {
+        name: "DeepSeek Coder 6.7B",
+        description: "Another code-specialized model for comparison",
+        weight: 0.2,
+        parameters: {
+          useLocalLLM: true,
+          localModel: "deepseek-coder:6.7b-instruct" as const,
+          diffStrategy: "minimal-diff",
+          customParameters: {
+            modelSize: "6.7B",
+            expectedLatency: "slower",
+            specialization: "code-instruct",
+          },
+        },
+      },
+    ];
+
+    const experiment = this.framework.createExperiment(
+      "Local Model Size vs Quality Comparison",
+      "Compare different local model sizes and specializations for code generation quality",
+      "Larger and code-specialized models will have better success rates but slower response times",
+      variants,
+      {
+        targetSampleSize: 40,
+        minimumDetectableEffect: 0.15,
+        tags: ["ollama", "model-comparison", "size-scaling", "specialization"],
       }
     );
 

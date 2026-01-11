@@ -30,6 +30,7 @@
  *   surrender         Surrender the current raid
  *   clear             Clear all state
  *   oracle [situation] Draw oblique strategy cards for novel insights
+ *   dspy-readiness    Assess DSPy integration value based on prompt performance
  */
 
 import { readFileSync } from "node:fs";
@@ -1792,6 +1793,52 @@ program
 		console.log(chalk.dim("  undercity oracle --info        - Deck information"));
 	});
 
+// DSPy readiness assessment command
+program
+	.command("dspy-readiness")
+	.description("Assess whether DSPy integration would provide value based on current prompt performance")
+	.action(async () => {
+		const { KnowledgeTracker } = await import("./knowledge-tracker.js");
+		const tracker = new KnowledgeTracker();
+
+		console.log(chalk.cyan.bold("\n🔮 DSPy Readiness Assessment"));
+		console.log(chalk.dim("  Analyzing prompt performance patterns for optimization opportunities\n"));
+
+		const assessment = tracker.assessDSPyReadiness();
+
+		// Display metrics
+		console.log(chalk.bold("📊 Current Metrics:"));
+		console.log(`  Low-performing prompts: ${chalk.yellow(assessment.criticalMetrics.lowPerformingPrompts)}`);
+		console.log(`  Human intervention rate: ${chalk.yellow(`${(assessment.criticalMetrics.humanInterventionRate * 100).toFixed(1)}%`)}`);
+		console.log(`  Average satisfaction: ${chalk.yellow(`${assessment.criticalMetrics.avgSatisfactionScore.toFixed(1)}/5`)}`);
+		console.log(`  Error pattern diversity: ${chalk.yellow(assessment.criticalMetrics.errorPatternDiversity)} categories`);
+
+		// Recommendation
+		const recommendationColor = assessment.recommendDSPy ? chalk.green : chalk.red;
+		const recommendationText = assessment.recommendDSPy ? "RECOMMENDED" : "NOT RECOMMENDED";
+
+		console.log(chalk.bold("🎯 Recommendation:"));
+		console.log(`  DSPy Integration: ${recommendationColor.bold(recommendationText)}`);
+		console.log(`  Confidence Level: ${chalk.cyan(`${(assessment.confidence * 100).toFixed(1)}%`)}\n`);
+
+		// Rationale
+		console.log(chalk.bold("💡 Analysis:"));
+		assessment.rationale.forEach(reason => {
+			console.log(`  ${chalk.dim("•")} ${reason}`);
+		});
+
+		console.log();
+
+		if (assessment.recommendDSPy) {
+			console.log(chalk.green("✅ DSPy integration appears worthwhile based on current data"));
+			console.log(chalk.dim("   Consider implementing targeted prompt optimization for underperforming areas"));
+		} else {
+			console.log(chalk.yellow("⏳ Current prompt optimization system appears sufficient"));
+			console.log(chalk.dim("   Continue collecting data or focus on other optimization areas"));
+		}
+		console.log();
+	});
+
 // Solo command - light mode with adaptive escalation
 program
 	.command("solo <goal>")
@@ -2526,6 +2573,109 @@ program
 				resolve();
 			});
 		});
+	});
+
+// Experiment commands
+program
+	.command("experiment")
+	.description("Run A/B experiments on raid configurations")
+	.argument("<action>", "Action to perform (list, show, create-template, start, stop, analyze, report)")
+	.argument("[id-or-template]", "Experiment ID or template name")
+	.argument("[output]", "Output file path (for report command)")
+	.option("-t, --trials <number>", "Number of trials to run")
+	.option("--confirm", "Confirm destructive actions")
+	.action(async (action: string, idOrTemplate?: string, output?: string, options?: any) => {
+		try {
+			const { ExperimentCLI } = await import("./experiments/cli.js");
+			const cli = new ExperimentCLI();
+
+			switch (action.toLowerCase()) {
+				case "list":
+					cli.listExperiments(idOrTemplate as any);
+					break;
+				case "show":
+					if (!idOrTemplate) {
+						console.error("❌ Experiment ID required");
+						return;
+					}
+					cli.showExperiment(idOrTemplate);
+					break;
+				case "create-template":
+					if (!idOrTemplate) {
+						console.error("❌ Template name required");
+						return;
+					}
+					cli.createTemplate(idOrTemplate);
+					break;
+				case "start":
+					if (!idOrTemplate) {
+						console.error("❌ Experiment ID required");
+						return;
+					}
+					cli.startExperiment(idOrTemplate, options?.trials ? parseInt(options.trials, 10) : undefined);
+					break;
+				case "stop":
+					if (!idOrTemplate) {
+						console.error("❌ Experiment ID required");
+						return;
+					}
+					cli.stopExperiment(idOrTemplate);
+					break;
+				case "analyze":
+					if (!idOrTemplate) {
+						console.error("❌ Experiment ID required");
+						return;
+					}
+					cli.analyzeExperiment(idOrTemplate);
+					break;
+				case "report":
+					if (!idOrTemplate) {
+						console.error("❌ Experiment ID required");
+						return;
+					}
+					cli.generateReport(idOrTemplate, output);
+					break;
+				case "templates":
+					cli.listTemplates();
+					break;
+				case "summary":
+					cli.showSummary();
+					break;
+				case "delete":
+					if (!idOrTemplate) {
+						console.error("❌ Experiment ID required");
+						return;
+					}
+					cli.deleteExperiment(idOrTemplate, options?.confirm || false);
+					break;
+				case "auto-analyze":
+					cli.autoAnalyze();
+					break;
+				default:
+					console.error(`❌ Unknown action: ${action}`);
+					console.log("Available actions: list, show, create-template, start, stop, analyze, report, templates, summary, delete, auto-analyze");
+					break;
+			}
+		} catch (error) {
+			console.error(`❌ Experiment error: ${error}`);
+		}
+	});
+
+// Quick experiment runner
+program
+	.command("quick-ollama-test")
+	.description("Run a quick Ollama vs Haiku diff generation test")
+	.action(async () => {
+		console.log("🧪 Running quick Ollama experiment...");
+
+		try {
+			const { runQuickOllamaExperiment } = await import("./diff-experiment-runner.js");
+			const experimentId = await runQuickOllamaExperiment();
+			console.log(`✅ Quick experiment completed: ${experimentId}`);
+			console.log(`Use 'undercity experiment show ${experimentId}' to see results`);
+		} catch (error) {
+			console.error(`❌ Quick experiment failed: ${error}`);
+		}
 	});
 
 // Parse and run

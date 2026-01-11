@@ -1289,9 +1289,31 @@ export class RaidOrchestrator {
 						this.persistence.saveRaid(raid);
 					}
 
-					// Add to elevator
-					this.elevator.add(waypoint.branch, waypoint.id, waypoint.agentId || "unknown");
-					this.log("Branch added to elevator", { branch: waypoint.branch });
+					// Find the quester waypoint to get the agent ID for file tracking
+					// The quester's agent is the one that modified files, not the sheriff
+					const questerWaypoint = this.persistence
+						.getTasks()
+						.find((t) => t.raidId === raid.id && t.type === "quester" && t.branch === waypoint.branch);
+
+					const questerAgentId = questerWaypoint?.agentId || waypoint.agentId || "unknown";
+					const modifiedFiles = this.fileTracker.getModifiedFiles(questerAgentId);
+
+					// Check for pre-merge conflicts before adding to elevator
+					const preAddConflicts = this.elevator.checkConflictsBeforeAdd(modifiedFiles);
+					if (preAddConflicts.length > 0) {
+						this.log("Pre-merge conflict detected", {
+							branch: waypoint.branch,
+							conflicts: preAddConflicts,
+							modifiedFiles,
+						});
+					}
+
+					// Add to elevator with modified files for conflict detection
+					this.elevator.add(waypoint.branch, waypoint.id, questerAgentId, modifiedFiles);
+					this.log("Branch added to elevator", {
+						branch: waypoint.branch,
+						modifiedFilesCount: modifiedFiles.length,
+					});
 
 					// Process elevator
 					await this.processElevator();

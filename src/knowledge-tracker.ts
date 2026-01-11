@@ -25,6 +25,12 @@ export interface PromptKnowledge {
 		executionTimeMs: number;
 		/** Success rating (1-5) */
 		successRating?: number;
+		/** Human satisfaction score (1-5) for DSPy evaluation */
+		humanSatisfactionScore?: number;
+		/** Error categories encountered (for prompt quality analysis) */
+		errorCategories?: string[];
+		/** Whether this prompt required human intervention */
+		requiredHumanIntervention?: boolean;
 	};
 	/** Metadata tags for searchability */
 	tags: string[];
@@ -242,6 +248,30 @@ export class KnowledgeTracker {
 			improvements.push("Reduce prompt verbosity and token usage");
 		}
 
+		// Human intervention analysis for DSPy readiness assessment
+		if (lowSuccessPrompt.metrics.requiredHumanIntervention) {
+			improvements.push("Improve prompt autonomy - reduce human dependency");
+		}
+
+		// Error category analysis
+		if (lowSuccessPrompt.metrics.errorCategories?.length) {
+			const errorTypes = lowSuccessPrompt.metrics.errorCategories;
+			if (errorTypes.includes("ambiguous_requirements")) {
+				improvements.push("Add more specific task requirements and constraints");
+			}
+			if (errorTypes.includes("poor_context")) {
+				improvements.push("Improve contextual information and examples");
+			}
+			if (errorTypes.includes("wrong_approach")) {
+				improvements.push("Consider few-shot examples of successful approaches");
+			}
+		}
+
+		// Human satisfaction analysis
+		if ((lowSuccessPrompt.metrics.humanSatisfactionScore || 0) < 3) {
+			improvements.push("Focus on improving output quality and user experience");
+		}
+
 		// Add tags-based suggestions
 		if (lowSuccessPrompt.tags.includes("complex")) {
 			improvements.push("Break down complex tasks into smaller, more focused prompts");
@@ -286,5 +316,139 @@ export class KnowledgeTracker {
 		}
 
 		return resultsMap;
+	}
+
+	/**
+	 * Assess readiness for DSPy integration by analyzing prompt performance patterns
+	 * @returns Analysis indicating whether DSPy would provide value
+	 */
+	assessDSPyReadiness(): {
+		recommendDSPy: boolean;
+		confidence: number;
+		rationale: string[];
+		criticalMetrics: {
+			lowPerformingPrompts: number;
+			humanInterventionRate: number;
+			avgSatisfactionScore: number;
+			errorPatternDiversity: number;
+		};
+	} {
+		const storage = this.loadStorage();
+		const allKnowledge = storage.knowledge;
+
+		if (allKnowledge.length < 50) {
+			return {
+				recommendDSPy: false,
+				confidence: 0.1,
+				rationale: ["Insufficient data: Need at least 50 prompt records for meaningful analysis"],
+				criticalMetrics: {
+					lowPerformingPrompts: 0,
+					humanInterventionRate: 0,
+					avgSatisfactionScore: 0,
+					errorPatternDiversity: 0,
+				},
+			};
+		}
+
+		// Calculate critical metrics
+		const lowPerformingPrompts = allKnowledge.filter(k =>
+			(k.successCount || 0) <= 2 || (k.metrics.successRating || 0) < 3
+		).length;
+
+		const promptsWithInterventionData = allKnowledge.filter(k =>
+			k.metrics.requiredHumanIntervention !== undefined
+		);
+		const humanInterventionRate = promptsWithInterventionData.length > 0
+			? promptsWithInterventionData.filter(k => k.metrics.requiredHumanIntervention).length / promptsWithInterventionData.length
+			: 0;
+
+		const promptsWithSatisfactionData = allKnowledge.filter(k =>
+			k.metrics.humanSatisfactionScore !== undefined
+		);
+		const avgSatisfactionScore = promptsWithSatisfactionData.length > 0
+			? promptsWithSatisfactionData.reduce((sum, k) => sum + (k.metrics.humanSatisfactionScore || 0), 0) / promptsWithSatisfactionData.length
+			: 0;
+
+		const allErrorCategories = new Set<string>();
+		allKnowledge.forEach(k => {
+			k.metrics.errorCategories?.forEach(cat => allErrorCategories.add(cat));
+		});
+		const errorPatternDiversity = allErrorCategories.size;
+
+		const metrics = {
+			lowPerformingPrompts,
+			humanInterventionRate,
+			avgSatisfactionScore,
+			errorPatternDiversity,
+		};
+
+		// Decision logic for DSPy recommendation
+		const rationale: string[] = [];
+		let score = 0;
+
+		// High proportion of low-performing prompts suggests optimization opportunity
+		const lowPerfRatio = lowPerformingPrompts / allKnowledge.length;
+		if (lowPerfRatio > 0.3) {
+			score += 3;
+			rationale.push(`High proportion of low-performing prompts (${(lowPerfRatio * 100).toFixed(1)}%)`);
+		} else if (lowPerfRatio > 0.15) {
+			score += 1;
+			rationale.push(`Moderate proportion of low-performing prompts (${(lowPerfRatio * 100).toFixed(1)}%)`);
+		} else {
+			rationale.push(`Low proportion of underperforming prompts (${(lowPerfRatio * 100).toFixed(1)}%) - existing system effective`);
+		}
+
+		// High human intervention rate suggests prompts need improvement
+		if (humanInterventionRate > 0.4) {
+			score += 3;
+			rationale.push(`High human intervention rate (${(humanInterventionRate * 100).toFixed(1)}%)`);
+		} else if (humanInterventionRate > 0.2) {
+			score += 1;
+			rationale.push(`Moderate human intervention rate (${(humanInterventionRate * 100).toFixed(1)}%)`);
+		} else {
+			rationale.push(`Low human intervention rate (${(humanInterventionRate * 100).toFixed(1)}%) - prompts are sufficiently autonomous`);
+		}
+
+		// Low satisfaction suggests quality issues
+		if (avgSatisfactionScore > 0 && avgSatisfactionScore < 3) {
+			score += 2;
+			rationale.push(`Low average satisfaction score (${avgSatisfactionScore.toFixed(1)}/5)`);
+		} else if (avgSatisfactionScore >= 4) {
+			rationale.push(`High average satisfaction score (${avgSatisfactionScore.toFixed(1)}/5) - current prompts perform well`);
+		}
+
+		// Diverse error patterns suggest systematic prompt issues
+		if (errorPatternDiversity >= 5) {
+			score += 2;
+			rationale.push(`Diverse error patterns (${errorPatternDiversity} categories) suggest systematic prompt quality issues`);
+		}
+
+		// Confidence based on data completeness
+		const dataCompleteness = Math.min(
+			promptsWithInterventionData.length / allKnowledge.length,
+			promptsWithSatisfactionData.length / allKnowledge.length,
+			allKnowledge.length / 100 // Cap at 100 samples for confidence calculation
+		);
+
+		const confidence = Math.max(0.1, dataCompleteness);
+
+		// Recommendation threshold
+		const recommendDSPy = score >= 5 && confidence > 0.7;
+
+		if (!recommendDSPy) {
+			if (score < 5) {
+				rationale.push("Current prompt optimization appears sufficient - DSPy overhead not justified");
+			}
+			if (confidence <= 0.7) {
+				rationale.push("Insufficient data quality for confident DSPy recommendation");
+			}
+		}
+
+		return {
+			recommendDSPy,
+			confidence,
+			rationale,
+			criticalMetrics: metrics,
+		};
 	}
 }

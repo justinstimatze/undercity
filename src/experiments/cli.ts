@@ -145,9 +145,15 @@ export class ExperimentCLI {
         case "comprehensive":
           experimentId = this.templates.createComprehensiveExperiment();
           break;
+        case "ollama-vs-haiku":
+          experimentId = this.templates.createOllamaVsHaikuDiffExperiment();
+          break;
+        case "local-model-comparison":
+          experimentId = this.templates.createLocalModelComparisonExperiment();
+          break;
         default:
           console.error(`❌ Unknown template: ${templateName}`);
-          console.log("Available templates: opus-vs-mixed, squad-composition, parallelism, context-size, auto-approval, comprehensive");
+          console.log("Available templates: opus-vs-mixed, squad-composition, parallelism, context-size, auto-approval, comprehensive, ollama-vs-haiku, local-model-comparison");
           return;
       }
 
@@ -353,6 +359,8 @@ export class ExperimentCLI {
     console.log("context-size      - Test different context size configurations");
     console.log("auto-approval     - Test human approval vs auto-approval");
     console.log("comprehensive     - Test speed vs quality configurations");
+    console.log("ollama-vs-haiku   - Test local Ollama models vs Haiku for diff generation");
+    console.log("local-model-comparison - Compare different Ollama model sizes and specializations");
     console.log();
     console.log("Usage: experiment create-template <template-name>");
     console.log();
