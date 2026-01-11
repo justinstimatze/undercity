@@ -135,6 +135,12 @@ export interface SoloOptions {
 	maxReviewPassesPerTier?: number;
 	/** Use annealing review at opus tier (multi-angle advisory review) */
 	annealingAtOpus?: boolean;
+	/**
+	 * Maximum fix attempts at the same model tier before escalating.
+	 * Allows the model to retry fixing errors multiple times before moving to a stronger model.
+	 * Default: 3 (allows 3 retries at same tier before escalating)
+	 */
+	maxRetriesPerTier?: number;
 }
 
 /**
@@ -166,6 +172,7 @@ export class SoloOrchestrator {
 	private reviewPasses: boolean;
 	private maxReviewPassesPerTier: number;
 	private annealingAtOpus: boolean;
+	private maxRetriesPerTier: number;
 
 	private currentModel: ModelTier;
 	private attempts: number = 0;
@@ -196,6 +203,7 @@ export class SoloOrchestrator {
 		this.reviewPasses = options.reviewPasses ?? false;
 		this.maxReviewPassesPerTier = options.maxReviewPassesPerTier ?? 2;
 		this.annealingAtOpus = options.annealingAtOpus ?? false;
+		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
 		this.currentModel = this.startingModel;
 		this.metricsTracker = new MetricsTracker();
 	}
@@ -1221,9 +1229,13 @@ Please fix these issues. Make minimal changes.`;
 	 * Decide whether to escalate to a better model
 	 *
 	 * Strategy:
-	 * - Trivial errors (lint/spell only): retry same tier up to 2x
-	 * - Serious errors (typecheck/build): escalate after 1 retry
 	 * - No changes made: escalate immediately (agent is stuck)
+	 * - Trivial errors (lint/spell only): allow full maxRetriesPerTier attempts
+	 * - Serious errors (typecheck/build/test): allow fewer retries (maxRetriesPerTier - 1)
+	 *   to escalate faster for errors that likely need a smarter model
+	 *
+	 * The configurable maxRetriesPerTier (default: 3) allows multiple fix attempts
+	 * at the same tier before escalating to a stronger model.
 	 */
 	private shouldEscalate(
 		verification: VerificationResult,
@@ -1239,24 +1251,28 @@ Please fix these issues. Make minimal changes.`;
 		const hasSerious = errorCategories.some((c) => c === "typecheck" || c === "build" || c === "test");
 
 		if (trivialOnly) {
-			// Trivial errors: allow 2 retries at same tier before escalating
-			if (this.sameModelRetries < 2) {
-				return { shouldEscalate: false, reason: "trivial error, retry same tier" };
+			// Trivial errors: allow full maxRetriesPerTier attempts before escalating
+			if (this.sameModelRetries < this.maxRetriesPerTier) {
+				const remaining = this.maxRetriesPerTier - this.sameModelRetries;
+				return { shouldEscalate: false, reason: `trivial error, ${remaining} retries left at tier` };
 			}
-			return { shouldEscalate: true, reason: "trivial errors persist after 2 retries" };
+			return { shouldEscalate: true, reason: `trivial errors persist after ${this.maxRetriesPerTier} retries` };
 		}
 
 		if (hasSerious) {
-			// Serious errors: allow 1 retry at same tier, then escalate
-			if (this.sameModelRetries < 2) {
-				return { shouldEscalate: false, reason: "serious error, one more retry" };
+			// Serious errors: allow fewer retries (at least 2, but less than max for trivial)
+			// This escalates faster for type/build/test errors that likely need a smarter model
+			const seriousRetryLimit = Math.max(2, this.maxRetriesPerTier - 1);
+			if (this.sameModelRetries < seriousRetryLimit) {
+				const remaining = seriousRetryLimit - this.sameModelRetries;
+				return { shouldEscalate: false, reason: `serious error, ${remaining} retries left at tier` };
 			}
-			return { shouldEscalate: true, reason: "serious errors after retry" };
+			return { shouldEscalate: true, reason: `serious errors after ${seriousRetryLimit} retries` };
 		}
 
-		// Default: escalate after 2 retries
-		if (this.sameModelRetries >= 2) {
-			return { shouldEscalate: true, reason: "max retries at tier" };
+		// Default: escalate after maxRetriesPerTier
+		if (this.sameModelRetries >= this.maxRetriesPerTier) {
+			return { shouldEscalate: true, reason: `max retries at tier (${this.maxRetriesPerTier})` };
 		}
 
 		return { shouldEscalate: false, reason: "retrying" };
