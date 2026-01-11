@@ -1,500 +1,112 @@
 {
-  "quests": [
+  "tasks": [
     {
-      "id": "quest-solo-complete",
-      "objective": "[solo] Solo mode with adaptive escalation - DONE",
-      "status": "complete",
-      "priority": 0,
-      "createdAt": "2026-01-10T08:00:00.000Z",
-      "completedAt": "2026-01-10T08:48:00.000Z",
-      "note": "Implemented haiku→sonnet→opus escalation, comprehensive verification, feedback loop"
-    },
-    {
-      "id": "quest-bug-intel-parser",
-      "objective": "[bug] Fix intel.txt parser - should skip Archive section and HTML comments",
-      "status": "complete",
+      "id": "task-feedback-metrics-reader",
+      "objective": "[feedback] Create metrics reader - load metrics.jsonl, parse outcomes, compute success rates by model/complexity",
+      "status": "pending",
       "priority": 1,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T09:28:06.066Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T09:28:40.364Z"
+      "createdAt": "2026-01-11T07:00:00.000Z",
+      "tags": ["feedback-loop", "metrics"]
     },
     {
-      "id": "quest-bug-surrender",
-      "objective": "[bug] Surrender should clear inventory.json so status shows 'No active raid'",
-      "status": "complete",
+      "id": "task-feedback-routing-adjustment",
+      "objective": "[feedback] Wire metrics to routing - adjust complexity thresholds based on historical success rates per model tier",
+      "status": "pending",
       "priority": 2,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T09:30:39.752Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T09:31:41.129Z"
+      "createdAt": "2026-01-11T07:00:00.000Z",
+      "tags": ["feedback-loop", "routing"],
+      "dependsOn": ["task-feedback-metrics-reader"]
     },
     {
-      "id": "quest-bug-sdk-cwd",
-      "objective": "[bug] SDK cwd option not isolating agent file operations - agents write to process.cwd() not worktree",
-      "status": "complete",
+      "id": "task-feedback-introspect-command",
+      "objective": "[feedback] Add 'undercity introspect' command - analyze own metrics, identify improvement opportunities, generate tasks",
+      "status": "pending",
       "priority": 3,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T09:31:41.130Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T09:33:14.174Z"
+      "createdAt": "2026-01-11T07:00:00.000Z",
+      "tags": ["feedback-loop", "self-improvement"],
+      "dependsOn": ["task-feedback-metrics-reader"]
     },
     {
-      "id": "quest-solo-token-tracking",
-      "objective": "[solo] Track token usage in solo mode - log tokens per attempt for cost visibility",
-      "status": "complete",
-      "priority": 10,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T09:33:14.175Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T09:36:45.250Z"
+      "id": "task-feedback-ab-integration",
+      "objective": "[feedback] Wire experiment framework to grind - randomly assign tasks to variants, track which routing/prompts work better",
+      "status": "pending",
+      "priority": 4,
+      "createdAt": "2026-01-11T07:00:00.000Z",
+      "tags": ["feedback-loop", "experiments"]
     },
     {
-      "id": "quest-solo-dry-run",
-      "objective": "[solo] Add --dry-run flag to solo command - show complexity assessment without executing",
-      "status": "complete",
-      "priority": 11,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T09:36:45.250Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T09:38:16.582Z"
+      "id": "task-feedback-pattern-learning",
+      "objective": "[feedback] Learn task patterns - cluster similar tasks by objective keywords, track which patterns succeed at which tiers",
+      "status": "pending",
+      "priority": 5,
+      "createdAt": "2026-01-11T07:00:00.000Z",
+      "tags": ["feedback-loop", "learning"],
+      "dependsOn": ["task-feedback-metrics-reader"]
     },
     {
-      "id": "quest-solo-spell-check",
-      "objective": "[solo] Add spell check to verification - pnpm spell as optional verification step",
-      "status": "complete",
-      "priority": 12,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T09:38:16.583Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T09:39:43.604Z"
-    },
-    {
-      "id": "quest-ux-status-flicker",
-      "objective": "[ux] Fix status flicker - atomic state file writes to prevent partial reads during watch",
-      "status": "complete",
-      "priority": 20,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "raidId": "",
-      "completedAt": "2026-01-11T03:00:00.000Z"
-    },
-    {
-      "id": "quest-portability-external",
-      "objective": "[portability] Add support for external repos - undercity should work on any repo, not just itself",
-      "status": "complete",
-      "priority": 30,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T10:53:29.602Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T10:57:55.973Z"
-    },
-    {
-      "id": "quest-portability-init",
-      "objective": "[portability] Add 'undercity init' command to initialize .undercity/ and intel.txt in a new repo",
-      "status": "complete",
-      "priority": 31,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "startedAt": "2026-01-10T10:59:08.834Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:03:04.755Z"
-    },
-    {
-      "id": "quest-metrics-jsonl",
-      "objective": "[metrics] Log to .undercity/metrics.jsonl - queryable history of quest durations, token usage, model escalations",
-      "status": "complete",
-      "priority": 40,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "completedAt": "2026-01-10T10:31:40.791Z",
-      "note": "Implemented via recordMetric() in metrics.ts, file exists at .undercity/metrics.jsonl"
-    },
-    {
-      "id": "quest-metrics-success-rate",
+      "id": "task-metrics-success-rate",
       "objective": "[metrics] Track success rate per complexity level - which tasks need escalation most?",
       "status": "pending",
-      "priority": 41,
+      "priority": 10,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "raidId": ""
+      "tags": ["metrics"]
     },
     {
-      "id": "quest-grind-improvements",
-      "objective": "[grind] Improve grind command - better quest selection, skip already-complete, priority ordering",
+      "id": "task-grind-improvements",
+      "objective": "[grind] Improve grind command - better task selection, skip already-complete, priority ordering",
       "status": "pending",
-      "priority": 50,
+      "priority": 11,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "raidId": ""
+      "tags": ["grind"]
     },
     {
-      "id": "quest-parallel-solo",
-      "objective": "[parallel] Add parallel solo mode - run multiple solo tasks on different branches concurrently",
-      "status": "complete",
-      "priority": 60,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "completedAt": "2026-01-10T19:00:00.000Z",
-      "note": "Implemented as ParallelSoloOrchestrator - uses worktrees for isolation, runs parallel workers"
-    },
-    {
-      "id": "quest-tui-dashboard",
-      "objective": "[tui] Build a TUI dashboard - combine status display and streaming logs in one view",
-      "status": "complete",
-      "priority": 100,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "completedAt": "2026-01-11T01:00:00.000Z",
-      "note": "Implemented as dashboard.ts with 'undercity watch' command - live status updates"
-    },
-    {
-      "id": "quest-config-file",
-      "objective": "[qol] Add config file support (.undercityrc) for default options like --stream, model choices",
-      "status": "complete",
-      "priority": 110,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "completedAt": "2026-01-10T18:00:00.000Z",
-      "note": "Implemented in config.ts with 'undercity config' command and .undercity/config.json"
-    },
-    {
-      "id": "quest-mk83qv1v-o4go",
-      "objective": "run typecheck",
-      "status": "complete",
-      "priority": 16,
-      "createdAt": "2026-01-10T09:27:58.387Z",
-      "startedAt": "2026-01-10T09:48:49.504Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T09:48:51.135Z"
-    },
-    {
-      "id": "quest-mk84e1cj-vvso",
-      "objective": "[setup] Add 'undercity setup-ollama' command - detect hardware, recommend models, pull them, test they work",
-      "status": "complete",
-      "priority": 17,
-      "createdAt": "2026-01-10T09:45:59.635Z",
-      "startedAt": "2026-01-10T09:54:05.243Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T09:55:54.945Z"
-    },
-    {
-      "id": "quest-mk84gfvr-1klk",
-      "objective": "[parallel] Add parallel-by-tier execution - batch local-tools, run 2-3 local LLM, serialize Claude API calls for max throughput",
-      "status": "complete",
-      "priority": 18,
-      "createdAt": "2026-01-10T09:47:51.783Z",
-      "startedAt": "2026-01-10T09:55:54.945Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T09:59:36.640Z"
-    },
-    {
-      "id": "quest-mk84h5xx-ciui",
-      "objective": "[skynet] Build self-improvement loop - metrics collection, experiment framework, PM agent that generates improvement quests based on empirical data",
-      "status": "complete",
-      "priority": 19,
-      "createdAt": "2026-01-10T09:48:25.557Z",
-      "startedAt": "2026-01-10T09:59:36.641Z",
-      "completedAt": "2026-01-10T10:15:00.000Z",
-      "raidId": ""
-    },
-    {
-      "id": "quest-mk84ilj8-1ihq",
-      "objective": "[distributed] Build undercity hive - worker daemons on multiple machines, capability discovery, distributed task routing across home network",
-      "status": "complete",
-      "priority": 20,
-      "createdAt": "2026-01-10T09:49:32.420Z",
-      "startedAt": "2026-01-10T10:28:29.730Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T10:30:34.537Z"
-    },
-    {
-      "id": "quest-mk84jbs1-t2pw",
-      "objective": "[metrics] Add metrics collector - track success/fail, time, tokens, model, escalations per task in .undercity/metrics.jsonl",
-      "status": "complete",
-      "priority": 21,
-      "createdAt": "2026-01-10T09:50:06.433Z",
-      "startedAt": "2026-01-10T10:30:34.539Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T10:31:40.791Z"
-    },
-    {
-      "id": "quest-mk84jc4c-vohd",
-      "objective": "[metrics] Add 'undercity metrics' command - show success rate by tier, avg time, token usage, top failure patterns",
-      "status": "complete",
-      "priority": 22,
-      "createdAt": "2026-01-10T09:50:06.876Z",
-      "startedAt": "2026-01-10T10:31:40.793Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T10:34:36.429Z"
-    },
-    {
-      "id": "quest-mk84jchv-ppk0",
-      "objective": "[metrics] Track routing accuracy - did the routed tier succeed or need escalation? Log prediction vs actual",
-      "status": "complete",
-      "priority": 23,
-      "createdAt": "2026-01-10T09:50:07.363Z",
-      "startedAt": "2026-01-10T10:43:28.887Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T10:44:18.819Z"
-    },
-    {
-      "id": "quest-mk84jct5-etvj",
-      "objective": "[experiment] Add experiment framework - A/B test routing decisions, log variant and outcome",
-      "status": "complete",
-      "priority": 24,
-      "createdAt": "2026-01-10T09:50:07.769Z",
-      "startedAt": "2026-01-10T10:44:18.821Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T10:46:08.484Z"
-    },
-    {
-      "id": "quest-mk84jd56-os9p",
-      "objective": "[experiment] Add 'undercity experiment' command - define hypothesis, run N trials, compare results",
-      "status": "complete",
-      "priority": 25,
-      "createdAt": "2026-01-10T09:50:08.202Z",
-      "startedAt": "2026-01-10T10:46:08.486Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T10:47:22.918Z"
-    },
-    {
-      "id": "quest-mk84jdh6-sxno",
-      "objective": "[pm] Add PM agent - weekly review of metrics, identify worst-performing task types, generate improvement hypotheses",
-      "status": "complete",
-      "priority": 26,
-      "createdAt": "2026-01-10T09:50:08.634Z",
-      "startedAt": "2026-01-10T10:47:22.920Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T10:48:25.183Z"
-    },
-    {
-      "id": "quest-mk84jdug-a6ga",
-      "objective": "[pm] PM generates quests - turn hypotheses into concrete improvement quests with expected impact",
-      "status": "complete",
-      "priority": 27,
-      "createdAt": "2026-01-10T09:50:09.112Z",
-      "startedAt": "2026-01-10T10:48:25.184Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T10:49:02.909Z"
-    },
-    {
-      "id": "quest-mk84je6n-a1sv",
-      "objective": "[pm] Add 'undercity improve' command - trigger PM analysis and quest generation on demand",
-      "status": "complete",
-      "priority": 28,
-      "createdAt": "2026-01-10T09:50:09.551Z",
-      "startedAt": "2026-01-10T10:49:02.910Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T10:52:21.339Z"
-    },
-    {
-      "id": "quest-mk84jeiu-6ko5",
-      "objective": "[dogfood] Add before/after validation - measure metrics before change, apply change, measure after, auto-rollback if worse",
-      "status": "complete",
-      "priority": 29,
-      "createdAt": "2026-01-10T09:50:09.990Z",
-      "startedAt": "2026-01-10T10:52:21.340Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T10:53:29.601Z"
-    },
-    {
-      "id": "quest-mk84jeuq-cow5",
-      "objective": "[dogfood] Add 'undercity benchmark' command - run standard task set to measure baseline performance",
-      "status": "complete",
-      "priority": 30,
-      "createdAt": "2026-01-10T09:50:10.418Z",
-      "startedAt": "2026-01-10T10:57:55.974Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T10:59:08.833Z"
-    },
-    {
-      "id": "quest-mk84jf6o-246w",
-      "objective": "[learning] Store successful prompts/approaches per task type - build institutional knowledge",
-      "status": "complete",
-      "priority": 31,
-      "createdAt": "2026-01-10T09:50:10.848Z",
-      "startedAt": "2026-01-10T11:03:04.756Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:05:52.208Z"
-    },
-    {
-      "id": "quest-mk84jfje-c6pe",
-      "objective": "[learning] Add prompt tuning - PM identifies low-success prompts, generates improvements, A/B tests them",
-      "status": "complete",
-      "priority": 32,
-      "createdAt": "2026-01-10T09:50:11.307Z",
-      "startedAt": "2026-01-10T11:05:52.209Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:06:46.248Z"
-    },
-    {
-      "id": "quest-mk84l871-b1ls",
-      "objective": "[learning] Evaluate DSPy for prompt optimization - once we have metrics data, assess if prompt quality is the bottleneck vs routing/model selection, add DSPy if warranted",
-      "status": "pending",
-      "priority": 33,
-      "createdAt": "2026-01-10T09:51:35.101Z",
-      "raidId": ""
-    },
-    {
-      "id": "quest-mk84nczb-fo84",
-      "objective": "[integration] Wire grind to use git worktrees - each parallel task gets isolated worktree, merge via elevator queue",
-      "status": "complete",
-      "priority": 34,
-      "createdAt": "2026-01-10T09:53:14.615Z",
-      "completedAt": "2026-01-10T19:00:00.000Z",
-      "note": "Implemented in worktree-manager.ts, used by ParallelSoloOrchestrator"
-    },
-    {
-      "id": "quest-mk84ndbx-dams",
-      "objective": "[integration] Parallel grind workers - spawn N workers, each in own worktree, coordinate via shared state",
-      "status": "complete",
-      "priority": 35,
-      "createdAt": "2026-01-10T09:53:15.069Z",
-      "completedAt": "2026-01-10T19:00:00.000Z",
-      "note": "Implemented in ParallelSoloOrchestrator - spawns workers in worktrees, coordinates via Persistence"
-    },
-    {
-      "id": "quest-mk84ndok-07cb",
-      "objective": "[integration] Merge queue for parallel grind - workers complete tasks, queue for serial merge (rebase, test, merge)",
-      "status": "complete",
-      "priority": 36,
-      "createdAt": "2026-01-10T09:53:15.524Z",
-      "completedAt": "2026-01-10T19:00:00.000Z",
-      "note": "Implemented as Elevator class in git.ts - serial rebase→test→merge queue"
-    },
-    {
-      "id": "quest-mk84ndzs-qga5",
+      "id": "task-conflict-detection",
       "objective": "[integration] Conflict detection - if two workers touch same files, flag before merge attempt",
       "status": "pending",
-      "priority": 37,
+      "priority": 12,
       "createdAt": "2026-01-10T09:53:15.928Z",
-      "raidId": ""
+      "tags": ["parallel"]
     },
     {
-      "id": "quest-mk85ba7a-l6sb",
-      "objective": "fix typo - add a test comment in logger.ts",
-      "status": "complete",
-      "priority": 38,
-      "createdAt": "2026-01-10T10:11:50.758Z",
-      "startedAt": "2026-01-10T11:07:47.595Z",
-      "raidId": "",
-      "completedAt": "2026-01-10T11:07:55.794Z"
-    },
-    {
-      "id": "quest-mk85paa6-8cxu",
-      "objective": "[experiment] Test local LLM code generation - try having Ollama generate diffs for simple edits, apply them locally, measure success rate vs haiku",
+      "id": "task-local-llm-experiment",
+      "objective": "[experiment] Test local LLM code generation - try having Ollama generate diffs for simple edits, measure success rate vs haiku",
       "status": "pending",
-      "priority": 39,
+      "priority": 13,
       "createdAt": "2026-01-10T10:22:44.046Z",
-      "raidId": ""
+      "tags": ["experiment", "local-llm"]
     },
     {
-      "id": "quest-mk86lots-qz2m",
+      "id": "task-verify-retry-logic",
       "objective": "[grind] Improve verification retry logic - allow multiple fix attempts at same tier before escalating",
       "status": "pending",
-      "priority": 40,
+      "priority": 14,
       "createdAt": "2026-01-10T10:47:55.888Z",
-      "note": "Reset after ENOENT failure (shell environment issue, not task issue)"
+      "tags": ["grind", "verification"]
     },
     {
-      "id": "quest-postmortem",
-      "objective": "[escalation] Add post-mortem analysis on tier escalation - have failed worker explain approach/failure, pass to next tier to avoid repeating mistakes",
-      "status": "complete",
-      "priority": 15,
-      "createdAt": "2026-01-10T12:00:00.000Z",
-      "note": "Only on escalation (haiku→sonnet→opus), not same-tier retries. Use Haiku for analysis (cheap). Pass structured context: approach taken, why it failed, what to try next.",
-      "completedAt": "2026-01-10T19:16:52.000Z"
-    },
-    {
-      "id": "quest-mk8ykjw9-4e4x",
-      "objective": "[refactor] Split cli.ts into separate command modules - file is too large at 700+ lines, extract each command to its own file",
-      "status": "complete",
-      "priority": 42,
-      "createdAt": "2026-01-10T23:50:52.089Z",
-      "completedAt": "2026-01-11T02:00:00.000Z",
-      "note": "Split into commands/analysis.ts, commands/mixed.ts, commands/quest.ts"
-    },
-    {
-      "id": "quest-continuous-quest-sync",
-      "objective": "[continuous] Sync quest board with grind - mark quests complete when merged, update status during execution",
+      "id": "task-dspy-evaluation",
+      "objective": "[learning] Evaluate DSPy for prompt optimization - assess if prompt quality is the bottleneck vs routing/model selection",
       "status": "pending",
-      "priority": 50,
-      "createdAt": "2026-01-11T02:15:00.000Z"
+      "priority": 20,
+      "createdAt": "2026-01-10T09:51:35.101Z",
+      "tags": ["learning", "prompts"]
     },
     {
-      "id": "quest-continuous-pacing",
-      "objective": "[continuous] Add comfortable pacing mode - --pace flag to throttle task rate (e.g. --pace 5m waits 5 min between tasks)",
+      "id": "task-continuous-sync",
+      "objective": "[continuous] Sync task board with grind - mark tasks complete when merged, update status during execution",
       "status": "pending",
-      "priority": 51,
-      "createdAt": "2026-01-11T02:15:00.000Z"
-    },
-    {
-      "id": "quest-continuous-reload",
-      "objective": "[continuous] Self-reload on code changes - detect src/*.ts changes after merge, rebuild, save checkpoint, exec self with --resume",
-      "status": "pending",
-      "priority": 52,
-      "createdAt": "2026-01-11T02:15:00.000Z"
-    },
-    {
-      "id": "quest-continuous-infinite",
-      "objective": "[continuous] Add --continuous flag to grind - never exit, wait for new quests when board empty, integrate with PM for quest generation",
-      "status": "pending",
-      "priority": 53,
-      "createdAt": "2026-01-11T02:15:00.000Z"
-    },
-    {
-      "id": "quest-pm-breakdown",
-      "objective": "[pm] Auto-decompose complex quests - PM analyzes high-level quests, breaks into concrete subtasks with clear scope, links parent/child",
-      "status": "pending",
-      "priority": 60,
-      "createdAt": "2026-01-11T02:15:00.000Z"
-    },
-    {
-      "id": "quest-pm-discard",
-      "objective": "[pm] Quest hygiene - PM reviews pending quests, discards stale/duplicate/already-done/misaligned quests, logs reasoning",
-      "status": "pending",
-      "priority": 61,
-      "createdAt": "2026-01-11T02:15:00.000Z"
-    },
-    {
-      "id": "quest-pm-generate",
-      "objective": "[pm] Metrics-driven quest generation - PM analyzes failure patterns, escalation rates, gaps in coverage, creates improvement quests",
-      "status": "pending",
-      "priority": 62,
-      "createdAt": "2026-01-11T02:15:00.000Z"
-    },
-    {
-      "id": "quest-pm-prioritize",
-      "objective": "[pm] Smart prioritization - PM ranks quests by impact/effort ratio, considers dependencies, reorders board for optimal throughput",
-      "status": "pending",
-      "priority": 63,
-      "createdAt": "2026-01-11T02:15:00.000Z"
-    },
-    {
-      "id": "quest-logging-parallel",
-      "objective": "[logging] Wire dual logging for parallel grind - capture streaming output from worktree workers to log files",
-      "status": "complete",
-      "priority": 70,
+      "priority": 30,
       "createdAt": "2026-01-11T02:15:00.000Z",
-      "completedAt": "2026-01-11T03:00:00.000Z",
-      "note": "Implemented in dual-logger.ts - logs to both console and .undercity/logs/"
+      "tags": ["continuous"]
     },
     {
-      "id": "quest-verify-spell-nonblocking",
-      "objective": "[verify] Make spell check non-blocking - spell failures should warn but not fail verification or trigger escalation",
+      "id": "task-spell-nonblocking",
+      "objective": "[verify] Make spell check non-blocking - spell failures should warn but not fail verification",
       "status": "pending",
-      "priority": 71,
-      "createdAt": "2026-01-11T02:15:00.000Z"
-    },
-    {
-      "id": "quest-checkpoint-resume",
-      "objective": "[continuous] Checkpoint and resume - save grind state periodically, resume from checkpoint after crash or restart",
-      "status": "pending",
-      "priority": 72,
-      "createdAt": "2026-01-11T02:15:00.000Z"
-    },
-    {
-      "id": "quest-pino-logger-migration",
-      "objective": "[cleanup] Migrate all logging to pino - replace console.log/info/warn/error with pino logger across 19 files in src/",
-      "status": "complete",
-      "priority": 73,
-      "createdAt": "2026-01-10T18:00:00.000Z",
-      "completedAt": "2026-01-11T04:00:00.000Z",
-      "note": "16 files now use pino logger. Console usage remains in examples/ (intentional for demos) and some CLI output."
+      "priority": 31,
+      "createdAt": "2026-01-11T02:15:00.000Z",
+      "tags": ["verification"]
     }
   ],
-  "lastUpdated": "2026-01-11T04:30:00.000Z"
+  "lastUpdated": "2026-01-11T07:00:00.000Z"
 }
