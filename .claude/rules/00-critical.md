@@ -42,6 +42,23 @@ git add .
 git add src/specific-file.ts
 ```
 
+### No Destructive Git Resets
+
+**NEVER use broad git reset/checkout commands that discard uncommitted work:**
+
+```bash
+# BAD: Destroys all uncommitted changes
+git checkout -- .
+git reset --hard HEAD
+git clean -fd  # on the whole repo
+
+# GOOD: Reset specific files only
+git checkout -- path/to/specific/file.ts
+git restore path/to/specific/file.ts
+```
+
+**Why**: Broad resets can destroy hours of uncommitted implementation work. Always target specific files, or commit your work before resetting.
+
 ### No Attribution Lines in Commits
 
 **Do NOT add Claude attribution to commit messages.** Skip these lines entirely:
