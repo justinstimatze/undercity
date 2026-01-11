@@ -29,7 +29,7 @@ import { type ContextBriefing, prepareContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
 import { createAndCheckout } from "./git.js";
 import { recordQueryResult } from "./live-metrics.js";
-import { raidLogger } from "./logger.js";
+import { sessionLogger } from "./logger.js";
 import { MetricsTracker } from "./metrics.js";
 import type { AttemptRecord, ErrorCategory, TokenUsage } from "./types.js";
 
@@ -211,7 +211,7 @@ export class SoloOrchestrator {
 
 	private log(message: string, data?: Record<string, unknown>): void {
 		if (this.verbose) {
-			raidLogger.info(data ?? {}, message);
+			sessionLogger.info(data ?? {}, message);
 		}
 	}
 
@@ -228,8 +228,8 @@ export class SoloOrchestrator {
 		// Ensure clean state before starting (in case previous task left dirty state)
 		this.cleanupDirtyState();
 
-		const questId = `solo_${Date.now()}`;
-		const raidId = `raid_${Date.now()}`;
+		const taskId = `solo_${Date.now()}`;
+		const sessionId = `raid_${Date.now()}`;
 
 		console.log(chalk.cyan(`\n━━━ Task: ${task.substring(0, 60)}${task.length > 60 ? "..." : ""} ━━━`));
 
@@ -287,9 +287,9 @@ export class SoloOrchestrator {
 		this.currentModel = this.determineStartingModel(assessment);
 		const reviewLevel = this.determineReviewLevel(assessment);
 
-		// Start quest tracking in metrics with the starting model
-		this.metricsTracker.startQuest(questId, task, raidId, this.currentModel);
-		this.metricsTracker.recordAgentSpawn(this.currentModel === "opus" ? "sheriff" : "quester");
+		// Start task tracking in metrics with the starting model
+		this.metricsTracker.startTask(taskId, task, sessionId, this.currentModel);
+		this.metricsTracker.recordAgentSpawn(this.currentModel === "opus" ? "reviewer" : "builder");
 
 		this.log("Starting task", { task, model: this.currentModel, assessment: assessment.level, reviewLevel });
 		console.log(chalk.dim(`  Model: ${this.currentModel}`));
@@ -370,8 +370,8 @@ export class SoloOrchestrator {
 					// Pass attempt records to metrics tracker before completing
 					this.metricsTracker.recordAttempts(this.attemptRecords);
 
-					// Complete quest tracking
-					this.metricsTracker.completeQuest(true);
+					// Complete task tracking
+					this.metricsTracker.completeTask(true);
 
 					return {
 						task,
@@ -447,7 +447,7 @@ export class SoloOrchestrator {
 		// Failed after all attempts - clean up dirty state
 		// Pass attempt records to metrics tracker before completing
 		this.metricsTracker.recordAttempts(this.attemptRecords);
-		this.metricsTracker.completeQuest(false);
+		this.metricsTracker.completeTask(false);
 		this.cleanupDirtyState();
 
 		return {
@@ -1394,7 +1394,7 @@ export class SupervisedOrchestrator {
 
 	private log(message: string, data?: Record<string, unknown>): void {
 		if (this.verbose) {
-			raidLogger.info(data ?? {}, message);
+			sessionLogger.info(data ?? {}, message);
 		}
 	}
 

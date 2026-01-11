@@ -19,7 +19,7 @@ import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { raidLogger } from "./logger.js";
+import { sessionLogger } from "./logger.js";
 
 /**
  * Complexity levels with associated configurations
@@ -761,7 +761,7 @@ Complexity guide:
 			};
 		}
 	} catch (error) {
-		raidLogger.warn({ error: String(error) }, "Deep complexity assessment failed, using fast assessment");
+		sessionLogger.warn({ error: String(error) }, "Deep complexity assessment failed, using fast assessment");
 	}
 
 	// Fall back to fast assessment
@@ -888,14 +888,14 @@ export async function assessComplexityFull(
 		if (targetFiles.length > 0) {
 			// Use quantitative assessment
 			const assessment = assessComplexityQuantitative(task, targetFiles, repoRoot);
-			raidLogger.debug(
+			sessionLogger.debug(
 				{ task: task.slice(0, 50), files: targetFiles.length, score: assessment.score },
 				"Quantitative complexity assessment",
 			);
 			return assessment;
 		}
 	} catch (error) {
-		raidLogger.warn({ error: String(error) }, "Context preparation failed, falling back to keyword assessment");
+		sessionLogger.warn({ error: String(error) }, "Context preparation failed, falling back to keyword assessment");
 	}
 
 	// Fall back to keyword-based assessment if no files found

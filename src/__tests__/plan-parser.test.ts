@@ -1,7 +1,7 @@
 /**
  * Plan Parser Module Tests
  *
- * Tests for parsing plan files into discrete waypoints.
+ * Tests for parsing plan files into discrete steps.
  */
 
 import { describe, expect, it } from "vitest";
@@ -13,12 +13,12 @@ import {
 	getTasksByPriority,
 	markTaskCompleted,
 	parsePlanFile,
-	planToQuests,
+	planToTasks,
 } from "../plan-parser.js";
 
 describe("Plan Parser", () => {
 	describe("parsePlanFile", () => {
-		it("parses simple waypoint list", () => {
+		it("parses simple step list", () => {
 			const content = `
 Implement the first feature
 Implement the second feature
@@ -26,55 +26,55 @@ Implement the third feature
 `;
 			const plan = parsePlanFile(content, "test.md");
 
-			expect(plan.waypoints).toHaveLength(3);
-			expect(plan.waypoints[0].content).toBe("Implement the first feature");
-			expect(plan.waypoints[1].content).toBe("Implement the second feature");
-			expect(plan.waypoints[2].content).toBe("Implement the third feature");
+			expect(plan.steps).toHaveLength(3);
+			expect(plan.steps[0].content).toBe("Implement the first feature");
+			expect(plan.steps[1].content).toBe("Implement the second feature");
+			expect(plan.steps[2].content).toBe("Implement the third feature");
 		});
 
 		it("ignores comment lines", () => {
 			const content = `
 # This is a comment
-Implement the first waypoint here
+Implement the first step here
 # Another comment
-Implement the second waypoint here
+Implement the second step here
 `;
 			const plan = parsePlanFile(content, "test.md");
 
-			expect(plan.waypoints).toHaveLength(2);
-			expect(plan.waypoints[0].content).toBe("Implement the first waypoint here");
-			expect(plan.waypoints[1].content).toBe("Implement the second waypoint here");
+			expect(plan.steps).toHaveLength(2);
+			expect(plan.steps[0].content).toBe("Implement the first step here");
+			expect(plan.steps[1].content).toBe("Implement the second step here");
 		});
 
 		it("ignores empty lines", () => {
 			const content = `
-Implement the first waypoint
+Implement the first step
 
-Implement the second waypoint
+Implement the second step
 
 
-Implement the third waypoint
+Implement the third step
 `;
 			const plan = parsePlanFile(content, "test.md");
 
-			expect(plan.waypoints).toHaveLength(3);
+			expect(plan.steps).toHaveLength(3);
 		});
 
 		it("parses markdown headers as section names", () => {
 			const content = `
 # Section One
-Implement the waypoint in section one
+Implement the step in section one
 
 ## Section Two
-Implement the waypoint in section two
+Implement the step in section two
 `;
 			const plan = parsePlanFile(content, "test.md");
 
 			expect(plan.sections).toHaveLength(2);
 			expect(plan.sections[0].name).toBe("Section One");
 			expect(plan.sections[1].name).toBe("Section Two");
-			expect(plan.waypoints[0].section).toBe("Section One");
-			expect(plan.waypoints[1].section).toBe("Section Two");
+			expect(plan.steps[0].section).toBe("Section One");
+			expect(plan.steps[1].section).toBe("Section Two");
 		});
 
 		it("parses decorated section headers", () => {
@@ -82,128 +82,126 @@ Implement the waypoint in section two
 # =============================================================================
 # CRITICAL: Important Section
 # =============================================================================
-Implement the waypoint in critical section
+Implement the step in critical section
 `;
 			const plan = parsePlanFile(content, "test.md");
 
 			expect(plan.sections.length).toBeGreaterThanOrEqual(1);
-			expect(plan.waypoints[0].section).toContain("CRITICAL");
+			expect(plan.steps[0].section).toContain("CRITICAL");
 		});
 
 		it("extracts priority from section keywords", () => {
 			const content = `
 # CRITICAL Section
-Implement the critical waypoint here
+Implement the critical step here
 
 # HIGH Priority
-Implement the high priority waypoint
+Implement the high priority step
 
 # MEDIUM Priority
-Implement the medium priority waypoint
+Implement the medium priority step
 
 # LOW Priority
-Implement the low priority waypoint
+Implement the low priority step
 `;
 			const plan = parsePlanFile(content, "test.md");
 
 			// Critical = priority 1
-			expect(plan.waypoints.find((t) => t.content === "Implement the critical waypoint here")?.sectionPriority).toBe(1);
+			expect(plan.steps.find((t) => t.content === "Implement the critical step here")?.sectionPriority).toBe(1);
 			// High = priority 3
-			expect(plan.waypoints.find((t) => t.content === "Implement the high priority waypoint")?.sectionPriority).toBe(3);
+			expect(plan.steps.find((t) => t.content === "Implement the high priority step")?.sectionPriority).toBe(3);
 			// Medium = priority 4
-			expect(plan.waypoints.find((t) => t.content === "Implement the medium priority waypoint")?.sectionPriority).toBe(
-				4,
-			);
+			expect(plan.steps.find((t) => t.content === "Implement the medium priority step")?.sectionPriority).toBe(4);
 			// Low = priority 5
-			expect(plan.waypoints.find((t) => t.content === "Implement the low priority waypoint")?.sectionPriority).toBe(5);
+			expect(plan.steps.find((t) => t.content === "Implement the low priority step")?.sectionPriority).toBe(5);
 		});
 
 		it("cleans markdown list markers", () => {
 			const content = `
-- Implement the waypoint with dash marker
-* Implement the waypoint with asterisk marker
-+ Implement the waypoint with plus marker
-1. Implement the numbered waypoint here
-2) Implement this also numbered waypoint
+- Implement the step with dash marker
+* Implement the step with asterisk marker
++ Implement the step with plus marker
+1. Implement the numbered step here
+2) Implement this also numbered step
 `;
 			const plan = parsePlanFile(content, "test.md");
 
-			expect(plan.waypoints[0].content).toBe("Implement the waypoint with dash marker");
-			expect(plan.waypoints[1].content).toBe("Implement the waypoint with asterisk marker");
-			expect(plan.waypoints[2].content).toBe("Implement the waypoint with plus marker");
-			expect(plan.waypoints[3].content).toBe("Implement the numbered waypoint here");
-			expect(plan.waypoints[4].content).toBe("Implement this also numbered waypoint");
+			expect(plan.steps[0].content).toBe("Implement the step with dash marker");
+			expect(plan.steps[1].content).toBe("Implement the step with asterisk marker");
+			expect(plan.steps[2].content).toBe("Implement the step with plus marker");
+			expect(plan.steps[3].content).toBe("Implement the numbered step here");
+			expect(plan.steps[4].content).toBe("Implement this also numbered step");
 		});
 
 		it("handles checkbox items and detects completion", () => {
 			const content = `
-- [ ] Uncompleted waypoint that needs work
-- [x] Completed waypoint that is done
-* [ ] Another uncompleted waypoint here
-* [X] Another completed waypoint here
+- [ ] Uncompleted step that needs work
+- [x] Completed step that is done
+* [ ] Another uncompleted step here
+* [X] Another completed step here
 `;
 			const plan = parsePlanFile(content, "test.md");
 
-			expect(plan.waypoints[0].completed).toBe(false);
-			expect(plan.waypoints[0].content).toBe("Uncompleted waypoint that needs work");
-			expect(plan.waypoints[1].completed).toBe(true);
-			expect(plan.waypoints[1].content).toBe("Completed waypoint that is done");
-			expect(plan.waypoints[2].completed).toBe(false);
-			expect(plan.waypoints[3].completed).toBe(true);
+			expect(plan.steps[0].completed).toBe(false);
+			expect(plan.steps[0].content).toBe("Uncompleted step that needs work");
+			expect(plan.steps[1].completed).toBe(true);
+			expect(plan.steps[1].content).toBe("Completed step that is done");
+			expect(plan.steps[2].completed).toBe(false);
+			expect(plan.steps[3].completed).toBe(true);
 		});
 
 		it("detects [DONE] markers", () => {
 			const content = `
-[DONE] This waypoint is already done
+[DONE] This step is already done
 [COMPLETE] This one is completed too
-Regular waypoint that is not done yet
+Regular step that is not done yet
 `;
 			const plan = parsePlanFile(content, "test.md");
 
-			expect(plan.waypoints[0].completed).toBe(true);
-			expect(plan.waypoints[0].content).toBe("This waypoint is already done");
-			expect(plan.waypoints[1].completed).toBe(true);
-			expect(plan.waypoints[2].completed).toBe(false);
+			expect(plan.steps[0].completed).toBe(true);
+			expect(plan.steps[0].content).toBe("This step is already done");
+			expect(plan.steps[1].completed).toBe(true);
+			expect(plan.steps[2].completed).toBe(false);
 		});
 
-		it("skips waypoints in COMPLETED sections", () => {
+		it("skips steps in COMPLETED sections", () => {
 			const content = `
 # Active Section
-Implement this active waypoint here
+Implement this active step here
 
 # COMPLETED (for reference)
-[DONE] This waypoint is already done
+[DONE] This step is already done
 This is also already done
 `;
 			const plan = parsePlanFile(content, "test.md");
 
-			// Only the active waypoint should be included
-			expect(plan.waypoints).toHaveLength(1);
-			expect(plan.waypoints[0].content).toBe("Implement this active waypoint here");
+			// Only the active step should be included
+			expect(plan.steps).toHaveLength(1);
+			expect(plan.steps[0].content).toBe("Implement this active step here");
 		});
 
-		it("assigns unique waypoint IDs", () => {
+		it("assigns unique step IDs", () => {
 			const content = `
-Implement the first waypoint here
-Implement the second waypoint here
-Implement the third waypoint here
+Implement the first step here
+Implement the second step here
+Implement the third step here
 `;
 			const plan = parsePlanFile(content, "test.md");
 
-			const ids = plan.waypoints.map((t) => t.id);
+			const ids = plan.steps.map((t) => t.id);
 			const uniqueIds = new Set(ids);
 			expect(uniqueIds.size).toBe(ids.length);
 		});
 
 		it("records line numbers", () => {
-			const content = `Implement waypoint on line one here
-Implement waypoint on line two here
-Implement waypoint on line three`;
+			const content = `Implement step on line one here
+Implement step on line two here
+Implement step on line three`;
 			const plan = parsePlanFile(content, "test.md");
 
-			expect(plan.waypoints[0].lineNumber).toBe(1);
-			expect(plan.waypoints[1].lineNumber).toBe(2);
-			expect(plan.waypoints[2].lineNumber).toBe(3);
+			expect(plan.steps[0].lineNumber).toBe(1);
+			expect(plan.steps[1].lineNumber).toBe(2);
+			expect(plan.steps[2].lineNumber).toBe(3);
 		});
 
 		it("extracts plan title from first header", () => {
@@ -211,7 +209,7 @@ Implement waypoint on line three`;
 # My Implementation Plan
 
 ## Section 1
-Implement the waypoint in section one
+Implement the step in section one
 `;
 			const plan = parsePlanFile(content, "test.md");
 
@@ -221,25 +219,25 @@ Implement the waypoint in section one
 		it("ignores short lines (less than 10 chars)", () => {
 			const content = `
 Short
-This is a proper waypoint with more content
+This is a proper step with more content
 Tiny
-Another proper waypoint here
+Another proper step here
 `;
 			const plan = parsePlanFile(content, "test.md");
 
-			expect(plan.waypoints).toHaveLength(2);
-			expect(plan.waypoints[0].content).toBe("This is a proper waypoint with more content");
-			expect(plan.waypoints[1].content).toBe("Another proper waypoint here");
+			expect(plan.steps).toHaveLength(2);
+			expect(plan.steps[0].content).toBe("This is a proper step with more content");
+			expect(plan.steps[1].content).toBe("Another proper step here");
 		});
 	});
 
 	describe("getPlanProgress", () => {
 		it("calculates progress correctly", () => {
 			const content = `
-- [ ] Implement the first waypoint here
-- [x] Implement the second waypoint here
-- [ ] Implement the third waypoint here
-- [x] Implement the fourth waypoint here
+- [ ] Implement the first step here
+- [x] Implement the second step here
+- [ ] Implement the third step here
+- [x] Implement the fourth step here
 `;
 			const plan = parsePlanFile(content, "test.md");
 			const progress = getPlanProgress(plan);
@@ -262,11 +260,11 @@ Another proper waypoint here
 		it("groups progress by section", () => {
 			const content = `
 # Section A
-- [x] Implement the done waypoint A1
-- [ ] Implement the todo waypoint A2
+- [x] Implement the done step A1
+- [ ] Implement the todo step A2
 
 # Section B
-- [ ] Implement the todo waypoint B1
+- [ ] Implement the todo step B1
 `;
 			const plan = parsePlanFile(content, "test.md");
 			const progress = getPlanProgress(plan);
@@ -283,79 +281,79 @@ Another proper waypoint here
 	});
 
 	describe("getTasksByPriority", () => {
-		it("sorts waypoints by section priority then line number", () => {
+		it("sorts steps by section priority then line number", () => {
 			const content = `
 # LOW Priority
-Implement the low waypoint number one
-Implement the low waypoint number two
+Implement the low step number one
+Implement the low step number two
 
 # HIGH Priority
-Implement the high waypoint number one
+Implement the high step number one
 
 # CRITICAL Section
-Implement the critical waypoint number one
+Implement the critical step number one
 `;
 			const plan = parsePlanFile(content, "test.md");
 			const sorted = getTasksByPriority(plan);
 
 			// Critical (1) should come first
-			expect(sorted[0].content).toBe("Implement the critical waypoint number one");
+			expect(sorted[0].content).toBe("Implement the critical step number one");
 			// Then High (3)
-			expect(sorted[1].content).toBe("Implement the high waypoint number one");
+			expect(sorted[1].content).toBe("Implement the high step number one");
 			// Then Low (5)
-			expect(sorted[2].content).toBe("Implement the low waypoint number one");
-			expect(sorted[3].content).toBe("Implement the low waypoint number two");
+			expect(sorted[2].content).toBe("Implement the low step number one");
+			expect(sorted[3].content).toBe("Implement the low step number two");
 		});
 	});
 
 	describe("getPendingTasks", () => {
-		it("filters out completed waypoints", () => {
+		it("filters out completed steps", () => {
 			const content = `
-- [x] Implement the done waypoint here
-- [ ] Implement the pending waypoint here
-[DONE] Another waypoint that is done here
-Implement the pending plain waypoint
+- [x] Implement the done step here
+- [ ] Implement the pending step here
+[DONE] Another step that is done here
+Implement the pending plain step
 `;
 			const plan = parsePlanFile(content, "test.md");
 			const pending = getPendingTasks(plan);
 
 			expect(pending).toHaveLength(2);
-			expect(pending[0].content).toBe("Implement the pending waypoint here");
-			expect(pending[1].content).toBe("Implement the pending plain waypoint");
+			expect(pending[0].content).toBe("Implement the pending step here");
+			expect(pending[1].content).toBe("Implement the pending plain step");
 		});
 	});
 
 	describe("getNextTask", () => {
-		it("returns highest priority pending waypoint", () => {
+		it("returns highest priority pending step", () => {
 			const content = `
 # LOW Section
-- [ ] Implement the low priority waypoint
+- [ ] Implement the low priority step
 
 # CRITICAL Section
-- [ ] Implement the critical waypoint here
+- [ ] Implement the critical step here
 `;
 			const plan = parsePlanFile(content, "test.md");
 			const next = getNextTask(plan);
 
-			expect(next?.content).toBe("Implement the critical waypoint here");
+			expect(next?.content).toBe("Implement the critical step here");
 		});
 
-		it("skips completed waypoints", () => {
+		it("skips completed steps", () => {
 			const content = `
 # CRITICAL Section
-- [x] Implement the done critical waypoint
-- [ ] Implement the pending critical waypoint
+- [x] Implement the done critical step
+- [ ] Implement the pending critical step
 `;
 			const plan = parsePlanFile(content, "test.md");
 			const next = getNextTask(plan);
 
-			expect(next?.content).toBe("Implement the pending critical waypoint");
+			expect(next?.content).toBe("Implement the pending critical step");
 		});
 
-		it("returns undefined when all waypoints complete", () => {
+		it("returns undefined when all steps complete", () => {
 			const content = `
-- [x] Implement the done waypoint one
-- [x] Implement the done waypoint two
+- [x] Implement the done step one
+- [x] Implement the done step two
 `;
 			const plan = parsePlanFile(content, "test.md");
 			const next = getNextTask(plan);
@@ -365,70 +363,70 @@ Implement the pending plain waypoint
 	});
 
 	describe("markTaskCompleted", () => {
-		it("marks waypoint as completed by ID", () => {
+		it("marks step as completed by ID", () => {
 			const content = `
-Implement the first waypoint here
-Implement the second waypoint here
+Implement the first step here
+Implement the second step here
 `;
 			const plan = parsePlanFile(content, "test.md");
-			const waypointId = plan.waypoints[0].id;
+			const stepId = plan.steps[0].id;
 
-			const updated = markTaskCompleted(plan, waypointId);
+			const updated = markTaskCompleted(plan, stepId);
 
-			expect(updated.waypoints[0].completed).toBe(true);
-			expect(updated.waypoints[1].completed).toBe(false);
+			expect(updated.steps[0].completed).toBe(true);
+			expect(updated.steps[1].completed).toBe(false);
 		});
 
 		it("does not mutate original plan", () => {
 			const content = `
-Implement the first waypoint here
+Implement the first step here
 `;
 			const plan = parsePlanFile(content, "test.md");
-			const waypointId = plan.waypoints[0].id;
+			const stepId = plan.steps[0].id;
 
-			const updated = markTaskCompleted(plan, waypointId);
+			const updated = markTaskCompleted(plan, stepId);
 
-			expect(plan.waypoints[0].completed).toBe(false);
-			expect(updated.waypoints[0].completed).toBe(true);
+			expect(plan.steps[0].completed).toBe(false);
+			expect(updated.steps[0].completed).toBe(true);
 		});
 	});
 
 	describe("generateTaskContext", () => {
-		it("includes current waypoint content", () => {
+		it("includes current step content", () => {
 			const content = `
 # Section A
-Implement the first waypoint here
-Implement the second waypoint here
+Implement the first step here
+Implement the second step here
 `;
 			const plan = parsePlanFile(content, "test.md");
-			const context = generateTaskContext(plan, plan.waypoints[0].id);
+			const context = generateTaskContext(plan, plan.steps[0].id);
 
-			expect(context).toContain("Implement the first waypoint here");
-			expect(context).toContain("## Current Waypoint");
+			expect(context).toContain("Implement the first step here");
+			expect(context).toContain("## Current Step");
 		});
 
 		it("includes progress information", () => {
 			const content = `
-- [x] Implement the done waypoint here
-- [ ] Implement the current waypoint here
-- [ ] Implement the future waypoint here
+- [x] Implement the done step here
+- [ ] Implement the current step here
+- [ ] Implement the future step here
 `;
 			const plan = parsePlanFile(content, "test.md");
-			const context = generateTaskContext(plan, plan.waypoints[1].id);
+			const context = generateTaskContext(plan, plan.steps[1].id);
 
-			expect(context).toContain("1/3 waypoints complete");
+			expect(context).toContain("1/3 steps complete");
 			expect(context).toContain("33%");
 		});
 
 		it("shows section context", () => {
 			const content = `
 # My Section
-- [x] Implement the completed in section waypoint
-- [ ] Implement the current waypoint here
-- [ ] Implement the upcoming waypoint here
+- [x] Implement the completed in section step
+- [ ] Implement the current step here
+- [ ] Implement the upcoming step here
 `;
 			const plan = parsePlanFile(content, "test.md");
-			const context = generateTaskContext(plan, plan.waypoints[1].id);
+			const context = generateTaskContext(plan, plan.steps[1].id);
 
 			expect(context).toContain("Section: My Section");
 			expect(context).toContain("Completed in this section");
@@ -436,59 +434,59 @@ Implement the second waypoint here
 		});
 	});
 
-	describe("planToQuests", () => {
-		it("converts pending waypoints to quest format", () => {
+	describe("planToTasks", () => {
+		it("converts pending steps to task format", () => {
 			const content = `
 # HIGH Section
-- [ ] Implement the high waypoint here
-- [x] Implement the done waypoint here
+- [ ] Implement the high step here
+- [x] Implement the done step here
 
 # LOW Section
-- [ ] Implement the low waypoint here
+- [ ] Implement the low step here
 `;
 			const plan = parsePlanFile(content, "test.md");
-			const quests = planToQuests(plan);
+			const tasks = planToTasks(plan);
 
-			// Should only include pending waypoints
-			expect(quests).toHaveLength(2);
+			// Should only include pending steps
+			expect(tasks).toHaveLength(2);
 
 			// Should preserve section info
-			expect(quests[0].section).toContain("HIGH");
-			expect(quests[1].section).toContain("LOW");
+			expect(tasks[0].section).toContain("HIGH");
+			expect(tasks[1].section).toContain("LOW");
 
 			// Should have sequential priority numbers
-			expect(quests[0].priority).toBe(0);
-			expect(quests[1].priority).toBe(1);
+			expect(tasks[0].priority).toBe(0);
+			expect(tasks[1].priority).toBe(1);
 		});
 
 		it("returns empty array for fully completed plan", () => {
 			const content = `
-- [x] Implement the done waypoint one
-- [x] Implement the done waypoint two
+- [x] Implement the done step one
+- [x] Implement the done step two
 `;
 			const plan = parsePlanFile(content, "test.md");
-			const quests = planToQuests(plan);
+			const tasks = planToTasks(plan);
 
-			expect(quests).toHaveLength(0);
+			expect(tasks).toHaveLength(0);
 		});
 	});
 
 	describe("real-world plan format", () => {
 		it("parses section-based plan format with priority headers", () => {
 			const content = `
-# Undercity quest board - the space pencil roadmap
+# Undercity task board - the space pencil roadmap
 
 # =============================================================================
-# CRITICAL: Self-Improvement Loop (agents can't add new quests)
+# CRITICAL: Self-Improvement Loop (agents can't add new tasks)
 # =============================================================================
-Add ability for agents to add new quests - when quester/sheriff discovers work, they should be able to queue it
-Parse agent output for "[NEW QUEST: ...]" markers and auto-add to quest board
+Add ability for agents to add new tasks - when builder/sheriff discovers work, they should be able to queue it
+Parse agent output for "[NEW QUEST: ...]" markers and auto-add to task board
 
 # =============================================================================
 # HIGH: Parallelism (the big gap vs Gas Town)
 # =============================================================================
-Add parallel quester support - spawn multiple questers working on different waypoints simultaneously
-Implement waypoint splitting in logistics - break large waypoints into independent subtasks
+Add parallel builder support - spawn multiple builders working on different steps simultaneously
+Implement step splitting in logistics - break large steps into independent subtasks
 
 # =============================================================================
 # COMPLETED (for reference)
@@ -498,11 +496,11 @@ Implement waypoint splitting in logistics - break large waypoints into independe
 `;
 			const plan = parsePlanFile(content, "intel.txt");
 
-			// Should have waypoints from CRITICAL and HIGH sections
-			expect(plan.waypoints.length).toBe(4);
+			// Should have steps from CRITICAL and HIGH sections
+			expect(plan.steps.length).toBe(4);
 
 			// Tasks from COMPLETED section should be excluded
-			const completedTasks = plan.waypoints.filter((t) => t.section?.includes("COMPLETED"));
+			const completedTasks = plan.steps.filter((t) => t.section?.includes("COMPLETED"));
 			expect(completedTasks).toHaveLength(0);
 
 			// Check priority ordering

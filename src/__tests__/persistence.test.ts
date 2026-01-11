@@ -62,24 +62,24 @@ describe("Persistence", () => {
 			const pocket = persistence.getPocket();
 
 			expect(pocket.lastUpdated).toBeInstanceOf(Date);
-			expect(pocket.raidId).toBeUndefined();
-			expect(pocket.raidGoal).toBeUndefined();
-			expect(pocket.raidStatus).toBeUndefined();
+			expect(pocket.sessionId).toBeUndefined();
+			expect(pocket.goal).toBeUndefined();
+			expect(pocket.status).toBeUndefined();
 		});
 
 		it("parses existing pocket file correctly", () => {
 			const existingPocket = createMockPocket({
-				raidId: "raid-123",
-				raidGoal: "Build feature X",
-				raidStatus: "executing",
+				sessionId: "raid-123",
+				goal: "Build feature X",
+				status: "executing",
 			});
 			mockFiles.set(".undercity/pocket.json", JSON.stringify(existingPocket));
 
 			const pocket = persistence.getPocket();
 
-			expect(pocket.raidId).toBe("raid-123");
-			expect(pocket.raidGoal).toBe("Build feature X");
-			expect(pocket.raidStatus).toBe("executing");
+			expect(pocket.sessionId).toBe("raid-123");
+			expect(pocket.goal).toBe("Build feature X");
+			expect(pocket.status).toBe("executing");
 		});
 
 		it("returns default pocket when file contains invalid JSON", () => {
@@ -88,14 +88,14 @@ describe("Persistence", () => {
 			const pocket = persistence.getPocket();
 
 			expect(pocket.lastUpdated).toBeInstanceOf(Date);
-			expect(pocket.raidId).toBeUndefined();
+			expect(pocket.sessionId).toBeUndefined();
 		});
 	});
 
 	describe("savePocket", () => {
 		it("updates lastUpdated timestamp on save", () => {
 			const pocket = createMockPocket({
-				raidId: "raid-456",
+				sessionId: "raid-456",
 				lastUpdated: new Date("2020-01-01"),
 			});
 
@@ -111,13 +111,13 @@ describe("Persistence", () => {
 		});
 
 		it("writes to correct path", () => {
-			const pocket = createMockPocket({ raidId: "raid-789" });
+			const pocket = createMockPocket({ sessionId: "raid-789" });
 
 			persistence.savePocket(pocket);
 
 			expect(mockFiles.has(".undercity/pocket.json")).toBe(true);
 			const saved = JSON.parse(mockFiles.get(".undercity/pocket.json") ?? "{}");
-			expect(saved.raidId).toBe("raid-789");
+			expect(saved.sessionId).toBe("raid-789");
 		});
 
 		it("creates directory if it does not exist", () => {
@@ -125,7 +125,7 @@ describe("Persistence", () => {
 			mockDirs.clear();
 
 			const customPersistence = new Persistence(".custom-state");
-			const pocket = createMockPocket({ raidId: "new-raid" });
+			const pocket = createMockPocket({ sessionId: "new-raid" });
 
 			customPersistence.savePocket(pocket);
 
@@ -137,18 +137,18 @@ describe("Persistence", () => {
 		it("resets pocket to default state", () => {
 			// Set up existing pocket with data
 			const existingPocket = createMockPocket({
-				raidId: "old-raid",
-				raidGoal: "Old goal",
-				raidStatus: "complete",
+				sessionId: "old-raid",
+				goal: "Old goal",
+				status: "complete",
 			});
 			mockFiles.set(".undercity/pocket.json", JSON.stringify(existingPocket));
 
 			persistence.clearPocket();
 
 			const cleared = persistence.getPocket();
-			expect(cleared.raidId).toBeUndefined();
-			expect(cleared.raidGoal).toBeUndefined();
-			expect(cleared.raidStatus).toBeUndefined();
+			expect(cleared.sessionId).toBeUndefined();
+			expect(cleared.goal).toBeUndefined();
+			expect(cleared.status).toBeUndefined();
 		});
 
 		it("sets fresh lastUpdated timestamp", () => {

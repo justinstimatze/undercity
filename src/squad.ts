@@ -4,10 +4,10 @@
  * Defines the agent types and manages the squad of raiders.
  *
  * Agent Types:
- * - Flute: Fast codebase reconnaissance (Haiku, read-only)
- * - Logistics: BMAD-style spec writer (Sonnet, read-only, fast iteration)
- * - Quester: Code builder (Sonnet, full access, fast + quality)
- * - Sheriff: Quality reviewer with Rule of Five (Opus, read + tests)
+ * - Scout: Fast codebase reconnaissance (Haiku, read-only)
+ * - Planner: BMAD-style spec writer (Sonnet, read-only, fast iteration)
+ * - Builder: Code builder (Sonnet, full access, fast + quality)
+ * - Reviewer: Quality reviewer with Rule of Five (Opus, read + tests)
  *
  * Based on Claude Agent SDK's AgentDefinition type.
  *
@@ -18,7 +18,7 @@
  * - Explicit tool whitelists
  */
 
-import type { AgentDefinition, AgentType, SquadMember, Waypoint } from "./types.js";
+import type { Agent, AgentDefinition, AgentType, Step } from "./types.js";
 
 /**
  * Structured delegation prompt format (inspired by Sisyphus)
@@ -173,9 +173,9 @@ export function createValidationPrompt(
  * These define the four raider types that go topside.
  */
 export const SQUAD_AGENTS: Record<AgentType, AgentDefinition> = {
-	// Flute - Fast recon, read-only, Haiku for speed/cost
+	// Scout - Fast recon, read-only, Haiku for speed/cost
 	// The only agent using Haiku - speed matters more than quality for recon
-	flute: {
+	scout: {
 		description:
 			"Fast codebase reconnaissance. Use for finding files, understanding structure, mapping the territory before planning begins.",
 		prompt: `You are a flute. Your job is to quickly survey the codebase and report findings.
@@ -191,9 +191,9 @@ Output your findings in a structured format the logistics can use.`,
 		model: "haiku",
 	},
 
-	// Logistics - BMAD-style spec creation, read-only, Sonnet for fast iteration
+	// Planner - BMAD-style spec creation, read-only, Sonnet for fast iteration
 	// Creates detailed specs using the Rule of Five
-	logistics: {
+	planner: {
 		description:
 			"Specification writer. Creates detailed implementation plans from flute intel. Uses BMAD-style planning and the Rule of Five before execution begins.",
 		prompt: `You are a logistics. Based on flute reports, create a detailed implementation spec.
@@ -218,12 +218,12 @@ Don't write code - write specs. The fabricators will implement.`,
 		model: "sonnet",
 	},
 
-	// Quester - Builds things, full access, Sonnet for speed + quality
+	// Builder - Builds things, full access, Sonnet for speed + quality
 	// Follows the approved plan, doesn't improvise
-	quester: {
+	builder: {
 		description:
 			"Implementation specialist. Builds features, fixes bugs, writes code following the approved logistics spec.",
-		prompt: `You are a quester. Your job is to EXECUTE the approved plan by using your tools.
+		prompt: `You are a builder. Your job is to EXECUTE the approved plan by using your tools.
 
 CRITICAL: You must USE your tools (Write, Edit, Bash, etc.) to make changes. Do NOT:
 - Ask for permission - you already have it
@@ -254,7 +254,7 @@ After making significant code changes (implementing features, adding files, majo
    - Undefined variables/functions
    - Syntax errors
    - Missing dependencies
-5. Do NOT complete your waypoint while type errors or build failures exist
+5. Do NOT complete your step while type errors or build failures exist
 6. Report typecheck and build status in your summary
 
 If you hit a blocker not covered by the spec:
@@ -272,9 +272,9 @@ When done, summarize what you changed and confirm build status.`,
 		model: "sonnet",
 	},
 
-	// Sheriff - Quality check, read-only + bash for tests, Opus for best judgment
+	// Reviewer - Quality check, read-only + bash for tests, Opus for best judgment
 	// Uses Rule of Five for comprehensive review
-	sheriff: {
+	reviewer: {
 		description:
 			"Quality assurance. Reviews code against the plan using Rule of Five, runs tests, catches issues before extraction.",
 		prompt: `You are an sheriff. Review code critically against the original plan.
@@ -296,7 +296,7 @@ BUILD VERIFICATION (CRITICAL):
 As part of your quality gates, you MUST verify the build:
 1. Run "pnpm typecheck" FIRST to verify TypeScript types pass
 2. Run "pnpm build" to ensure the codebase builds successfully
-3. Check that quester properly ran build verification
+3. Check that builder properly ran build verification
 4. Verify there are no build errors, warnings, or type issues
 5. If typecheck OR build fails, this is a CRITICAL issue - do not approve the implementation
 6. Type verification and build verification are mandatory quality gates
@@ -316,7 +316,7 @@ Don't fix code yourself - report issues for fabricators to fix.`,
 /**
  * Generate a unique squad member ID
  */
-export function generateSquadMemberId(type: AgentType): string {
+export function generateAgentId(type: AgentType): string {
 	const timestamp = Date.now().toString(36);
 	const random = Math.random().toString(36).substring(2, 6);
 	return `${type}-${timestamp}-${random}`;
@@ -325,13 +325,13 @@ export function generateSquadMemberId(type: AgentType): string {
 /**
  * Create a new squad member
  */
-export function createSquadMember(type: AgentType, waypoint?: Waypoint): SquadMember {
+export function createAgent(type: AgentType, step?: Step): Agent {
 	const now = new Date();
 	return {
-		id: generateSquadMemberId(type),
+		id: generateAgentId(type),
 		type,
-		waypoint,
-		status: waypoint ? "working" : "idle",
+		step,
+		status: step ? "working" : "idle",
 		spawnedAt: now,
 		lastActivityAt: now,
 	};
@@ -352,12 +352,12 @@ export function getAllAgentDefinitions(): Record<string, AgentDefinition> {
 }
 
 /**
- * Determine which agent type should handle a waypoint based on description
+ * Determine which agent type should handle a step based on description
  */
 export function determineAgentType(taskDescription: string): AgentType {
 	const desc = taskDescription.toLowerCase();
 
-	// Flute keywords
+	// Scout keywords
 	if (
 		desc.includes("find") ||
 		desc.includes("search") ||
@@ -367,10 +367,10 @@ export function determineAgentType(taskDescription: string): AgentType {
 		desc.includes("understand") ||
 		desc.includes("analyze structure")
 	) {
-		return "flute";
+		return "scout";
 	}
 
-	// Logistics keywords
+	// Planner keywords
 	if (
 		desc.includes("plan") ||
 		desc.includes("design") ||
@@ -379,10 +379,10 @@ export function determineAgentType(taskDescription: string): AgentType {
 		desc.includes("strategy") ||
 		desc.includes("how should")
 	) {
-		return "logistics";
+		return "planner";
 	}
 
-	// Sheriff keywords
+	// Reviewer keywords
 	if (
 		desc.includes("review") ||
 		desc.includes("test") ||
@@ -391,9 +391,9 @@ export function determineAgentType(taskDescription: string): AgentType {
 		desc.includes("audit") ||
 		desc.includes("quality")
 	) {
-		return "sheriff";
+		return "reviewer";
 	}
 
-	// Default to quester for implementation waypoints
-	return "quester";
+	// Default to builder for implementation steps
+	return "builder";
 }

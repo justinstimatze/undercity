@@ -4,22 +4,22 @@
  * Type-safe mock factories for testing Undercity persistence.
  */
 
-import type { AgentType, SafePocket, Waypoint, WaypointStatus } from "../types.js";
+import type { AgentType, SafePocket, Step, StepStatus } from "../types.js";
 
 /**
  * All agent types for parametrized testing
  */
-export const ALL_AGENT_TYPES: AgentType[] = ["flute", "logistics", "quester", "sheriff"];
+export const ALL_AGENT_TYPES: AgentType[] = ["scout", "planner", "builder", "reviewer"];
 
 /**
- * Create a mock Waypoint with sensible defaults
+ * Create a mock Step with sensible defaults
  */
-export const createMockTask = (overrides: Partial<Waypoint> = {}): Waypoint => ({
-	id: "waypoint-1",
-	raidId: "raid-1",
-	type: "quester",
-	description: "Test waypoint",
-	status: "pending" as WaypointStatus,
+export const createMockTask = (overrides: Partial<Step> = {}): Step => ({
+	id: "step-1",
+	sessionId: "raid-1",
+	type: "builder",
+	description: "Test step",
+	status: "pending" as StepStatus,
 	createdAt: new Date("2024-01-01T00:00:00.000Z"),
 	...overrides,
 });

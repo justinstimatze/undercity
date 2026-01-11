@@ -59,8 +59,8 @@ export const analysisCommands: CommandModule = {
 					console.log(
 						`${chalk.cyan(level.toUpperCase().padEnd(10))} ${statusColor(`${data.rate.toFixed(1)}%`)} success rate`,
 					);
-					console.log(`  ${chalk.dim(`Total quests: ${data.totalQuests}`)}`);
-					console.log(`  ${chalk.dim(`Avg tokens: ${data.avgTokensPerQuest.toFixed(0)}`)}`);
+					console.log(`  ${chalk.dim(`Total tasks: ${data.totalTasks}`)}`);
+					console.log(`  ${chalk.dim(`Avg tokens: ${data.avgTokensPerTask.toFixed(0)}`)}`);
 					console.log(`  ${escalationColor(`Escalation threshold: ${(data.escalationTrigger * 100).toFixed(0)}%`)}`);
 
 					// Show escalation data if any escalations occurred
@@ -72,11 +72,11 @@ export const analysisCommands: CommandModule = {
 									? chalk.yellow
 									: chalk.red;
 						console.log(
-							`  ${chalk.dim(`Escalated: ${data.escalatedCount} quests (${escColor(`${data.escalationSuccessRate.toFixed(1)}%`)} success)`)}`,
+							`  ${chalk.dim(`Escalated: ${data.escalatedCount} tasks (${escColor(`${data.escalationSuccessRate.toFixed(1)}%`)} success)`)}`,
 						);
 						if (data.escalationTokenOverhead > 0) {
 							console.log(
-								`  ${chalk.dim(`Escalation token overhead: +${data.escalationTokenOverhead.toFixed(0)} tokens/quest`)}`,
+								`  ${chalk.dim(`Escalation token overhead: +${data.escalationTokenOverhead.toFixed(0)} tokens/task`)}`,
 							);
 						}
 					}
@@ -88,7 +88,7 @@ export const analysisCommands: CommandModule = {
 				}
 
 				console.log(chalk.cyan("Overall Analytics:"));
-				console.log(`  Total quests analyzed: ${analytics.totalQuests}`);
+				console.log(`  Total tasks analyzed: ${analytics.totalTasks}`);
 				console.log(`  Overall success rate: ${analytics.successRate.toFixed(1)}%`);
 				console.log(`  Average tokens per completion: ${analytics.avgTokensPerCompletion.toFixed(0)}`);
 
@@ -115,14 +115,14 @@ export const analysisCommands: CommandModule = {
 				const totalEscalated = complexityLevels.reduce((sum, [, data]) => sum + data.escalatedCount, 0);
 				if (totalEscalated > 0) {
 					console.log(`\n${chalk.cyan("Escalation Summary:")}`);
-					console.log(`  Total escalated quests: ${totalEscalated}`);
+					console.log(`  Total escalated tasks: ${totalEscalated}`);
 
 					// Find which complexity levels escalate most frequently
 					const escalationByLevel = complexityLevels
-						.filter(([, data]) => data.escalatedCount > 0 && data.totalQuests > 0)
+						.filter(([, data]) => data.escalatedCount > 0 && data.totalTasks > 0)
 						.map(([level, data]) => ({
 							level,
-							escalationRate: (data.escalatedCount / data.totalQuests) * 100,
+							escalationRate: (data.escalatedCount / data.totalTasks) * 100,
 							successAfterEscalation: data.escalationSuccessRate,
 							count: data.escalatedCount,
 						}))
@@ -230,7 +230,7 @@ export const analysisCommands: CommandModule = {
 					const recent = tokenTrends.dailyUsage.slice(-7); // Last 7 days
 					for (const day of recent) {
 						const date = new Date(day.date).toLocaleDateString();
-						console.log(`  ${date}: ${day.tokens.toLocaleString()} tokens, ${day.quests} quests`);
+						console.log(`  ${date}: ${day.tokens.toLocaleString()} tokens, ${day.tasks} tasks`);
 					}
 				}
 			});

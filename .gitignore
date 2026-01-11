@@ -4,9 +4,9 @@ node_modules/
 # Build output
 dist/
 
-# Runtime state (but track quests.json - the work queue)
+# Runtime state (but track tasks.json - the work queue)
 .undercity/*
-!.undercity/quests.json
+!.undercity/tasks.json
 
 # IDE
 .vscode/
@@ -25,7 +25,7 @@ dist/
 *.local.md
 *.local.txt
 notes/
-experiments/
+/experiments/
 
 # Large data files
 *.csv

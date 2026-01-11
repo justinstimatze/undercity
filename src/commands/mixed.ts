@@ -131,12 +131,12 @@ export const mixedCommands: CommandModule = {
 				},
 			);
 
-		// Grind command - autonomous quest processing
+		// Grind command - autonomous task processing
 		program
 			.command("grind [goal]")
-			.description("Run tasks: pass a goal directly, or process from quest board")
-			.option("-n, --count <n>", "Process only N quests then stop", "0")
-			.option("-p, --parallel <n>", "Maximum concurrent quests (1-5)", "1")
+			.description("Run tasks: pass a goal directly, or process from task board")
+			.option("-n, --count <n>", "Process only N tasks then stop", "0")
+			.option("-p, --parallel <n>", "Maximum concurrent tasks (1-5)", "1")
 			.option("-s, --stream", "Stream raider activity")
 			.option("-v, --verbose", "Verbose logging")
 			.option("--supervised", "Use supervised mode")
@@ -194,7 +194,7 @@ export const mixedCommands: CommandModule = {
 						return;
 					}
 
-					// No goal provided - process from quest board
+					// No goal provided - process from task board
 					console.log(chalk.cyan.bold("\n⚙️ Undercity Grind Mode"));
 					console.log(chalk.dim("  Autonomous operation • Rate limit handling • Infinite processing"));
 					console.log();
@@ -231,33 +231,33 @@ export const mixedCommands: CommandModule = {
 					}
 
 					try {
-						// Get tasks from quest board
-						const { getAllItems, markQuestComplete, markQuestFailed } = await import("../quest.js");
-						const allQuests = getAllItems();
-						const pendingQuests = allQuests.filter((q) => q.status === "pending");
+						// Get tasks from task board
+						const { getAllItems, markTaskComplete, markTaskFailed } = await import("../task.js");
+						const allTasks = getAllItems();
+						const pendingTasks = allTasks.filter((q) => q.status === "pending");
 
-						const questsToProcess = maxCount > 0 ? pendingQuests.slice(0, maxCount) : pendingQuests;
-						const tasks = questsToProcess.map((q) => q.objective);
+						const tasksToProcess = maxCount > 0 ? pendingTasks.slice(0, maxCount) : pendingTasks;
+						const tasks = tasksToProcess.map((q) => q.objective);
 
-						// Build a map of objective -> quest ID for status updates
+						// Build a map of objective -> task ID for status updates
 						const objectiveToQuestId = new Map<string, string>();
-						for (const q of questsToProcess) {
+						for (const q of tasksToProcess) {
 							objectiveToQuestId.set(q.objective, q.id);
 						}
 
 						const result = await orchestrator.runParallel(tasks);
 
-						// Update quest status based on results
+						// Update task status based on results
 						for (const taskResult of result.results) {
-							const questId = objectiveToQuestId.get(taskResult.task);
-							if (questId) {
+							const taskId = objectiveToQuestId.get(taskResult.task);
+							if (taskId) {
 								if (taskResult.merged) {
-									markQuestComplete(questId);
-									console.log(chalk.dim(`  Quest ${questId} marked complete`));
+									markTaskComplete(taskId);
+									console.log(chalk.dim(`  Task ${taskId} marked complete`));
 								} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
 									const error = taskResult.mergeError || "Task failed";
-									markQuestFailed(questId, error);
-									console.log(chalk.dim(`  Quest ${questId} marked failed: ${error}`));
+									markTaskFailed(taskId, error);
+									console.log(chalk.dim(`  Task ${taskId} marked failed: ${error}`));
 								}
 							}
 						}
@@ -296,7 +296,7 @@ export const mixedCommands: CommandModule = {
 				// Check if there's any data
 				if (totalTokens === 0 && metrics.queries.total === 0) {
 					console.log(chalk.dim("\n📊 No usage data yet."));
-					console.log(chalk.dim("   Run 'undercity grind' to start processing quests.\n"));
+					console.log(chalk.dim("   Run 'undercity grind' to start processing tasks.\n"));
 					return;
 				}
 
@@ -366,7 +366,7 @@ export const mixedCommands: CommandModule = {
 				const persistence = new Persistence(options.directory);
 				persistence.initializeUndercity(options.directory);
 				console.log(chalk.green(`✓ Initialized Undercity state directory: ${options.directory || ".undercity"}`));
-				console.log(chalk.dim("  Ready to launch raids and manage quests"));
+				console.log(chalk.dim("  Ready to launch raids and manage tasks"));
 			});
 
 		// Setup command

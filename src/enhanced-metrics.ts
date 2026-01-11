@@ -2,7 +2,7 @@
  * Enhanced Metrics System
  *
  * Extends the existing metrics system to provide comprehensive logging of:
- * - Quest durations with detailed timing breakdowns
+ * - Task durations with detailed timing breakdowns
  * - Token usage across all models with escalation tracking
  * - Model escalation patterns and effectiveness
  * - Queryable history in .undercity/metrics.jsonl format
@@ -10,22 +10,22 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { AgentType, QuestMetrics } from "./types.js";
+import type { AgentType, TaskMetrics } from "./types.js";
 
 const METRICS_DIR = path.join(process.cwd(), ".undercity");
 const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl");
 
 /**
- * Enhanced quest metrics with detailed escalation and timing data
+ * Enhanced task metrics with detailed escalation and timing data
  */
-export interface EnhancedQuestMetrics extends QuestMetrics {
+export interface EnhancedTaskMetrics extends TaskMetrics {
 	/** Type identifier for enhanced metrics */
-	type: "enhanced_quest_metrics";
+	type: "enhanced_task_metrics";
 	/** Version for schema evolution */
 	version: string;
 	/** Detailed timing breakdown */
 	timing: {
-		/** Time from quest start to first attempt completion */
+		/** Time from task start to first attempt completion */
 		firstAttemptMs: number;
 		/** Time spent in planning phase */
 		planningMs?: number;
@@ -38,13 +38,13 @@ export interface EnhancedQuestMetrics extends QuestMetrics {
 	};
 	/** Enhanced escalation tracking */
 	escalation: {
-		/** Number of model escalations during this quest */
+		/** Number of model escalations during this task */
 		escalationCount: number;
 		/** Chain of models used (e.g., ["haiku", "sonnet", "opus"]) */
 		modelChain: Array<"haiku" | "sonnet" | "opus">;
 		/** Reasons for each escalation */
 		escalationReasons: string[];
-		/** Success rate per model in this quest */
+		/** Success rate per model in this task */
 		modelSuccess: Record<"haiku" | "sonnet" | "opus", { attempts: number; successes: number }>;
 	};
 	/** Enhanced token tracking */
@@ -90,9 +90,9 @@ export interface ModelEscalationEvent {
 	version: string;
 	/** Timestamp of escalation */
 	timestamp: Date;
-	/** Quest and raid context */
-	questId: string;
-	raidId: string;
+	/** Task and session context */
+	taskId: string;
+	sessionId: string;
 	/** Escalation details */
 	escalation: {
 		/** Model being escalated from */
@@ -132,8 +132,8 @@ export interface TokenUsageEvent {
 	/** Timestamp */
 	timestamp: Date;
 	/** Context */
-	questId: string;
-	raidId: string;
+	taskId: string;
+	sessionId: string;
 	agentType: AgentType;
 	/** Token details */
 	usage: {
@@ -156,9 +156,9 @@ export interface TokenUsageEvent {
  * Enhanced metrics collector that extends the existing system
  */
 export class EnhancedMetricsCollector {
-	private questStartTime?: Date;
-	private questId?: string;
-	private raidId?: string;
+	private taskStartTime?: Date;
+	private taskId?: string;
+	private sessionId?: string;
 	private objective?: string;
 
 	// Timing tracking
@@ -204,13 +204,13 @@ export class EnhancedMetricsCollector {
 	private communicationEvents = 0;
 
 	/**
-	 * Start tracking a new quest
+	 * Start tracking a new task
 	 */
-	startQuest(questId: string, objective: string, raidId: string): void {
+	startTask(taskId: string, objective: string, sessionId: string): void {
 		this.reset();
-		this.questStartTime = new Date();
-		this.questId = questId;
-		this.raidId = raidId;
+		this.taskStartTime = new Date();
+		this.taskId = taskId;
+		this.sessionId = sessionId;
 		this.objective = objective;
 	}
 
@@ -218,9 +218,9 @@ export class EnhancedMetricsCollector {
 	 * Reset all tracking state
 	 */
 	private reset(): void {
-		this.questStartTime = undefined;
-		this.questId = undefined;
-		this.raidId = undefined;
+		this.taskStartTime = undefined;
+		this.taskId = undefined;
+		this.sessionId = undefined;
 		this.objective = undefined;
 
 		this.timingBreakdown = {
@@ -294,13 +294,13 @@ export class EnhancedMetricsCollector {
 		}
 
 		// Log the token usage event
-		if (this.questId && this.raidId) {
+		if (this.taskId && this.sessionId) {
 			const tokenEvent: TokenUsageEvent = {
 				type: "token_usage",
 				version: "1.0",
 				timestamp: new Date(),
-				questId: this.questId,
-				raidId: this.raidId,
+				taskId: this.taskId,
+				sessionId: this.sessionId,
 				agentType,
 				usage: {
 					model,
@@ -339,13 +339,13 @@ export class EnhancedMetricsCollector {
 		}
 
 		// Log the escalation event
-		if (this.questId && this.raidId) {
+		if (this.taskId && this.sessionId) {
 			const escalationEvent: ModelEscalationEvent = {
 				type: "model_escalation",
 				version: "1.0",
 				timestamp: new Date(),
-				questId: this.questId,
-				raidId: this.raidId,
+				taskId: this.taskId,
+				sessionId: this.sessionId,
 				escalation: {
 					from,
 					to,
@@ -397,15 +397,15 @@ export class EnhancedMetricsCollector {
 	}
 
 	/**
-	 * Complete quest tracking and generate enhanced metrics
+	 * Complete task tracking and generate enhanced metrics
 	 */
-	completeQuest(baseMetrics: QuestMetrics): EnhancedQuestMetrics | null {
-		if (!this.questStartTime || !this.questId || !this.raidId || !this.objective) {
+	completeTask(baseMetrics: TaskMetrics): EnhancedTaskMetrics | null {
+		if (!this.taskStartTime || !this.taskId || !this.sessionId || !this.objective) {
 			return null;
 		}
 
 		const completedAt = new Date();
-		const totalDurationMs = completedAt.getTime() - this.questStartTime.getTime();
+		const totalDurationMs = completedAt.getTime() - this.taskStartTime.getTime();
 
 		// Calculate first attempt time
 		this.timingBreakdown.firstAttemptMs = Math.min(
@@ -416,9 +416,9 @@ export class EnhancedMetricsCollector {
 		// Calculate efficiency ratio
 		const efficiencyRatio = this.totalTokens > 0 ? this.firstOrderTokens / this.totalTokens : 1;
 
-		const enhancedMetrics: EnhancedQuestMetrics = {
+		const enhancedMetrics: EnhancedTaskMetrics = {
 			...baseMetrics,
-			type: "enhanced_quest_metrics",
+			type: "enhanced_task_metrics",
 			version: "1.0",
 			timing: {
 				...this.timingBreakdown,
@@ -456,7 +456,7 @@ export class EnhancedMetricsCollector {
 	 * Append metrics to the JSONL file
 	 */
 	private async appendToMetricsFile(
-		metrics: EnhancedQuestMetrics | ModelEscalationEvent | TokenUsageEvent,
+		metrics: EnhancedTaskMetrics | ModelEscalationEvent | TokenUsageEvent,
 	): Promise<void> {
 		try {
 			// Ensure directory exists
@@ -479,7 +479,7 @@ export class EnhancedMetricsQuery {
 	 * Load all enhanced metrics from the JSONL file
 	 */
 	static async loadAllMetrics(): Promise<{
-		questMetrics: EnhancedQuestMetrics[];
+		taskMetrics: EnhancedTaskMetrics[];
 		escalationEvents: ModelEscalationEvent[];
 		tokenEvents: TokenUsageEvent[];
 	}> {
@@ -487,7 +487,7 @@ export class EnhancedMetricsQuery {
 			const fileContent = await fs.readFile(METRICS_FILE, "utf-8");
 			const lines = fileContent.trim().split("\n");
 
-			const questMetrics: EnhancedQuestMetrics[] = [];
+			const taskMetrics: EnhancedTaskMetrics[] = [];
 			const escalationEvents: ModelEscalationEvent[] = [];
 			const tokenEvents: TokenUsageEvent[] = [];
 
@@ -509,8 +509,8 @@ export class EnhancedMetricsQuery {
 
 						// Categorize by type
 						switch (parsed.type) {
-							case "enhanced_quest_metrics":
-								questMetrics.push(parsed as EnhancedQuestMetrics);
+							case "enhanced_task_metrics":
+								taskMetrics.push(parsed as EnhancedTaskMetrics);
 								break;
 							case "model_escalation":
 								escalationEvents.push(parsed as ModelEscalationEvent);
@@ -526,10 +526,10 @@ export class EnhancedMetricsQuery {
 				}
 			}
 
-			return { questMetrics, escalationEvents, tokenEvents };
+			return { taskMetrics, escalationEvents, tokenEvents };
 		} catch {
 			// File doesn't exist or can't be read
-			return { questMetrics: [], escalationEvents: [], tokenEvents: [] };
+			return { taskMetrics: [], escalationEvents: [], tokenEvents: [] };
 		}
 	}
 
@@ -587,14 +587,14 @@ export class EnhancedMetricsQuery {
 		tokensByModel: Record<"haiku" | "sonnet" | "opus", number>;
 		tokensByPhase: Record<string, number>;
 		averageEfficiencyRatio: number;
-		dailyUsage: Array<{ date: string; tokens: number; quests: number }>;
+		dailyUsage: Array<{ date: string; tokens: number; tasks: number }>;
 	}> {
-		const { questMetrics } = await EnhancedMetricsQuery.loadAllMetrics();
+		const { taskMetrics } = await EnhancedMetricsQuery.loadAllMetrics();
 
 		const cutoffDate = new Date();
 		cutoffDate.setDate(cutoffDate.getDate() - days);
 
-		const recentMetrics = questMetrics.filter((m) => m.startedAt && new Date(m.startedAt) >= cutoffDate);
+		const recentMetrics = taskMetrics.filter((m) => m.startedAt && new Date(m.startedAt) >= cutoffDate);
 
 		const tokensByModel: Record<"haiku" | "sonnet" | "opus", number> = {
 			haiku: 0,
@@ -622,17 +622,17 @@ export class EnhancedMetricsQuery {
 		}
 
 		// Calculate daily usage
-		const dailyUsage = new Map<string, { tokens: number; quests: number }>();
+		const dailyUsage = new Map<string, { tokens: number; tasks: number }>();
 		for (const metrics of recentMetrics) {
 			const date = new Date(metrics.startedAt).toISOString().split("T")[0];
-			const existing = dailyUsage.get(date) || { tokens: 0, quests: 0 };
+			const existing = dailyUsage.get(date) || { tokens: 0, tasks: 0 };
 			existing.tokens += metrics.tokenUsage.efficiency.totalTokens;
-			existing.quests += 1;
+			existing.tasks += 1;
 			dailyUsage.set(date, existing);
 		}
 
 		const dailyUsageArray = Array.from(dailyUsage.entries())
-			.map(([date, data]) => ({ date, tokens: data.tokens, quests: data.quests }))
+			.map(([date, data]) => ({ date, tokens: data.tokens, tasks: data.tasks }))
 			.sort((a, b) => a.date.localeCompare(b.date));
 
 		return {

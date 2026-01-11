@@ -330,8 +330,8 @@ export class KnowledgeTracker {
 	 * Load metrics from the JSONL file for comprehensive DSPy analysis
 	 */
 	private loadMetricsData(): Array<{
-		questId: string;
-		raidId: string;
+		taskId: string;
+		sessionId: string;
 		objective: string;
 		success: boolean;
 		durationMs: number;

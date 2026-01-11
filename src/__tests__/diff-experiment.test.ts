@@ -94,15 +94,15 @@ describe("Diff Generation Experiments", () => {
 		const experimentId = templates.createOllamaDiffExperiment();
 		framework.startExperiment(experimentId);
 
-		const questId = "test-quest-001";
-		const assignment = framework.assignQuestToVariant(questId, experimentId);
+		const taskId = "test-task-001";
+		const assignment = framework.assignTaskToVariant(taskId, experimentId);
 
 		expect(assignment).toBeTruthy();
-		expect(assignment!.questId).toBe(questId);
+		expect(assignment!.taskId).toBe(taskId);
 		expect(assignment!.experimentId).toBe(experimentId);
 
 		// Record a test outcome
-		framework.recordOutcome(experimentId, questId, {
+		framework.recordOutcome(experimentId, taskId, {
 			success: true,
 			tokensUsed: 150,
 			executionTimeMs: 500,
@@ -159,10 +159,10 @@ describe("Diff Generation Experiments", () => {
 
 		// Record some outcomes with diff metrics
 		for (let i = 0; i < 3; i++) {
-			const questId = `test-quest-${i}`;
-			framework.assignQuestToVariant(questId, testExperiment.id);
+			const taskId = `test-task-${i}`;
+			framework.assignTaskToVariant(taskId, testExperiment.id);
 
-			framework.recordOutcome(testExperiment.id, questId, {
+			framework.recordOutcome(testExperiment.id, taskId, {
 				success: i < 2, // 2/3 success rate
 				tokensUsed: 100 + i * 50,
 				executionTimeMs: 300 + i * 100,

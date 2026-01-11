@@ -1,12 +1,12 @@
 /**
  * Git Worktree Manager Module
  *
- * Manages isolated git worktrees for raid branches to enable parallel raids
+ * Manages isolated git worktrees for session branches to enable parallel sessions
  * while keeping the main repo always available on the main branch.
  *
  * Key Features:
  * - Creates isolated worktrees in .undercity/worktrees/<raid-id>/
- * - Enables parallel raids without branch switching in main repo
+ * - Enables parallel sessions without branch switching in main repo
  * - Proper cleanup and error handling
  * - State tracking for active worktrees
  */
@@ -247,31 +247,31 @@ export class WorktreeManager {
 	}
 
 	/**
-	 * Get the worktree directory path for a raid
+	 * Get the worktree directory path for a session
 	 */
-	getWorktreePath(raidId: string): string {
-		return join(this.worktreesDir, raidId);
+	getWorktreePath(sessionId: string): string {
+		return join(this.worktreesDir, sessionId);
 	}
 
 	/**
-	 * Get the branch name for a raid's worktree
+	 * Get the branch name for a session's worktree
 	 */
-	getWorktreeBranchName(raidId: string): string {
-		return `undercity/${raidId}/worktree`;
+	getWorktreeBranchName(sessionId: string): string {
+		return `undercity/${sessionId}/worktree`;
 	}
 
 	/**
-	 * Create a new worktree for a raid
+	 * Create a new worktree for a session
 	 */
-	createWorktree(raidId: string): WorktreeInfo {
-		const worktreePath = this.getWorktreePath(raidId);
-		const branchName = this.getWorktreeBranchName(raidId);
+	createWorktree(sessionId: string): WorktreeInfo {
+		const worktreePath = this.getWorktreePath(sessionId);
+		const branchName = this.getWorktreeBranchName(sessionId);
 
-		gitLogger.info({ raidId, worktreePath, branchName }, "Creating raid worktree");
+		gitLogger.info({ sessionId, worktreePath, branchName }, "Creating session worktree");
 
 		// Check if worktree already exists
 		if (worktreePathExists(worktreePath)) {
-			throw new WorktreeError(`Worktree already exists for raid ${raidId} at ${worktreePath}`, "git worktree add");
+			throw new WorktreeError(`Worktree already exists for raid ${sessionId} at ${worktreePath}`, "git worktree add");
 		}
 
 		// CRITICAL: Fetch latest from origin before creating worktree
@@ -285,31 +285,31 @@ export class WorktreeManager {
 			execGit(["worktree", "add", "-b", branchName, worktreePath, baseBranch]);
 
 			const worktreeInfo: WorktreeInfo = {
-				raidId,
+				sessionId,
 				path: worktreePath,
 				branch: branchName,
 				createdAt: new Date(),
 				isActive: true,
 			};
 
-			gitLogger.info({ raidId, worktreePath, branchName }, "Worktree created successfully");
+			gitLogger.info({ sessionId, worktreePath, branchName }, "Worktree created successfully");
 			return worktreeInfo;
 		} catch (error) {
 			if (error instanceof WorktreeError) {
 				throw error;
 			}
-			throw new WorktreeError(`Failed to create worktree for raid ${raidId}: ${String(error)}`, "git worktree add");
+			throw new WorktreeError(`Failed to create worktree for raid ${sessionId}: ${String(error)}`, "git worktree add");
 		}
 	}
 
 	/**
-	 * Remove a worktree for a raid
+	 * Remove a worktree for a session
 	 */
-	removeWorktree(raidId: string, force = false): void {
-		const worktreePath = this.getWorktreePath(raidId);
-		const branchName = this.getWorktreeBranchName(raidId);
+	removeWorktree(sessionId: string, force = false): void {
+		const worktreePath = this.getWorktreePath(sessionId);
+		const branchName = this.getWorktreeBranchName(sessionId);
 
-		gitLogger.info({ raidId, worktreePath, branchName, force }, "Removing raid worktree");
+		gitLogger.info({ sessionId, worktreePath, branchName, force }, "Removing session worktree");
 
 		try {
 			// Remove the worktree
@@ -324,7 +324,7 @@ export class WorktreeManager {
 			} catch (error) {
 				// If worktree remove fails, try to clean up manually
 				if (worktreePathExists(worktreePath)) {
-					gitLogger.warn({ raidId, error: String(error) }, "Worktree remove failed, cleaning up manually");
+					gitLogger.warn({ sessionId, error: String(error) }, "Worktree remove failed, cleaning up manually");
 					rmSync(worktreePath, { recursive: true, force: true });
 				}
 			}
@@ -333,7 +333,7 @@ export class WorktreeManager {
 			try {
 				execGit(["branch", "-D", branchName]);
 			} catch (error) {
-				gitLogger.warn({ raidId, branchName, error: String(error) }, "Failed to delete worktree branch");
+				gitLogger.warn({ sessionId, branchName, error: String(error) }, "Failed to delete worktree branch");
 			}
 
 			// Prune worktree references
@@ -343,11 +343,11 @@ export class WorktreeManager {
 				gitLogger.warn({ error: String(error) }, "Failed to prune worktree references");
 			}
 
-			gitLogger.info({ raidId, worktreePath, branchName }, "Worktree removed successfully");
+			gitLogger.info({ sessionId, worktreePath, branchName }, "Worktree removed successfully");
 		} catch (error) {
 			const errorMsg = error instanceof WorktreeError ? error.message : String(error);
-			gitLogger.error({ raidId, error: errorMsg }, "Failed to remove worktree");
-			throw new WorktreeError(`Failed to remove worktree for raid ${raidId}: ${errorMsg}`, "git worktree remove");
+			gitLogger.error({ sessionId, error: errorMsg }, "Failed to remove worktree");
+			throw new WorktreeError(`Failed to remove worktree for raid ${sessionId}: ${errorMsg}`, "git worktree remove");
 		}
 	}
 
@@ -394,21 +394,21 @@ export class WorktreeManager {
 	}
 
 	/**
-	 * Get active raid worktrees (those in our managed directory)
+	 * Get active session worktrees (those in our managed directory)
 	 */
 	getActiveRaidWorktrees(): WorktreeInfo[] {
 		const allWorktrees = this.listWorktrees();
-		const raidWorktrees: WorktreeInfo[] = [];
+		const sessionWorktrees: WorktreeInfo[] = [];
 
 		for (const worktree of allWorktrees) {
 			// Check if this worktree is in our managed directory
 			if (worktree.path.startsWith(this.worktreesDir)) {
-				const raidId = basename(worktree.path);
+				const sessionId = basename(worktree.path);
 
 				// Verify it matches our naming convention
-				if (worktree.branch.startsWith(`undercity/${raidId}/worktree`)) {
-					raidWorktrees.push({
-						raidId,
+				if (worktree.branch.startsWith(`undercity/${sessionId}/worktree`)) {
+					sessionWorktrees.push({
+						sessionId,
 						path: worktree.path,
 						branch: worktree.branch,
 						createdAt: new Date(), // We don't track creation time in git, use current time
@@ -418,30 +418,30 @@ export class WorktreeManager {
 			}
 		}
 
-		return raidWorktrees;
+		return sessionWorktrees;
 	}
 
 	/**
-	 * Check if a worktree exists for a raid
+	 * Check if a worktree exists for a session
 	 */
-	hasWorktree(raidId: string): boolean {
-		const worktreePath = this.getWorktreePath(raidId);
+	hasWorktree(sessionId: string): boolean {
+		const worktreePath = this.getWorktreePath(sessionId);
 		return worktreePathExists(worktreePath);
 	}
 
 	/**
 	 * Get worktree info for a specific raid
 	 */
-	getWorktreeInfo(raidId: string): WorktreeInfo | null {
-		if (!this.hasWorktree(raidId)) {
+	getWorktreeInfo(sessionId: string): WorktreeInfo | null {
+		if (!this.hasWorktree(sessionId)) {
 			return null;
 		}
 
-		const worktreePath = this.getWorktreePath(raidId);
-		const branchName = this.getWorktreeBranchName(raidId);
+		const worktreePath = this.getWorktreePath(sessionId);
+		const branchName = this.getWorktreeBranchName(sessionId);
 
 		return {
-			raidId,
+			sessionId,
 			path: worktreePath,
 			branch: branchName,
 			createdAt: new Date(), // We don't track creation time, use current time
@@ -454,15 +454,18 @@ export class WorktreeManager {
 	 */
 	cleanupOrphanedWorktrees(activeRaidIds: string[]): void {
 		const activeSet = new Set(activeRaidIds);
-		const raidWorktrees = this.getActiveRaidWorktrees();
+		const sessionWorktrees = this.getActiveRaidWorktrees();
 
-		for (const worktree of raidWorktrees) {
-			if (!activeSet.has(worktree.raidId)) {
-				gitLogger.info({ raidId: worktree.raidId }, "Cleaning up orphaned worktree");
+		for (const worktree of sessionWorktrees) {
+			if (!activeSet.has(worktree.sessionId)) {
+				gitLogger.info({ sessionId: worktree.sessionId }, "Cleaning up orphaned worktree");
 				try {
-					this.removeWorktree(worktree.raidId, true);
+					this.removeWorktree(worktree.sessionId, true);
 				} catch (error) {
-					gitLogger.error({ raidId: worktree.raidId, error: String(error) }, "Failed to cleanup orphaned worktree");
+					gitLogger.error(
+						{ sessionId: worktree.sessionId, error: String(error) },
+						"Failed to cleanup orphaned worktree",
+					);
 				}
 			}
 		}
@@ -483,18 +486,18 @@ export class WorktreeManager {
 	}
 
 	/**
-	 * Emergency cleanup - remove all raid worktrees
+	 * Emergency cleanup - remove all session worktrees
 	 */
 	emergencyCleanup(): void {
-		gitLogger.warn("Performing emergency cleanup of all raid worktrees");
+		gitLogger.warn("Performing emergency cleanup of all session worktrees");
 
-		const raidWorktrees = this.getActiveRaidWorktrees();
-		for (const worktree of raidWorktrees) {
+		const sessionWorktrees = this.getActiveRaidWorktrees();
+		for (const worktree of sessionWorktrees) {
 			try {
-				this.removeWorktree(worktree.raidId, true);
+				this.removeWorktree(worktree.sessionId, true);
 			} catch (error) {
 				gitLogger.error(
-					{ raidId: worktree.raidId, error: String(error) },
+					{ sessionId: worktree.sessionId, error: String(error) },
 					"Failed to remove worktree during emergency cleanup",
 				);
 			}

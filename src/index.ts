@@ -49,26 +49,26 @@ export { Persistence } from "./persistence.js";
 export { SoloOrchestrator } from "./solo.js";
 // Squad management
 export {
-	createSquadMember,
+	createAgent,
 	determineAgentType,
-	generateSquadMemberId,
+	generateAgentId,
 	getAgentDefinition,
 	getAllAgentDefinitions,
 	SQUAD_AGENTS,
 } from "./squad.js";
 // Core types
 export type {
+	Agent,
 	AgentDefinition,
+	AgentStatus,
 	AgentType,
 	ElevatorItem,
 	Inventory,
 	Loadout,
 	MergeStatus,
-	RaidStatus,
 	SafePocket,
-	SquadMember,
-	SquadMemberStatus,
+	SessionStatus,
+	Step,
+	StepStatus,
 	UndercityConfig,
-	Waypoint,
-	WaypointStatus,
 } from "./types.js";

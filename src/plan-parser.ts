@@ -1,8 +1,8 @@
 /**
  * Plan Parser Module
  *
- * Parses plan files into discrete waypoints upfront instead of re-reading the whole
- * plan each iteration. Supports markdown-style plan files with sections and waypoints.
+ * Parses plan files into discrete steps upfront instead of re-reading the whole
+ * plan each iteration. Supports markdown-style plan files with sections and steps.
  */
 
 export interface ParsedTask {
@@ -17,7 +17,7 @@ export interface ParsedTask {
 export interface ParsedPlan {
 	filePath: string;
 	title?: string;
-	waypoints: ParsedTask[];
+	steps: ParsedTask[];
 	sections: PlanSection[];
 	rawContent: string;
 	parsedAt: Date;
@@ -43,11 +43,11 @@ const PRIORITY_KEYWORDS: Record<string, number> = {
 };
 
 /**
- * Generate a unique waypoint ID
+ * Generate a unique step ID
  */
 function generateTaskId(lineNumber: number): string {
 	const timestamp = Date.now().toString(36);
-	return `waypoint-${timestamp}-L${lineNumber}`;
+	return `step-${timestamp}-L${lineNumber}`;
 }
 
 /**
@@ -97,38 +97,38 @@ function isSectionHeader(line: string): { isHeader: boolean; name?: string } {
 }
 
 /**
- * Check if a line is a waypoint (not a comment, not empty, not a header)
+ * Check if a line is a step (not a comment, not empty, not a header)
  */
 function isTaskLine(line: string): boolean {
 	const trimmed = line.trim();
 
-	// Empty lines are not waypoints
+	// Empty lines are not steps
 	if (!trimmed) return false;
 
-	// Lines starting with # are comments or headers, not waypoints
+	// Lines starting with # are comments or headers, not steps
 	if (trimmed.startsWith("#")) return false;
 
 	// Lines that are just decorators or markers
 	if (/^[-=_*]+$/.test(trimmed)) return false;
 
-	// Markdown list items are waypoints
+	// Markdown list items are steps
 	if (/^[-*+]\s+/.test(trimmed)) return true;
 
-	// Numbered items are waypoints
+	// Numbered items are steps
 	if (/^\d+[.)]\s+/.test(trimmed)) return true;
 
-	// Checkbox items (markdown todo) are waypoints
+	// Checkbox items (markdown todo) are steps
 	if (/^[-*]\s*\[[ x]\]\s+/i.test(trimmed)) return true;
 
 	// Plain text lines that aren't obviously metadata
-	// Must have at least 10 characters to be considered a waypoint
+	// Must have at least 10 characters to be considered a step
 	if (trimmed.length >= 10 && /[a-zA-Z]/.test(trimmed)) return true;
 
 	return false;
 }
 
 /**
- * Clean waypoint content - remove list markers, checkboxes, etc.
+ * Clean step content - remove list markers, checkboxes, etc.
  */
 function cleanTaskContent(line: string): { content: string; completed: boolean } {
 	let content = line.trim();
@@ -157,11 +157,11 @@ function cleanTaskContent(line: string): { content: string; completed: boolean }
 }
 
 /**
- * Parse a plan file into discrete waypoints
+ * Parse a plan file into discrete steps
  */
 export function parsePlanFile(content: string, filePath: string = "unknown"): ParsedPlan {
 	const lines = content.split("\n");
-	const waypoints: ParsedTask[] = [];
+	const steps: ParsedTask[] = [];
 	const sections: PlanSection[] = [];
 
 	let currentSection: { name: string; priority: number; startLine: number } | null = null;
@@ -196,15 +196,15 @@ export function parsePlanFile(content: string, filePath: string = "unknown"): Pa
 			continue;
 		}
 
-		// Check for waypoint line
+		// Check for step line
 		if (isTaskLine(line)) {
 			const { content: taskContent, completed } = cleanTaskContent(line);
 
-			// Skip waypoints in "completed" sections
+			// Skip steps in "completed" sections
 			const inCompletedSection = currentSection && currentSection.priority >= 99;
 
 			if (!inCompletedSection && taskContent) {
-				waypoints.push({
+				steps.push({
 					id: generateTaskId(lineNumber),
 					content: taskContent,
 					section: currentSection?.name,
@@ -227,7 +227,7 @@ export function parsePlanFile(content: string, filePath: string = "unknown"): Pa
 	return {
 		filePath,
 		title: planTitle,
-		waypoints,
+		steps,
 		sections,
 		rawContent: content,
 		parsedAt: new Date(),
@@ -235,17 +235,17 @@ export function parsePlanFile(content: string, filePath: string = "unknown"): Pa
 }
 
 /**
- * Get pending (non-completed) waypoints from a parsed plan
+ * Get pending (non-completed) steps from a parsed plan
  */
 export function getPendingTasks(plan: ParsedPlan): ParsedTask[] {
-	return plan.waypoints.filter((waypoint) => !waypoint.completed);
+	return plan.steps.filter((step) => !step.completed);
 }
 
 /**
- * Get waypoints sorted by priority (section priority, then line number)
+ * Get steps sorted by priority (section priority, then line number)
  */
 export function getTasksByPriority(plan: ParsedPlan): ParsedTask[] {
-	return [...plan.waypoints].sort((a, b) => {
+	return [...plan.steps].sort((a, b) => {
 		// First sort by section priority
 		const priorityA = a.sectionPriority ?? 4;
 		const priorityB = b.sectionPriority ?? 4;
@@ -258,7 +258,7 @@ export function getTasksByPriority(plan: ParsedPlan): ParsedTask[] {
 }
 
 /**
- * Get the next waypoint to execute from a parsed plan
+ * Get the next step to execute from a parsed plan
  */
 export function getNextTask(plan: ParsedPlan): ParsedTask | undefined {
 	const pendingByPriority = getTasksByPriority(plan).filter((t) => !t.completed);
@@ -266,14 +266,12 @@ export function getNextTask(plan: ParsedPlan): ParsedTask | undefined {
 }
 
 /**
- * Mark a waypoint as completed by ID
+ * Mark a step as completed by ID
  */
-export function markTaskCompleted(plan: ParsedPlan, waypointId: string): ParsedPlan {
+export function markTaskCompleted(plan: ParsedPlan, stepId: string): ParsedPlan {
 	return {
 		...plan,
-		waypoints: plan.waypoints.map((waypoint) =>
-			waypoint.id === waypointId ? { ...waypoint, completed: true } : waypoint,
-		),
+		steps: plan.steps.map((step) => (step.id === stepId ? { ...step, completed: true } : step)),
 	};
 }
 
@@ -287,17 +285,17 @@ export function getPlanProgress(plan: ParsedPlan): {
 	percentComplete: number;
 	bySections: Array<{ section: string; total: number; completed: number }>;
 } {
-	const total = plan.waypoints.length;
-	const completed = plan.waypoints.filter((t) => t.completed).length;
+	const total = plan.steps.length;
+	const completed = plan.steps.filter((t) => t.completed).length;
 	const pending = total - completed;
 
 	// Group by section
 	const sectionMap = new Map<string, { total: number; completed: number }>();
-	for (const waypoint of plan.waypoints) {
-		const section = waypoint.section || "Uncategorized";
+	for (const step of plan.steps) {
+		const section = step.section || "Uncategorized";
 		const current = sectionMap.get(section) || { total: 0, completed: 0 };
 		current.total++;
-		if (waypoint.completed) current.completed++;
+		if (step.completed) current.completed++;
 		sectionMap.set(section, current);
 	}
 
@@ -316,42 +314,42 @@ export function getPlanProgress(plan: ParsedPlan): {
 }
 
 /**
- * Generate a focused context for an agent based on current waypoint
+ * Generate a focused context for an agent based on current step
  * Instead of passing the whole plan, we pass:
- * - The current waypoint
- * - Recent completed waypoints (for context)
- * - Upcoming waypoints in same section (for awareness)
+ * - The current step
+ * - Recent completed steps (for context)
+ * - Upcoming steps in same section (for awareness)
  */
 export function generateTaskContext(plan: ParsedPlan, currentTaskId: string): string {
-	const currentTask = plan.waypoints.find((t) => t.id === currentTaskId);
+	const currentTask = plan.steps.find((t) => t.id === currentTaskId);
 	if (!currentTask) {
-		return "No current waypoint found.";
+		return "No current step found.";
 	}
 
 	const progress = getPlanProgress(plan);
-	const sectionTasks = plan.waypoints.filter((t) => t.section === currentTask.section);
+	const sectionTasks = plan.steps.filter((t) => t.section === currentTask.section);
 	const completedInSection = sectionTasks.filter((t) => t.completed).map((t) => t.content);
 	const upcomingInSection = sectionTasks.filter((t) => !t.completed && t.id !== currentTaskId).map((t) => t.content);
 
-	let context = `## Current Waypoint\n${currentTask.content}\n\n`;
-	context += `## Progress\n${progress.completed}/${progress.total} waypoints complete (${progress.percentComplete}%)\n\n`;
+	let context = `## Current Step\n${currentTask.content}\n\n`;
+	context += `## Progress\n${progress.completed}/${progress.total} steps complete (${progress.percentComplete}%)\n\n`;
 
 	if (currentTask.section) {
 		context += `## Section: ${currentTask.section}\n`;
 
 		if (completedInSection.length > 0) {
 			context += `\nCompleted in this section:\n`;
-			for (const waypoint of completedInSection.slice(-3)) {
+			for (const step of completedInSection.slice(-3)) {
 				// Last 3 completed
-				context += `- [x] ${waypoint}\n`;
+				context += `- [x] ${step}\n`;
 			}
 		}
 
 		if (upcomingInSection.length > 0) {
 			context += `\nUpcoming in this section:\n`;
-			for (const waypoint of upcomingInSection.slice(0, 3)) {
+			for (const step of upcomingInSection.slice(0, 3)) {
 				// Next 3 upcoming
-				context += `- [ ] ${waypoint}\n`;
+				context += `- [ ] ${step}\n`;
 			}
 		}
 	}
@@ -360,16 +358,16 @@ export function generateTaskContext(plan: ParsedPlan, currentTaskId: string): st
 }
 
 /**
- * Parse plan and convert to quest board format (for import-plan command)
+ * Parse plan and convert to task board format (for import-plan command)
  */
-export function planToQuests(plan: ParsedPlan): Array<{ objective: string; priority: number; section?: string }> {
+export function planToTasks(plan: ParsedPlan): Array<{ objective: string; priority: number; section?: string }> {
 	const tasksByPriority = getTasksByPriority(plan);
 
 	return tasksByPriority
-		.filter((waypoint) => !waypoint.completed)
-		.map((waypoint, index) => ({
-			objective: waypoint.content,
+		.filter((step) => !step.completed)
+		.map((step, index) => ({
+			objective: step.content,
 			priority: index, // Preserve order from priority sort
-			section: waypoint.section,
+			section: step.section,
 		}));
 }

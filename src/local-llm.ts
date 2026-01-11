@@ -6,7 +6,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { raidLogger } from "./logger.js";
+import { sessionLogger } from "./logger.js";
 
 /**
  * Available Ollama models for code generation
@@ -90,7 +90,7 @@ export function getAvailableModels(): string[] {
 			.map((line) => line.split(/\s+/)[0])
 			.filter(Boolean);
 	} catch (error) {
-		raidLogger.warn({ error: String(error) }, "Failed to get Ollama models");
+		sessionLogger.warn({ error: String(error) }, "Failed to get Ollama models");
 		return [];
 	}
 }
@@ -139,7 +139,7 @@ export async function queryLocal(prompt: string, model: LocalModel = "qwen2:1.5b
 
 		return response;
 	} catch (error) {
-		raidLogger.error({ error: String(error), model, prompt: prompt.substring(0, 100) }, "Ollama query failed");
+		sessionLogger.error({ error: String(error), model, prompt: prompt.substring(0, 100) }, "Ollama query failed");
 		throw error;
 	}
 }

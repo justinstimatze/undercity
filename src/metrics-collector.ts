@@ -6,7 +6,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { raidLogger } from "./logger.js";
+import { sessionLogger } from "./logger.js";
 
 export interface TaskMetrics {
 	/** Unique identifier for the task */
@@ -43,7 +43,7 @@ export class MetricsCollector {
 		try {
 			fs.mkdirSync(this.baseDir, { recursive: true });
 		} catch (error) {
-			raidLogger.warn({ error: String(error) }, "Failed to create metrics directory");
+			sessionLogger.warn({ error: String(error) }, "Failed to create metrics directory");
 		}
 	}
 
@@ -55,7 +55,7 @@ export class MetricsCollector {
 			const jsonlEntry = `${JSON.stringify(metrics)}\n`;
 			fs.appendFileSync(this.metricsFilePath, jsonlEntry);
 		} catch (error) {
-			raidLogger.error({ error: String(error), metrics }, "Failed to record task metrics");
+			sessionLogger.error({ error: String(error), metrics }, "Failed to record task metrics");
 		}
 	}
 
@@ -71,7 +71,7 @@ export class MetricsCollector {
 				.map((line) => JSON.parse(line) as TaskMetrics)
 				.filter((metrics) => !metrics.startTime || (metrics.startTime >= fromDate && metrics.startTime <= toDate));
 		} catch (error) {
-			raidLogger.warn({ error: String(error) }, "Failed to read metrics");
+			sessionLogger.warn({ error: String(error) }, "Failed to read metrics");
 			return [];
 		}
 	}
@@ -88,7 +88,7 @@ export class MetricsCollector {
 				.map((line) => JSON.parse(line) as TaskMetrics)
 				.filter((metrics) => metrics.taskId === taskId);
 		} catch (error) {
-			raidLogger.warn({ error: String(error), taskId }, "Failed to read metrics for task");
+			sessionLogger.warn({ error: String(error), taskId }, "Failed to read metrics for task");
 			return [];
 		}
 	}
@@ -138,7 +138,7 @@ export class MetricsCollector {
 				.filter((line) => line.trim() !== "")
 				.map((line) => JSON.parse(line) as TaskMetrics);
 		} catch (error) {
-			raidLogger.warn({ error: String(error) }, "Failed to read metrics");
+			sessionLogger.warn({ error: String(error) }, "Failed to read metrics");
 			return [];
 		}
 	}

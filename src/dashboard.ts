@@ -176,7 +176,7 @@ export function launchDashboard(): void {
 	}) as LogWidget;
 
 	// MIDDLE RIGHT - QUESTS
-	const questBox = grid.set(7, 6, 2, 6, blessed.box, {
+	const taskBox = grid.set(7, 6, 2, 6, blessed.box, {
 		label: " QUESTS ",
 		tags: true,
 		border: { type: "line" },
@@ -253,12 +253,12 @@ export function launchDashboard(): void {
 		}
 	}
 
-	function getQuestStats(): { pending: number; complete: number; failed: number; total: number; inProgress: number } {
+	function getTaskStats(): { pending: number; complete: number; failed: number; total: number; inProgress: number } {
 		try {
-			const path = join(process.cwd(), ".undercity", "quests.json");
+			const path = join(process.cwd(), ".undercity", "tasks.json");
 			if (!existsSync(path)) return { pending: 0, complete: 0, failed: 0, total: 0, inProgress: 0 };
 			const data = JSON.parse(readFileSync(path, "utf-8"));
-			const q = data.quests || [];
+			const q = data.tasks || [];
 			return {
 				pending: q.filter((x: { status: string }) => x.status === "pending").length,
 				complete: q.filter((x: { status: string }) => x.status === "complete").length,
@@ -399,16 +399,16 @@ export function launchDashboard(): void {
 		}
 
 		// QUESTS
-		const stats = getQuestStats();
+		const stats = getTaskStats();
 		if (stats.total === 0) {
-			questBox.setContent(`{gray-fg}No quests{/}`);
+			taskBox.setContent(`{gray-fg}No tasks{/}`);
 		} else {
 			const pct = Math.round((stats.complete / stats.total) * 100);
 			const barWidth = 20;
 			const filled = Math.floor((pct / 100) * barWidth);
 			const bar = "█".repeat(filled) + "░".repeat(barWidth - filled);
 
-			questBox.setContent(
+			taskBox.setContent(
 				`{green-fg}${bar}{/} ${pct}%\n` +
 					`{yellow-fg}Pending: ${stats.pending}{/}  {cyan-fg}Active: ${stats.inProgress}{/}\n` +
 					`{green-fg}Done: ${stats.complete}{/}  {red-fg}Failed: ${stats.failed}{/}`,

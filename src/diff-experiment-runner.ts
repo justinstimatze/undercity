@@ -7,10 +7,10 @@
 
 import { existsSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { ExperimentFramework } from "./experiments/framework.js";
-import { QuestExperimentIntegrator } from "./experiments/integration.js";
+import { TaskExperimentIntegrator } from "./experiments/integration.js";
 import type { ExperimentOutcome } from "./experiments/types.js";
 import { generateDiffWithOllama, isOllamaAvailable, type LocalModel } from "./local-llm.js";
-import { raidLogger } from "./logger.js";
+import { sessionLogger } from "./logger.js";
 
 /**
  * Test case for diff generation
@@ -115,11 +115,11 @@ function add(a: number, b: number): number {
  */
 export class DiffExperimentRunner {
 	public framework: ExperimentFramework;
-	private integrator: QuestExperimentIntegrator;
+	private integrator: TaskExperimentIntegrator;
 
 	constructor() {
 		this.framework = new ExperimentFramework();
-		this.integrator = new QuestExperimentIntegrator(this.framework);
+		this.integrator = new TaskExperimentIntegrator(this.framework);
 	}
 
 	/**
@@ -198,7 +198,7 @@ export class DiffExperimentRunner {
 		testCases: DiffTestCase[] = SAMPLE_TEST_CASES,
 		trials: number = 5,
 	): Promise<void> {
-		raidLogger.info({ experimentId, testCases: testCases.length, trials }, "Starting diff experiment batch");
+		sessionLogger.info({ experimentId, testCases: testCases.length, trials }, "Starting diff experiment batch");
 
 		const experiment = this.framework.getExperiment(experimentId);
 		if (!experiment) {
@@ -207,21 +207,21 @@ export class DiffExperimentRunner {
 
 		for (let trial = 0; trial < trials; trial++) {
 			for (const testCase of testCases) {
-				// Create a mock quest for this test case
-				const questId = `diff-test-${testCase.id}-${trial}`;
+				// Create a mock task for this test case
+				const taskId = `diff-test-${testCase.id}-${trial}`;
 
 				// Assign to experiment variant
-				const assignment = this.framework.assignQuestToVariant(questId, experimentId);
+				const assignment = this.framework.assignTaskToVariant(taskId, experimentId);
 
 				if (!assignment) {
-					raidLogger.warn({ questId, experimentId }, "No assignment created");
+					sessionLogger.warn({ taskId, experimentId }, "No assignment created");
 					continue;
 				}
 
 				// Get variant parameters
 				const variant = experiment.variants.find((v) => v.id === assignment.variantId);
 				if (!variant) {
-					raidLogger.warn({ variantId: assignment.variantId }, "Variant not found");
+					sessionLogger.warn({ variantId: assignment.variantId }, "Variant not found");
 					continue;
 				}
 
@@ -235,7 +235,7 @@ export class DiffExperimentRunner {
 				const outcome: Omit<ExperimentOutcome, "id" | "recordedAt"> = {
 					experimentId,
 					variantId: assignment.variantId,
-					questId,
+					taskId,
 					success: result.success,
 					tokensUsed: result.tokensUsed,
 					executionTimeMs: result.executionTimeMs,
@@ -254,11 +254,11 @@ export class DiffExperimentRunner {
 					},
 				};
 
-				this.framework.recordOutcome(experimentId, questId, outcome);
+				this.framework.recordOutcome(experimentId, taskId, outcome);
 
-				raidLogger.debug(
+				sessionLogger.debug(
 					{
-						questId,
+						taskId,
 						testCaseId: testCase.id,
 						success: result.success,
 						model: result.model,
@@ -272,7 +272,7 @@ export class DiffExperimentRunner {
 		// Analyze results
 		const analysis = this.framework.analyzeExperiment(experimentId);
 
-		raidLogger.info(
+		sessionLogger.info(
 			{
 				experimentId,
 				status: analysis.status,

@@ -6,10 +6,10 @@
  * extracts only the relevant sections each agent needs.
  *
  * Context limits by agent type:
- * - Flute: Just the goal (~1K chars)
- * - Logistics: Full flute report (~10K chars)
- * - Quester: Implementation details only (~5K chars)
- * - Sheriff: Review requirements (~3K chars)
+ * - Scout: Just the goal (~1K chars)
+ * - Planner: Full flute report (~10K chars)
+ * - Builder: Implementation details only (~5K chars)
+ * - Reviewer: Review requirements (~3K chars)
  */
 
 import type { AgentType } from "./types.js";
@@ -27,19 +27,19 @@ interface PlanSection {
  * Context limits per agent type (in characters)
  */
 const CONTEXT_LIMITS: Record<AgentType, number> = {
-	flute: 1000,
-	logistics: 10000,
-	quester: 5000,
-	sheriff: 3000,
+	scout: 1000,
+	planner: 10000,
+	builder: 5000,
+	reviewer: 3000,
 };
 
 /**
  * Keywords that indicate relevant sections for each agent type
  */
 const RELEVANCE_KEYWORDS: Record<AgentType, string[]> = {
-	flute: ["goal", "objective", "target", "find", "locate"],
-	logistics: ["flute", "intel", "findings", "structure", "files", "dependencies"],
-	quester: [
+	scout: ["goal", "objective", "target", "find", "locate"],
+	planner: ["scout", "intel", "findings", "structure", "files", "dependencies"],
+	builder: [
 		"implement",
 		"create",
 		"modify",
@@ -51,9 +51,9 @@ const RELEVANCE_KEYWORDS: Record<AgentType, string[]> = {
 		"class",
 		"module",
 		"step",
-		"waypoint",
+		"step",
 	],
-	sheriff: ["test", "verify", "check", "review", "requirement", "edge case", "security", "validation"],
+	reviewer: ["test", "verify", "check", "review", "requirement", "edge case", "security", "validation"],
 };
 
 /**
@@ -126,15 +126,15 @@ function calculateRelevanceScore(section: PlanSection, agentType: AgentType): nu
 		}
 	}
 
-	// Bonus for implementation-specific sections for quester
-	if (agentType === "quester") {
+	// Bonus for implementation-specific sections for builder
+	if (agentType === "builder") {
 		if (/files?\s+to\s+(modify|create|change)/i.test(textToSearch) || /implementation/i.test(section.heading)) {
 			score += 5;
 		}
 	}
 
-	// Bonus for test-related sections for sheriff
-	if (agentType === "sheriff") {
+	// Bonus for test-related sections for reviewer
+	if (agentType === "reviewer") {
 		if (/test/i.test(section.heading) || /verification|validation/i.test(section.heading)) {
 			score += 5;
 		}
@@ -237,7 +237,7 @@ export function summarizeContextForAgent(fullContext: string, agentType: AgentTy
 	const limit = CONTEXT_LIMITS[agentType];
 
 	// For flute, just return the goal
-	if (agentType === "flute") {
+	if (agentType === "scout") {
 		if (goal) {
 			return smartTruncate(goal, limit);
 		}
@@ -270,7 +270,7 @@ export function summarizeContextForAgent(fullContext: string, agentType: AgentTy
 }
 
 /**
- * Extract implementation-focused context for quester
+ * Extract implementation-focused context for builder
  *
  * This specifically extracts:
  * - Files to modify/create
@@ -286,7 +286,7 @@ export function extractImplementationContext(planContent: string): string {
 		/files?\s+to/i,
 		/changes?/i,
 		/steps?/i,
-		/waypoints?/i,
+		/steps?/i,
 		/code/i,
 		/modify/i,
 		/create/i,
@@ -301,11 +301,11 @@ export function extractImplementationContext(planContent: string): string {
 	}
 
 	// Fall back to full context with smart summarization
-	return summarizeContextForAgent(planContent, "quester");
+	return summarizeContextForAgent(planContent, "builder");
 }
 
 /**
- * Extract review-focused context for sheriff
+ * Extract review-focused context for reviewer
  *
  * This specifically extracts:
  * - Test requirements
@@ -313,7 +313,7 @@ export function extractImplementationContext(planContent: string): string {
  * - Security considerations
  * - Expected behavior
  */
-export function extractReviewContext(planContent: string, questerOutput: string): string {
+export function extractReviewContext(planContent: string, builderOutput: string): string {
 	const planSections = parseMarkdownSections(planContent);
 
 	// Priority headings for review
@@ -340,11 +340,11 @@ export function extractReviewContext(planContent: string, questerOutput: string)
 		result += "\n\n";
 	}
 
-	// Add truncated quester output
+	// Add truncated builder output
 	result += "## Implementation Output\n\n";
-	result += smartTruncate(questerOutput, 1500);
+	result += smartTruncate(builderOutput, 1500);
 
-	return smartTruncate(result, CONTEXT_LIMITS.sheriff);
+	return smartTruncate(result, CONTEXT_LIMITS.reviewer);
 }
 
 /**
@@ -378,7 +378,7 @@ import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { type FunctionDeclaration, type MethodDeclaration, Project, type SourceFile, SyntaxKind } from "ts-morph";
-import { raidLogger } from "./logger.js";
+import { sessionLogger } from "./logger.js";
 
 // Cached ts-morph project for reuse
 let cachedProject: Project | null = null;
@@ -521,7 +521,10 @@ export async function prepareContext(
 		// 9. Build the briefing document
 		briefing.briefingDoc = buildBriefingDoc(briefing);
 	} catch (error) {
-		raidLogger.warn({ error: String(error), cwd, repoRoot }, "Context preparation had issues, using minimal briefing");
+		sessionLogger.warn(
+			{ error: String(error), cwd, repoRoot },
+			"Context preparation had issues, using minimal briefing",
+		);
 		briefing.briefingDoc = buildMinimalBriefing(task);
 	}
 
@@ -945,7 +948,7 @@ function getTsMorphProject(cwd: string): Project | null {
 		cachedProjectPath = cwd;
 		return cachedProject;
 	} catch (error) {
-		raidLogger.debug({ error: String(error) }, "Failed to create ts-morph project");
+		sessionLogger.debug({ error: String(error) }, "Failed to create ts-morph project");
 		return null;
 	}
 }
@@ -1023,7 +1026,7 @@ export function extractFunctionSignaturesWithTypes(filePath: string, cwd: string
 
 		return signatures.slice(0, 20); // Limit total signatures
 	} catch (error) {
-		raidLogger.debug({ error: String(error), file: filePath }, "ts-morph extraction failed");
+		sessionLogger.debug({ error: String(error), file: filePath }, "ts-morph extraction failed");
 		return [];
 	}
 }
@@ -1132,7 +1135,7 @@ export function extractTypeDefinitionsFromFile(filePath: string, cwd: string): s
 
 		return definitions.slice(0, 15);
 	} catch (error) {
-		raidLogger.debug({ error: String(error), file: filePath }, "ts-morph type extraction failed");
+		sessionLogger.debug({ error: String(error), file: filePath }, "ts-morph type extraction failed");
 		return [];
 	}
 }

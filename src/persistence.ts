@@ -3,7 +3,7 @@
  *
  * Handles the persistence hierarchy:
  * - Safe Pocket: Critical state surviving crashes
- * - Inventory: Active session state (waypoints, squad)
+ * - Inventory: Active session state (steps, squad)
  * - Loadout: Pre-session config
  *
  * All state is stored as JSON files in .undercity/
@@ -13,11 +13,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { dirname, join } from "node:path";
 import { persistenceLogger } from "./logger.js";
 import type {
+	Agent,
 	AgentType,
 	EfficiencyOutcome,
 	FileTrackingState,
-	FluteCache,
-	FluteCacheEntry,
 	Inventory,
 	Loadout,
 	LoadoutConfiguration,
@@ -26,16 +25,17 @@ import type {
 	LoadoutStorage,
 	ParallelRecoveryState,
 	PromptKnowledge,
-	QuestMetrics,
 	RateLimitState,
 	SafePocket,
-	SquadMember,
-	Waypoint,
+	ScoutCache,
+	ScoutCacheEntry,
+	Step,
+	TaskMetrics,
 	WorktreeInfo,
 	WorktreeState,
 } from "./types.js";
 
-/** Flute cache configuration */
+/** Scout cache configuration */
 const FLUTE_CACHE_FILE = "flute-cache.json";
 const SCOUT_CACHE_VERSION = "1.0";
 const SCOUT_CACHE_MAX_ENTRIES = 100;
@@ -129,12 +129,12 @@ export class Persistence {
 	}
 
 	// ============== Inventory ==============
-	// Active raid state (waypoints, squad)
+	// Active raid state (steps, squad)
 
 	getInventory(): Inventory {
 		return this.readJson<Inventory>("inventory.json", {
-			waypoints: [],
-			squad: [],
+			steps: [],
+			agents: [],
 			lastUpdated: new Date(),
 		});
 	}
@@ -145,59 +145,59 @@ export class Persistence {
 	}
 
 	// Convenience methods for inventory
-	getTasks(): Waypoint[] {
-		return this.getInventory().waypoints;
+	getTasks(): Step[] {
+		return this.getInventory().steps;
 	}
 
-	saveTasks(waypoints: Waypoint[]): void {
+	saveTasks(steps: Step[]): void {
 		const inventory = this.getInventory();
-		inventory.waypoints = waypoints;
+		inventory.steps = steps;
 		this.saveInventory(inventory);
 	}
 
-	addTask(waypoint: Waypoint): void {
-		const waypoints = this.getTasks();
-		waypoints.push(waypoint);
-		this.saveTasks(waypoints);
+	addTasks(step: Step): void {
+		const steps = this.getTasks();
+		steps.push(step);
+		this.saveTasks(steps);
 	}
 
-	updateTask(waypointId: string, updates: Partial<Waypoint>): void {
-		const waypoints = this.getTasks();
-		const index = waypoints.findIndex((t) => t.id === waypointId);
+	updateTask(stepId: string, updates: Partial<Step>): void {
+		const steps = this.getTasks();
+		const index = steps.findIndex((t) => t.id === stepId);
 		if (index !== -1) {
-			waypoints[index] = { ...waypoints[index], ...updates };
-			this.saveTasks(waypoints);
+			steps[index] = { ...steps[index], ...updates };
+			this.saveTasks(steps);
 		}
 	}
 
-	getSquad(): SquadMember[] {
-		return this.getInventory().squad;
+	getAgents(): Agent[] {
+		return this.getInventory().agents;
 	}
 
-	saveSquad(squad: SquadMember[]): void {
+	saveAgents(agents: Agent[]): void {
 		const inventory = this.getInventory();
-		inventory.squad = squad;
+		inventory.agents = agents;
 		this.saveInventory(inventory);
 	}
 
-	addSquadMember(member: SquadMember): void {
-		const squad = this.getSquad();
-		squad.push(member);
-		this.saveSquad(squad);
+	addAgent(member: Agent): void {
+		const agents = this.getAgents();
+		agents.push(member);
+		this.saveAgents(agents);
 	}
 
-	updateSquadMember(memberId: string, updates: Partial<SquadMember>): void {
-		const squad = this.getSquad();
-		const index = squad.findIndex((m) => m.id === memberId);
+	updateAgent(memberId: string, updates: Partial<Agent>): void {
+		const agents = this.getAgents();
+		const index = agents.findIndex((m) => m.id === memberId);
 		if (index !== -1) {
-			squad[index] = { ...squad[index], ...updates };
-			this.saveSquad(squad);
+			agents[index] = { ...agents[index], ...updates };
+			this.saveAgents(agents);
 		}
 	}
 
-	removeSquadMember(memberId: string): void {
-		const squad = this.getSquad().filter((m) => m.id !== memberId);
-		this.saveSquad(squad);
+	removeAgent(memberId: string): void {
+		const agents = this.getAgents().filter((m) => m.id !== memberId);
+		this.saveAgents(agents);
 	}
 
 	// ============== Loadout ==============
@@ -205,8 +205,8 @@ export class Persistence {
 
 	getLoadout(): Loadout {
 		return this.readJson<Loadout>("loadout.json", {
-			maxSquadSize: 5,
-			enabledAgentTypes: ["flute", "logistics", "quester", "sheriff"] as AgentType[],
+			maxAgents: 5,
+			enabledAgentTypes: ["scout", "planner", "builder", "reviewer"] as AgentType[],
 			autoApprove: false,
 			lastUpdated: new Date(),
 		});
@@ -218,7 +218,7 @@ export class Persistence {
 	}
 
 	// ============== Loadout Configurations ==============
-	// Configurable loadouts for different quest types
+	// Configurable loadouts for different task types
 
 	getLoadoutStorage(): LoadoutStorage {
 		return this.readJson<LoadoutStorage>("loadout-storage.json", {
@@ -278,7 +278,7 @@ export class Persistence {
 	// ============== Squad Member Sessions ==============
 	// Per-agent session state for SDK resumption
 
-	getSquadMemberSession(memberId: string): string | undefined {
+	getAgentSession(memberId: string): string | undefined {
 		const path = join(this.stateDir, "squad", `${memberId}.json`);
 		if (!existsSync(path)) {
 			return undefined;
@@ -292,7 +292,7 @@ export class Persistence {
 		}
 	}
 
-	saveSquadMemberSession(memberId: string, sessionId: string): void {
+	saveAgentSession(memberId: string, sessionId: string): void {
 		const path = join(this.stateDir, "squad", `${memberId}.json`);
 		const tempPath = `${path}.tmp`;
 		const data = JSON.stringify({ sessionId, savedAt: new Date() }, null, 2);
@@ -354,19 +354,19 @@ export class Persistence {
 
 	addWorktree(worktreeInfo: WorktreeInfo): void {
 		const state = this.getWorktreeState();
-		state.worktrees[worktreeInfo.raidId] = worktreeInfo;
+		state.worktrees[worktreeInfo.sessionId] = worktreeInfo;
 		this.saveWorktreeState(state);
 	}
 
-	removeWorktree(raidId: string): void {
+	removeWorktree(sessionId: string): void {
 		const state = this.getWorktreeState();
-		delete state.worktrees[raidId];
+		delete state.worktrees[sessionId];
 		this.saveWorktreeState(state);
 	}
 
-	getWorktreeForRaid(raidId: string): WorktreeInfo | null {
+	getWorktreeForRaid(sessionId: string): WorktreeInfo | null {
 		const state = this.getWorktreeState();
-		return state.worktrees[raidId] || null;
+		return state.worktrees[sessionId] || null;
 	}
 
 	getAllActiveWorktrees(): WorktreeInfo[] {
@@ -389,20 +389,20 @@ export class Persistence {
 	clearAll(): void {
 		this.clearPocket();
 		this.saveInventory({
-			waypoints: [],
-			squad: [],
+			steps: [],
+			agents: [],
 			lastUpdated: new Date(),
 		});
 	}
 
-	// ============== Flute Cache ==============
+	// ============== Scout Cache ==============
 	// Caches flute results to avoid redundant codebase analysis
 
 	/**
 	 * Get the flute cache (creates empty cache if doesn't exist)
 	 */
-	getFluteCache(): FluteCache {
-		return this.readJson<FluteCache>(FLUTE_CACHE_FILE, {
+	getScoutCache(): ScoutCache {
+		return this.readJson<ScoutCache>(FLUTE_CACHE_FILE, {
 			entries: {},
 			version: SCOUT_CACHE_VERSION,
 			lastUpdated: new Date(),
@@ -412,7 +412,7 @@ export class Persistence {
 	/**
 	 * Save the flute cache
 	 */
-	saveFluteCache(cache: FluteCache): void {
+	saveScoutCache(cache: ScoutCache): void {
 		cache.lastUpdated = new Date();
 		this.writeJson(FLUTE_CACHE_FILE, cache);
 	}
@@ -424,9 +424,9 @@ export class Persistence {
 	 * @param goalHash Hash of the flute goal
 	 * @returns The cache entry if found and valid, null otherwise
 	 */
-	getFluteCacheEntry(fingerprintHash: string, goalHash: string): FluteCacheEntry | null {
+	getScoutCacheEntry(fingerprintHash: string, goalHash: string): ScoutCacheEntry | null {
 		try {
-			const cache = this.getFluteCache();
+			const cache = this.getScoutCache();
 			const key = `${fingerprintHash}:${goalHash}`;
 			const entry = cache.entries[key];
 
@@ -440,16 +440,16 @@ export class Persistence {
 			const ttlMs = SCOUT_CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
 
 			if (ageMs > ttlMs) {
-				persistenceLogger.debug({ key, ageMs, ttlMs }, "Flute cache entry expired");
+				persistenceLogger.debug({ key, ageMs, ttlMs }, "Scout cache entry expired");
 				return null;
 			}
 
 			// Update last used timestamp
 			entry.lastUsedAt = new Date();
 			cache.entries[key] = entry;
-			this.saveFluteCache(cache);
+			this.saveScoutCache(cache);
 
-			persistenceLogger.debug({ key, goalText: entry.goalText }, "Flute cache hit");
+			persistenceLogger.debug({ key, goalText: entry.goalText }, "Scout cache hit");
 			return entry;
 		} catch (error) {
 			persistenceLogger.warn({ error }, "Error reading flute cache entry");
@@ -465,12 +465,12 @@ export class Persistence {
 	 * @param fluteResult The flute intel result to cache
 	 * @param goalText Original goal text (for debugging)
 	 */
-	saveFluteCacheEntry(fingerprintHash: string, goalHash: string, fluteResult: string, goalText: string): void {
+	saveScoutCacheEntry(fingerprintHash: string, goalHash: string, fluteResult: string, goalText: string): void {
 		try {
-			const cache = this.getFluteCache();
+			const cache = this.getScoutCache();
 			const key = `${fingerprintHash}:${goalHash}`;
 
-			const entry: FluteCacheEntry = {
+			const entry: ScoutCacheEntry = {
 				fingerprintHash,
 				goalHash,
 				fluteResult,
@@ -500,7 +500,7 @@ export class Persistence {
 				persistenceLogger.debug({ removed: toRemove }, "Evicted old flute cache entries (LRU)");
 			}
 
-			this.saveFluteCache(cache);
+			this.saveScoutCache(cache);
 			persistenceLogger.debug({ key, goalText }, "Saved flute result to cache");
 		} catch (error) {
 			persistenceLogger.warn({ error }, "Error saving flute cache entry");
@@ -511,9 +511,9 @@ export class Persistence {
 	/**
 	 * Clean up expired cache entries
 	 */
-	cleanupFluteCache(): void {
+	cleanupScoutCache(): void {
 		try {
-			const cache = this.getFluteCache();
+			const cache = this.getScoutCache();
 			const now = Date.now();
 			const ttlMs = SCOUT_CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
 			let removed = 0;
@@ -527,7 +527,7 @@ export class Persistence {
 			}
 
 			if (removed > 0) {
-				this.saveFluteCache(cache);
+				this.saveScoutCache(cache);
 				persistenceLogger.info({ removed }, "Cleaned up expired flute cache entries");
 			}
 		} catch (error) {
@@ -538,8 +538,8 @@ export class Persistence {
 	/**
 	 * Clear the entire flute cache
 	 */
-	clearFluteCache(): void {
-		this.saveFluteCache({
+	clearScoutCache(): void {
+		this.saveScoutCache({
 			entries: {},
 			version: SCOUT_CACHE_VERSION,
 			lastUpdated: new Date(),
@@ -550,8 +550,8 @@ export class Persistence {
 	/**
 	 * Get flute cache statistics
 	 */
-	getFluteCacheStats(): { entryCount: number; oldestEntry: Date | null; newestEntry: Date | null } {
-		const cache = this.getFluteCache();
+	getScoutCacheStats(): { entryCount: number; oldestEntry: Date | null; newestEntry: Date | null } {
+		const cache = this.getScoutCache();
 		const entries = Object.values(cache.entries);
 
 		if (entries.length === 0) {
@@ -660,7 +660,7 @@ export class Persistence {
 	getRateLimitState(): RateLimitState | null {
 		try {
 			return this.readJson<RateLimitState>("rate-limit-state.json", {
-				quests: [],
+				tasks: [],
 				rateLimitHits: [],
 				config: {
 					maxTokensPer5Hours: 1_000_000,
@@ -693,15 +693,15 @@ export class Persistence {
 		}
 	}
 
-	// ============== Quest Metrics ==============
+	// ============== Task Metrics ==============
 
 	/**
-	 * Save quest metrics
+	 * Save task metrics
 	 */
-	saveQuestMetrics(metrics: QuestMetrics): void {
+	saveTaskMetrics(metrics: TaskMetrics): void {
 		try {
-			const metricsFile = this.getPath("quest-metrics.json");
-			let existingMetrics: QuestMetrics[] = [];
+			const metricsFile = this.getPath("task-metrics.json");
+			let existingMetrics: TaskMetrics[] = [];
 
 			// Load existing metrics
 			if (existsSync(metricsFile)) {
@@ -741,18 +741,18 @@ export class Persistence {
 				}
 				throw writeError;
 			}
-			persistenceLogger.debug({ questId: metrics.questId }, "Saved quest metrics");
+			persistenceLogger.debug({ taskId: metrics.taskId }, "Saved task metrics");
 		} catch (error) {
-			persistenceLogger.error({ error: String(error) }, "Failed to save quest metrics");
+			persistenceLogger.error({ error: String(error) }, "Failed to save task metrics");
 		}
 	}
 
 	/**
-	 * Load all quest metrics
+	 * Load all task metrics
 	 */
-	getQuestMetrics(): QuestMetrics[] {
+	getTaskMetrics(): TaskMetrics[] {
 		try {
-			const metricsFile = this.getPath("quest-metrics.json");
+			const metricsFile = this.getPath("task-metrics.json");
 			if (!existsSync(metricsFile)) {
 				return [];
 			}
@@ -760,16 +760,16 @@ export class Persistence {
 			const data = JSON.parse(readFileSync(metricsFile, "utf8"));
 			return data.metrics || [];
 		} catch (error) {
-			persistenceLogger.error({ error: String(error) }, "Failed to load quest metrics");
+			persistenceLogger.error({ error: String(error) }, "Failed to load task metrics");
 			return [];
 		}
 	}
 
 	/**
-	 * Get quest metrics filtered by raid ID
+	 * Get task metrics filtered by raid ID
 	 */
-	getQuestMetricsByRaid(raidId: string): QuestMetrics[] {
-		return this.getQuestMetrics().filter((m) => m.raidId === raidId);
+	getTaskMetricsByRaid(sessionId: string): TaskMetrics[] {
+		return this.getTaskMetrics().filter((m) => m.sessionId === sessionId);
 	}
 
 	// ============== Parallel Recovery System ==============

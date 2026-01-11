@@ -456,11 +456,11 @@ export async function runTests(cwd?: string): Promise<{ success: boolean; output
 }
 
 /**
- * Generate a branch name for a raid waypoint
+ * Generate a branch name for a session step
  */
-export function generateBranchName(raidId: string, waypointId: string): string {
+export function generateBranchName(sessionId: string, stepId: string): string {
 	const timestamp = Date.now().toString(36);
-	return `undercity/${raidId}/${waypointId}-${timestamp}`;
+	return `undercity/${sessionId}/${stepId}-${timestamp}`;
 }
 
 // ============== Codebase Fingerprinting ==============
@@ -611,14 +611,14 @@ export class Elevator {
 	/**
 	 * Add a branch to the elevator
 	 * @param branch - Branch name to queue for merge
-	 * @param waypointId - Waypoint ID associated with this branch
+	 * @param stepId - Step ID associated with this branch
 	 * @param agentId - Agent ID that worked on this branch
 	 * @param modifiedFiles - Optional list of files modified by this branch for conflict detection
 	 */
-	add(branch: string, waypointId: string, agentId: string, modifiedFiles?: string[]): ElevatorItem {
+	add(branch: string, stepId: string, agentId: string, modifiedFiles?: string[]): ElevatorItem {
 		const item: ElevatorItem = {
 			branch,
-			waypointId,
+			stepId,
 			agentId,
 			status: "pending",
 			queuedAt: new Date(),
@@ -628,10 +628,7 @@ export class Elevator {
 			modifiedFiles,
 		};
 		this.queue.push(item);
-		gitLogger.debug(
-			{ branch, waypointId, agentId, modifiedFilesCount: modifiedFiles?.length ?? 0 },
-			"Added to elevator",
-		);
+		gitLogger.debug({ branch, stepId, agentId, modifiedFilesCount: modifiedFiles?.length ?? 0 }, "Added to elevator");
 		return item;
 	}
 
@@ -990,7 +987,7 @@ export class Elevator {
 				// Remove from queue
 				this.queue = this.queue.filter((i) => i !== item);
 
-				gitLogger.info({ branch: item.branch, waypointId: item.waypointId }, "Worktree branch merge complete");
+				gitLogger.info({ branch: item.branch, stepId: item.stepId }, "Worktree branch merge complete");
 				return item;
 			} finally {
 				// Return to original branch
@@ -1194,7 +1191,7 @@ export class Elevator {
 			// Remove from queue
 			this.queue = this.queue.filter((i) => i !== item);
 
-			gitLogger.info({ branch: item.branch, waypointId: item.waypointId }, "Merge complete");
+			gitLogger.info({ branch: item.branch, stepId: item.stepId }, "Merge complete");
 			return item;
 		} catch (error) {
 			item.status = "conflict";

@@ -5,7 +5,7 @@
  * and generating improvement hypotheses.
  */
 
-import { raidLogger } from "./logger.js";
+import { sessionLogger } from "./logger.js";
 import { getMetricsCollector, type TaskMetrics } from "./metrics-collector.js";
 
 interface PerformanceHypothesis {
@@ -55,7 +55,7 @@ export class PerformanceManager {
 		});
 
 		// Log the review
-		raidLogger.info(
+		sessionLogger.info(
 			{
 				hypothesesGenerated: hypotheses.length,
 				fromDate,

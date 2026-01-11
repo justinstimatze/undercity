@@ -1,15 +1,15 @@
 /**
  * Squad Module Tests
  *
- * Tests for generateSquadMemberId and createSquadMember functions.
+ * Tests for generateAgentId and createAgent functions.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSquadMember, generateSquadMemberId } from "../squad.js";
+import { createAgent, generateAgentId } from "../squad.js";
 import type { AgentType } from "../types.js";
 import { ALL_AGENT_TYPES, createMockTask } from "./helpers.js";
 
-describe("generateSquadMemberId", () => {
+describe("generateAgentId", () => {
 	beforeEach(() => {
 		// Mock Date.now and Math.random for deterministic testing
 		vi.spyOn(Date, "now").mockReturnValue(1704067200000); // 2024-01-01T00:00:00.000Z
@@ -21,15 +21,15 @@ describe("generateSquadMemberId", () => {
 	});
 
 	it("generates ID in correct format: {agentType}-{timestamp}-{random}", () => {
-		const id = generateSquadMemberId("flute");
+		const id = generateAgentId("scout");
 
 		// timestamp: 1704067200000.toString(36) = "lqu5m2o0"
 		// random: 0.123456789.toString(36).substring(2, 6) = "4fzz"
-		expect(id).toBe("flute-lqu5m2o0-4fzz");
+		expect(id).toBe("scout-lqu5m2o0-4fzz");
 	});
 
 	it.each(ALL_AGENT_TYPES)("uses correct prefix for agent type: %s", (type: AgentType) => {
-		const id = generateSquadMemberId(type);
+		const id = generateAgentId(type);
 
 		expect(id).toMatch(new RegExp(`^${type}-`));
 	});
@@ -38,26 +38,26 @@ describe("generateSquadMemberId", () => {
 		// Restore original implementations for this test
 		vi.restoreAllMocks();
 
-		const id1 = generateSquadMemberId("quester");
-		const id2 = generateSquadMemberId("quester");
+		const id1 = generateAgentId("builder");
+		const id2 = generateAgentId("builder");
 
 		expect(id1).not.toBe(id2);
 	});
 
 	it("generates unique IDs for different agent types at the same time", () => {
-		const fluteId = generateSquadMemberId("flute");
-		const logisticsId = generateSquadMemberId("logistics");
-		const questerId = generateSquadMemberId("quester");
-		const sheriffId = generateSquadMemberId("sheriff");
+		const fluteId = generateAgentId("scout");
+		const logisticsId = generateAgentId("planner");
+		const builderId = generateAgentId("builder");
+		const sheriffId = generateAgentId("reviewer");
 
 		// All IDs should be unique (even with mocked time/random, types differ)
-		const allIds = [fluteId, logisticsId, questerId, sheriffId];
+		const allIds = [fluteId, logisticsId, builderId, sheriffId];
 		const uniqueIds = new Set(allIds);
 		expect(uniqueIds.size).toBe(4);
 	});
 });
 
-describe("createSquadMember", () => {
+describe("createAgent", () => {
 	const mockDate = new Date("2024-01-01T12:00:00.000Z");
 
 	beforeEach(() => {
@@ -72,43 +72,43 @@ describe("createSquadMember", () => {
 		vi.restoreAllMocks();
 	});
 
-	describe("without waypoint", () => {
+	describe("without step", () => {
 		it("creates squad member with idle status", () => {
-			const member = createSquadMember("flute");
+			const member = createAgent("scout");
 
 			expect(member.status).toBe("idle");
 		});
 
-		it("creates squad member with undefined waypoint", () => {
-			const member = createSquadMember("quester");
+		it("creates squad member with undefined step", () => {
+			const member = createAgent("builder");
 
-			expect(member.waypoint).toBeUndefined();
+			expect(member.step).toBeUndefined();
 		});
 	});
 
-	describe("with waypoint", () => {
+	describe("with step", () => {
 		it("creates squad member with working status", () => {
-			const waypoint = createMockTask({ description: "Build feature" });
-			const member = createSquadMember("quester", waypoint);
+			const step = createMockTask({ description: "Build feature" });
+			const member = createAgent("builder", step);
 
 			expect(member.status).toBe("working");
 		});
 
-		it("assigns the waypoint to the squad member", () => {
-			const waypoint = createMockTask({
-				id: "waypoint-abc",
+		it("assigns the step to the squad member", () => {
+			const step = createMockTask({
+				id: "step-abc",
 				description: "Build feature",
 			});
-			const member = createSquadMember("quester", waypoint);
+			const member = createAgent("builder", step);
 
-			expect(member.waypoint).toBe(waypoint);
-			expect(member.waypoint?.id).toBe("waypoint-abc");
+			expect(member.step).toBe(step);
+			expect(member.step?.id).toBe("step-abc");
 		});
 	});
 
 	describe("type property", () => {
 		it.each(ALL_AGENT_TYPES)("sets correct type for agent: %s", (type: AgentType) => {
-			const member = createSquadMember(type);
+			const member = createAgent(type);
 
 			expect(member.type).toBe(type);
 		});
@@ -116,7 +116,7 @@ describe("createSquadMember", () => {
 
 	describe("timestamps", () => {
 		it("sets spawnedAt and lastActivityAt to equal Date instances", () => {
-			const member = createSquadMember("sheriff");
+			const member = createAgent("reviewer");
 
 			expect(member.spawnedAt).toBeInstanceOf(Date);
 			expect(member.lastActivityAt).toBeInstanceOf(Date);
@@ -124,7 +124,7 @@ describe("createSquadMember", () => {
 		});
 
 		it("uses current time for timestamps", () => {
-			const member = createSquadMember("logistics");
+			const member = createAgent("planner");
 
 			expect(member.spawnedAt.getTime()).toBe(mockDate.getTime());
 			expect(member.lastActivityAt.getTime()).toBe(mockDate.getTime());
@@ -133,7 +133,7 @@ describe("createSquadMember", () => {
 
 	describe("id property", () => {
 		it("generates a valid ID", () => {
-			const member = createSquadMember("flute");
+			const member = createAgent("scout");
 
 			expect(member.id).toBeDefined();
 			expect(typeof member.id).toBe("string");
@@ -141,7 +141,7 @@ describe("createSquadMember", () => {
 		});
 
 		it.each(ALL_AGENT_TYPES)("ID contains agent type prefix for: %s", (type: AgentType) => {
-			const member = createSquadMember(type);
+			const member = createAgent(type);
 
 			expect(member.id).toMatch(new RegExp(`^${type}-`));
 		});

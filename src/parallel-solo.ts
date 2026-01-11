@@ -339,7 +339,7 @@ export class ParallelSoloOrchestrator {
 			const { task, taskId, worktreePath, branch } = prepared;
 
 			// Start file tracking for this task
-			this.fileTracker.startQuestTracking(taskId, taskId);
+			this.fileTracker.startTaskTracking(taskId, taskId);
 
 			// Mark task as running
 			this.updateTaskStatus(taskId, "running");

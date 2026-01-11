@@ -2,15 +2,15 @@
  * Rate Limit Tracking
  *
  * Empirical rate limit tracking for Claude API usage.
- * Logs tokens per quest, models usage over time, and captures 429 events.
+ * Logs tokens per task, models usage over time, and captures 429 events.
  */
 
 import type {
-	QuestUsage,
 	RateLimitConfig,
 	RateLimitHit,
 	RateLimitPause,
 	RateLimitState,
+	TaskUsage,
 	TimeWindow,
 	TokenUsage,
 } from "./types.js";
@@ -38,7 +38,7 @@ export class RateLimitTracker {
 
 	constructor(initialState?: Partial<RateLimitState>) {
 		this.state = {
-			quests: [],
+			tasks: [],
 			rateLimitHits: [],
 			config: { ...DEFAULT_CONFIG, ...initialState?.config },
 			lastUpdated: new Date(),
@@ -68,33 +68,33 @@ export class RateLimitTracker {
 	}
 
 	/**
-	 * Record a quest's token usage
+	 * Record a task's token usage
 	 */
 	recordQuest(
-		questId: string,
+		taskId: string,
 		model: "haiku" | "sonnet" | "opus",
 		inputTokens: number,
 		outputTokens: number,
 		options?: {
 			durationMs?: number;
-			raidId?: string;
+			sessionId?: string;
 			agentId?: string;
 			timestamp?: Date;
 		},
 	): void {
 		const tokens = this.calculateTokenUsage(inputTokens, outputTokens, model);
 
-		const questUsage: QuestUsage = {
-			questId,
+		const taskUsage: TaskUsage = {
+			taskId,
 			model,
 			tokens,
 			timestamp: options?.timestamp || new Date(),
 			durationMs: options?.durationMs,
-			raidId: options?.raidId,
+			sessionId: options?.sessionId,
 			agentId: options?.agentId,
 		};
 
-		this.state.quests.push(questUsage);
+		this.state.tasks.push(taskUsage);
 		this.state.lastUpdated = new Date();
 
 		// Clean up old entries to prevent unbounded growth
@@ -160,16 +160,16 @@ export class RateLimitTracker {
 		let last5HoursSonnet = 0;
 		let currentWeekSonnet = 0;
 
-		for (const quest of this.state.quests) {
-			const questTime = quest.timestamp;
+		for (const task of this.state.tasks) {
+			const taskTime = task.timestamp;
 
-			if (questTime >= weekAgo) {
-				currentWeek += quest.tokens.totalTokens;
-				currentWeekSonnet += quest.tokens.sonnetEquivalentTokens;
+			if (taskTime >= weekAgo) {
+				currentWeek += task.tokens.totalTokens;
+				currentWeekSonnet += task.tokens.sonnetEquivalentTokens;
 
-				if (questTime >= fiveHoursAgo) {
-					last5Hours += quest.tokens.totalTokens;
-					last5HoursSonnet += quest.tokens.sonnetEquivalentTokens;
+				if (taskTime >= fiveHoursAgo) {
+					last5Hours += task.tokens.totalTokens;
+					last5HoursSonnet += task.tokens.sonnetEquivalentTokens;
 				}
 			}
 		}
@@ -242,29 +242,29 @@ export class RateLimitTracker {
 		if (limitType === "5-hour") {
 			// Calculate when oldest tokens in 5-hour window will expire
 			const fiveHoursAgo = new Date(now.getTime() - 5 * 60 * 60 * 1000);
-			const oldestRelevantQuest = this.state.quests
+			const oldestRelevantTask = this.state.tasks
 				.filter((q) => q.timestamp >= fiveHoursAgo)
 				.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())[0];
 
-			if (oldestRelevantQuest) {
-				// Resume when oldest quest ages out + 5min buffer
-				resumeAt = new Date(oldestRelevantQuest.timestamp.getTime() + 5 * 60 * 60 * 1000 + 5 * 60 * 1000);
+			if (oldestRelevantTask) {
+				// Resume when oldest task ages out + 5min buffer
+				resumeAt = new Date(oldestRelevantTask.timestamp.getTime() + 5 * 60 * 60 * 1000 + 5 * 60 * 1000);
 			} else {
-				// Default to 30 minutes if no quest data
+				// Default to 30 minutes if no task data
 				resumeAt = new Date(now.getTime() + 30 * 60 * 1000);
 			}
 		} else {
 			// Weekly limit - wait until oldest weekly tokens expire
 			const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-			const oldestWeeklyQuest = this.state.quests
+			const oldestWeeklyTask = this.state.tasks
 				.filter((q) => q.timestamp >= weekAgo)
 				.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())[0];
 
-			if (oldestWeeklyQuest) {
-				// Resume when oldest quest ages out + 30min buffer
-				resumeAt = new Date(oldestWeeklyQuest.timestamp.getTime() + 7 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000);
+			if (oldestWeeklyTask) {
+				// Resume when oldest task ages out + 30min buffer
+				resumeAt = new Date(oldestWeeklyTask.timestamp.getTime() + 7 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000);
 			} else {
-				// Default to 2 hours if no quest data
+				// Default to 2 hours if no task data
 				resumeAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
 			}
 		}
@@ -284,17 +284,17 @@ export class RateLimitTracker {
 	}
 
 	/**
-	 * Clean up old quest entries beyond the tracking window
+	 * Clean up old task entries beyond the tracking window
 	 */
 	private cleanupOldEntries(): void {
 		const cutoff = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000); // 8 days (1 week + buffer)
 
-		const originalLength = this.state.quests.length;
-		this.state.quests = this.state.quests.filter((quest) => quest.timestamp >= cutoff);
+		const originalLength = this.state.tasks.length;
+		this.state.tasks = this.state.tasks.filter((task) => task.timestamp >= cutoff);
 
-		const cleaned = originalLength - this.state.quests.length;
+		const cleaned = originalLength - this.state.tasks.length;
 		if (cleaned > 0) {
-			console.log(`🧹 Cleaned up ${cleaned} old quest entries`);
+			console.log(`🧹 Cleaned up ${cleaned} old task entries`);
 		}
 
 		// Also clean up old rate limit hits
@@ -311,25 +311,25 @@ export class RateLimitTracker {
 	 * Get usage analytics for a specific model
 	 */
 	getModelUsage(model: "haiku" | "sonnet" | "opus"): {
-		totalQuests: number;
+		totalTasks: number;
 		totalTokens: number;
 		sonnetEquivalentTokens: number;
 		last24Hours: number;
 		rateLimitHits: number;
 	} {
-		const modelQuests = this.state.quests.filter((q) => q.model === model);
+		const modelTasks = this.state.tasks.filter((q) => q.model === model);
 		const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-		const totalQuests = modelQuests.length;
-		const totalTokens = modelQuests.reduce((sum, q) => sum + q.tokens.totalTokens, 0);
-		const sonnetEquivalentTokens = modelQuests.reduce((sum, q) => sum + q.tokens.sonnetEquivalentTokens, 0);
-		const last24Hours = modelQuests
+		const totalTasks = modelTasks.length;
+		const totalTokens = modelTasks.reduce((sum, q) => sum + q.tokens.totalTokens, 0);
+		const sonnetEquivalentTokens = modelTasks.reduce((sum, q) => sum + q.tokens.sonnetEquivalentTokens, 0);
+		const last24Hours = modelTasks
 			.filter((q) => q.timestamp >= yesterday)
 			.reduce((sum, q) => sum + q.tokens.totalTokens, 0);
 		const rateLimitHits = this.state.rateLimitHits.filter((hit) => hit.model === model).length;
 
 		return {
-			totalQuests,
+			totalTasks,
 			totalTokens,
 			sonnetEquivalentTokens,
 			last24Hours,
@@ -351,7 +351,7 @@ export class RateLimitTracker {
 		modelBreakdown: Record<
 			string,
 			{
-				totalQuests: number;
+				totalTasks: number;
 				totalTokens: number;
 				sonnetEquivalentTokens: number;
 				last24Hours: number;
@@ -415,7 +415,7 @@ export class RateLimitTracker {
 
 		for (const [model, usage] of Object.entries(modelBreakdown)) {
 			lines.push(
-				`  ${model.padEnd(6)}: ${usage.totalQuests.toString().padStart(4)} quests, ` +
+				`  ${model.padEnd(6)}: ${usage.totalTasks.toString().padStart(4)} tasks, ` +
 					`${usage.sonnetEquivalentTokens.toLocaleString().padStart(8)} Sonnet eq, ` +
 					`${usage.rateLimitHits} rate limit hits`,
 			);
@@ -508,13 +508,13 @@ export class RateLimitTracker {
 		if (fiveHourUsagePercent >= 0.95) {
 			// Close to 5-hour limit, wait for oldest tokens to age out
 			const fiveHoursAgo = new Date(now.getTime() - 5 * 60 * 60 * 1000);
-			const oldestRelevantQuest = this.state.quests
+			const oldestRelevantTask = this.state.tasks
 				.filter((q) => q.timestamp >= fiveHoursAgo)
 				.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())[0];
 
-			if (oldestRelevantQuest) {
-				// Resume when oldest quest ages out of 5-hour window + 10min buffer
-				return new Date(oldestRelevantQuest.timestamp.getTime() + 5 * 60 * 60 * 1000 + 10 * 60 * 1000);
+			if (oldestRelevantTask) {
+				// Resume when oldest task ages out of 5-hour window + 10min buffer
+				return new Date(oldestRelevantTask.timestamp.getTime() + 5 * 60 * 60 * 1000 + 10 * 60 * 1000);
 			}
 		}
 

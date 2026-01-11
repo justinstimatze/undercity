@@ -39,7 +39,7 @@ export class DualLogger {
 	/**
 	 * Start dual logging for a new raid
 	 */
-	start(raidId?: string): void {
+	start(sessionId?: string): void {
 		this.ensureLogDirectory();
 
 		// If we have an existing log stream, rotate it first
@@ -53,7 +53,7 @@ export class DualLogger {
 
 		// Write header
 		const timestamp = new Date().toISOString();
-		const header = `=== Undercity Raid Log ===\nStarted: ${timestamp}\n${raidId ? `Raid ID: ${raidId}\n` : ""}${"=".repeat(50)}\n\n`;
+		const header = `=== Undercity Raid Log ===\nStarted: ${timestamp}\n${sessionId ? `Raid ID: ${sessionId}\n` : ""}${"=".repeat(50)}\n\n`;
 
 		this.writeToLogFile(header);
 
@@ -62,13 +62,13 @@ export class DualLogger {
 			this.logStream.write("", "utf8");
 		}
 
-		baseLogger.info({ raidId, logFile: this.currentLogPath }, "Dual logging started");
+		baseLogger.info({ sessionId, logFile: this.currentLogPath }, "Dual logging started");
 	}
 
 	/**
 	 * Stop dual logging and optionally rotate current log
 	 */
-	stop(raidId?: string): void {
+	stop(sessionId?: string): void {
 		if (!this.isEnabled) return;
 
 		const timestamp = new Date().toISOString();
@@ -79,17 +79,17 @@ export class DualLogger {
 		if (this.logStream) {
 			this.logStream.end(() => {
 				// Rotate log if we have a raid ID (after stream is closed)
-				if (raidId) {
-					this.rotateCurrentLog(raidId);
+				if (sessionId) {
+					this.rotateCurrentLog(sessionId);
 				}
 			});
 			this.logStream = null;
-		} else if (raidId) {
-			this.rotateCurrentLog(raidId);
+		} else if (sessionId) {
+			this.rotateCurrentLog(sessionId);
 		}
 
 		this.isEnabled = false;
-		baseLogger.info({ raidId }, "Dual logging stopped");
+		baseLogger.info({ sessionId }, "Dual logging stopped");
 	}
 
 	/**
@@ -124,20 +124,20 @@ export class DualLogger {
 	/**
 	 * Rotate current.log to an archived name
 	 */
-	private rotateCurrentLog(raidId?: string): void {
+	private rotateCurrentLog(sessionId?: string): void {
 		if (!existsSync(this.currentLogPath)) return;
 
 		try {
 			// Generate archive filename
 			const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-			const archiveName = raidId ? `raid-${raidId}-${timestamp}.log` : `archived-${timestamp}.log`;
+			const archiveName = sessionId ? `raid-${sessionId}-${timestamp}.log` : `archived-${timestamp}.log`;
 
 			const archivePath = join(this.logDir, archiveName);
 
 			// Move current.log to archive
 			renameSync(this.currentLogPath, archivePath);
 
-			baseLogger.info({ archivePath, raidId }, "Log rotated");
+			baseLogger.info({ archivePath, sessionId }, "Log rotated");
 		} catch (error) {
 			baseLogger.error({ error: String(error) }, "Failed to rotate log");
 		}

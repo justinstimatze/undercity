@@ -11,43 +11,43 @@ import {
 	markTaskCompleted,
 	type ParsedPlan,
 	parsePlanFile,
-	planToQuests,
+	planToTasks,
 } from "../plan-parser.js";
 import {
 	addGoal,
 	addGoals,
-	addQuests,
+	addTasks,
 	getAllItems,
 	getBacklogSummary,
 	getNextGoal,
-	getQuestBoardAnalytics,
-	getReadyQuestsForBatch,
+	getReadyTasksForBatch,
+	getTaskBoardAnalytics,
 	markComplete,
 	markFailed,
 	markInProgress,
-} from "../quest.js";
-import { QuestBoardAnalyzer } from "../quest-board-analyzer.js";
+} from "../task.js";
+import { TaskBoardAnalyzer } from "../task-board-analyzer.js";
 import type { CommandModule } from "./types.js";
 
-export const questCommands: CommandModule = {
+export const taskCommands: CommandModule = {
 	register(program) {
 		// Backlog command - show/manage the goal queue
 		program
-			.command("quests")
-			.description("Show the quest board")
+			.command("tasks")
+			.description("Show the task board")
 			.action(() => {
 				const items = getAllItems();
 				const summary = getBacklogSummary();
 
-				console.log(chalk.bold("Quest Board"));
+				console.log(chalk.bold("Task Board"));
 				console.log(
 					`  ${chalk.yellow(summary.pending)} pending, ${chalk.cyan(summary.inProgress)} in progress, ${chalk.green(summary.complete)} complete, ${chalk.red(summary.failed)} failed`,
 				);
 				console.log();
 
 				if (items.length === 0) {
-					console.log(chalk.gray("No quests on the board"));
-					console.log("Add quests with: undercity add <quest>");
+					console.log(chalk.gray("No tasks on the board"));
+					console.log("Add tasks with: undercity add <task>");
 					return;
 				}
 
@@ -112,12 +112,12 @@ export const questCommands: CommandModule = {
 				}
 			});
 
-		// Import-plan command - parse plan files into discrete quests
+		// Import-plan command - parse plan files into discrete tasks
 		program
 			.command("import-plan <file>")
-			.description("Import a plan file as discrete quests (extracts waypoints from markdown plans)")
-			.option("--dry-run", "Show what would be imported without adding to quest board")
-			.option("--by-priority", "Sort waypoints by section priority (default: by file order)")
+			.description("Import a plan file as discrete tasks (extracts steps from markdown plans)")
+			.option("--dry-run", "Show what would be imported without adding to task board")
+			.option("--by-priority", "Sort steps by section priority (default: by file order)")
 			.action((file: string, options: { dryRun?: boolean; byPriority?: boolean }) => {
 				try {
 					const content = readFileSync(file, "utf-8");
@@ -147,41 +147,41 @@ export const questCommands: CommandModule = {
 						console.log();
 					}
 
-					// Get waypoints to import
-					const quests = planToQuests(plan);
+					// Get steps to import
+					const tasks = planToTasks(plan);
 
-					if (quests.length === 0) {
-						console.log(chalk.yellow("No pending waypoints found in plan"));
+					if (tasks.length === 0) {
+						console.log(chalk.yellow("No pending steps found in plan"));
 						return;
 					}
 
 					// Sort by priority if requested
 					if (options.byPriority) {
-						// quests are already sorted by priority from planToQuests
+						// tasks are already sorted by priority from planToTasks
 						console.log(chalk.dim("Tasks sorted by section priority"));
 					}
 
 					if (options.dryRun) {
-						console.log(chalk.cyan(`Would import ${quests.length} waypoints:`));
-						for (let i = 0; i < Math.min(quests.length, 20); i++) {
-							const quest = quests[i];
-							const sectionTag = quest.section ? chalk.dim(` [${quest.section}]`) : "";
+						console.log(chalk.cyan(`Would import ${tasks.length} steps:`));
+						for (let i = 0; i < Math.min(tasks.length, 20); i++) {
+							const task = tasks[i];
+							const sectionTag = task.section ? chalk.dim(` [${task.section}]`) : "";
 							console.log(
-								`  ${i + 1}. ${quest.objective.substring(0, 70)}${quest.objective.length > 70 ? "..." : ""}${sectionTag}`,
+								`  ${i + 1}. ${task.objective.substring(0, 70)}${task.objective.length > 70 ? "..." : ""}${sectionTag}`,
 							);
 						}
-						if (quests.length > 20) {
-							console.log(chalk.dim(`  ... and ${quests.length - 20} more`));
+						if (tasks.length > 20) {
+							console.log(chalk.dim(`  ... and ${tasks.length - 20} more`));
 						}
 					} else {
-						// Import as quests
-						const objectives = quests.map((q) => q.objective);
-						const imported = addQuests(objectives);
-						console.log(chalk.green(`✓ Imported ${imported.length} waypoints as quests`));
-						if (imported.length < quests.length) {
-							console.log(chalk.yellow(`  (${quests.length - imported.length} duplicates skipped)`));
+						// Import as tasks
+						const objectives = tasks.map((q) => q.objective);
+						const imported = addTasks(objectives);
+						console.log(chalk.green(`✓ Imported ${imported.length} steps as tasks`));
+						if (imported.length < tasks.length) {
+							console.log(chalk.yellow(`  (${tasks.length - imported.length} duplicates skipped)`));
 						}
-						console.log(chalk.dim(`\nRun "undercity work" to start processing quests`));
+						console.log(chalk.dim(`\nRun "undercity work" to start processing tasks`));
 					}
 				} catch (error) {
 					console.error(chalk.red(`Error parsing plan: ${error instanceof Error ? error.message : error}`));
@@ -203,7 +203,7 @@ export const questCommands: CommandModule = {
 						const planContent = readFileSync(file, "utf-8");
 						const maxSteps = options.steps ? Number.parseInt(options.steps, 10) : options.continuous ? 100 : 1;
 
-						// Parse plan upfront into discrete waypoints (unless legacy mode)
+						// Parse plan upfront into discrete steps (unless legacy mode)
 						let parsedPlan: ParsedPlan | null = null;
 						if (!options.legacy) {
 							parsedPlan = parsePlanFile(planContent, file);
@@ -221,21 +221,21 @@ export const questCommands: CommandModule = {
 							}
 							console.log();
 
-							// Get waypoints sorted by priority
+							// Get steps sorted by priority
 							const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
 
 							if (tasksByPriority.length === 0) {
-								console.log(chalk.green("✓ All waypoints already marked complete in plan!"));
+								console.log(chalk.green("✓ All steps already marked complete in plan!"));
 								return;
 							}
 
-							// Show upcoming waypoints
-							console.log(chalk.cyan("Queued waypoints (by priority):"));
+							// Show upcoming steps
+							console.log(chalk.cyan("Queued steps (by priority):"));
 							for (let i = 0; i < Math.min(tasksByPriority.length, 5); i++) {
-								const waypoint = tasksByPriority[i];
-								const sectionTag = waypoint.section ? chalk.dim(` [${waypoint.section}]`) : "";
+								const step = tasksByPriority[i];
+								const sectionTag = step.section ? chalk.dim(` [${step.section}]`) : "";
 								console.log(
-									`  ${i + 1}. ${waypoint.content.substring(0, 60)}${waypoint.content.length > 60 ? "..." : ""}${sectionTag}`,
+									`  ${i + 1}. ${step.content.substring(0, 60)}${step.content.length > 60 ? "..." : ""}${sectionTag}`,
 								);
 							}
 							if (tasksByPriority.length > 5) {
@@ -268,31 +268,29 @@ export const questCommands: CommandModule = {
 							let goal: string;
 
 							if (parsedPlan && !options.legacy) {
-								// New mode: use parsed waypoints with focused context
+								// New mode: use parsed steps with focused context
 								const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
 								const currentTask = tasksByPriority[0];
 
 								if (!currentTask) {
-									console.log(chalk.green("\n✓ All plan waypoints complete!"));
+									console.log(chalk.green("\n✓ All plan steps complete!"));
 									break;
 								}
 
-								// Generate focused context for the current waypoint
+								// Generate focused context for the current step
 								const taskContext = generateTaskContext(parsedPlan, currentTask.id);
 								const progress = getPlanProgress(parsedPlan);
 
-								goal = `Implement this specific waypoint:
+								goal = `Implement this specific step:
 
 ${currentTask.content}
 
 ${taskContext}
 
-After completing this waypoint, summarize what you did. If this waypoint is impossible or already done, explain why and say "TASK SKIPPED".`;
+After completing this step, summarize what you did. If this step is impossible or already done, explain why and say "TASK SKIPPED".`;
 
 								console.log(
-									chalk.cyan(
-										`\n━━━ Waypoint ${step}/${progress.total}: ${currentTask.content.substring(0, 50)}... ━━━`,
-									),
+									chalk.cyan(`\n━━━ Step ${step}/${progress.total}: ${currentTask.content.substring(0, 50)}... ━━━`),
 								);
 								if (currentTask.section) {
 									console.log(chalk.dim(`    Section: ${currentTask.section}`));
@@ -313,7 +311,7 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 							const taskResult = result.results[0]?.result;
 							const taskSucceeded = taskResult?.status === "complete";
 
-							// Mark current waypoint as completed in parsed plan (for new mode)
+							// Mark current step as completed in parsed plan (for new mode)
 							if (parsedPlan && !options.legacy) {
 								const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
 								const currentTask = tasksByPriority[0];
@@ -321,11 +319,11 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 								if (currentTask && taskSucceeded) {
 									parsedPlan = markTaskCompleted(parsedPlan, currentTask.id);
 									const progress = getPlanProgress(parsedPlan);
-									console.log(chalk.green(`  ✓ Waypoint complete (${progress.completed}/${progress.total})`));
+									console.log(chalk.green(`  ✓ Step complete (${progress.completed}/${progress.total})`));
 								} else if (currentTask && !taskSucceeded) {
 									// Task failed - mark as skipped and continue
 									parsedPlan = markTaskCompleted(parsedPlan, currentTask.id);
-									console.log(chalk.yellow(`  ⊘ Waypoint failed: ${taskResult?.error || "Unknown error"}`));
+									console.log(chalk.yellow(`  ⊘ Step failed: ${taskResult?.error || "Unknown error"}`));
 								}
 							}
 
@@ -340,7 +338,7 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 							const progress = getPlanProgress(parsedPlan);
 							console.log(
 								chalk.cyan(
-									`\nFinal progress: ${progress.completed}/${progress.total} waypoints (${progress.percentComplete}%)`,
+									`\nFinal progress: ${progress.completed}/${progress.total} steps (${progress.percentComplete}%)`,
 								),
 							);
 						}
@@ -363,7 +361,7 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 
 				console.log(chalk.cyan("Starting backlog worker..."));
 				if (maxCount > 0) {
-					console.log(chalk.dim(`  Will process ${maxCount} quest(s) then stop`));
+					console.log(chalk.dim(`  Will process ${maxCount} task(s) then stop`));
 				} else {
 					console.log(chalk.dim("  Will process all pending goals"));
 				}
@@ -373,16 +371,16 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 					const nextGoal = getNextGoal();
 
 					if (!nextGoal) {
-						console.log(chalk.green("\n✓ Backlog empty - all quests processed"));
+						console.log(chalk.green("\n✓ Backlog empty - all tasks processed"));
 						break;
 					}
 
 					if (maxCount > 0 && processed >= maxCount) {
-						console.log(chalk.yellow(`\n✓ Processed ${maxCount} quest(s) - stopping`));
+						console.log(chalk.yellow(`\n✓ Processed ${maxCount} task(s) - stopping`));
 						break;
 					}
 
-					console.log(chalk.cyan(`\n━━━ Quest ${processed + 1}: ${nextGoal.objective.substring(0, 50)}... ━━━`));
+					console.log(chalk.cyan(`\n━━━ Task ${processed + 1}: ${nextGoal.objective.substring(0, 50)}... ━━━`));
 
 					const orchestrator = new ParallelSoloOrchestrator({
 						startingModel: "sonnet",
@@ -400,11 +398,11 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 
 						if (taskResult?.status === "complete") {
 							markComplete(nextGoal.id);
-							console.log(chalk.green(`✓ Quest complete: ${nextGoal.objective.substring(0, 40)}...`));
+							console.log(chalk.green(`✓ Task complete: ${nextGoal.objective.substring(0, 40)}...`));
 						} else {
 							const errorMsg = taskResult?.error || "Unknown error";
 							markFailed(nextGoal.id, errorMsg);
-							console.log(chalk.red(`✗ Quest failed: ${nextGoal.objective.substring(0, 40)}...`));
+							console.log(chalk.red(`✗ Task failed: ${nextGoal.objective.substring(0, 40)}...`));
 							if (taskResult?.error) {
 								console.log(chalk.dim(`  Error: ${taskResult.error.substring(0, 100)}`));
 							}
@@ -423,25 +421,25 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 				);
 			});
 
-		// Quest analyze command - analyze quest board for parallelization opportunities
+		// Task analyze command - analyze task board for parallelization opportunities
 		program
-			.command("quest-analyze")
-			.description("Analyze quest board for parallelization opportunities")
+			.command("task-analyze")
+			.description("Analyze task board for parallelization opportunities")
 			.option("--compatibility", "Show compatibility matrix")
 			.option("--suggestions", "Show optimization suggestions")
 			.action(async (options: { compatibility?: boolean; suggestions?: boolean }) => {
-				const analyzer = new QuestBoardAnalyzer();
+				const analyzer = new TaskBoardAnalyzer();
 
-				console.log(chalk.bold("Quest Board Analysis"));
+				console.log(chalk.bold("Task Board Analysis"));
 				console.log();
 
 				try {
-					const insights = await analyzer.analyzeQuestBoard();
+					const insights = await analyzer.analyzeTaskBoard();
 
 					// Basic insights
 					console.log(chalk.cyan("Overview:"));
-					console.log(`  Total quests: ${insights.totalQuests}`);
-					console.log(`  Pending quests: ${insights.pendingQuests}`);
+					console.log(`  Total tasks: ${insights.totalTasks}`);
+					console.log(`  Pending tasks: ${insights.pendingTasks}`);
 					console.log(`  Ready for parallelization: ${insights.readyForParallelization}`);
 					console.log(`  Average complexity: ${insights.averageComplexity}`);
 					console.log();
@@ -484,18 +482,18 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 						console.log(chalk.bold("Compatibility Matrix:"));
 						const matrix = await analyzer.generateCompatibilityMatrix();
 
-						if (matrix.quests.length > 0) {
+						if (matrix.tasks.length > 0) {
 							console.log(`  ${matrix.summary.compatiblePairs}/${matrix.summary.totalPairs} pairs are compatible`);
 							console.log(`  Average compatibility: ${(matrix.summary.averageCompatibilityScore * 100).toFixed(1)}%`);
 
-							// Show a simplified matrix for first few quests
-							const maxShow = Math.min(5, matrix.quests.length);
+							// Show a simplified matrix for first few tasks
+							const maxShow = Math.min(5, matrix.tasks.length);
 							console.log();
-							console.log("  Quest compatibility (✓ = compatible, ✗ = conflict):");
+							console.log("  Task compatibility (✓ = compatible, ✗ = conflict):");
 							for (let i = 0; i < maxShow; i++) {
-								const quest = matrix.quests[i];
+								const task = matrix.tasks[i];
 								const row = matrix.matrix[i];
-								let line = `  ${quest.id.substring(0, 8)}: `;
+								let line = `  ${task.id.substring(0, 8)}: `;
 								for (let j = 0; j < maxShow; j++) {
 									if (i === j) {
 										line += "  -";
@@ -507,11 +505,11 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 								console.log(line);
 							}
 
-							if (matrix.quests.length > maxShow) {
-								console.log(chalk.dim(`  ... and ${matrix.quests.length - maxShow} more quests`));
+							if (matrix.tasks.length > maxShow) {
+								console.log(chalk.dim(`  ... and ${matrix.tasks.length - maxShow} more tasks`));
 							}
 						} else {
-							console.log("  No quests available for analysis");
+							console.log("  No tasks available for analysis");
 						}
 						console.log();
 					}
@@ -531,17 +529,17 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 				}
 			});
 
-		// Quest status command - show detailed quest board status
+		// Task status command - show detailed task board status
 		program
-			.command("quest-status")
-			.description("Show detailed quest board status and analytics")
+			.command("task-status")
+			.description("Show detailed task board status and analytics")
 			.action(() => {
-				console.log(chalk.bold("Quest Board Status"));
+				console.log(chalk.bold("Task Board Status"));
 				console.log();
 
-				// Basic quest board summary
+				// Basic task board summary
 				const summary = getBacklogSummary();
-				const analytics = getQuestBoardAnalytics();
+				const analytics = getTaskBoardAnalytics();
 
 				console.log(chalk.cyan("Current Status:"));
 				console.log(`  ${chalk.green("Complete:")} ${summary.complete}`);
@@ -551,7 +549,7 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 				console.log();
 
 				console.log(chalk.cyan("Analytics:"));
-				console.log(`  Total quests: ${analytics.totalQuests}`);
+				console.log(`  Total tasks: ${analytics.totalTasks}`);
 				console.log(`  Average completion time: ${Math.round(analytics.averageCompletionTime / 60000)} minutes`);
 				console.log(`  Parallelization opportunities: ${analytics.parallelizationOpportunities}`);
 				console.log();
@@ -564,22 +562,22 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 					console.log();
 				}
 
-				// Show next few ready quests
-				const readyQuests = getReadyQuestsForBatch(5);
-				if (readyQuests.length > 0) {
-					console.log(chalk.cyan("Next Ready Quests:"));
-					for (let i = 0; i < Math.min(3, readyQuests.length); i++) {
-						const quest = readyQuests[i];
-						console.log(`  ${i + 1}. ${quest.objective.substring(0, 60)}${quest.objective.length > 60 ? "..." : ""}`);
+				// Show next few ready tasks
+				const readyTasks = getReadyTasksForBatch(5);
+				if (readyTasks.length > 0) {
+					console.log(chalk.cyan("Next Ready Tasks:"));
+					for (let i = 0; i < Math.min(3, readyTasks.length); i++) {
+						const task = readyTasks[i];
+						console.log(`  ${i + 1}. ${task.objective.substring(0, 60)}${task.objective.length > 60 ? "..." : ""}`);
 					}
-					if (readyQuests.length > 3) {
-						console.log(chalk.dim(`  ... and ${readyQuests.length - 3} more`));
+					if (readyTasks.length > 3) {
+						console.log(chalk.dim(`  ... and ${readyTasks.length - 3} more`));
 					}
 					console.log();
 				}
 
-				console.log(chalk.dim("Run 'undercity quest-analyze' for detailed parallelization analysis"));
-				console.log(chalk.dim("Run 'undercity grind --parallel 3' to process quests in parallel"));
+				console.log(chalk.dim("Run 'undercity task-analyze' for detailed parallelization analysis"));
+				console.log(chalk.dim("Run 'undercity grind --parallel 3' to process tasks in parallel"));
 			});
 	},
 };

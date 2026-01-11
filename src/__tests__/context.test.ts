@@ -137,16 +137,16 @@ describe("extractRelevantSections", () => {
 		{ heading: "Random Notes", level: 3, content: "Some unrelated notes" },
 	];
 
-	it("extracts implementation sections for quester", () => {
-		const relevant = extractRelevantSections(testSections, "quester");
+	it("extracts implementation sections for builder", () => {
+		const relevant = extractRelevantSections(testSections, "builder");
 
 		// Should prioritize implementation-related sections
 		const headings = relevant.map((s) => s.heading);
 		expect(headings).toContain("Implementation Steps");
 	});
 
-	it("extracts test sections for sheriff", () => {
-		const relevant = extractRelevantSections(testSections, "sheriff");
+	it("extracts test sections for reviewer", () => {
+		const relevant = extractRelevantSections(testSections, "reviewer");
 
 		// Should prioritize test and security sections
 		const headings = relevant.map((s) => s.heading);
@@ -161,7 +161,7 @@ describe("extractRelevantSections", () => {
 			{ heading: "Section 3", level: 1, content: "C".repeat(2000) },
 		];
 
-		const relevant = extractRelevantSections(longSections, "sheriff");
+		const relevant = extractRelevantSections(longSections, "reviewer");
 
 		// Should not exceed sheriff limit (3000 chars)
 		const totalLength = relevant.reduce((sum, s) => sum + s.heading.length + s.content.length, 0);
@@ -197,7 +197,7 @@ describe("summarizeContextForAgent", () => {
 ## Goal
 Add a new authentication feature.
 
-## Flute Intel
+## Scout Intel
 Found 3 files: auth.ts, user.ts, config.ts
 
 ## Implementation Steps
@@ -219,29 +219,29 @@ Found 3 files: auth.ts, user.ts, config.ts
 - Use secure tokens`;
 
 	it("returns truncated goal for flute", () => {
-		const result = summarizeContextForAgent(fullPlan, "flute", "Add auth");
+		const result = summarizeContextForAgent(fullPlan, "scout", "Add auth");
 
 		expect(result.length).toBeLessThanOrEqual(1000);
 		expect(result).toBe("Add auth");
 	});
 
 	it("returns full context for logistics (within limit)", () => {
-		const result = summarizeContextForAgent(fullPlan, "logistics");
+		const result = summarizeContextForAgent(fullPlan, "planner");
 
-		// Logistics has 10K limit, so full plan should fit
+		// Planner has 10K limit, so full plan should fit
 		expect(result.length).toBeLessThanOrEqual(10000);
 	});
 
-	it("extracts implementation focus for quester", () => {
-		const result = summarizeContextForAgent(fullPlan, "quester");
+	it("extracts implementation focus for builder", () => {
+		const result = summarizeContextForAgent(fullPlan, "builder");
 
 		// Should include implementation details
 		expect(result).toContain("Implementation");
 		expect(result.length).toBeLessThanOrEqual(5000);
 	});
 
-	it("extracts review focus for sheriff", () => {
-		const result = summarizeContextForAgent(fullPlan, "sheriff");
+	it("extracts review focus for reviewer", () => {
+		const result = summarizeContextForAgent(fullPlan, "reviewer");
 
 		expect(result.length).toBeLessThanOrEqual(3000);
 	});
@@ -249,7 +249,7 @@ Found 3 files: auth.ts, user.ts, config.ts
 	it("handles plain text input gracefully", () => {
 		const plainText = "Just some plain text without any markdown formatting at all.";
 
-		const result = summarizeContextForAgent(plainText, "quester");
+		const result = summarizeContextForAgent(plainText, "builder");
 
 		expect(result).toBeTruthy();
 		expect(result.length).toBeLessThanOrEqual(5000);
@@ -300,7 +300,7 @@ Random notes here.`;
 });
 
 describe("extractReviewContext", () => {
-	it("combines plan requirements with quester output", () => {
+	it("combines plan requirements with builder output", () => {
 		const plan = `# Plan
 
 ## Test Requirements
@@ -310,16 +310,16 @@ describe("extractReviewContext", () => {
 ## Security
 - Check XSS`;
 
-		const questerOutput = "Created auth.ts with login/logout methods.";
+		const builderOutput = "Created auth.ts with login/logout methods.";
 
-		const result = extractReviewContext(plan, questerOutput);
+		const result = extractReviewContext(plan, builderOutput);
 
 		expect(result).toContain("Review Requirements");
 		expect(result).toContain("Implementation Output");
 		expect(result).toContain("auth.ts");
 	});
 
-	it("truncates long quester output", () => {
+	it("truncates long builder output", () => {
 		const plan = "## Test Requirements\nTest everything.";
 		const longOutput = "A".repeat(3000);
 
@@ -340,10 +340,10 @@ describe("extractReviewContext", () => {
 
 describe("getContextLimit", () => {
 	it("returns correct limits for each agent type", () => {
-		expect(getContextLimit("flute")).toBe(1000);
-		expect(getContextLimit("logistics")).toBe(10000);
-		expect(getContextLimit("quester")).toBe(5000);
-		expect(getContextLimit("sheriff")).toBe(3000);
+		expect(getContextLimit("scout")).toBe(1000);
+		expect(getContextLimit("planner")).toBe(10000);
+		expect(getContextLimit("builder")).toBe(5000);
+		expect(getContextLimit("reviewer")).toBe(3000);
 	});
 });
 
@@ -357,7 +357,7 @@ This plan outlines the implementation of a new authentication system for the app
 We will be adding JWT-based authentication with refresh tokens.
 ${"This is additional context that makes the plan much larger. ".repeat(50)}
 
-## Flute Intel Report
+## Scout Intel Report
 The flute found the following relevant files:
 - src/auth/index.ts - Main auth module
 - src/middleware/auth.ts - Auth middleware (does not exist, needs creation)
@@ -391,13 +391,13 @@ ${"Additional security notes. ".repeat(30)}`;
 		// Full plan should be much larger than limits
 		expect(fullLength).toBeGreaterThan(10000);
 
-		// Test quester context extraction respects 5K limit
-		const questerContext = summarizeContextForAgent(largePlan, "quester");
-		expect(questerContext.length).toBeLessThanOrEqual(5000);
-		expect(questerContext.length).toBeLessThan(fullLength);
+		// Test builder context extraction respects 5K limit
+		const builderContext = summarizeContextForAgent(largePlan, "builder");
+		expect(builderContext.length).toBeLessThanOrEqual(5000);
+		expect(builderContext.length).toBeLessThan(fullLength);
 
 		// Test sheriff context extraction respects 3K limit
-		const sheriffContext = summarizeContextForAgent(largePlan, "sheriff");
+		const sheriffContext = summarizeContextForAgent(largePlan, "reviewer");
 		expect(sheriffContext.length).toBeLessThanOrEqual(3000);
 		expect(sheriffContext.length).toBeLessThan(fullLength);
 	});
@@ -412,11 +412,11 @@ ${"Additional security notes. ".repeat(30)}`;
 ## Test Requirements
 - Test the function`;
 
-		// Small plan should fit within quester limit
-		const questerContext = summarizeContextForAgent(smallPlan, "quester");
-		expect(questerContext.length).toBeLessThanOrEqual(5000);
+		// Small plan should fit within builder limit
+		const builderContext = summarizeContextForAgent(smallPlan, "builder");
+		expect(builderContext.length).toBeLessThanOrEqual(5000);
 
 		// Should preserve meaningful content
-		expect(questerContext).toContain("Implementation");
+		expect(builderContext).toContain("Implementation");
 	});
 });

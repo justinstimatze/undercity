@@ -2,14 +2,13 @@
  * Undercity Types
  *
  * Core type definitions for the multi-agent orchestrator.
- * Inspired by Gas Town (Steve Yegge) and ARC Raiders extraction mechanics.
  */
 import type { ComplexityLevel } from "./complexity.js";
 
 /**
- * Raid status - the overall state of a work session
+ * Session status - the overall state of a work session
  */
-export type RaidStatus =
+export type SessionStatus =
 	| "planning" // Planning phase
 	| "awaiting_approval" // Human needs to approve the plan
 	| "executing" // Execution phase
@@ -20,27 +19,27 @@ export type RaidStatus =
 	| "failed"; // Something went wrong
 
 /**
- * Agent types in the raid squad, representing specialized roles in the multi-agent orchestration system.
- * Each agent type has a specific function in the raid workflow and is assigned a particular AI model:
+ * Agent types representing specialized roles in the orchestration system.
+ * Each agent type has a specific function and is assigned a particular AI model:
  *
- * - Flute: Fast reconnaissance agent using Haiku model
+ * - Scout: Fast reconnaissance agent using Haiku model
  *   Purpose: Quick codebase exploration, initial intelligence gathering
  *
- * - Logistics: Strategic planning agent using Sonnet model
+ * - Planner: Strategic planning agent using Sonnet model
  *   Purpose: Create detailed specifications, break down complex goals
  *
- * - Quester: Implementation agent using Sonnet model
+ * - Builder: Implementation agent using Sonnet model
  *   Purpose: Build and modify code, execute detailed tasks
  *
- * - Sheriff: Quality assurance agent using Opus model
+ * - Reviewer: Quality assurance agent using Opus model
  *   Purpose: Review work, validate implementations, ensure code quality
  */
-export type AgentType = "flute" | "logistics" | "quester" | "sheriff";
+export type AgentType = "scout" | "planner" | "builder" | "reviewer";
 
 /**
- * Waypoint status within a raid
+ * Step status within a session
  */
-export type WaypointStatus =
+export type StepStatus =
 	| "pending" // Not yet started
 	| "assigned" // Assigned to an agent
 	| "in_progress" // Agent is working
@@ -52,14 +51,14 @@ export type WaypointStatus =
 	| "escalated"; // Human intervention needed
 
 /**
- * A Waypoint is a unit of work assigned to an agent during a raid
+ * A Step is a unit of work assigned to an agent during a session
  */
-export interface Waypoint {
+export interface Step {
 	id: string;
-	raidId: string;
+	sessionId: string;
 	type: AgentType;
 	description: string;
-	status: WaypointStatus;
+	status: StepStatus;
 	agentId?: string;
 	branch?: string;
 	result?: string;
@@ -69,19 +68,19 @@ export interface Waypoint {
 }
 
 /**
- * Squad member status
+ * Agent status
  */
-export type SquadMemberStatus = "idle" | "working" | "done" | "error" | "stuck";
+export type AgentStatus = "idle" | "working" | "done" | "error" | "stuck";
 
 /**
- * A SquadMember is an active agent working on the raid
+ * An active agent working on the session
  */
-export interface SquadMember {
+export interface Agent {
 	id: string;
 	type: AgentType;
-	sessionId?: string; // Claude SDK session ID for resumption
-	waypoint?: Waypoint;
-	status: SquadMemberStatus;
+	sdkSessionId?: string; // Claude SDK session ID for resumption
+	step?: Step;
+	status: AgentStatus;
 	spawnedAt: Date;
 	lastActivityAt: Date;
 }
@@ -89,25 +88,25 @@ export interface SquadMember {
 /**
  * Persistence hierarchy:
  * - Pocket: Critical state surviving crashes (session ID, goal, status)
- * - Inventory: Active state during session (agent sessions, waypoints)
+ * - Inventory: Active state during session (agent sessions, steps)
  * - Loadout: Pre-session config (agent types, rules)
  */
 export interface SafePocket {
-	raidId?: string;
-	raidGoal?: string;
-	raidStatus?: RaidStatus;
+	sessionId?: string;
+	goal?: string;
+	status?: SessionStatus;
 	checkpoint?: string;
 	lastUpdated: Date;
 }
 
 export interface Inventory {
-	waypoints: Waypoint[];
-	squad: SquadMember[];
+	steps: Step[];
+	agents: Agent[];
 	lastUpdated: Date;
 }
 
 export interface Loadout {
-	maxSquadSize: number;
+	maxAgents: number;
 	enabledAgentTypes: AgentType[];
 	autoApprove: boolean; // Skip human approval for plan
 	lastUpdated: Date;
@@ -128,7 +127,7 @@ export type MergeStatus =
 
 export interface ElevatorItem {
 	branch: string;
-	waypointId: string;
+	stepId: string;
 	agentId: string;
 	status: MergeStatus;
 	queuedAt: Date;
@@ -200,7 +199,7 @@ export interface UndercityConfig {
 	/** Directory for runtime state (.undercity/) */
 	stateDir: string;
 	/** Maximum squad size */
-	maxSquadSize: number;
+	maxAgents: number;
 	/** Agent definitions */
 	agents: Record<AgentType, AgentDefinition>;
 	/** Enable auto-approval of plans */
@@ -226,7 +225,7 @@ export interface FileTouch {
 	timestamp: Date;
 }
 
-// ============== Flute Cache Types ==============
+// ============== Scout Cache Types ==============
 
 /**
  * Fingerprint of the codebase state for cache validation
@@ -243,15 +242,15 @@ export interface CodebaseFingerprint {
 }
 
 /**
- * File tracking state for an agent/waypoint
+ * File tracking state for an agent/step
  */
 export interface FileTrackingEntry {
 	/** The agent ID that touched these files */
 	agentId: string;
-	/** The waypoint ID associated with this agent */
-	waypointId: string;
-	/** The raid ID this belongs to */
-	raidId: string;
+	/** The step ID associated with this agent */
+	stepId: string;
+	/** The session ID this belongs to */
+	sessionId: string;
 	/** Files touched by this agent */
 	files: FileTouch[];
 	/** When tracking started */
@@ -269,7 +268,7 @@ export interface FileConflict {
 	/** Agents that have touched this file */
 	touchedBy: Array<{
 		agentId: string;
-		waypointId: string;
+		stepId: string;
 		operation: FileOperation;
 		timestamp: Date;
 	}>;
@@ -288,7 +287,7 @@ export interface FileTrackingState {
 /**
  * A cached flute result entry
  */
-export interface FluteCacheEntry {
+export interface ScoutCacheEntry {
 	/** SHA-256 hash of CodebaseFingerprint for quick lookup */
 	fingerprintHash: string;
 	/** The cached flute intel result */
@@ -304,11 +303,11 @@ export interface FluteCacheEntry {
 }
 
 /**
- * Flute cache storage structure
+ * Scout cache storage structure
  */
-export interface FluteCache {
+export interface ScoutCache {
 	/** Cache entries keyed by combined fingerprintHash + goalHash */
-	entries: Record<string, FluteCacheEntry>;
+	entries: Record<string, ScoutCacheEntry>;
 	/** Cache format version for future migrations */
 	version: string;
 	/** When cache was last modified */
@@ -321,10 +320,10 @@ export interface FluteCache {
  * Model choices for each agent type in a loadout
  */
 export interface LoadoutModelChoices {
-	flute: "haiku" | "sonnet" | "opus";
-	logistics: "haiku" | "sonnet" | "opus";
-	quester: "haiku" | "sonnet" | "opus";
-	sheriff: "haiku" | "sonnet" | "opus";
+	scout: "haiku" | "sonnet" | "opus";
+	planner: "haiku" | "sonnet" | "opus";
+	builder: "haiku" | "sonnet" | "opus";
+	reviewer: "haiku" | "sonnet" | "opus";
 }
 
 /**
@@ -348,7 +347,7 @@ export interface LoadoutConfiguration {
 	/** Description of when to use this loadout */
 	description: string;
 	/** Maximum number of agents in the squad */
-	maxSquadSize: number;
+	maxAgents: number;
 	/** Which agent types are enabled */
 	enabledAgentTypes: AgentType[];
 	/** Model choice for each agent type */
@@ -364,16 +363,16 @@ export interface LoadoutConfiguration {
 }
 
 /**
- * Performance record for a loadout on a specific quest
+ * Performance record for a loadout on a specific task
  */
 export interface LoadoutPerformanceRecord {
 	/** The loadout ID used */
 	loadoutId: string;
-	/** The quest ID */
-	questId: string;
-	/** Quest type/category if known */
-	questType?: string;
-	/** Whether the quest succeeded */
+	/** The task ID */
+	taskId: string;
+	/** Task type/category if known */
+	taskType?: string;
+	/** Whether the task succeeded */
 	success: boolean;
 	/** Total tokens used */
 	tokensUsed: number;
@@ -391,12 +390,12 @@ export interface LoadoutPerformanceRecord {
 export interface LoadoutScore {
 	/** The loadout ID */
 	loadoutId: string;
-	/** Number of quests completed with this loadout */
-	questCount: number;
+	/** Number of tasks completed with this loadout */
+	taskCount: number;
 	/** Success rate (0-1) */
 	successRate: number;
-	/** Average tokens per quest */
-	avgTokensPerQuest: number;
+	/** Average tokens per task */
+	avgTokensPerTask: number;
 	/** Average execution time in ms */
 	avgExecutionTimeMs: number;
 	/** Average rework count */
@@ -421,36 +420,36 @@ export interface LoadoutStorage {
 	lastUpdated: Date;
 }
 
-// ============== Quest Matchmaking Types ==============
+// ============== Task Matchmaking Types ==============
 
 /**
- * Cross-quest conflict detection
- * NEW: Types for parallel quest execution
+ * Cross-task conflict detection
+ * NEW: Types for parallel task execution
  */
-export interface CrossQuestConflict {
-	questIds: string[];
+export interface CrossTaskConflict {
+	taskIds: string[];
 	conflictingFiles: string[];
 	severity: "warning" | "error" | "critical";
 }
 
 /**
- * Quest batch execution result
- * NEW: Result tracking for parallel quest execution
+ * Task batch execution result
+ * NEW: Result tracking for parallel task execution
  */
-export interface QuestBatchResult {
-	completedQuests: string[];
-	failedQuests: string[];
+export interface TaskBatchResult {
+	completedTasks: string[];
+	failedTasks: string[];
 	totalDuration: number;
-	conflicts: CrossQuestConflict[];
+	conflicts: CrossTaskConflict[];
 }
 
 /**
- * Quest set metadata
- * NEW: Metadata for quest batching
+ * Task set metadata
+ * NEW: Metadata for task batching
  */
-export interface QuestSetMetadata {
-	questIds: string[];
-	raidIds: string[];
+export interface TaskSetMetadata {
+	taskIds: string[];
+	sessionIds: string[];
 	startedAt: Date;
 	estimatedDuration: number;
 	riskLevel: "low" | "medium" | "high";
@@ -459,9 +458,9 @@ export interface QuestSetMetadata {
 // ============== Metrics and Rate Limit Types ==============
 
 /**
- * Quest types for categorization
+ * Task types for categorization
  */
-export type QuestType = "feature" | "bugfix" | "refactor" | "docs" | "test" | "chore" | "unknown";
+export type TaskType = "feature" | "bugfix" | "refactor" | "docs" | "test" | "chore" | "unknown";
 
 /**
  * Model choice options
@@ -481,11 +480,11 @@ export interface TokenUsage {
 }
 
 /**
- * Quest-level usage tracking
+ * Task-level usage tracking
  */
-export interface QuestUsage {
-	questId: string;
-	raidId?: string;
+export interface TaskUsage {
+	taskId: string;
+	sessionId?: string;
 	agentId?: string;
 	model: ModelChoice;
 	tokens: TokenUsage;
@@ -556,7 +555,7 @@ export interface RateLimitPause {
  * Rate limit state
  */
 export interface RateLimitState {
-	quests: QuestUsage[];
+	tasks: TaskUsage[];
 	rateLimitHits: RateLimitHit[];
 	config: RateLimitConfig;
 	lastUpdated: Date;
@@ -570,7 +569,7 @@ export interface RateLimitState {
 export type ErrorCategory = "lint" | "typecheck" | "build" | "test" | "spell" | "no_changes" | "unknown";
 
 /**
- * Single attempt within a quest
+ * Single attempt within a task
  */
 export interface AttemptRecord {
 	model: "haiku" | "sonnet" | "opus";
@@ -582,11 +581,11 @@ export interface AttemptRecord {
 }
 
 /**
- * Quest metrics for efficiency tracking
+ * Task metrics for efficiency tracking
  */
-export interface QuestMetrics {
-	questId: string;
-	raidId: string;
+export interface TaskMetrics {
+	taskId: string;
+	sessionId: string;
 	objective: string;
 	success: boolean;
 	durationMs: number;
@@ -612,7 +611,7 @@ export interface QuestMetrics {
  * Efficiency metrics summary
  */
 export interface EfficiencyMetrics {
-	questId: string;
+	taskId: string;
 	tokensPerCompletion: number;
 	timeToComplete: number;
 	agentEfficiency: Record<AgentType, number>;
@@ -624,33 +623,33 @@ export interface EfficiencyMetrics {
  * Efficiency analytics aggregation
  */
 export interface EfficiencyAnalytics {
-	/** Total quests processed */
-	totalQuests: number;
-	/** Overall success rate across all quests */
+	/** Total tasks processed */
+	totalTasks: number;
+	/** Overall success rate across all tasks */
 	successRate: number;
 	/** Average tokens used per successful completion */
 	avgTokensPerCompletion: number;
-	/** Average duration of quests in milliseconds */
+	/** Average duration of tasks in milliseconds */
 	avgDurationMs: number;
-	/** Average number of agents spawned per quest */
+	/** Average number of agents spawned per task */
 	avgAgentsSpawned: number;
 	/** Most efficient agent type */
 	mostEfficientAgentType: AgentType | null;
 	/** Token usage breakdown by agent type */
-	tokensByAgentType: Record<AgentType, { total: number; avgPerQuest: number }>;
+	tokensByAgentType: Record<AgentType, { total: number; avgPerTask: number }>;
 	/** Success rates per complexity level with escalation guidance */
 	successRateByComplexity: Record<
 		ComplexityLevel,
 		{
 			/** Success rate for this complexity level */
 			rate: number;
-			/** Total quests at this complexity level */
-			totalQuests: number;
-			/** Average tokens used per quest */
-			avgTokensPerQuest: number;
+			/** Total tasks at this complexity level */
+			totalTasks: number;
+			/** Average tokens used per task */
+			avgTokensPerTask: number;
 			/** Recommended escalation trigger threshold */
 			escalationTrigger: number;
-			/** Number of quests that required escalation */
+			/** Number of tasks that required escalation */
 			escalatedCount: number;
 			/** Success rate after escalation */
 			escalationSuccessRate: number;
@@ -680,14 +679,14 @@ export interface LoadoutRecommendation {
 // ============== A/B Efficiency Tracking Types ==============
 
 /**
- * First-order efficiency metrics (direct quest completion)
+ * First-order efficiency metrics (direct task completion)
  */
 export interface FirstOrderEfficiency {
 	/** Initial tokens used for successful completion */
 	tokensUsed: number;
 	/** Time to first successful completion */
 	timeToComplete: number;
-	/** Was the quest successful on first attempt */
+	/** Was the task successful on first attempt */
 	successfulFirstAttempt: boolean;
 }
 
@@ -713,27 +712,27 @@ export interface SecondOrderEfficiency {
 export interface EfficiencyOutcome {
 	/** Unique identifier for this outcome */
 	id: string;
-	/** Quest ID this outcome relates to */
-	questId: string;
+	/** Task ID this outcome relates to */
+	taskId: string;
 	/** Raid ID this outcome relates to */
-	raidId: string;
+	sessionId: string;
 	/** Experiment ID if part of an A/B test */
 	experimentId?: string;
 	/** Variant name if part of an A/B test */
 	variantName?: string;
 	/** Parallelism level used (linear vs swarm mode) */
 	parallelismLevel: ParallelismLevel;
-	/** Quest objective/description */
+	/** Task objective/description */
 	objective: string;
 	/** First-order efficiency metrics */
 	firstOrder: FirstOrderEfficiency;
 	/** Second-order efficiency metrics */
 	secondOrder: SecondOrderEfficiency;
-	/** Agents used in this quest execution */
+	/** Agents used in this task execution */
 	agentsUsed: AgentType[];
 	/** Model choices used */
 	modelChoices: LoadoutModelChoices;
-	/** Whether the quest ultimately succeeded */
+	/** Whether the task ultimately succeeded */
 	finalSuccess: boolean;
 	/** When this outcome was recorded */
 	recordedAt: Date;
@@ -817,11 +816,11 @@ export interface UserIntervention {
 // ============== Git Worktree Types ==============
 
 /**
- * Information about an active worktree for a raid
+ * Information about an active worktree for a session
  */
 export interface WorktreeInfo {
-	/** The raid ID this worktree belongs to */
-	raidId: string;
+	/** The session ID this worktree belongs to */
+	sessionId: string;
 	/** Absolute path to the worktree directory */
 	path: string;
 	/** Branch name for this worktree */
@@ -898,7 +897,7 @@ export interface ParallelRecoveryState {
 
 // Self-Improvement Loop Types
 export interface CompletionMetrics {
-	raidId: string;
+	sessionId: string;
 	goal: string;
 	completionTime: number;
 	agentsInvolved: AgentType[];
@@ -913,9 +912,9 @@ export interface ExperimentResult {
 }
 
 /**
- * Task-level metrics for detailed tracking
+ * Task execution metrics for experiment tracking
  */
-export interface TaskMetrics {
+export interface TaskExecutionMetrics {
 	/** Unique identifier for the task */
 	taskId: string;
 	/** Timestamp when task started */
@@ -934,14 +933,14 @@ export interface TaskMetrics {
 	escalationReasons?: string[];
 	/** Total time taken for task completion (in milliseconds) */
 	timeTakenMs?: number;
-	/** Raid or experiment context */
-	raidId?: string;
+	/** Session context */
+	sessionId?: string;
 	/** Associated experiment ID */
 	experimentId?: string;
 }
 
-export interface ImprovementQuest {
-	/** Unique identifier for the improvement quest */
+export interface ImprovementTask {
+	/** Unique identifier for the improvement task */
 	id: string;
 	/** Human-readable title */
 	title: string;
@@ -951,15 +950,15 @@ export interface ImprovementQuest {
 	priority: "low" | "medium" | "high" | "critical";
 	/** Category of improvement */
 	category: "performance" | "quality" | "efficiency" | "reliability" | "usability";
-	/** Data source for this quest */
+	/** Data source for this task */
 	dataSource: "metrics" | "experiments" | "patterns" | "manual";
-	/** Evidence supporting this improvement quest */
+	/** Evidence supporting this improvement task */
 	evidence: string[];
 	/** Estimated impact (0-100 score) */
 	estimatedImpact: number;
 	/** Estimated effort required */
 	estimatedEffort: "low" | "medium" | "high";
-	/** When the quest was created */
+	/** When the task was created */
 	createdAt: Date;
 	/** Optional associated experiment ID */
 	experimentId?: string;

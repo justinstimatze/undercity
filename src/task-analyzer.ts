@@ -1,13 +1,13 @@
 /**
- * Quest Analyzer Module
+ * Task Analyzer Module
  *
- * Analyzes quest objectives to detect package boundaries, estimate file modifications,
- * and calculate risk scores for intelligent quest matchmaking.
+ * Analyzes task objectives to detect package boundaries, estimate file modifications,
+ * and calculate risk scores for intelligent task matchmaking.
  */
 
-import type { Quest } from "./quest.js";
+import type { Task } from "./task.js";
 
-export interface QuestAnalysis {
+export interface TaskAnalysis {
 	packages: string[];
 	estimatedFiles: string[];
 	complexity: "low" | "medium" | "high";
@@ -15,7 +15,7 @@ export interface QuestAnalysis {
 	tags: string[];
 }
 
-export class QuestAnalyzer {
+export class TaskAnalyzer {
 	private packagePatterns: RegExp[];
 	private filePatterns: RegExp[];
 	private complexityKeywords: { [key: string]: string };
@@ -79,25 +79,25 @@ export class QuestAnalyzer {
 	}
 
 	/**
-	 * Analyze a quest for package boundaries, file estimates, and risk factors
+	 * Analyze a task for package boundaries, file estimates, and risk factors
 	 */
-	async analyzeQuest(quest: Quest): Promise<QuestAnalysis> {
-		const _objective = quest.objective.toLowerCase();
+	async analyzeTask(task: Task): Promise<TaskAnalysis> {
+		const _objective = task.objective.toLowerCase();
 
 		// Detect package boundaries
-		const packages = this.detectPackageBoundaries(quest.objective);
+		const packages = this.detectPackageBoundaries(task.objective);
 
 		// Estimate files that might be touched
-		const estimatedFiles = this.estimateFilesTouched(quest.objective);
+		const estimatedFiles = this.estimateFilesTouched(task.objective);
 
 		// Determine complexity
-		const complexity = this.assessComplexity(quest.objective);
+		const complexity = this.assessComplexity(task.objective);
 
 		// Calculate risk score
-		const riskScore = this.calculateRiskScore(quest, packages, estimatedFiles, complexity);
+		const riskScore = this.calculateRiskScore(task, packages, estimatedFiles, complexity);
 
 		// Generate tags
-		const tags = this.generateTags(quest.objective, complexity);
+		const tags = this.generateTags(task.objective, complexity);
 
 		return {
 			packages,
@@ -109,13 +109,13 @@ export class QuestAnalyzer {
 	}
 
 	/**
-	 * Detect package boundaries from quest objective
+	 * Detect package boundaries from task objective
 	 */
 	detectPackageBoundaries(objective: string): string[] {
 		const packages = new Set<string>();
 
 		// Check manual hints first if available
-		// (Would be passed in via quest.packageHints)
+		// (Would be passed in via task.packageHints)
 
 		// Extract package names from text patterns
 		for (const pattern of this.packagePatterns) {
@@ -145,7 +145,7 @@ export class QuestAnalyzer {
 	}
 
 	/**
-	 * Estimate files likely to be touched based on quest description
+	 * Estimate files likely to be touched based on task description
 	 */
 	estimateFilesTouched(objective: string): string[] {
 		const files = new Set<string>();
@@ -158,7 +158,7 @@ export class QuestAnalyzer {
 			}
 		}
 
-		// Infer file types based on waypoint type
+		// Infer file types based on step type
 		const lowerObjective = objective.toLowerCase();
 
 		if (lowerObjective.includes("test") || lowerObjective.includes("spec")) {
@@ -201,7 +201,7 @@ export class QuestAnalyzer {
 	}
 
 	/**
-	 * Assess the complexity level of a quest
+	 * Assess the complexity level of a task
 	 */
 	assessComplexity(objective: string): "low" | "medium" | "high" {
 		const lowerObjective = objective.toLowerCase();
@@ -227,7 +227,7 @@ export class QuestAnalyzer {
 		}
 
 		// Additional complexity heuristics
-		if (words.length > 15) highCount++; // Very detailed waypoints tend to be complex
+		if (words.length > 15) highCount++; // Very detailed steps tend to be complex
 		if (lowerObjective.includes("across") || lowerObjective.includes("multiple")) mediumCount++;
 		if (lowerObjective.includes("breaking change")) highCount++;
 		if (lowerObjective.includes("backward compatible")) mediumCount++;
@@ -239,10 +239,10 @@ export class QuestAnalyzer {
 	}
 
 	/**
-	 * Calculate risk score based on quest characteristics
+	 * Calculate risk score based on task characteristics
 	 */
 	calculateRiskScore(
-		quest: Quest,
+		task: Task,
 		packages: string[],
 		estimatedFiles: string[],
 		complexity: "low" | "medium" | "high",
@@ -271,7 +271,7 @@ export class QuestAnalyzer {
 		else if (estimatedFiles.length > 5) score += 0.1;
 
 		// Special keywords that increase risk
-		const objective = quest.objective.toLowerCase();
+		const objective = task.objective.toLowerCase();
 		const riskKeywords = [
 			"delete",
 			"remove",
@@ -295,16 +295,16 @@ export class QuestAnalyzer {
 			}
 		}
 
-		// Manual risk indicators from quest fields
-		if (quest.conflicts && quest.conflicts.length > 0) score += 0.1;
-		if (quest.dependsOn && quest.dependsOn.length > 0) score += 0.05;
+		// Manual risk indicators from task fields
+		if (task.conflicts && task.conflicts.length > 0) score += 0.1;
+		if (task.dependsOn && task.dependsOn.length > 0) score += 0.05;
 
 		// Cap at 1.0
 		return Math.min(score, 1.0);
 	}
 
 	/**
-	 * Generate categorization tags for the quest
+	 * Generate categorization tags for the task
 	 */
 	generateTags(objective: string, complexity: "low" | "medium" | "high"): string[] {
 		const tags = new Set<string>();
