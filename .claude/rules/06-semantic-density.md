@@ -184,6 +184,33 @@ const matchingItem = items.find(item => item.hasData);
 4. Manually convert low-density prose to tables/lists
 5. Track density improvements over time
 
+## When Agents Should Run This
+
+**Proactive usage - run semantic-check when:**
+- Working on documentation files (.md, .claude/rules)
+- Refactoring code with many comments
+- Creating new documentation
+- After completing several tasks (periodic check)
+- Before major releases
+
+**Workflow:**
+```bash
+# 1. Run analysis
+pnpm semantic-check
+
+# 2. Parse JSON output
+# 3. Process high-priority actions first
+# 4. Apply auto-fixes
+pnpm semantic-check:fix
+
+# 5. Manually address structural issues (prose → tables)
+```
+
+**Task board integration:**
+- Periodic task: "Run semantic-check and fix high-priority issues"
+- Optimization tasks target specific low-density files
+- Agents execute autonomously via grind
+
 ## Goals
 
 - Reduce token usage for agent comprehension

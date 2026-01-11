@@ -434,7 +434,28 @@
         "agent-optimization",
         "prompts"
       ]
+    },
+    {
+      "id": "task-mka7ceac-m3kf",
+      "objective": "[periodic] Run semantic-check and fix high-priority density issues",
+      "status": "pending",
+      "priority": 38,
+      "createdAt": "2026-01-11T20:44:14.292Z"
+    },
+    {
+      "id": "task-mka7cfkg-avsy",
+      "objective": "[optimization] Review .claude/rules files for semantic density improvements",
+      "status": "pending",
+      "priority": 39,
+      "createdAt": "2026-01-11T20:44:15.952Z"
+    },
+    {
+      "id": "task-mka7chrr-udp0",
+      "objective": "[optimization] Convert low-density prose to tables/lists in documentation",
+      "status": "pending",
+      "priority": 40,
+      "createdAt": "2026-01-11T20:44:18.807Z"
     }
   ],
-  "lastUpdated": "2026-01-11T07:54:50.687Z"
+  "lastUpdated": "2026-01-11T20:44:18.807Z"
 }
