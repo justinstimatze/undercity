@@ -7,11 +7,11 @@
 │                              CLI COMMANDS                                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│   solo <goal>          grind [--parallel N]         plan/work/slingshot    │
+│   solo <goal>          grind [--parallel N]         (deprecated session)   │
 │        │                        │                           │               │
 │        ▼                        ▼                           ▼               │
 │  ┌───────────┐          ┌──────────────┐            ┌──────────────┐       │
-│  │   Solo    │          │ ParallelSolo │            │     Raid     │       │
+│  │   Solo    │          │ ParallelSolo │            │   Session    │       │
 │  │Orchestrator│          │ Orchestrator │            │ Orchestrator │       │
 │  └─────┬─────┘          └──────┬───────┘            └──────┬───────┘       │
 │        │                       │                           │               │
@@ -23,13 +23,13 @@
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │  Worktree   │  │  Elevator   │  │    Quest    │  │    Live     │        │
+│  │  Worktree   │  │  Elevator   │  │    Task     │  │    Live     │        │
 │  │  Manager    │  │ (merge queue)│  │    Board    │  │   Metrics   │        │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
 │         │                │                │                │               │
 │    Solo: ❌         Solo: ❌         Solo: ❌         Solo: ✅              │
-│  PSolo: ✅        PSolo: ✅        PSolo: ✅ (new)   PSolo: ✅              │
-│   Raid: ✅         Raid: ✅         Raid: ❌          Raid: ✅              │
+│  PSolo: ✅        PSolo: ✅        PSolo: ✅        PSolo: ✅              │
+│ Session: ✅      Session: ✅      Session: ❌       Session: ✅             │
 │                                                                             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
 │  │ RateLimit   │  │    File     │  │  Recovery   │  │ Efficiency  │        │
@@ -38,18 +38,18 @@
 │         │                │                │                │               │
 │    Solo: ❌         Solo: ❌         Solo: ❌         Solo: ❌              │
 │  PSolo: ✅        PSolo: ✅        PSolo: ✅        PSolo: ❌              │
-│   Raid: ✅         Raid: ✅         Raid: ✅          Raid: ✅              │
+│ Session: ✅      Session: ✅      Session: ✅       Session: ✅             │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Current State Summary
 
-| Component | Solo | ParallelSolo | Raid |
-|-----------|------|--------------|------|
+| Component | Solo | ParallelSolo | Session |
+|-----------|------|--------------|---------|
 | **WorktreeManager** | ❌ | ✅ | ✅ |
 | **Elevator (merge)** | ❌ | ✅ | ✅ |
-| **Quest Board** | ❌ | ✅ | ❌ |
+| **Task Board** | ❌ | ✅ | ❌ |
 | **Live Metrics** | ✅ | ✅ (via Solo) | ✅ |
 | **RateLimitTracker** | ❌ | ✅ | ✅ |
 | **FileTracker** | ❌ | ✅ | ✅ |
@@ -63,7 +63,7 @@
 - ~~No file conflict detection → parallel tasks can fight~~ ✅ DONE
 - ~~No recovery → failures leave state inconsistent~~ ✅ DONE
 
-**RaidOrchestrator** has all the infrastructure but requires human approval and is complex.
+**SessionOrchestrator** has all the infrastructure but requires human approval and is complex.
 
 ## Proposed Simplification
 
@@ -73,15 +73,15 @@ Add the missing infrastructure to ParallelSolo:
 2. Wire in FileTracker for pre-execution conflict check
 3. Add basic recovery (save state, resume on restart)
 
-### Option B: Simplify Raid for Autonomous Use
-Make RaidOrchestrator work without human approval:
+### Option B: Simplify Session for Autonomous Use
+Make SessionOrchestrator work without human approval:
 1. Add auto-approve mode
 2. Use existing infrastructure
 3. Deprecate ParallelSolo
 
 ### Option C: Unified Orchestrator
 Create one orchestrator that can run in different modes:
-- `--interactive` (current Raid behavior)
+- `--interactive` (current Session behavior)
 - `--autonomous` (current grind behavior)
 - `--solo` (single task, no worktree)
 
@@ -93,7 +93,7 @@ ParallelSolo is simpler and already works. Add the missing pieces:
 ParallelSoloOrchestrator
 ├── WorktreeManager ✅
 ├── Elevator ✅
-├── Quest Board ✅
+├── Task Board ✅
 ├── Live Metrics ✅ (via Solo)
 ├── RateLimitTracker ✅
 ├── FileTracker ✅ (conflict detection before merge)
@@ -109,28 +109,24 @@ ParallelSoloOrchestrator
 Entry Points:
   src/cli.ts → routes to command modules
   src/commands/mixed.ts → solo, grind, watch, dashboard
-  src/commands/raid.ts → slingshot, approve, extract
-  src/commands/quest.ts → quests, add, work
+  src/commands/task.ts → tasks, add, work
 
 Orchestrators:
   src/solo.ts → SoloOrchestrator (lightweight)
   src/parallel-solo.ts → ParallelSoloOrchestrator (parallel grind)
-  src/raid.ts → RaidOrchestrator (full-featured)
 
 Infrastructure:
   src/worktree-manager.ts → git worktree isolation
   src/git.ts → Elevator, git operations
-  src/quest.ts → quest board CRUD
-  src/live-metrics.ts → SDK metrics aggregation
+  src/task.ts → task board CRUD
   src/dashboard.ts → TUI display
-  src/rate-limit.ts → API rate limit tracking (now shared)
+  src/rate-limit.ts → API rate limit tracking
   src/persistence.ts → state persistence
+  src/file-tracker.ts → conflict detection
 
-Shared Infrastructure (from Raid):
-  src/file-tracker.ts → conflict detection (now shared with PSolo)
-
-Raid-Only (candidates for sharing):
-  src/efficiency-tracker.ts → performance metrics
-  src/checkpoint-manager.ts → recovery checkpoints
-  src/error-escalation.ts → pattern-based error handling
+Agent Types:
+  scout → Fast reconnaissance (Haiku, read-only)
+  planner → Specification writing (Opus)
+  builder → Code implementation (Opus)
+  reviewer → Quality assurance (Opus)
 ```
