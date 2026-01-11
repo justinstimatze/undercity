@@ -619,6 +619,12 @@ export interface QuestMetrics {
 	attempts?: AttemptRecord[];
 	/** Final model that succeeded (or failed on last attempt) */
 	finalModel?: "haiku" | "sonnet" | "opus";
+	/** Complexity level assessed at task start */
+	complexityLevel?: ComplexityLevel;
+	/** Whether the task was escalated to a higher-tier model */
+	wasEscalated?: boolean;
+	/** Starting model before any escalation */
+	startingModel?: "haiku" | "sonnet" | "opus";
 }
 
 /**
@@ -663,6 +669,12 @@ export interface EfficiencyAnalytics {
 			avgTokensPerQuest: number;
 			/** Recommended escalation trigger threshold */
 			escalationTrigger: number;
+			/** Number of quests that required escalation */
+			escalatedCount: number;
+			/** Success rate after escalation */
+			escalationSuccessRate: number;
+			/** Average additional tokens spent due to escalation */
+			escalationTokenOverhead: number;
 		}
 	>;
 	/** Analysis time period */

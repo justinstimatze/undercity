@@ -219,12 +219,8 @@ export class SoloOrchestrator {
 		// Ensure clean state before starting (in case previous task left dirty state)
 		this.cleanupDirtyState();
 
-		// Start quest tracking in metrics
-		this.metricsTracker.startQuest(
-			`solo_${Date.now()}`, // Generate unique quest ID
-			task,
-			`raid_${Date.now()}`, // Generate unique raid ID
-		);
+		const questId = `solo_${Date.now()}`;
+		const raidId = `raid_${Date.now()}`;
 
 		console.log(chalk.cyan(`\n━━━ Task: ${task.substring(0, 60)}${task.length > 60 ? "..." : ""} ━━━`));
 
@@ -281,6 +277,9 @@ export class SoloOrchestrator {
 
 		this.currentModel = this.determineStartingModel(assessment);
 		const reviewLevel = this.determineReviewLevel(assessment);
+
+		// Start quest tracking in metrics with the starting model
+		this.metricsTracker.startQuest(questId, task, raidId, this.currentModel);
 		this.metricsTracker.recordAgentSpawn(this.currentModel === "opus" ? "sheriff" : "quester");
 
 		this.log("Starting task", { task, model: this.currentModel, assessment: assessment.level, reviewLevel });
@@ -359,6 +358,9 @@ export class SoloOrchestrator {
 						commitSha = await this.commitWork(task);
 					}
 
+					// Pass attempt records to metrics tracker before completing
+					this.metricsTracker.recordAttempts(this.attemptRecords);
+
 					// Complete quest tracking
 					this.metricsTracker.completeQuest(true);
 
@@ -434,6 +436,8 @@ export class SoloOrchestrator {
 		}
 
 		// Failed after all attempts - clean up dirty state
+		// Pass attempt records to metrics tracker before completing
+		this.metricsTracker.recordAttempts(this.attemptRecords);
 		this.metricsTracker.completeQuest(false);
 		this.cleanupDirtyState();
 
@@ -1266,9 +1270,12 @@ Please fix these issues. Make minimal changes.`;
 		const currentIndex = tiers.indexOf(this.currentModel);
 
 		if (currentIndex < tiers.length - 1) {
+			const previousModel = this.currentModel;
 			const newModel = tiers[currentIndex + 1];
-			console.log(chalk.yellow(`  Escalating: ${this.currentModel} → ${newModel}`));
+			console.log(chalk.yellow(`  Escalating: ${previousModel} → ${newModel}`));
 			this.currentModel = newModel;
+			// Record escalation in metrics tracker
+			this.metricsTracker.recordEscalation(previousModel, newModel);
 			return true;
 		}
 

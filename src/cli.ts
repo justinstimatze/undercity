@@ -555,6 +555,15 @@ program
 			console.log(`  ${chalk.dim(`Avg tokens: ${data.avgTokensPerQuest.toFixed(0)}`)}`);
 			console.log(`  ${escalationColor(`Escalation threshold: ${(data.escalationTrigger * 100).toFixed(0)}%`)}`);
 
+			// Show escalation data if any escalations occurred
+			if (data.escalatedCount > 0) {
+				const escColor = data.escalationSuccessRate >= 80 ? chalk.green : data.escalationSuccessRate >= 60 ? chalk.yellow : chalk.red;
+				console.log(`  ${chalk.dim(`Escalated: ${data.escalatedCount} quests (${escColor(`${data.escalationSuccessRate.toFixed(1)}%`)} success)`)}`);
+				if (data.escalationTokenOverhead > 0) {
+					console.log(`  ${chalk.dim(`Escalation token overhead: +${data.escalationTokenOverhead.toFixed(0)} tokens/quest`)}`);
+				}
+			}
+
 			if (data.rate < data.escalationTrigger * 100) {
 				console.log(`  ${chalk.red.bold("⚠ ESCALATION RECOMMENDED")}`);
 			}
@@ -574,11 +583,47 @@ program
 		const needsEscalation = complexityLevels.filter(([, data]) => data.rate < data.escalationTrigger * 100);
 		if (needsEscalation.length > 0) {
 			console.log(`\n${chalk.red.bold("Complexity levels requiring escalation:")}`);
-			for (const [level] of needsEscalation) {
-				console.log(`  • ${level} - Consider routing to higher-tier agents`);
+			for (const [level, data] of needsEscalation) {
+				const escInfo = data.escalatedCount > 0
+					? ` (${data.escalatedCount} already escalated, ${data.escalationSuccessRate.toFixed(0)}% success)`
+					: "";
+				console.log(`  • ${level} - Consider routing to higher-tier agents${escInfo}`);
 			}
 		} else {
 			console.log(`\n${chalk.green("All complexity levels are performing adequately")}`);
+		}
+
+		// Summary of escalation patterns
+		const totalEscalated = complexityLevels.reduce((sum, [, data]) => sum + data.escalatedCount, 0);
+		if (totalEscalated > 0) {
+			console.log(`\n${chalk.cyan("Escalation Summary:")}`);
+			console.log(`  Total escalated quests: ${totalEscalated}`);
+
+			// Find which complexity levels escalate most frequently
+			const escalationByLevel = complexityLevels
+				.filter(([, data]) => data.escalatedCount > 0 && data.totalQuests > 0)
+				.map(([level, data]) => ({
+					level,
+					escalationRate: (data.escalatedCount / data.totalQuests) * 100,
+					successAfterEscalation: data.escalationSuccessRate,
+					count: data.escalatedCount,
+				}))
+				.sort((a, b) => b.escalationRate - a.escalationRate);
+
+			if (escalationByLevel.length > 0) {
+				console.log(`  Highest escalation rate: ${escalationByLevel[0].level} (${escalationByLevel[0].escalationRate.toFixed(1)}%)`);
+
+				// Identify if escalation is effective
+				const effectiveEscalations = escalationByLevel.filter(e => e.successAfterEscalation >= 70);
+				const ineffectiveEscalations = escalationByLevel.filter(e => e.successAfterEscalation < 50 && e.count >= 3);
+
+				if (effectiveEscalations.length > 0) {
+					console.log(`  ${chalk.green("Effective escalation:")} ${effectiveEscalations.map(e => e.level).join(", ")}`);
+				}
+				if (ineffectiveEscalations.length > 0) {
+					console.log(`  ${chalk.red("Ineffective escalation:")} ${ineffectiveEscalations.map(e => e.level).join(", ")} - consider different approaches`);
+				}
+			}
 		}
 	});
 

@@ -10,7 +10,7 @@ import path from "node:path";
 import type { ComplexityLevel } from "./complexity.js";
 import { assessComplexityFast } from "./complexity.js";
 import { RateLimitTracker } from "./rate-limit.js";
-import type { AgentType, EfficiencyAnalytics, QuestMetrics, TokenUsage } from "./types.js";
+import type { AgentType, AttemptRecord, EfficiencyAnalytics, QuestMetrics, TokenUsage } from "./types.js";
 
 const METRICS_DIR = path.join(process.cwd(), ".undercity");
 const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl");
@@ -45,6 +45,16 @@ export class MetricsTracker {
 	private agentTypes: AgentType[] = [];
 	private currentError?: string;
 	private rateLimitTracker: RateLimitTracker;
+	/** Track individual attempts with model info for escalation analysis */
+	private attempts: AttemptRecord[] = [];
+	/** Track the final model used (after any escalations) */
+	private finalModel?: "haiku" | "sonnet" | "opus";
+	/** Complexity level assessed at task start */
+	private complexityLevel?: ComplexityLevel;
+	/** Starting model before any escalation */
+	private startingModel?: "haiku" | "sonnet" | "opus";
+	/** Whether the task was escalated */
+	private wasEscalated = false;
 
 	constructor(rateLimitTracker?: RateLimitTracker) {
 		this.rateLimitTracker = rateLimitTracker || new RateLimitTracker();
@@ -62,17 +72,33 @@ export class MetricsTracker {
 		this.agentsSpawned = 0;
 		this.agentTypes = [];
 		this.currentError = undefined;
+		this.attempts = [];
+		this.finalModel = undefined;
+		this.complexityLevel = undefined;
+		this.startingModel = undefined;
+		this.wasEscalated = false;
 	}
 
 	/**
-	 * Start tracking a quest
+	 * Start tracking a quest with complexity assessment
 	 */
-	startQuest(questId: string, objective: string, raidId: string): void {
+	startQuest(questId: string, objective: string, raidId: string, startingModel?: "haiku" | "sonnet" | "opus"): void {
 		this.reset();
 		this.questStartTime = new Date();
 		this.questId = questId;
 		this.raidId = raidId;
 		this.objective = objective;
+		this.startingModel = startingModel;
+		// Assess complexity at start time
+		this.complexityLevel = assessComplexityFast(objective).level;
+	}
+
+	/**
+	 * Record model escalation
+	 */
+	recordEscalation(fromModel: "haiku" | "sonnet" | "opus", toModel: "haiku" | "sonnet" | "opus"): void {
+		this.wasEscalated = true;
+		this.finalModel = toModel;
 	}
 
 	/**
@@ -82,6 +108,25 @@ export class MetricsTracker {
 		this.agentsSpawned++;
 		if (!this.agentTypes.includes(agentType)) {
 			this.agentTypes.push(agentType);
+		}
+	}
+
+	/**
+	 * Record an attempt for the current quest.
+	 * Tracks model used, duration, success, and escalation info.
+	 */
+	recordAttempt(attempt: AttemptRecord): void {
+		this.attempts.push(attempt);
+		this.finalModel = attempt.model;
+	}
+
+	/**
+	 * Record multiple attempts at once (useful when batch-setting from external tracking)
+	 */
+	recordAttempts(attempts: AttemptRecord[]): void {
+		this.attempts.push(...attempts);
+		if (attempts.length > 0) {
+			this.finalModel = attempts[attempts.length - 1].model;
 		}
 	}
 
@@ -194,6 +239,13 @@ export class MetricsTracker {
 			startedAt: this.questStartTime,
 			completedAt,
 			error: this.currentError,
+			// Include attempt records for model escalation analysis
+			attempts: this.attempts.length > 0 ? [...this.attempts] : undefined,
+			finalModel: this.finalModel,
+			// Complexity and escalation tracking
+			complexityLevel: this.complexityLevel,
+			wasEscalated: this.wasEscalated,
+			startingModel: this.startingModel,
 		};
 
 		// Log metrics to file asynchronously, without blocking
@@ -237,11 +289,11 @@ export class MetricsTracker {
 				mostEfficientAgentType: null,
 				tokensByAgentType: {} as Record<AgentType, { total: number; avgPerQuest: number }>,
 				successRateByComplexity: {
-					trivial: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0 },
-					simple: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.1 },
-					standard: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.3 },
-					complex: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.5 },
-					critical: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.8 },
+					trivial: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0, escalatedCount: 0, escalationSuccessRate: 0, escalationTokenOverhead: 0 },
+					simple: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.1, escalatedCount: 0, escalationSuccessRate: 0, escalationTokenOverhead: 0 },
+					standard: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.3, escalatedCount: 0, escalationSuccessRate: 0, escalationTokenOverhead: 0 },
+					complex: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.5, escalatedCount: 0, escalationSuccessRate: 0, escalationTokenOverhead: 0 },
+					critical: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.8, escalatedCount: 0, escalationSuccessRate: 0, escalationTokenOverhead: 0 },
 				},
 				analysisPeriod: {
 					from: new Date(),
@@ -254,20 +306,24 @@ export class MetricsTracker {
 		const totalQuests = questMetrics.length;
 		const successRate = (completedQuests.length / totalQuests) * 100;
 
-		// Calculate complexity breakdowns
+		// Calculate complexity breakdowns with escalation tracking
 		const complexityBreakdown: Record<
 			string,
 			{
 				totalQuests: number;
 				successfulQuests: number;
 				totalTokens: number;
+				escalatedCount: number;
+				escalatedSuccessful: number;
+				escalatedTokens: number;
+				nonEscalatedTokens: number;
 			}
 		> = {
-			trivial: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
-			simple: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
-			standard: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
-			complex: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
-			critical: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
+			trivial: { totalQuests: 0, successfulQuests: 0, totalTokens: 0, escalatedCount: 0, escalatedSuccessful: 0, escalatedTokens: 0, nonEscalatedTokens: 0 },
+			simple: { totalQuests: 0, successfulQuests: 0, totalTokens: 0, escalatedCount: 0, escalatedSuccessful: 0, escalatedTokens: 0, nonEscalatedTokens: 0 },
+			standard: { totalQuests: 0, successfulQuests: 0, totalTokens: 0, escalatedCount: 0, escalatedSuccessful: 0, escalatedTokens: 0, nonEscalatedTokens: 0 },
+			complex: { totalQuests: 0, successfulQuests: 0, totalTokens: 0, escalatedCount: 0, escalatedSuccessful: 0, escalatedTokens: 0, nonEscalatedTokens: 0 },
+			critical: { totalQuests: 0, successfulQuests: 0, totalTokens: 0, escalatedCount: 0, escalatedSuccessful: 0, escalatedTokens: 0, nonEscalatedTokens: 0 },
 		};
 
 		// Calculate averages from completed quests only
@@ -299,14 +355,25 @@ export class MetricsTracker {
 
 		// Process metrics for different dimensions
 		for (const metrics of questMetrics) {
-			// Complexity tracking
-			const complexity = assessComplexityFast(metrics.objective).level;
+			// Use stored complexity if available, otherwise assess from objective
+			const complexity = metrics.complexityLevel ?? assessComplexityFast(metrics.objective).level;
 			const complexityData = complexityBreakdown[complexity];
 			complexityData.totalQuests++;
 			complexityData.totalTokens += metrics.totalTokens;
 
 			if (metrics.success) {
 				complexityData.successfulQuests++;
+			}
+
+			// Track escalation data per complexity level
+			if (metrics.wasEscalated) {
+				complexityData.escalatedCount++;
+				complexityData.escalatedTokens += metrics.totalTokens;
+				if (metrics.success) {
+					complexityData.escalatedSuccessful++;
+				}
+			} else {
+				complexityData.nonEscalatedTokens += metrics.totalTokens;
 			}
 
 			// Agent type tracking
@@ -337,9 +404,23 @@ export class MetricsTracker {
 			}
 		}
 
-		// Compute complexity-level success rates and metrics
+		// Compute complexity-level success rates and metrics with escalation data
 		const successRateByComplexity = Object.entries(complexityBreakdown).reduce(
 			(acc, [complexity, data]) => {
+				// Calculate escalation success rate
+				const escalationSuccessRate = data.escalatedCount > 0
+					? (data.escalatedSuccessful / data.escalatedCount) * 100
+					: 0;
+
+				// Calculate token overhead from escalation
+				// Compare average tokens for escalated vs non-escalated tasks
+				const nonEscalatedCount = data.totalQuests - data.escalatedCount;
+				const avgEscalatedTokens = data.escalatedCount > 0 ? data.escalatedTokens / data.escalatedCount : 0;
+				const avgNonEscalatedTokens = nonEscalatedCount > 0 ? data.nonEscalatedTokens / nonEscalatedCount : 0;
+				const escalationTokenOverhead = avgNonEscalatedTokens > 0
+					? avgEscalatedTokens - avgNonEscalatedTokens
+					: avgEscalatedTokens;
+
 				acc[complexity as ComplexityLevel] = {
 					rate: data.totalQuests > 0 ? (data.successfulQuests / data.totalQuests) * 100 : 0,
 					totalQuests: data.totalQuests,
@@ -355,12 +436,24 @@ export class MetricsTracker {
 									: complexity === "complex"
 										? 0.5
 										: 0.8,
+					// New escalation tracking fields
+					escalatedCount: data.escalatedCount,
+					escalationSuccessRate,
+					escalationTokenOverhead,
 				};
 				return acc;
 			},
 			{} as Record<
 				ComplexityLevel,
-				{ rate: number; totalQuests: number; avgTokensPerQuest: number; escalationTrigger: number }
+				{
+					rate: number;
+					totalQuests: number;
+					avgTokensPerQuest: number;
+					escalationTrigger: number;
+					escalatedCount: number;
+					escalationSuccessRate: number;
+					escalationTokenOverhead: number;
+				}
 			>,
 		);
 
