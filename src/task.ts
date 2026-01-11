@@ -5,7 +5,114 @@
  * Tasks are processed sequentially in full-auto mode.
  */
 
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+
+const LOCK_TIMEOUT_MS = 30000; // 30 seconds - lock considered stale after this
+const LOCK_RETRY_DELAY_MS = 50; // Initial retry delay
+const LOCK_MAX_RETRIES = 100; // Max retries (with backoff, ~10 seconds total)
+
+interface LockInfo {
+	pid: number;
+	timestamp: number;
+}
+
+/**
+ * Check if a lock file is stale (process dead or timeout exceeded)
+ */
+function isLockStale(lockPath: string): boolean {
+	try {
+		const content = readFileSync(lockPath, "utf-8");
+		const lockInfo: LockInfo = JSON.parse(content);
+
+		// Check if lock has timed out
+		if (Date.now() - lockInfo.timestamp > LOCK_TIMEOUT_MS) {
+			return true;
+		}
+
+		// Check if process is still alive (Unix-specific, but safe fallback)
+		try {
+			process.kill(lockInfo.pid, 0); // Signal 0 = check if process exists
+			return false; // Process is alive
+		} catch {
+			return true; // Process is dead
+		}
+	} catch {
+		return true; // Can't read lock = stale
+	}
+}
+
+/**
+ * Acquire a file lock with retry and exponential backoff
+ */
+function acquireLock(lockPath: string): boolean {
+	const lockInfo: LockInfo = {
+		pid: process.pid,
+		timestamp: Date.now(),
+	};
+
+	for (let attempt = 0; attempt < LOCK_MAX_RETRIES; attempt++) {
+		try {
+			// Try to create lock file exclusively (fails if exists)
+			const fd = openSync(lockPath, "wx");
+			writeFileSync(fd, JSON.stringify(lockInfo));
+			closeSync(fd);
+			return true;
+		} catch (err: unknown) {
+			if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+				// Lock exists - check if stale
+				if (isLockStale(lockPath)) {
+					try {
+						unlinkSync(lockPath);
+						continue; // Try again immediately
+					} catch {
+						// Someone else cleaned it up, try again
+					}
+				}
+
+				// Wait with exponential backoff (capped at 500ms)
+				const delay = Math.min(LOCK_RETRY_DELAY_MS * 1.5 ** attempt, 500);
+				const start = Date.now();
+				while (Date.now() - start < delay) {
+					// Busy wait (synchronous delay)
+				}
+			} else {
+				throw err; // Unexpected error
+			}
+		}
+	}
+
+	return false; // Failed to acquire lock
+}
+
+/**
+ * Release a file lock
+ */
+function releaseLock(lockPath: string): void {
+	try {
+		// Verify we own the lock before releasing
+		const content = readFileSync(lockPath, "utf-8");
+		const lockInfo: LockInfo = JSON.parse(content);
+		if (lockInfo.pid === process.pid) {
+			unlinkSync(lockPath);
+		}
+	} catch {
+		// Lock already gone or not ours - that's fine
+	}
+}
+
+/**
+ * Execute a function while holding a file lock
+ */
+function withLock<T>(lockPath: string, fn: () => T): T {
+	if (!acquireLock(lockPath)) {
+		throw new Error(`Failed to acquire lock on ${lockPath} after ${LOCK_MAX_RETRIES} attempts`);
+	}
+	try {
+		return fn();
+	} finally {
+		releaseLock(lockPath);
+	}
+}
 
 export interface Task {
 	id: string;
@@ -36,6 +143,13 @@ export interface TaskBoard {
 }
 
 const DEFAULT_TASK_BOARD_PATH = ".undercity/tasks.json";
+
+/**
+ * Get the lock file path for a task board file
+ */
+function getLockPath(taskBoardPath: string): string {
+	return `${taskBoardPath}.lock`;
+}
 
 /**
  * Generate a unique task ID
@@ -90,35 +204,39 @@ export function saveTaskBoard(board: TaskBoard, path: string = DEFAULT_TASK_BOAR
 /**
  * Add a task to the board
  */
-export function addTask(objective: string, priority?: number): Task {
-	const board = loadTaskBoard();
-	const task: Task = {
-		id: generateTaskId(),
-		objective,
-		status: "pending",
-		priority: priority ?? board.tasks.length,
-		createdAt: new Date(),
-	};
-	board.tasks.push(task);
-	saveTaskBoard(board);
-	return task;
+export function addTask(objective: string, priority?: number, path: string = DEFAULT_TASK_BOARD_PATH): Task {
+	return withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const task: Task = {
+			id: generateTaskId(),
+			objective,
+			status: "pending",
+			priority: priority ?? board.tasks.length,
+			createdAt: new Date(),
+		};
+		board.tasks.push(task);
+		saveTaskBoard(board, path);
+		return task;
+	});
 }
 
 /**
  * Add multiple tasks to the board
  */
-export function addTasks(objectives: string[]): Task[] {
-	const board = loadTaskBoard();
-	const tasks: Task[] = objectives.map((objective, i) => ({
-		id: generateTaskId(),
-		objective,
-		status: "pending" as const,
-		priority: board.tasks.length + i,
-		createdAt: new Date(),
-	}));
-	board.tasks.push(...tasks);
-	saveTaskBoard(board);
-	return tasks;
+export function addTasks(objectives: string[], path: string = DEFAULT_TASK_BOARD_PATH): Task[] {
+	return withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const tasks: Task[] = objectives.map((objective, i) => ({
+			id: generateTaskId(),
+			objective,
+			status: "pending" as const,
+			priority: board.tasks.length + i,
+			createdAt: new Date(),
+		}));
+		board.tasks.push(...tasks);
+		saveTaskBoard(board, path);
+		return tasks;
+	});
 }
 
 /**
@@ -187,42 +305,48 @@ export function getNextTask(): Task | undefined {
 /**
  * Mark a task as in progress
  */
-export function markTaskInProgress(id: string, sessionId: string): void {
-	const board = loadTaskBoard();
-	const task = board.tasks.find((q) => q.id === id);
-	if (task) {
-		task.status = "in_progress";
-		task.startedAt = new Date();
-		task.sessionId = sessionId;
-		saveTaskBoard(board);
-	}
+export function markTaskInProgress(id: string, sessionId: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+	withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const task = board.tasks.find((q) => q.id === id);
+		if (task) {
+			task.status = "in_progress";
+			task.startedAt = new Date();
+			task.sessionId = sessionId;
+			saveTaskBoard(board, path);
+		}
+	});
 }
 
 /**
  * Mark a task as complete
  */
-export function markTaskComplete(id: string): void {
-	const board = loadTaskBoard();
-	const task = board.tasks.find((q) => q.id === id);
-	if (task) {
-		task.status = "complete";
-		task.completedAt = new Date();
-		saveTaskBoard(board);
-	}
+export function markTaskComplete(id: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+	withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const task = board.tasks.find((q) => q.id === id);
+		if (task) {
+			task.status = "complete";
+			task.completedAt = new Date();
+			saveTaskBoard(board, path);
+		}
+	});
 }
 
 /**
  * Mark a task as failed
  */
-export function markTaskFailed(id: string, error: string): void {
-	const board = loadTaskBoard();
-	const task = board.tasks.find((q) => q.id === id);
-	if (task) {
-		task.status = "failed";
-		task.completedAt = new Date();
-		task.error = error;
-		saveTaskBoard(board);
-	}
+export function markTaskFailed(id: string, error: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+	withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const task = board.tasks.find((q) => q.id === id);
+		if (task) {
+			task.status = "failed";
+			task.completedAt = new Date();
+			task.error = error;
+			saveTaskBoard(board, path);
+		}
+	});
 }
 
 /**
@@ -241,12 +365,14 @@ export function getTaskBoardSummary(): { pending: number; inProgress: number; co
 /**
  * Clear completed tasks from the board
  */
-export function clearCompletedTasks(): number {
-	const board = loadTaskBoard();
-	const before = board.tasks.length;
-	board.tasks = board.tasks.filter((q) => q.status !== "complete");
-	saveTaskBoard(board);
-	return before - board.tasks.length;
+export function clearCompletedTasks(path: string = DEFAULT_TASK_BOARD_PATH): number {
+	return withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const before = board.tasks.length;
+		board.tasks = board.tasks.filter((q) => q.status !== "complete");
+		saveTaskBoard(board, path);
+		return before - board.tasks.length;
+	});
 }
 
 /**
@@ -325,19 +451,25 @@ export function getReadyTasksForBatch(count: number = 3): Task[] {
 /**
  * Mark multiple tasks as in progress
  */
-export function markTaskSetInProgress(taskIds: string[], sessionIds: string[]): void {
-	const board = loadTaskBoard();
-	for (let i = 0; i < taskIds.length; i++) {
-		const taskId = taskIds[i];
-		const sessionId = sessionIds[i];
-		const task = board.tasks.find((q) => q.id === taskId);
-		if (task) {
-			task.status = "in_progress";
-			task.startedAt = new Date();
-			task.sessionId = sessionId;
+export function markTaskSetInProgress(
+	taskIds: string[],
+	sessionIds: string[],
+	path: string = DEFAULT_TASK_BOARD_PATH,
+): void {
+	withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		for (let i = 0; i < taskIds.length; i++) {
+			const taskId = taskIds[i];
+			const sessionId = sessionIds[i];
+			const task = board.tasks.find((q) => q.id === taskId);
+			if (task) {
+				task.status = "in_progress";
+				task.startedAt = new Date();
+				task.sessionId = sessionId;
+			}
 		}
-	}
-	saveTaskBoard(board);
+		saveTaskBoard(board, path);
+	});
 }
 
 /**
@@ -423,16 +555,19 @@ export function updateTaskAnalysis(
 		estimatedFiles?: string[];
 		tags?: string[];
 	},
+	path: string = DEFAULT_TASK_BOARD_PATH,
 ): void {
-	const board = loadTaskBoard();
-	const task = board.tasks.find((q) => q.id === taskId);
-	if (task) {
-		if (analysis.computedPackages) task.computedPackages = analysis.computedPackages;
-		if (analysis.riskScore !== undefined) task.riskScore = analysis.riskScore;
-		if (analysis.estimatedFiles) task.estimatedFiles = analysis.estimatedFiles;
-		if (analysis.tags) task.tags = analysis.tags;
-		saveTaskBoard(board);
-	}
+	withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const task = board.tasks.find((q) => q.id === taskId);
+		if (task) {
+			if (analysis.computedPackages) task.computedPackages = analysis.computedPackages;
+			if (analysis.riskScore !== undefined) task.riskScore = analysis.riskScore;
+			if (analysis.estimatedFiles) task.estimatedFiles = analysis.estimatedFiles;
+			if (analysis.tags) task.tags = analysis.tags;
+			saveTaskBoard(board, path);
+		}
+	});
 }
 
 // Legacy aliases for backwards compatibility during migration
