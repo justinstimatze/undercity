@@ -4,6 +4,14 @@
 
 **CRITICAL**: Never bulk-stage files. Always stage specific files relevant to the change.
 
+**NOTE**: The following commands are **blocked in `.claude/settings.json`**:
+- `git add -A`
+- `git add .`
+- `git add --all`
+- `git stash -u` / `git stash --include-untracked`
+
+If you attempt to use these commands, Claude Code should prevent them. If this enforcement fails, it indicates a configuration issue that must be fixed.
+
 ```bash
 # BAD - stages everything including untracked research data, experiments, etc.
 git add .
