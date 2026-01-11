@@ -132,8 +132,13 @@ export interface SoloOptions {
 	workingDirectory?: string;
 	/** Enable escalating review passes before commit (haiku → sonnet → opus) */
 	reviewPasses?: boolean;
-	/** Maximum review passes per tier before escalating */
+	/** Maximum review passes per tier before escalating (haiku/sonnet) */
 	maxReviewPassesPerTier?: number;
+	/**
+	 * Maximum review passes at opus tier (final tier has no escalation path).
+	 * Defaults to maxReviewPassesPerTier * 3 if not set.
+	 */
+	maxOpusReviewPasses?: number;
 	/** Use annealing review at opus tier (multi-angle advisory review) */
 	annealingAtOpus?: boolean;
 	/**
@@ -152,7 +157,8 @@ export interface ReviewResult {
 	foundIssues: boolean;
 	issues: string[];
 	suggestion?: string;
-	converged: boolean;
+	/** True if this pass found no issues (clean pass) */
+	passedClean: boolean;
 }
 
 /**
@@ -172,6 +178,7 @@ export class SoloOrchestrator {
 	private workingDirectory: string;
 	private reviewPasses: boolean;
 	private maxReviewPassesPerTier: number;
+	private maxOpusReviewPasses: number;
 	private annealingAtOpus: boolean;
 	private maxRetriesPerTier: number;
 
@@ -203,6 +210,8 @@ export class SoloOrchestrator {
 		this.workingDirectory = options.workingDirectory ?? process.cwd();
 		this.reviewPasses = options.reviewPasses ?? false;
 		this.maxReviewPassesPerTier = options.maxReviewPassesPerTier ?? 2;
+		// Opus is final tier - no escalation path, so give it more attempts by default
+		this.maxOpusReviewPasses = options.maxOpusReviewPasses ?? this.maxReviewPassesPerTier * 3;
 		this.annealingAtOpus = options.annealingAtOpus ?? false;
 		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
 		this.currentModel = this.startingModel;
@@ -338,9 +347,9 @@ export class SoloOrchestrator {
 					if (reviewLevel.review) {
 						const reviewResult = await this.runEscalatingReview(task, reviewLevel.annealing);
 						if (!reviewResult.converged) {
-							// Review fix broke verification, retry
-							console.log(chalk.yellow(`  Review fix broke verification, retrying...`));
-							this.lastFeedback = `Review found issues: ${reviewResult.issuesFound.join(", ")}`;
+							// Review couldn't resolve all issues - either verification broke or exhausted passes
+							console.log(chalk.yellow(`  Review could not fully resolve issues, retrying task...`));
+							this.lastFeedback = `Review found issues that couldn't be fully resolved: ${reviewResult.issuesFound.join(", ")}`;
 							continue;
 						}
 						// Re-verify after reviews if issues were found and fixed
@@ -1017,19 +1026,20 @@ When done, provide a brief summary of what you changed.`;
 			}
 
 			// Standard tier review loop
-			// Opus (final tier) gets significantly more passes since there's nowhere to escalate
-			const maxPasses = tier === "opus" ? this.maxReviewPassesPerTier * 3 : this.maxReviewPassesPerTier;
+			// Opus (final tier) gets more passes since there's nowhere to escalate
+			const maxPasses = tier === "opus" ? this.maxOpusReviewPasses : this.maxReviewPassesPerTier;
 			let tierPasses = 0;
-			let tierConverged = false;
+			let tierFoundIssues = false;
 
-			while (tierPasses < maxPasses && !tierConverged) {
+			while (tierPasses < maxPasses) {
 				tierPasses++;
 				totalPasses++;
 
 				const review = await this.runSingleReview(task, tier);
 
 				if (review.foundIssues) {
-					console.log(chalk.yellow(`  [${tier}] Pass ${tierPasses}: Found issues`));
+					tierFoundIssues = true;
+					console.log(chalk.yellow(`  [${tier}] Pass ${tierPasses}/${maxPasses}: Found issues`));
 					for (const issue of review.issues) {
 						console.log(chalk.dim(`    - ${issue.slice(0, 80)}`));
 						allIssuesFound.push(issue);
@@ -1049,15 +1059,23 @@ When done, provide a brief summary of what you changed.`;
 						}
 					}
 				} else {
-					console.log(chalk.green(`  [${tier}] Pass ${tierPasses}: Converged ✓`));
-					tierConverged = true;
+					// No issues found on this pass
+					console.log(chalk.green(`  [${tier}] Pass ${tierPasses}/${maxPasses}: No issues found ✓`));
+					// Tier is clean - move to next tier (or finish if opus)
+					break;
 				}
 			}
 
-			if (!tierConverged) {
+			// Check if we exhausted all passes without getting a clean review
+			const reachedMaxPasses = tierPasses >= maxPasses;
+			const lastPassHadIssues = tierFoundIssues && tierPasses >= maxPasses;
+
+			if (lastPassHadIssues) {
 				if (tier === "opus") {
-					// Opus is final tier - can't escalate further
-					console.log(chalk.yellow(`  [opus] Max passes (${maxPasses}) reached, unresolved issues remain`));
+					// Opus is final tier - no escalation path
+					console.log(
+						chalk.yellow(`  [opus] Exhausted ${maxPasses} passes - issues may remain unresolved`),
+					);
 					return {
 						converged: false,
 						issuesFound: allIssuesFound,
@@ -1066,7 +1084,12 @@ When done, provide a brief summary of what you changed.`;
 						annealingInsights: annealingInsights.length > 0 ? annealingInsights : undefined,
 					};
 				}
-				console.log(chalk.yellow(`  [${tier}] Max passes (${maxPasses}) reached, escalating to next tier...`));
+				console.log(chalk.yellow(`  [${tier}] Exhausted ${maxPasses} passes, escalating...`));
+			} else if (!reachedMaxPasses) {
+				// Tier finished cleanly (found no issues on last pass)
+				if (tierFoundIssues) {
+					console.log(chalk.green(`  [${tier}] Issues fixed, tier complete`));
+				}
 			}
 		}
 
@@ -1224,10 +1247,10 @@ NO ISSUES FOUND - Ready to commit.`;
 				}
 			}
 
-			return { model, foundIssues, issues, suggestion, converged: !foundIssues };
+			return { model, foundIssues, issues, suggestion, passedClean: !foundIssues };
 		} catch (error) {
 			this.log("Review failed", { error: String(error), model });
-			return { model, foundIssues: false, issues: [], converged: true };
+			return { model, foundIssues: false, issues: [], passedClean: true };
 		}
 	}
 

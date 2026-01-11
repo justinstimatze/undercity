@@ -197,6 +197,9 @@ export const mixedCommands: CommandModule = {
 					// No goal provided - process from task board
 					output.header("Undercity Grind Mode", "Autonomous operation • Rate limit handling • Infinite processing");
 
+					// Track how many tasks we've processed (for -n flag)
+					let tasksProcessed = 0;
+
 					// Check for interrupted batch and offer to resume
 					if (orchestrator.hasActiveRecovery()) {
 						const recoveryInfo = orchestrator.getRecoveryInfo();
@@ -211,19 +214,30 @@ export const mixedCommands: CommandModule = {
 
 							// Auto-resume the pending tasks
 							output.progress("Resuming interrupted batch...");
-							const pendingTasks = await orchestrator.resumeRecovery();
+							const recoveryTasks = await orchestrator.resumeRecovery();
 
-							if (pendingTasks.length > 0) {
-								const result = await orchestrator.runParallel(pendingTasks);
+							if (recoveryTasks.length > 0) {
+								// Apply -n limit to recovery tasks if specified
+								const tasksToResume =
+									maxCount > 0 ? recoveryTasks.slice(0, maxCount) : recoveryTasks;
+
+								const result = await orchestrator.runParallel(tasksToResume);
+								tasksProcessed += result.results.length;
+
 								output.summary("Recovery Complete", [
 									{ label: "Resumed", value: result.results.length },
 									{ label: "Successful", value: result.successful, status: "good" },
 									{ label: "Failed", value: result.failed, status: result.failed > 0 ? "bad" : "neutral" },
 									{ label: "Merged", value: result.merged },
 								]);
-								return;
+
+								// If -n limit reached, stop here
+								if (maxCount > 0 && tasksProcessed >= maxCount) {
+									return;
+								}
+							} else {
+								output.info("No pending tasks to resume");
 							}
-							output.info("No pending tasks to resume");
 						}
 					}
 
@@ -233,7 +247,20 @@ export const mixedCommands: CommandModule = {
 						const allTasks = getAllItems();
 						const pendingTasks = allTasks.filter((q) => q.status === "pending");
 
-						const tasksToProcess = maxCount > 0 ? pendingTasks.slice(0, maxCount) : pendingTasks;
+						// Account for tasks already processed during recovery
+						const remainingCount = maxCount > 0 ? maxCount - tasksProcessed : 0;
+						const tasksToProcess =
+							maxCount > 0 ? pendingTasks.slice(0, remainingCount) : pendingTasks;
+
+						// Skip if no tasks to process (either none pending or -n limit reached)
+						if (tasksToProcess.length === 0) {
+							if (pendingTasks.length === 0) {
+								output.info("No pending tasks on the task board");
+							}
+							// If tasksProcessed > 0, we already showed recovery summary
+							return;
+						}
+
 						const tasks = tasksToProcess.map((q) => q.objective);
 
 						// Build a map of objective -> task ID for status updates
@@ -260,7 +287,7 @@ export const mixedCommands: CommandModule = {
 						}
 
 						output.summary("Grind Session Complete", [
-							{ label: "Total processed", value: result.results.length },
+							{ label: "Total processed", value: result.results.length + tasksProcessed },
 							{ label: "Successful", value: result.successful, status: result.successful > 0 ? "good" : "neutral" },
 							{ label: "Failed", value: result.failed, status: result.failed > 0 ? "bad" : "neutral" },
 							{ label: "Merged", value: result.merged },
