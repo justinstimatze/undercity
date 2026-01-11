@@ -23,6 +23,8 @@ export interface ParallelSoloOptions {
 	autoCommit?: boolean;
 	stream?: boolean;
 	verbose?: boolean;
+	reviewPasses?: boolean; // Enable escalating review (haiku → sonnet → opus)
+	annealingAtOpus?: boolean; // Enable annealing review at opus tier
 }
 
 export interface ParallelTaskResult {
@@ -67,6 +69,8 @@ export class ParallelSoloOrchestrator {
 	private autoCommit: boolean;
 	private stream: boolean;
 	private verbose: boolean;
+	private reviewPasses: boolean;
+	private annealingAtOpus: boolean;
 	private worktreeManager: WorktreeManager;
 
 	constructor(options: ParallelSoloOptions = {}) {
@@ -75,6 +79,8 @@ export class ParallelSoloOrchestrator {
 		this.autoCommit = options.autoCommit ?? true;
 		this.stream = options.stream ?? false;
 		this.verbose = options.verbose ?? false;
+		this.reviewPasses = options.reviewPasses ?? true; // Default to review enabled
+		this.annealingAtOpus = options.annealingAtOpus ?? false;
 		this.worktreeManager = new WorktreeManager();
 	}
 
@@ -141,6 +147,8 @@ export class ParallelSoloOrchestrator {
 					stream: this.stream,
 					verbose: this.verbose,
 					workingDirectory: worktreePath,
+					reviewPasses: this.reviewPasses,
+					annealingAtOpus: this.annealingAtOpus,
 				});
 
 				const result = await orchestrator.runTask(task);

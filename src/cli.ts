@@ -1960,6 +1960,8 @@ program
 						autoCommit: true,
 						stream: options.stream,
 						verbose: options.stream,
+						reviewPasses: options.review !== false, // Default true
+						annealingAtOpus: options.annealing,
 					});
 
 					const result = await orchestrator.runParallel(batch.map((q) => q.objective));
