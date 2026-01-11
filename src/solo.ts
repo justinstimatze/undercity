@@ -28,6 +28,7 @@ import { assessComplexityFast, assessComplexityQuantitative, type ComplexityAsse
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
 import { createAndCheckout } from "./git.js";
+import { recordQueryResult } from "./live-metrics.js";
 import { raidLogger } from "./logger.js";
 import { MetricsTracker } from "./metrics.js";
 import type { AttemptRecord, ErrorCategory, TokenUsage } from "./types.js";
@@ -702,8 +703,30 @@ When done, provide a brief summary of what you changed.`;
 				this.streamMessage(message);
 			}
 
-			if (message.type === "result" && message.subtype === "success") {
-				result = message.result;
+			if (message.type === "result") {
+				// Record SDK metrics to live-metrics.json
+				const msg = message as Record<string, unknown>;
+				const usageData = msg.usage as Record<string, number> | undefined;
+				const modelUsage = msg.modelUsage as Record<string, Record<string, number>> | undefined;
+
+				recordQueryResult({
+					success: msg.subtype === "success",
+					rateLimited: msg.subtype === "error" && String(msg.result || "").includes("rate"),
+					inputTokens: usageData?.inputTokens ?? 0,
+					outputTokens: usageData?.outputTokens ?? 0,
+					cacheReadTokens: usageData?.cacheReadInputTokens ?? 0,
+					cacheCreationTokens: usageData?.cacheCreationInputTokens ?? 0,
+					costUsd: (msg.total_cost_usd as number) ?? 0,
+					durationMs: (msg.duration_ms as number) ?? 0,
+					apiDurationMs: (msg.duration_api_ms as number) ?? 0,
+					turns: (msg.num_turns as number) ?? 0,
+					model: this.currentModel,
+					modelUsage: modelUsage as Record<string, { inputTokens?: number; outputTokens?: number; costUSD?: number }>,
+				});
+
+				if (msg.subtype === "success") {
+					result = msg.result as string;
+				}
 			}
 		}
 

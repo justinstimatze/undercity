@@ -191,10 +191,10 @@ export const mixedCommands: CommandModule = {
 						// Get tasks from quest board
 						const { getAllItems } = await import("../quest.js");
 						const allQuests = getAllItems();
-						const pendingQuests = allQuests.filter(q => q.status === "pending");
+						const pendingQuests = allQuests.filter((q) => q.status === "pending");
 
 						const questsToProcess = maxCount > 0 ? pendingQuests.slice(0, maxCount) : pendingQuests;
-						const tasks = questsToProcess.map(q => q.objective);
+						const tasks = questsToProcess.map((q) => q.objective);
 
 						const result = await orchestrator.runParallel(tasks);
 
@@ -271,48 +271,50 @@ export const mixedCommands: CommandModule = {
 				"Filter by card category: questioning, action, perspective, disruption, exploration",
 			)
 			.option("--all-categories", "Show all available categories")
-			.action((situation: string | undefined, options: { count?: string; category?: string; allCategories?: boolean }) => {
-				const oracle = new UndercityOracle();
+			.action(
+				(situation: string | undefined, options: { count?: string; category?: string; allCategories?: boolean }) => {
+					const oracle = new UndercityOracle();
 
-				if (options.allCategories) {
-					console.log(chalk.bold("Oracle Categories"));
-					console.log("Available categories for filtering:");
-					console.log("  • questioning   - Cards that ask probing questions");
-					console.log("  • action        - Cards that suggest specific actions");
-					console.log("  • perspective   - Cards that shift viewpoint");
-					console.log("  • disruption    - Cards that challenge assumptions");
-					console.log("  • exploration   - Cards that encourage investigation");
-					return;
-				}
-
-				const count = Math.min(5, Math.max(1, Number.parseInt(options.count || "1", 10)));
-
-				if (situation) {
-					console.log(chalk.bold(`Oracle Consultation: ${situation}`));
-				} else {
-					console.log(chalk.bold("Oracle Draw"));
-				}
-				console.log();
-
-				try {
-					const cards = oracle.drawSpread(count, options.category as any);
-
-					for (let i = 0; i < cards.length; i++) {
-						const card = cards[i];
-						console.log(chalk.cyan(`Card ${i + 1}:`));
-						console.log(`  ${card.text}`);
-						console.log(chalk.dim(`  Category: ${card.category}`));
-						if (i < cards.length - 1) console.log();
+					if (options.allCategories) {
+						console.log(chalk.bold("Oracle Categories"));
+						console.log("Available categories for filtering:");
+						console.log("  • questioning   - Cards that ask probing questions");
+						console.log("  • action        - Cards that suggest specific actions");
+						console.log("  • perspective   - Cards that shift viewpoint");
+						console.log("  • disruption    - Cards that challenge assumptions");
+						console.log("  • exploration   - Cards that encourage investigation");
+						return;
 					}
+
+					const count = Math.min(5, Math.max(1, Number.parseInt(options.count || "1", 10)));
 
 					if (situation) {
-						console.log();
-						console.log(chalk.dim("Reflect on how these insights apply to your situation."));
+						console.log(chalk.bold(`Oracle Consultation: ${situation}`));
+					} else {
+						console.log(chalk.bold("Oracle Draw"));
 					}
-				} catch (error) {
-					console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
-				}
-			});
+					console.log();
+
+					try {
+						const cards = oracle.drawSpread(count, options.category as any);
+
+						for (let i = 0; i < cards.length; i++) {
+							const card = cards[i];
+							console.log(chalk.cyan(`Card ${i + 1}:`));
+							console.log(`  ${card.text}`);
+							console.log(chalk.dim(`  Category: ${card.category}`));
+							if (i < cards.length - 1) console.log();
+						}
+
+						if (situation) {
+							console.log();
+							console.log(chalk.dim("Reflect on how these insights apply to your situation."));
+						}
+					} catch (error) {
+						console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+					}
+				},
+			);
 
 		// DSPy readiness command
 		program
@@ -406,22 +408,17 @@ export const mixedCommands: CommandModule = {
 				}
 			});
 
-		// Watch command (alias for dashboard)
+		// Watch command - Matrix-style visualization
 		program
 			.command("watch")
-			.description("Alias for dashboard - live TUI with status and logs")
-			.option("-r, --refresh <ms>", "Refresh interval in milliseconds", "1000")
-			.action(async (options: { refresh?: string }) => {
-				const refreshInterval = Number.parseInt(options.refresh || "1000", 10);
-
-				console.log(chalk.cyan("Starting Undercity Dashboard..."));
-				console.log(chalk.dim(`Refresh interval: ${refreshInterval}ms`));
-
+			.description("Matrix-style TUI dashboard - dense cyberpunk visualization of grind operations")
+			.action(async () => {
 				try {
-					const { startDashboard } = await import("../tui-dashboard.js");
-					await startDashboard({ refreshInterval });
+					const { launchDashboard } = await import("../dashboard.js");
+					launchDashboard();
 				} catch (error) {
 					console.error(chalk.red("Dashboard failed to start:"), error);
+					console.error(chalk.dim("Make sure blessed and blessed-contrib are installed"));
 					process.exit(1);
 				}
 			});

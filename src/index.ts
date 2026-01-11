@@ -32,6 +32,14 @@ export {
 	stash,
 	stashPop,
 } from "./git.js";
+// Live metrics
+export {
+	type LiveMetrics,
+	loadLiveMetrics,
+	recordQueryResult,
+	resetLiveMetrics,
+	saveLiveMetrics,
+} from "./live-metrics.js";
 // Performance management
 export { getPerformanceManager } from "./performance-manager.js";
 // Persistence layer
