@@ -714,4 +714,97 @@ export class ExperimentTemplates {
 
     return experiment.id;
   }
+
+  /**
+   * Comprehensive Ollama vs Haiku diff generation experiment
+   */
+  createOllamaDiffExperiment(): string {
+    const variants: Omit<ExperimentVariant, "id">[] = [
+      {
+        name: "Haiku Cloud API (Control)",
+        description: "Claude Haiku via Anthropic API for diff generation baseline",
+        weight: 0.25,
+        isControl: true,
+        parameters: {
+          useLocalLLM: false,
+          modelChoices: {
+            quester: "haiku",
+          },
+          diffStrategy: "minimal-diff",
+          customParameters: {
+            diffProvider: "haiku-cloud",
+            expectedCost: "low-api-cost",
+            expectedLatency: "cloud-dependent",
+          },
+        },
+      },
+      {
+        name: "Ollama Qwen2 1.5B",
+        description: "Fast local model optimized for speed over quality",
+        weight: 0.25,
+        parameters: {
+          useLocalLLM: true,
+          localModel: "qwen2:1.5b" as const,
+          diffStrategy: "minimal-diff",
+          customParameters: {
+            diffProvider: "ollama-local",
+            modelFamily: "qwen2",
+            modelSize: "1.5B",
+            expectedCost: "zero",
+            expectedLatency: "very-fast",
+          },
+        },
+      },
+      {
+        name: "Ollama DeepSeek Coder 6.7B",
+        description: "Code-specialized model for higher quality diffs",
+        weight: 0.25,
+        parameters: {
+          useLocalLLM: true,
+          localModel: "deepseek-coder:6.7b-instruct" as const,
+          diffStrategy: "minimal-diff",
+          customParameters: {
+            diffProvider: "ollama-local",
+            modelFamily: "deepseek-coder",
+            modelSize: "6.7B",
+            specialization: "code-instruction",
+            expectedCost: "zero",
+            expectedLatency: "medium",
+          },
+        },
+      },
+      {
+        name: "Ollama CodeLlama 7B",
+        description: "Alternative code-specialized model for comparison",
+        weight: 0.25,
+        parameters: {
+          useLocalLLM: true,
+          localModel: "codellama:7b-code" as const,
+          diffStrategy: "minimal-diff",
+          customParameters: {
+            diffProvider: "ollama-local",
+            modelFamily: "codellama",
+            modelSize: "7B",
+            specialization: "code",
+            expectedCost: "zero",
+            expectedLatency: "medium-slow",
+          },
+        },
+      },
+    ];
+
+    const experiment = this.framework.createExperiment(
+      "Ollama vs Haiku Comprehensive Diff Generation",
+      "Test local Ollama models vs cloud Haiku for code diff generation across speed, quality, and cost dimensions",
+      "Local code-specialized models will achieve similar success rates to Haiku while providing zero API costs and faster response times",
+      variants,
+      {
+        targetSampleSize: 50,
+        minimumDetectableEffect: 0.1,
+        tags: ["ollama", "haiku", "diff-generation", "local-vs-cloud", "cost-efficiency", "code-quality"],
+      }
+    );
+
+    return experiment.id;
+  }
 }

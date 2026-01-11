@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { ExperimentFramework } from "./framework.js";
 import { QuestExperimentIntegrator } from "./integration.js";
 import { ExperimentTemplates } from "./examples.js";
+import { DiffGenerationService } from "./diff-generator.js";
 import { Experiment, ExperimentStatus } from "./types.js";
 import { writeFileAtomic } from "../file-utils.js";
 
@@ -15,11 +16,13 @@ export class ExperimentCLI {
   private framework: ExperimentFramework;
   private integrator: QuestExperimentIntegrator;
   private templates: ExperimentTemplates;
+  private diffService: DiffGenerationService;
 
   constructor(storagePath?: string) {
     this.framework = new ExperimentFramework(storagePath);
     this.integrator = new QuestExperimentIntegrator(this.framework);
     this.templates = new ExperimentTemplates(this.framework);
+    this.diffService = new DiffGenerationService(this.framework);
   }
 
 
@@ -151,9 +154,12 @@ export class ExperimentCLI {
         case "local-model-comparison":
           experimentId = this.templates.createLocalModelComparisonExperiment();
           break;
+        case "ollama-diff":
+          experimentId = this.templates.createOllamaDiffExperiment();
+          break;
         default:
           console.error(`❌ Unknown template: ${templateName}`);
-          console.log("Available templates: opus-vs-mixed, squad-composition, parallelism, context-size, auto-approval, comprehensive, ollama-vs-haiku, local-model-comparison");
+          console.log("Available templates: opus-vs-mixed, squad-composition, parallelism, context-size, auto-approval, comprehensive, ollama-vs-haiku, local-model-comparison, ollama-diff");
           return;
       }
 
@@ -361,9 +367,101 @@ export class ExperimentCLI {
     console.log("comprehensive     - Test speed vs quality configurations");
     console.log("ollama-vs-haiku   - Test local Ollama models vs Haiku for diff generation");
     console.log("local-model-comparison - Compare different Ollama model sizes and specializations");
+    console.log("ollama-diff          - Comprehensive Ollama vs Haiku diff generation test");
     console.log();
     console.log("Usage: experiment create-template <template-name>");
     console.log();
+  }
+
+  /**
+   * Run diff generation experiment
+   */
+  async runDiffExperiment(experimentId: string, trials?: number): Promise<void> {
+    try {
+      const experiment = this.framework.getExperiment(experimentId);
+      if (!experiment) {
+        console.error(`❌ Experiment not found: ${experimentId}`);
+        return;
+      }
+
+      // Check if this is a diff-related experiment
+      const isDiffExperiment = experiment.tags.includes("diff-generation") ||
+                              experiment.tags.includes("ollama") ||
+                              experiment.name.toLowerCase().includes("diff");
+
+      if (!isDiffExperiment) {
+        console.error(`❌ Experiment ${experimentId} is not a diff generation experiment`);
+        return;
+      }
+
+      console.log(`🧪 Running diff generation experiment: ${experiment.name}`);
+      console.log(`   Experiment ID: ${experimentId}`);
+
+      // Test Ollama setup first
+      console.log("🔧 Testing Ollama setup...");
+      const setup = await this.diffService.testOllamaSetup();
+
+      if (!setup.available) {
+        console.log("⚠️  Ollama is not available. Only cloud API variants will be tested.");
+      } else {
+        console.log(`✅ Ollama available with models: ${setup.models.join(", ")}`);
+        for (const [model, result] of Object.entries(setup.testResults)) {
+          const status = result.success ? "✅" : "❌";
+          const time = result.responseTime ? `${result.responseTime}ms` : "failed";
+          console.log(`   ${status} ${model}: ${time}`);
+        }
+      }
+
+      // Generate sample tasks
+      const tasks = this.diffService.generateSampleTasks();
+      const trialsPerTask = trials || 3;
+
+      console.log(`📋 Running ${tasks.length} tasks with ${trialsPerTask} trials each`);
+      console.log(`   Total trials: ${tasks.length * trialsPerTask}`);
+
+      // Start the experiment
+      await this.diffService.runDiffExperiment(experimentId, tasks, trialsPerTask);
+
+      console.log("✅ Diff generation experiment completed");
+      console.log(`📊 Use 'experiment analyze ${experimentId}' to see results`);
+
+    } catch (error) {
+      console.error(`❌ Failed to run diff experiment: ${error}`);
+    }
+  }
+
+  /**
+   * Test Ollama setup
+   */
+  async testOllama(): Promise<void> {
+    try {
+      console.log("🔧 Testing Ollama setup...");
+      const setup = await this.diffService.testOllamaSetup();
+
+      if (!setup.available) {
+        console.log("❌ Ollama is not available");
+        console.log("   Make sure Ollama is installed and running");
+        console.log("   Visit: https://ollama.ai");
+        return;
+      }
+
+      console.log("✅ Ollama is available");
+      console.log(`📦 Available models: ${setup.models.length}`);
+
+      for (const [model, result] of Object.entries(setup.testResults)) {
+        const status = result.success ? "✅" : "❌";
+        const time = result.responseTime ? `${result.responseTime}ms` : "failed";
+        const tps = result.tokensPerSecond ? ` (${result.tokensPerSecond.toFixed(1)} t/s)` : "";
+        console.log(`   ${status} ${model}: ${time}${tps}`);
+
+        if (!result.success && result.error) {
+          console.log(`      Error: ${result.error}`);
+        }
+      }
+
+    } catch (error) {
+      console.error(`❌ Failed to test Ollama: ${error}`);
+    }
   }
 
   /**
@@ -379,7 +477,7 @@ USAGE:
 COMMANDS:
   list [status]                List experiments (optionally filter by status)
   show <id>                    Show detailed experiment information
-  create-template <name>          Create experiment from template
+  create-template <name>       Create experiment from template
   start <id> [trials]          Start an experiment (optionally specify trial count)
   stop <id>                    Stop an experiment
   analyze <id>                 Analyze experiment results
@@ -390,14 +488,17 @@ COMMANDS:
   import <file>                Import experiment from JSON
   export <id> <file>           Export experiment to JSON
   templates                    List available templates
+  run-diff <id> [trials]       Run diff generation experiment
+  test-ollama                  Test Ollama setup and models
   help                         Show this help
 
 EXAMPLES:
   experiment list
-  experiment create-template opus-vs-mixed
+  experiment create-template ollama-diff
   experiment start exp-123456        # Use default trials
-  experiment start exp-123456 50     # Run exactly 50 trials
+  experiment run-diff exp-123456 5   # Run diff experiment with 5 trials per task
   experiment analyze exp-123456
+  experiment test-ollama             # Test Ollama availability
   experiment report exp-123456 report.md
 
 For more information, see the experimentation documentation.

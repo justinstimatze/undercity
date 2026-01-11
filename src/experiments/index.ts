@@ -7,6 +7,7 @@ export * from "./framework.js";
 export * from "./integration.js";
 export * from "./examples.js";
 export * from "./cli.js";
+export * from "./diff-generator.js";
 
 // Convenience function to create a new experiment framework instance
 export function createExperimentFramework(storagePath?: string) {

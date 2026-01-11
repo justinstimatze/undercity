@@ -3,6 +3,14 @@
  *
  * Tracks successful prompts, approaches, and learnings across different task types
  * Builds institutional knowledge to improve future raid performance
+ *
+ * DSPy Evaluation:
+ * This module includes assessment logic for determining whether DSPy integration
+ * would provide value based on actual metrics data. The assessment analyzes:
+ * - Success rates (is prompt quality the bottleneck?)
+ * - Escalation patterns (is routing the bottleneck?)
+ * - Token efficiency (are prompts optimized?)
+ * - Task type performance variance (are specific prompts underperforming?)
  */
 
 import { createHash } from "node:crypto";
@@ -319,7 +327,199 @@ export class KnowledgeTracker {
 	}
 
 	/**
+	 * Load metrics from the JSONL file for comprehensive DSPy analysis
+	 */
+	private loadMetricsData(): Array<{
+		questId: string;
+		raidId: string;
+		objective: string;
+		success: boolean;
+		durationMs: number;
+		totalTokens: number;
+		agentsSpawned: number;
+		agentTypes: string[];
+		startedAt: string;
+		completedAt?: string;
+		escalations?: number;
+		escalationReasons?: string[];
+	}> {
+		const metricsPath = ".undercity/metrics.jsonl";
+		if (!existsSync(metricsPath)) {
+			return [];
+		}
+
+		try {
+			const content = readFileSync(metricsPath, "utf-8");
+			return content
+				.split("\n")
+				.filter((line) => line.trim() !== "")
+				.map((line) => {
+					try {
+						return JSON.parse(line);
+					} catch {
+						return null;
+					}
+				})
+				.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+		} catch {
+			return [];
+		}
+	}
+
+	/**
+	 * Analyze bottleneck: is prompt quality or routing/model selection the issue?
+	 * This is the core analysis for DSPy evaluation.
+	 */
+	private analyzeBottleneck(metrics: ReturnType<typeof this.loadMetricsData>): {
+		bottleneck: "prompt_quality" | "routing" | "model_capability" | "unknown" | "none";
+		evidence: string[];
+		promptQualityScore: number;
+		routingAccuracyScore: number;
+	} {
+		if (metrics.length === 0) {
+			return {
+				bottleneck: "unknown",
+				evidence: ["No metrics data available for analysis"],
+				promptQualityScore: 0,
+				routingAccuracyScore: 0,
+			};
+		}
+
+		const evidence: string[] = [];
+		// Filter out entries without objective field (legacy or malformed entries)
+		const validMetrics = metrics.filter((m) => m.objective && typeof m.objective === "string");
+		const successfulTasks = validMetrics.filter((m) => m.success);
+		const failedTasks = validMetrics.filter((m) => !m.success);
+		const successRate = validMetrics.length > 0 ? successfulTasks.length / validMetrics.length : 0;
+
+		// Analyze task patterns
+		const taskCategories = new Map<string, { success: number; fail: number; totalTokens: number }>();
+		for (const task of validMetrics) {
+			// Extract category from objective (e.g., "[metrics]", "[learning]")
+			const categoryMatch = task.objective.match(/^\[([^\]]+)\]/);
+			const category = categoryMatch ? categoryMatch[1] : "general";
+
+			const existing = taskCategories.get(category) || { success: 0, fail: 0, totalTokens: 0 };
+			if (task.success) {
+				existing.success++;
+			} else {
+				existing.fail++;
+			}
+			existing.totalTokens += task.totalTokens || 0;
+			taskCategories.set(category, existing);
+		}
+
+		// Calculate variance in success rates across categories
+		const categorySuccessRates: number[] = [];
+		for (const [category, stats] of taskCategories) {
+			const total = stats.success + stats.fail;
+			if (total >= 2) {
+				const rate = stats.success / total;
+				categorySuccessRates.push(rate);
+				if (rate < 0.5) {
+					evidence.push(`Category "${category}" has low success rate (${(rate * 100).toFixed(0)}%)`);
+				}
+			}
+		}
+
+		// High variance in category success rates suggests prompt quality issues
+		const avgCategoryRate =
+			categorySuccessRates.length > 0
+				? categorySuccessRates.reduce((a, b) => a + b, 0) / categorySuccessRates.length
+				: 0;
+		const categoryVariance =
+			categorySuccessRates.length > 1
+				? categorySuccessRates.reduce((sum, rate) => sum + (rate - avgCategoryRate) ** 2, 0) /
+					categorySuccessRates.length
+				: 0;
+
+		// Analyze token efficiency (high tokens on failed tasks suggests prompt issues)
+		const avgTokensSuccess =
+			successfulTasks.length > 0
+				? successfulTasks.reduce((sum, t) => sum + (t.totalTokens || 0), 0) / successfulTasks.length
+				: 0;
+		const avgTokensFailed =
+			failedTasks.length > 0
+				? failedTasks.reduce((sum, t) => sum + (t.totalTokens || 0), 0) / failedTasks.length
+				: 0;
+
+		// Check for escalation patterns (indicates routing issues)
+		const tasksWithEscalation = metrics.filter((m) => (m.escalations || 0) > 0);
+		const escalationRate = tasksWithEscalation.length / metrics.length;
+
+		// Analyze agent type distribution for routing accuracy
+		const agentTypeFailures = new Map<string, number>();
+		for (const task of failedTasks) {
+			for (const agentType of task.agentTypes || []) {
+				agentTypeFailures.set(agentType, (agentTypeFailures.get(agentType) || 0) + 1);
+			}
+		}
+
+		// Calculate scores
+		let promptQualityScore = 100;
+		let routingAccuracyScore = 100;
+
+		// Reduce prompt quality score based on evidence
+		if (categoryVariance > 0.1) {
+			promptQualityScore -= 20;
+			evidence.push(
+				`High variance in category success rates (${(categoryVariance * 100).toFixed(1)}%) suggests inconsistent prompt quality`,
+			);
+		}
+
+		if (avgTokensFailed > avgTokensSuccess * 1.5 && failedTasks.length > 0) {
+			promptQualityScore -= 15;
+			evidence.push(
+				`Failed tasks use ${((avgTokensFailed / avgTokensSuccess - 1) * 100).toFixed(0)}% more tokens than successful ones`,
+			);
+		}
+
+		// Reduce routing score based on escalation patterns
+		if (escalationRate > 0.3) {
+			routingAccuracyScore -= 30;
+			evidence.push(`High escalation rate (${(escalationRate * 100).toFixed(1)}%) suggests routing issues`);
+		} else if (escalationRate > 0.15) {
+			routingAccuracyScore -= 15;
+			evidence.push(`Moderate escalation rate (${(escalationRate * 100).toFixed(1)}%)`);
+		}
+
+		// Overall success rate impact
+		if (successRate < 0.7) {
+			promptQualityScore -= Math.floor((0.7 - successRate) * 50);
+			evidence.push(`Overall success rate is ${(successRate * 100).toFixed(1)}%`);
+		}
+
+		// Determine the bottleneck
+		let bottleneck: "prompt_quality" | "routing" | "model_capability" | "unknown" | "none";
+
+		if (successRate > 0.9 && promptQualityScore > 80 && routingAccuracyScore > 80) {
+			bottleneck = "none";
+			evidence.push("System is performing well - no significant bottleneck identified");
+		} else if (promptQualityScore < routingAccuracyScore - 20) {
+			bottleneck = "prompt_quality";
+			evidence.push("Prompt quality appears to be the primary bottleneck");
+		} else if (routingAccuracyScore < promptQualityScore - 20) {
+			bottleneck = "routing";
+			evidence.push("Routing/model selection appears to be the primary bottleneck");
+		} else if (promptQualityScore < 60 && routingAccuracyScore < 60) {
+			bottleneck = "model_capability";
+			evidence.push("Both prompt quality and routing need improvement");
+		} else {
+			bottleneck = "unknown";
+			evidence.push("No clear bottleneck identified - mixed signals");
+		}
+
+		return {
+			bottleneck,
+			evidence,
+			promptQualityScore,
+			routingAccuracyScore,
+		};
+	}
+
+	/**
 	 * Assess readiness for DSPy integration by analyzing prompt performance patterns
+	 * Integrates with actual metrics data from .undercity/metrics.jsonl
 	 * @returns Analysis indicating whether DSPy would provide value
 	 */
 	assessDSPyReadiness(): {
@@ -332,62 +532,164 @@ export class KnowledgeTracker {
 			avgSatisfactionScore: number;
 			errorPatternDiversity: number;
 		};
+		metricsAnalysis?: {
+			totalTasks: number;
+			successRate: number;
+			avgTokensPerTask: number;
+			avgDurationMs: number;
+			bottleneck: string;
+			promptQualityScore: number;
+			routingAccuracyScore: number;
+			categoryBreakdown: Array<{ category: string; successRate: number; count: number }>;
+		};
 	} {
+		// First, load and analyze actual metrics data
+		const metricsData = this.loadMetricsData();
+		const bottleneckAnalysis = this.analyzeBottleneck(metricsData);
+
+		// Then, check knowledge tracker data
 		const storage = this.loadStorage();
 		const allKnowledge = storage.knowledge;
 
-		if (allKnowledge.length < 50) {
-			return {
-				recommendDSPy: false,
-				confidence: 0.1,
-				rationale: ["Insufficient data: Need at least 50 prompt records for meaningful analysis"],
-				criticalMetrics: {
-					lowPerformingPrompts: 0,
-					humanInterventionRate: 0,
-					avgSatisfactionScore: 0,
-					errorPatternDiversity: 0,
-				},
-			};
-		}
+		// Build metrics analysis from actual data
+		const metricsAnalysis =
+			metricsData.length > 0
+				? {
+						totalTasks: metricsData.length,
+						successRate: metricsData.filter((m) => m.success).length / metricsData.length,
+						avgTokensPerTask:
+							metricsData.reduce((sum, m) => sum + (m.totalTokens || 0), 0) / metricsData.length,
+						avgDurationMs: metricsData.reduce((sum, m) => sum + (m.durationMs || 0), 0) / metricsData.length,
+						bottleneck: bottleneckAnalysis.bottleneck,
+						promptQualityScore: bottleneckAnalysis.promptQualityScore,
+						routingAccuracyScore: bottleneckAnalysis.routingAccuracyScore,
+						categoryBreakdown: this.buildCategoryBreakdown(metricsData),
+					}
+				: undefined;
 
-		// Calculate critical metrics
-		const lowPerformingPrompts = allKnowledge.filter(k =>
-			(k.successCount || 0) <= 2 || (k.metrics.successRating || 0) < 3
+		// Calculate legacy metrics from knowledge storage (for backward compatibility)
+		const lowPerformingPrompts = allKnowledge.filter(
+			(k) => (k.successCount || 0) <= 2 || (k.metrics.successRating || 0) < 3,
 		).length;
 
-		const promptsWithInterventionData = allKnowledge.filter(k =>
-			k.metrics.requiredHumanIntervention !== undefined
+		const promptsWithInterventionData = allKnowledge.filter(
+			(k) => k.metrics.requiredHumanIntervention !== undefined,
 		);
-		const humanInterventionRate = promptsWithInterventionData.length > 0
-			? promptsWithInterventionData.filter(k => k.metrics.requiredHumanIntervention).length / promptsWithInterventionData.length
-			: 0;
+		const humanInterventionRate =
+			promptsWithInterventionData.length > 0
+				? promptsWithInterventionData.filter((k) => k.metrics.requiredHumanIntervention).length /
+					promptsWithInterventionData.length
+				: 0;
 
-		const promptsWithSatisfactionData = allKnowledge.filter(k =>
-			k.metrics.humanSatisfactionScore !== undefined
-		);
-		const avgSatisfactionScore = promptsWithSatisfactionData.length > 0
-			? promptsWithSatisfactionData.reduce((sum, k) => sum + (k.metrics.humanSatisfactionScore || 0), 0) / promptsWithSatisfactionData.length
-			: 0;
+		const promptsWithSatisfactionData = allKnowledge.filter((k) => k.metrics.humanSatisfactionScore !== undefined);
+		const avgSatisfactionScore =
+			promptsWithSatisfactionData.length > 0
+				? promptsWithSatisfactionData.reduce((sum, k) => sum + (k.metrics.humanSatisfactionScore || 0), 0) /
+					promptsWithSatisfactionData.length
+				: 0;
 
 		const allErrorCategories = new Set<string>();
-		allKnowledge.forEach(k => {
-			k.metrics.errorCategories?.forEach(cat => allErrorCategories.add(cat));
+		allKnowledge.forEach((k) => {
+			k.metrics.errorCategories?.forEach((cat) => allErrorCategories.add(cat));
 		});
 		const errorPatternDiversity = allErrorCategories.size;
 
-		const metrics = {
+		const legacyMetrics = {
 			lowPerformingPrompts,
 			humanInterventionRate,
 			avgSatisfactionScore,
 			errorPatternDiversity,
 		};
 
-		// Decision logic for DSPy recommendation
+		// Decision logic combining both data sources
 		const rationale: string[] = [];
 		let score = 0;
 
-		// High proportion of low-performing prompts suggests optimization opportunity
-		const lowPerfRatio = lowPerformingPrompts / allKnowledge.length;
+		// Primary decision: Use metrics data if available (more reliable)
+		if (metricsData.length >= 10) {
+			rationale.push(`Analyzing ${metricsData.length} tasks from metrics.jsonl`);
+
+			// Check if prompt quality is the bottleneck
+			if (bottleneckAnalysis.bottleneck === "prompt_quality") {
+				score += 4;
+				rationale.push("Bottleneck Analysis: Prompt quality identified as primary issue");
+				rationale.push(
+					`Prompt Quality Score: ${bottleneckAnalysis.promptQualityScore}/100 (DSPy could help optimize)`,
+				);
+			} else if (bottleneckAnalysis.bottleneck === "routing") {
+				score += 1;
+				rationale.push("Bottleneck Analysis: Routing/model selection is the primary issue");
+				rationale.push("Focus on improving task routing before considering DSPy");
+			} else if (bottleneckAnalysis.bottleneck === "none") {
+				rationale.push("Bottleneck Analysis: System performing well - no significant issues");
+				rationale.push("DSPy would provide marginal improvement at best");
+			}
+
+			// Add evidence from bottleneck analysis
+			bottleneckAnalysis.evidence.forEach((e) => rationale.push(e));
+
+			// Success rate analysis
+			if (metricsAnalysis && metricsAnalysis.successRate < 0.7) {
+				score += 2;
+				rationale.push(
+					`Low overall success rate (${(metricsAnalysis.successRate * 100).toFixed(1)}%) indicates optimization opportunity`,
+				);
+			} else if (metricsAnalysis && metricsAnalysis.successRate > 0.9) {
+				rationale.push(
+					`High success rate (${(metricsAnalysis.successRate * 100).toFixed(1)}%) - current prompts are effective`,
+				);
+			}
+
+			// Calculate confidence based on data volume
+			const dataConfidence = Math.min(1, metricsData.length / 50);
+
+			// Final recommendation
+			const recommendDSPy = score >= 4 && bottleneckAnalysis.bottleneck === "prompt_quality";
+
+			if (!recommendDSPy) {
+				if (bottleneckAnalysis.bottleneck !== "prompt_quality") {
+					rationale.push(
+						"DSPy NOT RECOMMENDED: Prompt quality is not the bottleneck. Focus on improving " +
+							(bottleneckAnalysis.bottleneck === "routing"
+								? "task routing and model selection"
+								: "overall system architecture"),
+					);
+				} else if (score < 4) {
+					rationale.push("DSPy NOT RECOMMENDED: Insufficient evidence of prompt quality issues");
+				}
+			} else {
+				rationale.push("DSPy RECOMMENDED: Prompt quality is the bottleneck and could benefit from optimization");
+				rationale.push(
+					"Suggested approach: Use DSPy for few-shot learning on underperforming task categories",
+				);
+			}
+
+			return {
+				recommendDSPy,
+				confidence: dataConfidence,
+				rationale,
+				criticalMetrics: legacyMetrics,
+				metricsAnalysis,
+			};
+		}
+
+		// Fallback to legacy knowledge-based analysis if no metrics data
+		if (allKnowledge.length < 10 && metricsData.length < 10) {
+			return {
+				recommendDSPy: false,
+				confidence: 0.1,
+				rationale: [
+					"Insufficient data: Need at least 10 task records for meaningful analysis",
+					`Currently have ${metricsData.length} metrics entries and ${allKnowledge.length} knowledge entries`,
+					"Continue running tasks to collect more data before evaluating DSPy",
+				],
+				criticalMetrics: legacyMetrics,
+				metricsAnalysis,
+			};
+		}
+
+		// Legacy analysis if we only have knowledge data
+		const lowPerfRatio = allKnowledge.length > 0 ? lowPerformingPrompts / allKnowledge.length : 0;
 		if (lowPerfRatio > 0.3) {
 			score += 3;
 			rationale.push(`High proportion of low-performing prompts (${(lowPerfRatio * 100).toFixed(1)}%)`);
@@ -395,60 +697,72 @@ export class KnowledgeTracker {
 			score += 1;
 			rationale.push(`Moderate proportion of low-performing prompts (${(lowPerfRatio * 100).toFixed(1)}%)`);
 		} else {
-			rationale.push(`Low proportion of underperforming prompts (${(lowPerfRatio * 100).toFixed(1)}%) - existing system effective`);
+			rationale.push(
+				`Low proportion of underperforming prompts (${(lowPerfRatio * 100).toFixed(1)}%) - existing system effective`,
+			);
 		}
 
-		// High human intervention rate suggests prompts need improvement
 		if (humanInterventionRate > 0.4) {
 			score += 3;
 			rationale.push(`High human intervention rate (${(humanInterventionRate * 100).toFixed(1)}%)`);
 		} else if (humanInterventionRate > 0.2) {
 			score += 1;
 			rationale.push(`Moderate human intervention rate (${(humanInterventionRate * 100).toFixed(1)}%)`);
-		} else {
-			rationale.push(`Low human intervention rate (${(humanInterventionRate * 100).toFixed(1)}%) - prompts are sufficiently autonomous`);
 		}
 
-		// Low satisfaction suggests quality issues
-		if (avgSatisfactionScore > 0 && avgSatisfactionScore < 3) {
-			score += 2;
-			rationale.push(`Low average satisfaction score (${avgSatisfactionScore.toFixed(1)}/5)`);
-		} else if (avgSatisfactionScore >= 4) {
-			rationale.push(`High average satisfaction score (${avgSatisfactionScore.toFixed(1)}/5) - current prompts perform well`);
-		}
-
-		// Diverse error patterns suggest systematic prompt issues
-		if (errorPatternDiversity >= 5) {
-			score += 2;
-			rationale.push(`Diverse error patterns (${errorPatternDiversity} categories) suggest systematic prompt quality issues`);
-		}
-
-		// Confidence based on data completeness
 		const dataCompleteness = Math.min(
-			promptsWithInterventionData.length / allKnowledge.length,
-			promptsWithSatisfactionData.length / allKnowledge.length,
-			allKnowledge.length / 100 // Cap at 100 samples for confidence calculation
+			promptsWithInterventionData.length > 0 ? promptsWithInterventionData.length / allKnowledge.length : 0,
+			promptsWithSatisfactionData.length > 0 ? promptsWithSatisfactionData.length / allKnowledge.length : 0,
+			allKnowledge.length / 100,
 		);
 
 		const confidence = Math.max(0.1, dataCompleteness);
-
-		// Recommendation threshold
 		const recommendDSPy = score >= 5 && confidence > 0.7;
 
 		if (!recommendDSPy) {
-			if (score < 5) {
-				rationale.push("Current prompt optimization appears sufficient - DSPy overhead not justified");
-			}
-			if (confidence <= 0.7) {
-				rationale.push("Insufficient data quality for confident DSPy recommendation");
-			}
+			rationale.push(
+				"DSPy NOT RECOMMENDED based on current data - continue collecting metrics for better assessment",
+			);
 		}
 
 		return {
 			recommendDSPy,
 			confidence,
 			rationale,
-			criticalMetrics: metrics,
+			criticalMetrics: legacyMetrics,
+			metricsAnalysis,
 		};
+	}
+
+	/**
+	 * Build category breakdown from metrics data
+	 */
+	private buildCategoryBreakdown(
+		metrics: ReturnType<typeof this.loadMetricsData>,
+	): Array<{ category: string; successRate: number; count: number }> {
+		const categoryStats = new Map<string, { success: number; total: number }>();
+
+		// Filter to only entries with valid objective field
+		const validMetrics = metrics.filter((m) => m.objective && typeof m.objective === "string");
+
+		for (const task of validMetrics) {
+			const categoryMatch = task.objective.match(/^\[([^\]]+)\]/);
+			const category = categoryMatch ? categoryMatch[1] : "general";
+
+			const existing = categoryStats.get(category) || { success: 0, total: 0 };
+			existing.total++;
+			if (task.success) {
+				existing.success++;
+			}
+			categoryStats.set(category, existing);
+		}
+
+		return Array.from(categoryStats.entries())
+			.map(([category, stats]) => ({
+				category,
+				successRate: stats.total > 0 ? stats.success / stats.total : 0,
+				count: stats.total,
+			}))
+			.sort((a, b) => b.count - a.count);
 	}
 }

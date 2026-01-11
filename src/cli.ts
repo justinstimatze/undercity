@@ -1802,19 +1802,50 @@ program
 		const tracker = new KnowledgeTracker();
 
 		console.log(chalk.cyan.bold("\n🔮 DSPy Readiness Assessment"));
-		console.log(chalk.dim("  Analyzing prompt performance patterns for optimization opportunities\n"));
+		console.log(chalk.dim("  Analyzing prompt performance to identify if DSPy would provide value\n"));
 
 		const assessment = tracker.assessDSPyReadiness();
 
-		// Display metrics
-		console.log(chalk.bold("📊 Current Metrics:"));
-		console.log(`  Low-performing prompts: ${chalk.yellow(assessment.criticalMetrics.lowPerformingPrompts)}`);
-		console.log(`  Human intervention rate: ${chalk.yellow(`${(assessment.criticalMetrics.humanInterventionRate * 100).toFixed(1)}%`)}`);
-		console.log(`  Average satisfaction: ${chalk.yellow(`${assessment.criticalMetrics.avgSatisfactionScore.toFixed(1)}/5`)}`);
-		console.log(`  Error pattern diversity: ${chalk.yellow(assessment.criticalMetrics.errorPatternDiversity)} categories`);
+		// Display metrics analysis if available (from metrics.jsonl)
+		if (assessment.metricsAnalysis) {
+			const ma = assessment.metricsAnalysis;
+			console.log(chalk.bold("📊 Task Metrics Analysis:"));
+			console.log(`  Total tasks analyzed: ${chalk.cyan(ma.totalTasks)}`);
+			console.log(`  Success rate: ${ma.successRate >= 0.8 ? chalk.green(`${(ma.successRate * 100).toFixed(1)}%`) : chalk.yellow(`${(ma.successRate * 100).toFixed(1)}%`)}`);
+			console.log(`  Avg tokens/task: ${chalk.cyan(Math.round(ma.avgTokensPerTask).toLocaleString())}`);
+			console.log(`  Avg duration: ${chalk.cyan(`${(ma.avgDurationMs / 1000).toFixed(1)}s`)}`);
+			console.log();
+
+			console.log(chalk.bold("🔍 Bottleneck Analysis:"));
+			const bottleneckColor = ma.bottleneck === "none" ? chalk.green : ma.bottleneck === "prompt_quality" ? chalk.yellow : chalk.cyan;
+			console.log(`  Identified bottleneck: ${bottleneckColor(ma.bottleneck.replace(/_/g, " "))}`);
+			console.log(`  Prompt Quality Score: ${ma.promptQualityScore >= 80 ? chalk.green(`${ma.promptQualityScore}/100`) : chalk.yellow(`${ma.promptQualityScore}/100`)}`);
+			console.log(`  Routing Accuracy Score: ${ma.routingAccuracyScore >= 80 ? chalk.green(`${ma.routingAccuracyScore}/100`) : chalk.yellow(`${ma.routingAccuracyScore}/100`)}`);
+			console.log();
+
+			// Category breakdown
+			if (ma.categoryBreakdown.length > 0) {
+				console.log(chalk.bold("📁 Category Performance:"));
+				for (const cat of ma.categoryBreakdown.slice(0, 8)) {
+					const rateColor = cat.successRate >= 0.8 ? chalk.green : cat.successRate >= 0.5 ? chalk.yellow : chalk.red;
+					console.log(`  ${chalk.dim(`[${cat.category}]`)} ${rateColor(`${(cat.successRate * 100).toFixed(0)}%`)} success (${cat.count} tasks)`);
+				}
+				console.log();
+			}
+		}
+
+		// Legacy metrics (for knowledge tracker data)
+		if (assessment.criticalMetrics.lowPerformingPrompts > 0 || assessment.criticalMetrics.errorPatternDiversity > 0) {
+			console.log(chalk.bold("📚 Knowledge Tracker Data:"));
+			console.log(`  Low-performing prompts: ${chalk.yellow(assessment.criticalMetrics.lowPerformingPrompts)}`);
+			console.log(`  Human intervention rate: ${chalk.yellow(`${(assessment.criticalMetrics.humanInterventionRate * 100).toFixed(1)}%`)}`);
+			console.log(`  Average satisfaction: ${chalk.yellow(`${assessment.criticalMetrics.avgSatisfactionScore.toFixed(1)}/5`)}`);
+			console.log(`  Error pattern diversity: ${chalk.yellow(assessment.criticalMetrics.errorPatternDiversity)} categories`);
+			console.log();
+		}
 
 		// Recommendation
-		const recommendationColor = assessment.recommendDSPy ? chalk.green : chalk.red;
+		const recommendationColor = assessment.recommendDSPy ? chalk.green : chalk.yellow;
 		const recommendationText = assessment.recommendDSPy ? "RECOMMENDED" : "NOT RECOMMENDED";
 
 		console.log(chalk.bold("🎯 Recommendation:"));
@@ -1823,18 +1854,38 @@ program
 
 		// Rationale
 		console.log(chalk.bold("💡 Analysis:"));
-		assessment.rationale.forEach(reason => {
-			console.log(`  ${chalk.dim("•")} ${reason}`);
-		});
+		for (const reason of assessment.rationale) {
+			// Color-code key findings
+			let line = reason;
+			if (reason.includes("NOT RECOMMENDED")) {
+				line = chalk.yellow(reason);
+			} else if (reason.includes("RECOMMENDED:")) {
+				line = chalk.green(reason);
+			} else if (reason.includes("bottleneck") || reason.includes("Bottleneck")) {
+				line = chalk.cyan(reason);
+			}
+			console.log(`  ${chalk.dim("•")} ${line}`);
+		}
 
 		console.log();
 
+		// Summary
 		if (assessment.recommendDSPy) {
 			console.log(chalk.green("✅ DSPy integration appears worthwhile based on current data"));
-			console.log(chalk.dim("   Consider implementing targeted prompt optimization for underperforming areas"));
+			console.log(chalk.dim("   Prompt quality is the bottleneck - DSPy could optimize underperforming prompts"));
+			console.log(chalk.dim("   Suggested: Implement few-shot learning for categories with <80% success rate"));
 		} else {
-			console.log(chalk.yellow("⏳ Current prompt optimization system appears sufficient"));
-			console.log(chalk.dim("   Continue collecting data or focus on other optimization areas"));
+			if (assessment.metricsAnalysis?.bottleneck === "routing") {
+				console.log(chalk.cyan("🔄 Focus on routing optimization instead of DSPy"));
+				console.log(chalk.dim("   The current bottleneck is task routing/model selection, not prompt quality"));
+				console.log(chalk.dim("   Suggested: Improve the router to better match tasks to appropriate models"));
+			} else if (assessment.metricsAnalysis?.bottleneck === "none") {
+				console.log(chalk.green("✨ System is performing well - DSPy not currently needed"));
+				console.log(chalk.dim("   Continue monitoring metrics; re-evaluate if success rate drops"));
+			} else {
+				console.log(chalk.yellow("⏳ Continue collecting data for better assessment"));
+				console.log(chalk.dim("   Run more tasks to get a clearer picture of bottlenecks"));
+			}
 		}
 		console.log();
 	});

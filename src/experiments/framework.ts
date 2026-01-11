@@ -310,6 +310,13 @@ export class ExperimentFramework {
       reworkCount: number;
       humanRating?: number;
       metadata?: Record<string, any>;
+      diffMetrics?: {
+        diffGenerated: boolean;
+        diffApplied: boolean;
+        diffGenerationTimeMs: number;
+        diffModel?: string;
+        diffSize?: number;
+      };
     }
   ): void {
     const storage = this.loadStorage();
@@ -396,12 +403,25 @@ export class ExperimentFramework {
         ? ratingsWithValues.reduce((sum, o) => sum + o.humanRating!, 0) / ratingsWithValues.length
         : undefined;
 
+      // Calculate diff-specific metrics
+      const diffOutcomes = variantOutcomes.filter(o => o.diffMetrics);
+      const diffSuccessCount = diffOutcomes.filter(o => o.diffMetrics?.diffGenerated).length;
+      const diffApplicationCount = diffOutcomes.filter(o => o.diffMetrics?.diffApplied).length;
+      const diffGenTimes = diffOutcomes
+        .map(o => o.diffMetrics?.diffGenerationTimeMs || 0)
+        .filter(t => t > 0);
+
       variantMetrics[variantId] = {
         successRate: successCount / variantOutcomes.length,
         avgTokensPerQuest: totalTokens / variantOutcomes.length,
         avgExecutionTimeMs: totalTime / variantOutcomes.length,
         avgReworkCount: totalRework / variantOutcomes.length,
         humanSatisfaction: avgRating,
+        diffSuccessRate: diffOutcomes.length > 0 ? diffSuccessCount / diffOutcomes.length : undefined,
+        diffApplicationSuccessRate: diffOutcomes.length > 0 ? diffApplicationCount / diffOutcomes.length : undefined,
+        avgDiffGenerationTimeMs: diffGenTimes.length > 0
+          ? diffGenTimes.reduce((sum, t) => sum + t, 0) / diffGenTimes.length
+          : undefined,
       };
     }
 
