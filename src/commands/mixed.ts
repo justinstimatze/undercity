@@ -27,10 +27,10 @@ function getVersion(): string {
 
 export const mixedCommands: CommandModule = {
 	register(program) {
-		// Solo command - light mode with verification and adaptive escalation
+		// Solo command - DEPRECATED, use grind instead
 		program
 			.command("solo <goal>")
-			.description("Light mode: run a single task with verification and adaptive escalation")
+			.description("[DEPRECATED: use 'grind <goal>'] Run a single task with verification")
 			.option("-s, --stream", "Stream raider activity")
 			.option("-v, --verbose", "Verbose logging")
 			.option("-m, --model <tier>", "Starting model tier: haiku, sonnet, opus", "sonnet")
@@ -59,13 +59,17 @@ export const mixedCommands: CommandModule = {
 						annealing?: boolean;
 					},
 				) => {
+					// Show deprecation warning
+					console.log(chalk.yellow.bold("\n⚠ DEPRECATED: 'solo' command will be removed in a future version"));
+					console.log(chalk.yellow(`  Use: undercity grind "${goal}"\n`));
+
 					// Merge CLI options with config file defaults
 					const options = mergeWithConfig(cliOptions);
 
 					// Dynamic import to avoid loading heavy modules until needed
 					const { SoloOrchestrator, SupervisedOrchestrator } = await import("../solo.js");
 
-					console.log(chalk.cyan.bold("\n⚡ Undercity Solo Mode"));
+					console.log(chalk.cyan.bold("⚡ Undercity Solo Mode"));
 					console.log(chalk.dim("  Adaptive escalation • External verification • Auto-commit"));
 					const configSource = getConfigSource();
 					if (configSource) {
@@ -145,8 +149,8 @@ export const mixedCommands: CommandModule = {
 
 		// Grind command - autonomous quest processing
 		program
-			.command("grind")
-			.description("Process quest board continuously (autonomous, handles rate limits, can run for hours)")
+			.command("grind [goal]")
+			.description("Run tasks: pass a goal directly, or process from quest board")
 			.option("-n, --count <n>", "Process only N quests then stop", "0")
 			.option("-p, --parallel <n>", "Maximum concurrent quests (1-5)", "1")
 			.option("-s, --stream", "Stream raider activity")
@@ -158,22 +162,21 @@ export const mixedCommands: CommandModule = {
 			.option("--no-typecheck", "Skip typecheck verification")
 			.option("--no-review", "Skip review passes")
 			.action(
-				async (options: {
-					count?: string;
-					parallel?: string;
-					stream?: boolean;
-					verbose?: boolean;
-					supervised?: boolean;
-					model?: string;
-					worker?: string;
-					commit?: boolean;
-					typecheck?: boolean;
-					review?: boolean;
-				}) => {
-					console.log(chalk.cyan.bold("\n⚙️ Undercity Grind Mode"));
-					console.log(chalk.dim("  Autonomous operation • Rate limit handling • Infinite processing"));
-					console.log();
-
+				async (
+					goal: string | undefined,
+					options: {
+						count?: string;
+						parallel?: string;
+						stream?: boolean;
+						verbose?: boolean;
+						supervised?: boolean;
+						model?: string;
+						worker?: string;
+						commit?: boolean;
+						typecheck?: boolean;
+						review?: boolean;
+					},
+				) => {
 					const { ParallelSoloOrchestrator } = await import("../parallel-solo.js");
 
 					const maxCount = Number.parseInt(options.count || "0", 10);
@@ -187,6 +190,30 @@ export const mixedCommands: CommandModule = {
 						startingModel: (options.model || "sonnet") as "haiku" | "sonnet" | "opus",
 						reviewPasses: options.review !== false,
 					});
+
+					// If a goal is passed directly, run it as a single task
+					if (goal) {
+						console.log(chalk.cyan.bold("\n⚡ Undercity Grind"));
+						console.log(chalk.dim("  Running task directly"));
+						console.log();
+
+						try {
+							const result = await orchestrator.runParallel([goal]);
+							console.log(chalk.green.bold("\n📊 Complete"));
+							console.log(`  Successful: ${result.successful}`);
+							console.log(`  Failed: ${result.failed}`);
+							console.log(`  Duration: ${Math.round(result.durationMs / 1000)}s`);
+						} catch (error) {
+							console.log(chalk.red(`\n✗ Error: ${error}`));
+							process.exit(1);
+						}
+						return;
+					}
+
+					// No goal provided - process from quest board
+					console.log(chalk.cyan.bold("\n⚙️ Undercity Grind Mode"));
+					console.log(chalk.dim("  Autonomous operation • Rate limit handling • Infinite processing"));
+					console.log();
 
 					// Check for interrupted batch and offer to resume
 					if (orchestrator.hasActiveRecovery()) {

@@ -140,11 +140,12 @@ export const raidCommands: CommandModule = {
 				},
 			);
 
-		// Status command
+		// Status command (DEPRECATED)
 		program
 			.command("status")
-			.description("Show current raid status")
+			.description("[DEPRECATED: use 'grind' + 'watch'] Show current raid status")
 			.action(() => {
+				showDeprecationWarning("status", "undercity watch");
 				const orchestrator = new RaidOrchestrator({ verbose: false });
 				const status = orchestrator.getStatus();
 
@@ -171,12 +172,13 @@ export const raidCommands: CommandModule = {
 				// Additional status information would be shown here
 			});
 
-		// Approve command
+		// Approve command (DEPRECATED)
 		program
 			.command("approve")
-			.description("Approve the current plan and start execution")
+			.description("[DEPRECATED] Approve the current plan and start execution")
 			.option("-s, --stream", "Stream raider activity to console")
 			.action(async (options: { stream?: boolean }) => {
+				showDeprecationWarning("approve", "undercity grind (auto-approves)");
 				const orchestrator = new RaidOrchestrator({ verbose: true, streamOutput: options.stream ?? true });
 				const raid = orchestrator.getCurrentRaid();
 
@@ -201,31 +203,34 @@ export const raidCommands: CommandModule = {
 				}
 			});
 
-		// Squad command
+		// Squad command (DEPRECATED)
 		program
 			.command("squad")
-			.description("Show active squad members")
+			.description("[DEPRECATED] Show active squad members")
 			.action(() => {
+				showDeprecationWarning("squad", "undercity watch");
 				console.log(chalk.bold("Squad Members"));
 				console.log(chalk.gray("Squad functionality not yet implemented"));
 				console.log(chalk.dim("This will show active raid squad members"));
 			});
 
-		// Tasks command
+		// Tasks command (DEPRECATED)
 		program
 			.command("waypoints")
-			.description("Show pending/complete waypoints")
+			.description("[DEPRECATED] Show pending/complete waypoints")
 			.action(() => {
+				showDeprecationWarning("waypoints", "undercity quests");
 				console.log(chalk.bold("Waypoints"));
 				console.log(chalk.gray("Waypoints functionality not yet implemented"));
 				console.log(chalk.dim("This will show raid task waypoints"));
 			});
 
-		// Merges command
+		// Merges command (DEPRECATED)
 		program
 			.command("elevator")
-			.description("Show elevator queue status")
+			.description("[DEPRECATED] Show elevator queue status")
 			.action(() => {
+				showDeprecationWarning("elevator", "grind handles merges automatically");
 				const orchestrator = new RaidOrchestrator({ verbose: false });
 				const status = orchestrator.getStatus();
 
@@ -254,7 +259,9 @@ export const raidCommands: CommandModule = {
 									: chalk.yellow("🏃");
 
 					const retryInfo =
-						item.retryCount && item.retryCount > 0 ? chalk.dim(` (retry ${item.retryCount}/${item.maxRetries || 3})`) : "";
+						item.retryCount && item.retryCount > 0
+							? chalk.dim(` (retry ${item.retryCount}/${item.maxRetries || 3})`)
+							: "";
 
 					const isRetry = item.isRetry ? chalk.cyan(" [RETRY]") : "";
 
@@ -283,11 +290,12 @@ export const raidCommands: CommandModule = {
 				}
 			});
 
-		// Extract command
+		// Extract command (DEPRECATED)
 		program
 			.command("extract")
-			.description("Complete the current raid")
+			.description("[DEPRECATED] Complete the current raid")
 			.action(async () => {
+				showDeprecationWarning("extract", "grind completes automatically");
 				const orchestrator = new RaidOrchestrator({ verbose: true });
 
 				try {
@@ -299,11 +307,12 @@ export const raidCommands: CommandModule = {
 				}
 			});
 
-		// Surrender command
+		// Surrender command (DEPRECATED)
 		program
 			.command("surrender")
-			.description("Surrender the current raid")
+			.description("[DEPRECATED] Surrender the current raid")
 			.action(() => {
+				showDeprecationWarning("surrender", "Ctrl+C to stop grind");
 				const orchestrator = new RaidOrchestrator({ verbose: true });
 				orchestrator.surrender();
 				console.log(chalk.yellow("Raid surrendered"));

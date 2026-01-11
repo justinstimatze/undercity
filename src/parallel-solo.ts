@@ -130,9 +130,119 @@ export class ParallelSoloOrchestrator {
 	}
 
 	/**
+	 * Run a single task directly without worktree overhead
+	 *
+	 * This is an optimization for when only one task needs to run.
+	 * It runs SoloOrchestrator directly in the current directory.
+	 */
+	async runSingle(task: string): Promise<ParallelBatchResult> {
+		const startTime = Date.now();
+
+		// Check if rate limited
+		this.rateLimitTracker.checkAutoResume();
+
+		if (this.rateLimitTracker.isPaused()) {
+			const pauseState = this.rateLimitTracker.getPauseState();
+			const remaining = this.rateLimitTracker.formatRemainingTime();
+			console.log(chalk.yellow.bold(`\n⏳ Rate Limit Pause Active`));
+			console.log(chalk.yellow(`  Reason: ${pauseState.reason || "Rate limit hit"}`));
+			console.log(chalk.yellow(`  Remaining: ${remaining}`));
+
+			return {
+				results: [],
+				successful: 0,
+				failed: 0,
+				merged: 0,
+				mergeFailed: 0,
+				durationMs: Date.now() - startTime,
+			};
+		}
+
+		console.log(chalk.cyan.bold(`\n⚡ Solo Mode (Direct)`));
+		console.log(chalk.dim(`  Running task directly without worktree`));
+		console.log(chalk.dim(`  Model: ${this.startingModel} → escalate if needed\n`));
+
+		const taskId = generateTaskId();
+
+		try {
+			// Run SoloOrchestrator directly in current directory
+			const orchestrator = new SoloOrchestrator({
+				startingModel: this.startingModel,
+				autoCommit: this.autoCommit,
+				stream: this.stream,
+				verbose: this.verbose,
+				reviewPasses: this.reviewPasses,
+				annealingAtOpus: this.annealingAtOpus,
+				// No workingDirectory - runs in current directory
+			});
+
+			const result = await orchestrator.runTask(task);
+
+			// Record token usage
+			if (result.tokenUsage) {
+				for (const attemptUsage of result.tokenUsage.attempts) {
+					const model = (attemptUsage.model as "haiku" | "sonnet" | "opus") || this.startingModel;
+					this.rateLimitTracker.recordQuest(taskId, model, attemptUsage.inputTokens, attemptUsage.outputTokens, {
+						durationMs: result.durationMs,
+					});
+				}
+			}
+
+			// Save rate limit state
+			this.persistence.saveRateLimitState(this.rateLimitTracker.getState());
+
+			const taskResult: ParallelTaskResult = {
+				task,
+				taskId,
+				result,
+				worktreePath: process.cwd(),
+				branch: "current",
+				merged: result.status === "complete", // Already committed in place
+			};
+
+			return {
+				results: [taskResult],
+				successful: result.status === "complete" ? 1 : 0,
+				failed: result.status === "complete" ? 0 : 1,
+				merged: result.status === "complete" ? 1 : 0,
+				mergeFailed: 0,
+				durationMs: Date.now() - startTime,
+			};
+		} catch (error) {
+			console.log(chalk.red(`  Error: ${error}`));
+
+			return {
+				results: [
+					{
+						task,
+						taskId,
+						result: null,
+						worktreePath: process.cwd(),
+						branch: "current",
+						merged: false,
+						mergeError: String(error),
+					},
+				],
+				successful: 0,
+				failed: 1,
+				merged: 0,
+				mergeFailed: 0,
+				durationMs: Date.now() - startTime,
+			};
+		}
+	}
+
+	/**
 	 * Run multiple tasks in parallel
+	 *
+	 * If only one task is provided and maxConcurrent is 1, runs in direct mode
+	 * without worktree overhead.
 	 */
 	async runParallel(tasks: string[]): Promise<ParallelBatchResult> {
+		// Optimization: run single task directly without worktree
+		if (tasks.length === 1 && this.maxConcurrent <= 1) {
+			return this.runSingle(tasks[0]);
+		}
 		const startTime = Date.now();
 		const results: ParallelTaskResult[] = [];
 
