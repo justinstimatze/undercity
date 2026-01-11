@@ -386,6 +386,38 @@ export const mixedCommands: CommandModule = {
 						startGrindProgress(totalToProcess, mode);
 						updateGrindProgress(tasksProcessed, totalToProcess);
 
+						// Start grind event logging
+						const {
+							startGrindSession,
+							endGrindSession,
+							logTaskQueued,
+							logTaskStarted,
+							logTaskComplete,
+							logTaskFailed,
+						} = await import("../grind-events.js");
+						const batchId = `grind-${Date.now().toString(36)}`;
+						startGrindSession({
+							batchId,
+							taskCount: tasksWithModels.length,
+							maxCount: maxCount > 0 ? maxCount : undefined,
+							parallelism,
+							modelDistribution: {
+								haiku: tasksByModel.haiku.length,
+								sonnet: tasksByModel.sonnet.length,
+								opus: tasksByModel.opus.length,
+							},
+						});
+
+						// Log all tasks as queued
+						for (const task of tasksWithModels) {
+							logTaskQueued({
+								batchId,
+								taskId: task.id,
+								objective: task.objective,
+								recommendedModel: task.recommendedModel || "sonnet",
+							});
+						}
+
 						// Run tasks grouped by model tier (haiku first = cheapest, then sonnet, then opus)
 						const modelOrder: Array<"haiku" | "sonnet" | "opus"> = ["haiku", "sonnet", "opus"];
 						let completedCount = tasksProcessed;
@@ -400,6 +432,16 @@ export const mixedCommands: CommandModule = {
 
 							output.info(`Running ${tierTasks.length} task(s) with ${modelTier}...`);
 
+							// Log task starts for this tier
+							for (const task of tierTasks) {
+								logTaskStarted({
+									batchId,
+									taskId: task.id,
+									objective: task.objective,
+									model: modelTier,
+								});
+							}
+
 							// Create orchestrator for this model tier
 							const tierOrchestrator = new ParallelSoloOrchestrator({
 								maxConcurrent: parallelism,
@@ -411,7 +453,9 @@ export const mixedCommands: CommandModule = {
 							});
 
 							const tierObjectives = tierTasks.map((t) => t.objective);
+							const tierStartTime = Date.now();
 							const result = await tierOrchestrator.runParallel(tierObjectives);
+							const tierDurationMs = Date.now() - tierStartTime;
 
 							// Update task status based on results
 							for (const taskResult of result.results) {
@@ -422,6 +466,15 @@ export const mixedCommands: CommandModule = {
 										output.taskComplete(taskId, `Task merged (${modelTier})`);
 										completedCount++;
 										updateGrindProgress(completedCount, totalToProcess);
+
+										// Log completion event
+										logTaskComplete({
+											batchId,
+											taskId,
+											objective: taskResult.task,
+											durationMs: tierDurationMs,
+											commitSha: taskResult.result?.commitSha,
+										});
 
 										// Check if this was a subtask and auto-complete parent if all siblings done
 										const task = getTaskById(taskId);
@@ -437,6 +490,15 @@ export const mixedCommands: CommandModule = {
 										output.taskFailed(taskId, `Task failed (${modelTier})`, errorMsg);
 										completedCount++;
 										updateGrindProgress(completedCount, totalToProcess);
+
+										// Log failure event
+										logTaskFailed({
+											batchId,
+											taskId,
+											objective: taskResult.task,
+											error: errorMsg,
+											durationMs: tierDurationMs,
+										});
 									}
 								}
 							}
@@ -448,6 +510,16 @@ export const mixedCommands: CommandModule = {
 						}
 
 						clearGrindProgress();
+
+						// End grind session logging
+						endGrindSession({
+							batchId,
+							successful: totalSuccessful,
+							failed: totalFailed,
+							merged: totalMerged,
+							durationMs: totalDurationMs,
+						});
+
 						output.summary("Grind Session Complete", [
 							{ label: "Total processed", value: tasksWithModels.length + tasksProcessed },
 							{ label: "Successful", value: totalSuccessful, status: totalSuccessful > 0 ? "good" : "neutral" },

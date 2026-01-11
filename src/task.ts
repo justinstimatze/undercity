@@ -117,7 +117,7 @@ function withLock<T>(lockPath: string, fn: () => T): T {
 export interface Task {
 	id: string;
 	objective: string;
-	status: "pending" | "in_progress" | "complete" | "failed";
+	status: "pending" | "in_progress" | "complete" | "failed" | "blocked";
 	priority?: number;
 	createdAt: Date;
 	startedAt?: Date;
@@ -358,14 +358,49 @@ export function markTaskFailed(id: string, error: string, path: string = DEFAULT
 /**
  * Get task board summary
  */
-export function getTaskBoardSummary(): { pending: number; inProgress: number; complete: number; failed: number } {
+export function getTaskBoardSummary(): {
+	pending: number;
+	inProgress: number;
+	complete: number;
+	failed: number;
+	blocked: number;
+} {
 	const board = loadTaskBoard();
 	return {
 		pending: board.tasks.filter((q) => q.status === "pending").length,
 		inProgress: board.tasks.filter((q) => q.status === "in_progress").length,
 		complete: board.tasks.filter((q) => q.status === "complete").length,
 		failed: board.tasks.filter((q) => q.status === "failed").length,
+		blocked: board.tasks.filter((q) => q.status === "blocked").length,
 	};
+}
+
+/**
+ * Block a task (prevent it from being picked up)
+ */
+export function blockTask(id: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+	withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const task = board.tasks.find((q) => q.id === id);
+		if (task && task.status === "pending") {
+			task.status = "blocked";
+			saveTaskBoard(board, path);
+		}
+	});
+}
+
+/**
+ * Unblock a task (allow it to be picked up again)
+ */
+export function unblockTask(id: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+	withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const task = board.tasks.find((q) => q.id === id);
+		if (task && task.status === "blocked") {
+			task.status = "pending";
+			saveTaskBoard(board, path);
+		}
+	});
 }
 
 /**
