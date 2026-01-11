@@ -2,9 +2,9 @@
  * File Utilities Tests
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs";
 import * as fsPromises from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { writeFileAtomic, writeFileAtomicAsync, writeJsonAtomic, writeJsonAtomicAsync } from "../file-utils.js";
 
 // Mock file system
@@ -49,11 +49,10 @@ describe("File Utilities", () => {
 
 			writeFileAtomic(filePath, content);
 
-			expect(mockFs.writeFileSync).toHaveBeenCalledWith(
-				"/test/file.txt.tmp",
-				content,
-				{ encoding: "utf-8", flag: "w" }
-			);
+			expect(mockFs.writeFileSync).toHaveBeenCalledWith("/test/file.txt.tmp", content, {
+				encoding: "utf-8",
+				flag: "w",
+			});
 			expect(mockFs.renameSync).toHaveBeenCalledWith("/test/file.txt.tmp", "/test/file.txt");
 		});
 
@@ -77,11 +76,10 @@ describe("File Utilities", () => {
 		it("should handle custom encoding", () => {
 			writeFileAtomic("/test/file.txt", "content", { encoding: "ascii" });
 
-			expect(mockFs.writeFileSync).toHaveBeenCalledWith(
-				"/test/file.txt.tmp",
-				"content",
-				{ encoding: "ascii", flag: "w" }
-			);
+			expect(mockFs.writeFileSync).toHaveBeenCalledWith("/test/file.txt.tmp", "content", {
+				encoding: "ascii",
+				flag: "w",
+			});
 		});
 	});
 
@@ -92,11 +90,10 @@ describe("File Utilities", () => {
 
 			await writeFileAtomicAsync(filePath, content);
 
-			expect(mockFsPromises.writeFile).toHaveBeenCalledWith(
-				"/test/file.txt.tmp",
-				content,
-				{ encoding: "utf-8", flag: "w" }
-			);
+			expect(mockFsPromises.writeFile).toHaveBeenCalledWith("/test/file.txt.tmp", content, {
+				encoding: "utf-8",
+				flag: "w",
+			});
 			expect(mockFsPromises.rename).toHaveBeenCalledWith("/test/file.txt.tmp", "/test/file.txt");
 		});
 
@@ -118,11 +115,10 @@ describe("File Utilities", () => {
 		it("should handle custom encoding", async () => {
 			await writeFileAtomicAsync("/test/file.txt", "content", { encoding: "base64" });
 
-			expect(mockFsPromises.writeFile).toHaveBeenCalledWith(
-				"/test/file.txt.tmp",
-				"content",
-				{ encoding: "base64", flag: "w" }
-			);
+			expect(mockFsPromises.writeFile).toHaveBeenCalledWith("/test/file.txt.tmp", "content", {
+				encoding: "base64",
+				flag: "w",
+			});
 		});
 	});
 
@@ -132,11 +128,10 @@ describe("File Utilities", () => {
 
 			writeJsonAtomic("/test/data.json", data);
 
-			expect(mockFs.writeFileSync).toHaveBeenCalledWith(
-				"/test/data.json.tmp",
-				JSON.stringify(data, null, 2),
-				{ encoding: "utf-8", flag: "w" }
-			);
+			expect(mockFs.writeFileSync).toHaveBeenCalledWith("/test/data.json.tmp", JSON.stringify(data, null, 2), {
+				encoding: "utf-8",
+				flag: "w",
+			});
 			expect(mockFs.renameSync).toHaveBeenCalledWith("/test/data.json.tmp", "/test/data.json");
 		});
 
@@ -145,11 +140,10 @@ describe("File Utilities", () => {
 
 			writeJsonAtomic("/test/data.json", data, 4);
 
-			expect(mockFs.writeFileSync).toHaveBeenCalledWith(
-				"/test/data.json.tmp",
-				JSON.stringify(data, null, 4),
-				{ encoding: "utf-8", flag: "w" }
-			);
+			expect(mockFs.writeFileSync).toHaveBeenCalledWith("/test/data.json.tmp", JSON.stringify(data, null, 4), {
+				encoding: "utf-8",
+				flag: "w",
+			});
 		});
 	});
 
@@ -159,11 +153,10 @@ describe("File Utilities", () => {
 
 			await writeJsonAtomicAsync("/test/data.json", data);
 
-			expect(mockFsPromises.writeFile).toHaveBeenCalledWith(
-				"/test/data.json.tmp",
-				JSON.stringify(data, null, 2),
-				{ encoding: "utf-8", flag: "w" }
-			);
+			expect(mockFsPromises.writeFile).toHaveBeenCalledWith("/test/data.json.tmp", JSON.stringify(data, null, 2), {
+				encoding: "utf-8",
+				flag: "w",
+			});
 			expect(mockFsPromises.rename).toHaveBeenCalledWith("/test/data.json.tmp", "/test/data.json");
 		});
 
@@ -172,11 +165,10 @@ describe("File Utilities", () => {
 
 			await writeJsonAtomicAsync("/test/data.json", data, 0);
 
-			expect(mockFsPromises.writeFile).toHaveBeenCalledWith(
-				"/test/data.json.tmp",
-				JSON.stringify(data, null, 0),
-				{ encoding: "utf-8", flag: "w" }
-			);
+			expect(mockFsPromises.writeFile).toHaveBeenCalledWith("/test/data.json.tmp", JSON.stringify(data, null, 0), {
+				encoding: "utf-8",
+				flag: "w",
+			});
 		});
 	});
 });

@@ -5,10 +5,9 @@
  * during watch operations and ensure consistency across the codebase.
  */
 
-import { existsSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { mkdirSync } from "node:fs";
 
 /**
  * Atomically write content to a file using the temp-file-then-rename pattern.
@@ -54,7 +53,11 @@ export function writeFileAtomic(filePath: string, content: string, options?: { e
  * @param content - Content to write
  * @param options - Write options
  */
-export async function writeFileAtomicAsync(filePath: string, content: string, options?: { encoding?: BufferEncoding }): Promise<void> {
+export async function writeFileAtomicAsync(
+	filePath: string,
+	content: string,
+	options?: { encoding?: BufferEncoding },
+): Promise<void> {
 	const tempPath = `${filePath}.tmp`;
 	const dir = dirname(filePath);
 

@@ -37,6 +37,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { Command } from "commander";
+import { getConfigSource, loadConfig, mergeWithConfig } from "./config.js";
 import { UndercityOracle } from "./oracle.js";
 import { Persistence } from "./persistence.js";
 import {
@@ -136,7 +137,7 @@ program
 	.action(
 		async (
 			goal: string | undefined,
-			options: {
+			cliOptions: {
 				autoApprove?: boolean;
 				yes?: boolean;
 				verbose?: boolean;
@@ -148,20 +149,26 @@ program
 				retry?: boolean;
 			},
 		) => {
+			// Merge CLI options with config file defaults
+			const options = mergeWithConfig(cliOptions);
+
 			showDeprecationWarning("slingshot", "undercity solo <goal> --stream");
-			const fullAuto = options.yes || false;
+			const fullAuto = cliOptions.yes || false;
 			// Parse and validate parallel option (default 3, max 5)
-			const parallelValue = Math.min(5, Math.max(1, Number.parseInt(options.parallel || "3", 10)));
+			const parallelValue = Math.min(
+				5,
+				Math.max(1, Number.parseInt(cliOptions.parallel || String(options.parallel), 10)),
+			);
 			const orchestrator = new RaidOrchestrator({
-				autoApprove: options.autoApprove || fullAuto,
-				verbose: options.verbose || fullAuto,
-				streamOutput: options.stream ?? options.verbose ?? fullAuto,
-				maxSquadSize: Number.parseInt(options.maxSquad || "5", 10),
+				autoApprove: cliOptions.autoApprove || options.autoApprove || fullAuto,
+				verbose: cliOptions.verbose || options.verbose || fullAuto,
+				streamOutput: cliOptions.stream ?? options.stream ?? cliOptions.verbose ?? options.verbose ?? fullAuto,
+				maxSquadSize: Number.parseInt(cliOptions.maxSquad || String(options.maxSquad), 10),
 				maxParallel: parallelValue,
-				autoCommit: fullAuto,
+				autoCommit: fullAuto || options.autoCommit,
 				retryConfig: {
-					enabled: options.retry !== false,
-					maxRetries: Number.parseInt(options.maxRetries || "3", 10),
+					enabled: cliOptions.retry !== false,
+					maxRetries: Number.parseInt(cliOptions.maxRetries || String(options.maxRetries), 10),
 				},
 			});
 
@@ -557,10 +564,15 @@ program
 
 			// Show escalation data if any escalations occurred
 			if (data.escalatedCount > 0) {
-				const escColor = data.escalationSuccessRate >= 80 ? chalk.green : data.escalationSuccessRate >= 60 ? chalk.yellow : chalk.red;
-				console.log(`  ${chalk.dim(`Escalated: ${data.escalatedCount} quests (${escColor(`${data.escalationSuccessRate.toFixed(1)}%`)} success)`)}`);
+				const escColor =
+					data.escalationSuccessRate >= 80 ? chalk.green : data.escalationSuccessRate >= 60 ? chalk.yellow : chalk.red;
+				console.log(
+					`  ${chalk.dim(`Escalated: ${data.escalatedCount} quests (${escColor(`${data.escalationSuccessRate.toFixed(1)}%`)} success)`)}`,
+				);
 				if (data.escalationTokenOverhead > 0) {
-					console.log(`  ${chalk.dim(`Escalation token overhead: +${data.escalationTokenOverhead.toFixed(0)} tokens/quest`)}`);
+					console.log(
+						`  ${chalk.dim(`Escalation token overhead: +${data.escalationTokenOverhead.toFixed(0)} tokens/quest`)}`,
+					);
 				}
 			}
 
@@ -584,9 +596,10 @@ program
 		if (needsEscalation.length > 0) {
 			console.log(`\n${chalk.red.bold("Complexity levels requiring escalation:")}`);
 			for (const [level, data] of needsEscalation) {
-				const escInfo = data.escalatedCount > 0
-					? ` (${data.escalatedCount} already escalated, ${data.escalationSuccessRate.toFixed(0)}% success)`
-					: "";
+				const escInfo =
+					data.escalatedCount > 0
+						? ` (${data.escalatedCount} already escalated, ${data.escalationSuccessRate.toFixed(0)}% success)`
+						: "";
 				console.log(`  • ${level} - Consider routing to higher-tier agents${escInfo}`);
 			}
 		} else {
@@ -611,17 +624,23 @@ program
 				.sort((a, b) => b.escalationRate - a.escalationRate);
 
 			if (escalationByLevel.length > 0) {
-				console.log(`  Highest escalation rate: ${escalationByLevel[0].level} (${escalationByLevel[0].escalationRate.toFixed(1)}%)`);
+				console.log(
+					`  Highest escalation rate: ${escalationByLevel[0].level} (${escalationByLevel[0].escalationRate.toFixed(1)}%)`,
+				);
 
 				// Identify if escalation is effective
-				const effectiveEscalations = escalationByLevel.filter(e => e.successAfterEscalation >= 70);
-				const ineffectiveEscalations = escalationByLevel.filter(e => e.successAfterEscalation < 50 && e.count >= 3);
+				const effectiveEscalations = escalationByLevel.filter((e) => e.successAfterEscalation >= 70);
+				const ineffectiveEscalations = escalationByLevel.filter((e) => e.successAfterEscalation < 50 && e.count >= 3);
 
 				if (effectiveEscalations.length > 0) {
-					console.log(`  ${chalk.green("Effective escalation:")} ${effectiveEscalations.map(e => e.level).join(", ")}`);
+					console.log(
+						`  ${chalk.green("Effective escalation:")} ${effectiveEscalations.map((e) => e.level).join(", ")}`,
+					);
 				}
 				if (ineffectiveEscalations.length > 0) {
-					console.log(`  ${chalk.red("Ineffective escalation:")} ${ineffectiveEscalations.map(e => e.level).join(", ")} - consider different approaches`);
+					console.log(
+						`  ${chalk.red("Ineffective escalation:")} ${ineffectiveEscalations.map((e) => e.level).join(", ")} - consider different approaches`,
+					);
 				}
 			}
 		}
@@ -1791,7 +1810,7 @@ program
 	.action(
 		async (
 			goal: string,
-			options: {
+			cliOptions: {
 				stream?: boolean;
 				verbose?: boolean;
 				model?: string;
@@ -1805,16 +1824,23 @@ program
 				annealing?: boolean;
 			},
 		) => {
+			// Merge CLI options with config file defaults
+			const options = mergeWithConfig(cliOptions);
+
 			// Dynamic import to avoid loading heavy modules until needed
 			const { SoloOrchestrator, SupervisedOrchestrator } = await import("./solo.js");
 
 			console.log(chalk.cyan.bold("\n⚡ Undercity Solo Mode"));
 			console.log(chalk.dim("  Adaptive escalation • External verification • Auto-commit"));
+			const configSource = getConfigSource();
+			if (configSource) {
+				console.log(chalk.dim(`  Config: ${configSource}`));
+			}
 			console.log();
 
 			try {
 				// Early dry-run complexity assessment
-				if (options.dryRun) {
+				if (cliOptions.dryRun) {
 					const { assessComplexityFast } = await import("./complexity.js");
 					const assessment = assessComplexityFast(goal);
 					console.log(chalk.bold("Complexity Assessment (Dry Run)"));
@@ -1940,7 +1966,7 @@ program
 	.option("--review", "Enable escalating review passes before commit (haiku → sonnet → opus)")
 	.option("--annealing", "Use annealing review at opus tier (multi-angle advisory)")
 	.action(
-		async (options: {
+		async (cliOptions: {
 			count?: string;
 			stream?: boolean;
 			model?: string;
@@ -1953,49 +1979,74 @@ program
 			review?: boolean;
 			annealing?: boolean;
 		}) => {
+			// Merge CLI options with config file defaults
+			const options = mergeWithConfig(cliOptions);
+
 			// Default: worktree isolation (parallel mode), even for single tasks
-			const parallelCount = Number.parseInt(options.parallel || "1", 10);
+			const parallelCount = Number.parseInt(cliOptions.parallel || String(options.parallel), 10);
 			if (!options.sequential && parallelCount > 0) {
 				const { ParallelSoloOrchestrator } = await import("./parallel-solo.js");
-				const { getAllQuests, markQuestInProgress, markQuestComplete, markQuestFailed } = await import("./quest.js");
+				const { getReadyQuestsForBatch, getAllQuests, markQuestInProgress, markQuestComplete, markQuestFailed } =
+					await import("./quest.js");
 
 				const maxCount = Number.parseInt(options.count || "0", 10);
-				const allQuests = getAllQuests();
-				let pendingQuests = allQuests.filter((q) => q.status === "pending");
 
-				// Apply count limit if specified
-				if (maxCount > 0) {
-					pendingQuests = pendingQuests.slice(0, maxCount);
-				}
+				// Get initial count of pending quests for progress display
+				const initialPending = getAllQuests().filter((q) => q.status === "pending").length;
 
-				if (pendingQuests.length === 0) {
+				if (initialPending === 0) {
 					console.log(chalk.gray("No pending quests to process"));
 					return;
 				}
 
-				const concurrency = Math.min(parallelCount, pendingQuests.length);
-				console.log(
-					chalk.cyan.bold(`\n⚡ Worktree Mode: ${pendingQuests.length} quest(s), ${concurrency} concurrent\n`),
-				);
+				const targetCount = maxCount > 0 ? Math.min(maxCount, initialPending) : initialPending;
+				const concurrency = Math.min(parallelCount, targetCount);
+				console.log(chalk.cyan.bold(`\n⚡ Worktree Mode: ${targetCount} quest(s), ${concurrency} concurrent\n`));
 
+				let totalProcessed = 0;
 				let totalSuccessful = 0;
 				let totalMerged = 0;
 				let totalMergeFailed = 0;
+				let totalSkipped = 0;
 				let totalDurationMs = 0;
+				let batchNum = 0;
 
-				// Process in batches of parallelCount
-				for (let i = 0; i < pendingQuests.length; i += parallelCount) {
-					const batch = pendingQuests.slice(i, i + parallelCount);
-					const batchNum = Math.floor(i / parallelCount) + 1;
-					const totalBatches = Math.ceil(pendingQuests.length / parallelCount);
+				// Process batches until we've hit the count limit or no more pending quests
+				while (maxCount === 0 || totalProcessed < maxCount) {
+					// Re-fetch pending quests each batch to get fresh state
+					// This handles resuming and avoids re-processing completed quests
+					const batch = getReadyQuestsForBatch(parallelCount);
 
-					if (totalBatches > 1) {
-						console.log(chalk.dim(`\n━━━ Batch ${batchNum}/${totalBatches} ━━━`));
+					// Filter out any quests that are already complete (race condition protection)
+					const pendingBatch = batch.filter((q) => q.status === "pending");
+
+					if (pendingBatch.length === 0) {
+						// No more pending quests
+						break;
+					}
+
+					// Apply remaining count limit if specified
+					const remainingCount = maxCount > 0 ? maxCount - totalProcessed : pendingBatch.length;
+					const limitedBatch = pendingBatch.slice(0, remainingCount);
+
+					if (limitedBatch.length === 0) {
+						break;
+					}
+
+					batchNum++;
+					const estimatedBatches = Math.ceil((targetCount - totalProcessed) / parallelCount);
+
+					if (estimatedBatches > 1 || batchNum > 1) {
+						console.log(
+							chalk.dim(
+								`\n━━━ Batch ${batchNum} (${limitedBatch.length} quest${limitedBatch.length > 1 ? "s" : ""}) ━━━`,
+							),
+						);
 					}
 
 					// Mark quests as in-progress
 					const batchId = `parallel-${Date.now()}`;
-					for (const quest of batch) {
+					for (const quest of limitedBatch) {
 						markQuestInProgress(quest.id, batchId);
 					}
 
@@ -2009,12 +2060,12 @@ program
 						annealingAtOpus: options.annealing,
 					});
 
-					const result = await orchestrator.runParallel(batch.map((q) => q.objective));
+					const result = await orchestrator.runParallel(limitedBatch.map((q) => q.objective));
 
 					// Update quest statuses based on results
 					for (let j = 0; j < result.results.length; j++) {
 						const taskResult = result.results[j];
-						const quest = batch[j];
+						const quest = limitedBatch[j];
 						if (taskResult.result?.status === "complete" && taskResult.merged) {
 							markQuestComplete(quest.id);
 						} else {
@@ -2022,19 +2073,24 @@ program
 						}
 					}
 
+					totalProcessed += limitedBatch.length;
 					totalSuccessful += result.successful;
 					totalMerged += result.merged;
 					totalMergeFailed += result.mergeFailed;
+					totalSkipped += batch.length - pendingBatch.length;
 					totalDurationMs += result.durationMs;
 				}
 
 				// Summary
 				console.log(chalk.cyan.bold("\n━━━ Grind Complete ━━━"));
-				console.log(`  Processed: ${pendingQuests.length} quest(s)`);
+				console.log(`  Processed: ${totalProcessed} quest(s)`);
 				console.log(`  Successful: ${totalSuccessful}`);
 				console.log(`  Merged: ${totalMerged}`);
 				if (totalMergeFailed > 0) {
 					console.log(chalk.yellow(`  Merge failed: ${totalMergeFailed}`));
+				}
+				if (totalSkipped > 0) {
+					console.log(chalk.dim(`  Skipped (already complete): ${totalSkipped}`));
 				}
 				console.log(`  Duration: ${(totalDurationMs / 1000).toFixed(1)}s`);
 
@@ -2346,6 +2402,131 @@ program
 			);
 		},
 	);
+
+// Config command - show/manage configuration
+program
+	.command("config")
+	.description("Show current configuration from .undercityrc files")
+	.option("--init", "Create a sample .undercityrc file in current directory")
+	.option("--defaults", "Show default configuration values")
+	.action((options: { init?: boolean; defaults?: boolean }) => {
+		const { getDefaultConfig, clearConfigCache } = require("./config.js");
+
+		if (options.defaults) {
+			console.log(chalk.bold("Default Configuration"));
+			console.log(chalk.dim("These values are used when no config file is present:\n"));
+			const defaults = getDefaultConfig();
+			console.log(JSON.stringify(defaults, null, 2));
+			return;
+		}
+
+		if (options.init) {
+			const fs = require("node:fs");
+			const configPath = ".undercityrc";
+
+			if (fs.existsSync(configPath)) {
+				console.log(chalk.yellow(`Config file already exists: ${configPath}`));
+				return;
+			}
+
+			const sampleConfig = {
+				stream: true,
+				model: "sonnet",
+				worker: "sonnet",
+				autoCommit: true,
+				typecheck: true,
+				review: false,
+				annealing: false,
+			};
+
+			fs.writeFileSync(configPath, JSON.stringify(sampleConfig, null, 2) + "\n");
+			console.log(chalk.green(`Created config file: ${configPath}`));
+			console.log(chalk.dim("Edit this file to customize your defaults."));
+			return;
+		}
+
+		// Show current configuration
+		clearConfigCache(); // Force reload
+		const config = loadConfig();
+		const source = getConfigSource();
+
+		console.log(chalk.bold("Current Configuration"));
+		if (source) {
+			console.log(chalk.dim(`Loaded from: ${source}\n`));
+		} else {
+			console.log(chalk.dim("No config file found, using defaults\n"));
+		}
+
+		console.log(JSON.stringify(config, null, 2));
+
+		console.log(chalk.dim("\nConfig file locations (in order of precedence):"));
+		console.log(chalk.dim("  1. .undercityrc (current directory)"));
+		console.log(chalk.dim("  2. ~/.undercityrc (home directory)"));
+		console.log(chalk.dim("\nCreate a config file with: undercity config --init"));
+	});
+
+// Dashboard command - TUI with status and streaming logs
+program
+	.command("dashboard")
+	.description("Live TUI dashboard with status display and streaming logs")
+	.option("-r, --refresh <ms>", "Refresh interval in milliseconds", "1000")
+	.option("-l, --lines <n>", "Number of log lines to display", "15")
+	.option("--snapshot", "Print snapshot and exit (non-interactive)")
+	.action(async (options: { refresh?: string; lines?: string; snapshot?: boolean }) => {
+		const { startDashboard, printDashboardSnapshot } = await import("./tui-dashboard.js");
+
+		if (options.snapshot) {
+			printDashboardSnapshot();
+			return;
+		}
+
+		console.log(chalk.dim("Starting dashboard... (Press Ctrl+C to exit)\n"));
+
+		const dashboard = startDashboard({
+			refreshInterval: Number.parseInt(options.refresh || "1000", 10),
+			logLines: Number.parseInt(options.lines || "15", 10),
+		});
+
+		// Keep the process alive until interrupted
+		await new Promise<void>((resolve) => {
+			process.on("SIGINT", () => {
+				dashboard.stop();
+				resolve();
+			});
+			process.on("SIGTERM", () => {
+				dashboard.stop();
+				resolve();
+			});
+		});
+	});
+
+// Alias: watch command (alias for dashboard)
+program
+	.command("watch")
+	.description("Alias for dashboard - live TUI with status and logs")
+	.option("-r, --refresh <ms>", "Refresh interval in milliseconds", "1000")
+	.option("-l, --lines <n>", "Number of log lines to display", "15")
+	.action(async (options: { refresh?: string; lines?: string }) => {
+		const { startDashboard } = await import("./tui-dashboard.js");
+
+		console.log(chalk.dim("Starting dashboard... (Press Ctrl+C to exit)\n"));
+
+		const dashboard = startDashboard({
+			refreshInterval: Number.parseInt(options.refresh || "1000", 10),
+			logLines: Number.parseInt(options.lines || "15", 10),
+		});
+
+		await new Promise<void>((resolve) => {
+			process.on("SIGINT", () => {
+				dashboard.stop();
+				resolve();
+			});
+			process.on("SIGTERM", () => {
+				dashboard.stop();
+				resolve();
+			});
+		});
+	});
 
 // Parse and run
 program.parse();

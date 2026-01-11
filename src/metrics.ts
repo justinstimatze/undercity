@@ -289,11 +289,51 @@ export class MetricsTracker {
 				mostEfficientAgentType: null,
 				tokensByAgentType: {} as Record<AgentType, { total: number; avgPerQuest: number }>,
 				successRateByComplexity: {
-					trivial: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0, escalatedCount: 0, escalationSuccessRate: 0, escalationTokenOverhead: 0 },
-					simple: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.1, escalatedCount: 0, escalationSuccessRate: 0, escalationTokenOverhead: 0 },
-					standard: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.3, escalatedCount: 0, escalationSuccessRate: 0, escalationTokenOverhead: 0 },
-					complex: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.5, escalatedCount: 0, escalationSuccessRate: 0, escalationTokenOverhead: 0 },
-					critical: { rate: 0, totalQuests: 0, avgTokensPerQuest: 0, escalationTrigger: 0.8, escalatedCount: 0, escalationSuccessRate: 0, escalationTokenOverhead: 0 },
+					trivial: {
+						rate: 0,
+						totalQuests: 0,
+						avgTokensPerQuest: 0,
+						escalationTrigger: 0,
+						escalatedCount: 0,
+						escalationSuccessRate: 0,
+						escalationTokenOverhead: 0,
+					},
+					simple: {
+						rate: 0,
+						totalQuests: 0,
+						avgTokensPerQuest: 0,
+						escalationTrigger: 0.1,
+						escalatedCount: 0,
+						escalationSuccessRate: 0,
+						escalationTokenOverhead: 0,
+					},
+					standard: {
+						rate: 0,
+						totalQuests: 0,
+						avgTokensPerQuest: 0,
+						escalationTrigger: 0.3,
+						escalatedCount: 0,
+						escalationSuccessRate: 0,
+						escalationTokenOverhead: 0,
+					},
+					complex: {
+						rate: 0,
+						totalQuests: 0,
+						avgTokensPerQuest: 0,
+						escalationTrigger: 0.5,
+						escalatedCount: 0,
+						escalationSuccessRate: 0,
+						escalationTokenOverhead: 0,
+					},
+					critical: {
+						rate: 0,
+						totalQuests: 0,
+						avgTokensPerQuest: 0,
+						escalationTrigger: 0.8,
+						escalatedCount: 0,
+						escalationSuccessRate: 0,
+						escalationTokenOverhead: 0,
+					},
 				},
 				analysisPeriod: {
 					from: new Date(),
@@ -319,11 +359,51 @@ export class MetricsTracker {
 				nonEscalatedTokens: number;
 			}
 		> = {
-			trivial: { totalQuests: 0, successfulQuests: 0, totalTokens: 0, escalatedCount: 0, escalatedSuccessful: 0, escalatedTokens: 0, nonEscalatedTokens: 0 },
-			simple: { totalQuests: 0, successfulQuests: 0, totalTokens: 0, escalatedCount: 0, escalatedSuccessful: 0, escalatedTokens: 0, nonEscalatedTokens: 0 },
-			standard: { totalQuests: 0, successfulQuests: 0, totalTokens: 0, escalatedCount: 0, escalatedSuccessful: 0, escalatedTokens: 0, nonEscalatedTokens: 0 },
-			complex: { totalQuests: 0, successfulQuests: 0, totalTokens: 0, escalatedCount: 0, escalatedSuccessful: 0, escalatedTokens: 0, nonEscalatedTokens: 0 },
-			critical: { totalQuests: 0, successfulQuests: 0, totalTokens: 0, escalatedCount: 0, escalatedSuccessful: 0, escalatedTokens: 0, nonEscalatedTokens: 0 },
+			trivial: {
+				totalQuests: 0,
+				successfulQuests: 0,
+				totalTokens: 0,
+				escalatedCount: 0,
+				escalatedSuccessful: 0,
+				escalatedTokens: 0,
+				nonEscalatedTokens: 0,
+			},
+			simple: {
+				totalQuests: 0,
+				successfulQuests: 0,
+				totalTokens: 0,
+				escalatedCount: 0,
+				escalatedSuccessful: 0,
+				escalatedTokens: 0,
+				nonEscalatedTokens: 0,
+			},
+			standard: {
+				totalQuests: 0,
+				successfulQuests: 0,
+				totalTokens: 0,
+				escalatedCount: 0,
+				escalatedSuccessful: 0,
+				escalatedTokens: 0,
+				nonEscalatedTokens: 0,
+			},
+			complex: {
+				totalQuests: 0,
+				successfulQuests: 0,
+				totalTokens: 0,
+				escalatedCount: 0,
+				escalatedSuccessful: 0,
+				escalatedTokens: 0,
+				nonEscalatedTokens: 0,
+			},
+			critical: {
+				totalQuests: 0,
+				successfulQuests: 0,
+				totalTokens: 0,
+				escalatedCount: 0,
+				escalatedSuccessful: 0,
+				escalatedTokens: 0,
+				nonEscalatedTokens: 0,
+			},
 		};
 
 		// Calculate averages from completed quests only
@@ -408,18 +488,16 @@ export class MetricsTracker {
 		const successRateByComplexity = Object.entries(complexityBreakdown).reduce(
 			(acc, [complexity, data]) => {
 				// Calculate escalation success rate
-				const escalationSuccessRate = data.escalatedCount > 0
-					? (data.escalatedSuccessful / data.escalatedCount) * 100
-					: 0;
+				const escalationSuccessRate =
+					data.escalatedCount > 0 ? (data.escalatedSuccessful / data.escalatedCount) * 100 : 0;
 
 				// Calculate token overhead from escalation
 				// Compare average tokens for escalated vs non-escalated tasks
 				const nonEscalatedCount = data.totalQuests - data.escalatedCount;
 				const avgEscalatedTokens = data.escalatedCount > 0 ? data.escalatedTokens / data.escalatedCount : 0;
 				const avgNonEscalatedTokens = nonEscalatedCount > 0 ? data.nonEscalatedTokens / nonEscalatedCount : 0;
-				const escalationTokenOverhead = avgNonEscalatedTokens > 0
-					? avgEscalatedTokens - avgNonEscalatedTokens
-					: avgEscalatedTokens;
+				const escalationTokenOverhead =
+					avgNonEscalatedTokens > 0 ? avgEscalatedTokens - avgNonEscalatedTokens : avgEscalatedTokens;
 
 				acc[complexity as ComplexityLevel] = {
 					rate: data.totalQuests > 0 ? (data.successfulQuests / data.totalQuests) * 100 : 0,
