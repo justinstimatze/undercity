@@ -205,14 +205,19 @@ export class SoloOrchestrator {
 			`raid_${Date.now()}`, // Generate unique raid ID
 		);
 
-		// Assess complexity to determine starting model
+		// Assess complexity to determine starting model and review level
 		const assessment = assessComplexityFast(task);
 		this.currentModel = this.determineStartingModel(assessment);
+		const reviewLevel = this.determineReviewLevel(assessment);
 		this.metricsTracker.recordAgentSpawn(this.currentModel === "opus" ? "sheriff" : "quester");
 
-		this.log("Starting task", { task, model: this.currentModel, assessment: assessment.level });
+		this.log("Starting task", { task, model: this.currentModel, assessment: assessment.level, reviewLevel });
 		console.log(chalk.cyan(`\n━━━ Task: ${task.substring(0, 60)}${task.length > 60 ? "..." : ""} ━━━`));
 		console.log(chalk.dim(`  Model: ${this.currentModel}, Complexity: ${assessment.level}`));
+		if (reviewLevel.review) {
+			const reviewMode = reviewLevel.annealing ? "escalating + annealing" : "escalating";
+			console.log(chalk.dim(`  Reviews: ${reviewMode} (auto-selected)`));
+		}
 
 		// Pre-flight: Prepare context briefing (FREE - no LLM tokens)
 		console.log(chalk.dim("  Preparing context briefing..."));
@@ -261,10 +266,10 @@ export class SoloOrchestrator {
 				const errorCategories = this.categorizeErrors(verification);
 
 				if (verification.passed) {
-					// Run review passes if enabled
+					// Run review passes if enabled (auto-selected or user-specified)
 					let finalVerification = verification;
-					if (this.reviewPasses) {
-						const reviewResult = await this.runEscalatingReview(task);
+					if (reviewLevel.review) {
+						const reviewResult = await this.runEscalatingReview(task, reviewLevel.annealing);
 						if (!reviewResult.converged) {
 							// Review fix broke verification, retry
 							console.log(chalk.yellow(`  Review fix broke verification, retrying...`));
@@ -511,6 +516,33 @@ Be concise and specific. Focus on actionable insights.`;
 				return "opus"; // Critical tasks go straight to opus
 			default:
 				return "sonnet";
+		}
+	}
+
+	/**
+	 * Determine review level based on complexity assessment
+	 */
+	private determineReviewLevel(assessment: ComplexityAssessment): { review: boolean; annealing: boolean } {
+		// If user explicitly set review options, respect them
+		if (this.reviewPasses || this.annealingAtOpus) {
+			return { review: this.reviewPasses, annealing: this.annealingAtOpus };
+		}
+
+		// Auto-determine based on complexity
+		switch (assessment.level) {
+			case "trivial":
+			case "simple":
+				// Fast path - no review overhead for simple tasks
+				return { review: false, annealing: false };
+			case "standard":
+				// Standard tasks get escalating review
+				return { review: true, annealing: false };
+			case "complex":
+			case "critical":
+				// Complex/critical tasks get full annealing review
+				return { review: true, annealing: true };
+			default:
+				return { review: true, annealing: false };
 		}
 	}
 
@@ -832,8 +864,13 @@ When done, provide a brief summary of what you changed.`;
 	/**
 	 * Run escalating review passes: haiku → sonnet → opus
 	 * Each tier reviews until it converges (finds nothing), then escalates.
+	 * @param task - The task being reviewed
+	 * @param useAnnealing - Whether to use annealing review at opus tier
 	 */
-	private async runEscalatingReview(task: string): Promise<{
+	private async runEscalatingReview(
+		task: string,
+		useAnnealing: boolean = this.annealingAtOpus,
+	): Promise<{
 		converged: boolean;
 		issuesFound: string[];
 		reviewPasses: number;
@@ -849,7 +886,7 @@ When done, provide a brief summary of what you changed.`;
 
 		for (const tier of tiers) {
 			// At opus tier, optionally use annealing review (advisory mode)
-			if (tier === "opus" && this.annealingAtOpus) {
+			if (tier === "opus" && useAnnealing) {
 				console.log(chalk.magenta(`  [opus] Annealing review (advisory mode)`));
 				const insights = await this.runAnnealingReview(task);
 				annealingInsights.push(...insights);
