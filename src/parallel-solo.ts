@@ -269,12 +269,9 @@ export class ParallelSoloOrchestrator {
 			};
 		}
 
-		// Limit to maxConcurrent
-		const tasksToRun = tasks.slice(0, this.maxConcurrent);
-
 		output.header(
 			"Parallel Solo Mode",
-			`${tasksToRun.length} tasks concurrently • Model: ${this.startingModel} → escalate if needed`,
+			`${tasks.length} tasks (max ${this.maxConcurrent} concurrent) • Model: ${this.startingModel} → escalate if needed`,
 		);
 
 		// Show rate limit usage if approaching threshold
@@ -285,140 +282,158 @@ export class ParallelSoloOrchestrator {
 			);
 		}
 
-		// Phase 1: Create worktrees and prepare tasks
-		const batchId = generateBatchId();
-		const preparedTasks: Array<{
-			task: string;
-			taskId: string;
-			worktreePath: string;
-			branch: string;
-		}> = [];
-
-		for (const task of tasksToRun) {
-			const taskId = generateTaskId();
-			try {
-				const worktreeInfo = this.worktreeManager.createWorktree(taskId);
-				preparedTasks.push({
-					task,
-					taskId,
-					worktreePath: worktreeInfo.path,
-					branch: worktreeInfo.branch,
-				});
-				output.success(`Created worktree: ${taskId}`);
-			} catch (err) {
-				output.error(`Failed to create worktree: ${err}`);
-				results.push({
-					task,
-					taskId,
-					result: null,
-					worktreePath: "",
-					branch: "",
-					merged: false,
-					mergeError: `Worktree creation failed: ${err}`,
-				});
-			}
-		}
-
-		// Save recovery state before running tasks
-		if (preparedTasks.length > 0) {
-			const recoveryState = this.createRecoveryState(batchId, preparedTasks);
-			this.persistence.saveParallelRecoveryState(recoveryState);
-			output.debug(`Recovery state saved: ${batchId}`);
-		}
-
-		// Phase 2: Run tasks in parallel
-		output.section(`Executing ${preparedTasks.length} tasks in parallel`);
-
 		// Get main branch for file tracking
 		const mainBranch = this.worktreeManager.getMainBranch();
 
 		// Clear completed file tracking entries from previous runs
 		this.fileTracker.clearCompleted();
 
-		const taskPromises = preparedTasks.map(async (prepared) => {
-			const { task, taskId, worktreePath, branch } = prepared;
+		// Process tasks in batches of maxConcurrent
+		const batchId = generateBatchId();
+		const allPreparedTasks: Array<{
+			task: string;
+			taskId: string;
+			worktreePath: string;
+			branch: string;
+		}> = [];
 
-			// Start file tracking for this task
-			this.fileTracker.startTaskTracking(taskId, taskId);
+		const totalBatches = Math.ceil(tasks.length / this.maxConcurrent);
 
-			// Mark task as running
-			this.updateTaskStatus(taskId, "running");
+		for (let batchStart = 0; batchStart < tasks.length; batchStart += this.maxConcurrent) {
+			const batchEnd = Math.min(batchStart + this.maxConcurrent, tasks.length);
+			const batchTasks = tasks.slice(batchStart, batchEnd);
+			const batchNum = Math.floor(batchStart / this.maxConcurrent) + 1;
 
-			try {
-				output.taskStart(taskId, task.substring(0, 50));
+			output.section(`Batch ${batchNum}/${totalBatches}: Processing ${batchTasks.length} tasks`);
 
-				// Create orchestrator that runs in the worktree directory
-				const orchestrator = new SoloOrchestrator({
-					startingModel: this.startingModel,
-					autoCommit: this.autoCommit,
-					stream: this.stream,
-					verbose: this.verbose,
-					workingDirectory: worktreePath,
-					reviewPasses: this.reviewPasses,
-					annealingAtOpus: this.annealingAtOpus,
-				});
+			// Phase 1: Create worktrees for this batch
+			const preparedTasks: Array<{
+				task: string;
+				taskId: string;
+				worktreePath: string;
+				branch: string;
+			}> = [];
 
-				const result = await orchestrator.runTask(task);
-
-				// Get modified files from git diff
-				const modifiedFiles = getModifiedFilesInWorktree(worktreePath, mainBranch);
-
-				// Record file operations in tracker
-				for (const file of modifiedFiles) {
-					this.fileTracker.recordFileAccess(taskId, file, "edit", taskId, worktreePath);
+			for (const task of batchTasks) {
+				const taskId = generateTaskId();
+				try {
+					const worktreeInfo = this.worktreeManager.createWorktree(taskId);
+					preparedTasks.push({
+						task,
+						taskId,
+						worktreePath: worktreeInfo.path,
+						branch: worktreeInfo.branch,
+					});
+					output.success(`Created worktree: ${taskId}`);
+				} catch (err) {
+					output.error(`Failed to create worktree: ${err}`);
+					results.push({
+						task,
+						taskId,
+						result: null,
+						worktreePath: "",
+						branch: "",
+						merged: false,
+						mergeError: `Worktree creation failed: ${err}`,
+					});
 				}
-
-				// Stop tracking for this task
-				this.fileTracker.stopTaskTracking(taskId);
-
-				if (result.status === "complete") {
-					output.taskComplete(taskId, "Task completed", { modifiedFiles: modifiedFiles.length });
-				} else {
-					output.taskFailed(taskId, "Task failed", result.error);
-				}
-
-				if (modifiedFiles.length > 0 && this.verbose) {
-					output.debug(`[${taskId}] Modified ${modifiedFiles.length} files`);
-				}
-
-				// Update recovery state
-				const taskStatus = result.status === "complete" ? "complete" : "failed";
-				this.updateTaskStatus(taskId, taskStatus, { modifiedFiles });
-
-				return {
-					task,
-					taskId,
-					result,
-					worktreePath,
-					branch,
-					merged: false,
-					modifiedFiles,
-				};
-			} catch (err) {
-				// Stop tracking even on error
-				this.fileTracker.stopTaskTracking(taskId);
-
-				// Update recovery state
-				this.updateTaskStatus(taskId, "failed", { error: String(err) });
-
-				output.taskFailed(taskId, "Task error", String(err));
-				return {
-					task,
-					taskId,
-					result: null,
-					worktreePath,
-					branch,
-					merged: false,
-					mergeError: String(err),
-				};
 			}
-		});
 
-		const parallelResults = await Promise.all(taskPromises);
-		results.push(...parallelResults);
+			allPreparedTasks.push(...preparedTasks);
+
+			// Save recovery state before running tasks (on first batch, include all prepared so far)
+			if (batchStart === 0 && allPreparedTasks.length > 0) {
+				const recoveryState = this.createRecoveryState(batchId, allPreparedTasks);
+				this.persistence.saveParallelRecoveryState(recoveryState);
+				output.debug(`Recovery state saved: ${batchId}`);
+			}
+
+			// Phase 2: Run this batch in parallel
+			const taskPromises = preparedTasks.map(async (prepared) => {
+				const { task, taskId, worktreePath, branch } = prepared;
+
+				// Start file tracking for this task
+				this.fileTracker.startTaskTracking(taskId, taskId);
+
+				// Mark task as running
+				this.updateTaskStatus(taskId, "running");
+
+				try {
+					output.taskStart(taskId, task.substring(0, 50));
+
+					// Create orchestrator that runs in the worktree directory
+					const orchestrator = new SoloOrchestrator({
+						startingModel: this.startingModel,
+						autoCommit: this.autoCommit,
+						stream: this.stream,
+						verbose: this.verbose,
+						workingDirectory: worktreePath,
+						reviewPasses: this.reviewPasses,
+						annealingAtOpus: this.annealingAtOpus,
+					});
+
+					const result = await orchestrator.runTask(task);
+
+					// Get modified files from git diff
+					const modifiedFiles = getModifiedFilesInWorktree(worktreePath, mainBranch);
+
+					// Record file operations in tracker
+					for (const file of modifiedFiles) {
+						this.fileTracker.recordFileAccess(taskId, file, "edit", taskId, worktreePath);
+					}
+
+					// Stop tracking for this task
+					this.fileTracker.stopTaskTracking(taskId);
+
+					if (result.status === "complete") {
+						output.taskComplete(taskId, "Task completed", { modifiedFiles: modifiedFiles.length });
+					} else {
+						output.taskFailed(taskId, "Task failed", result.error);
+					}
+
+					if (modifiedFiles.length > 0 && this.verbose) {
+						output.debug(`[${taskId}] Modified ${modifiedFiles.length} files`);
+					}
+
+					// Update recovery state
+					const taskStatus = result.status === "complete" ? "complete" : "failed";
+					this.updateTaskStatus(taskId, taskStatus, { modifiedFiles });
+
+					return {
+						task,
+						taskId,
+						result,
+						worktreePath,
+						branch,
+						merged: false,
+						modifiedFiles,
+					};
+				} catch (err) {
+					// Stop tracking even on error
+					this.fileTracker.stopTaskTracking(taskId);
+
+					// Update recovery state
+					this.updateTaskStatus(taskId, "failed", { error: String(err) });
+
+					output.taskFailed(taskId, "Task error", String(err));
+					return {
+						task,
+						taskId,
+						result: null,
+						worktreePath,
+						branch,
+						merged: false,
+						mergeError: String(err),
+					};
+				}
+			});
+
+			const batchResults = await Promise.all(taskPromises);
+			results.push(...batchResults);
+		}
 
 		// Record token usage for rate limit tracking
-		for (const taskResult of parallelResults) {
+		for (const taskResult of results) {
 			if (taskResult.result?.tokenUsage) {
 				// Record each attempt's usage
 				for (const attemptUsage of taskResult.result.tokenUsage.attempts) {

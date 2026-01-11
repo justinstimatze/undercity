@@ -1017,10 +1017,12 @@ When done, provide a brief summary of what you changed.`;
 			}
 
 			// Standard tier review loop
+			// Opus (final tier) gets significantly more passes since there's nowhere to escalate
+			const maxPasses = tier === "opus" ? this.maxReviewPassesPerTier * 3 : this.maxReviewPassesPerTier;
 			let tierPasses = 0;
 			let tierConverged = false;
 
-			while (tierPasses < this.maxReviewPassesPerTier && !tierConverged) {
+			while (tierPasses < maxPasses && !tierConverged) {
 				tierPasses++;
 				totalPasses++;
 
@@ -1053,11 +1055,22 @@ When done, provide a brief summary of what you changed.`;
 			}
 
 			if (!tierConverged) {
-				console.log(chalk.yellow(`  [${tier}] Max passes reached, escalating...`));
+				if (tier === "opus") {
+					// Opus is final tier - can't escalate further
+					console.log(chalk.yellow(`  [opus] Max passes (${maxPasses}) reached, unresolved issues remain`));
+					return {
+						converged: false,
+						issuesFound: allIssuesFound,
+						reviewPasses: totalPasses,
+						finalTier: "opus",
+						annealingInsights: annealingInsights.length > 0 ? annealingInsights : undefined,
+					};
+				}
+				console.log(chalk.yellow(`  [${tier}] Max passes (${maxPasses}) reached, escalating to next tier...`));
 			}
 		}
 
-		console.log(chalk.green(`  All review tiers converged (${totalPasses} passes)`));
+		console.log(chalk.green(`  Review complete: all tiers converged (${totalPasses} passes)`));
 		return {
 			converged: true,
 			issuesFound: allIssuesFound,
