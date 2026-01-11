@@ -7,9 +7,22 @@ export default defineConfig({
 		include: ["src/__tests__/**/*.test.ts"],
 		coverage: {
 			provider: "v8",
-			reporter: ["text", "html"],
+			reporter: ["text", "html", "json-summary"],
 			include: ["src/**/*.ts"],
-			exclude: ["src/__tests__/**", "src/index.ts", "src/cli.ts"],
+			exclude: [
+				"src/__tests__/**",
+				"src/index.ts",
+				"src/cli.ts",
+				"src/commands/**",
+				"src/experiments/**",
+			],
+			// Thresholds commented out - enable when ready to enforce
+			// thresholds: {
+			// 	lines: 70,
+			// 	functions: 70,
+			// 	branches: 70,
+			// 	statements: 70,
+			// },
 		},
 	},
 });

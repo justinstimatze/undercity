@@ -11,9 +11,17 @@ pnpm dev        # Watch mode
 ## Testing
 
 ```bash
-pnpm test       # Run tests (vitest)
-pnpm typecheck  # Type check without emitting
+pnpm test            # Run tests (vitest)
+pnpm test:coverage   # Run tests with coverage report
+pnpm typecheck       # Type check without emitting
 ```
+
+Coverage reports:
+- Text summary: displayed in terminal
+- HTML report: `coverage/index.html`
+- JSON summary: `coverage/coverage-summary.json`
+
+Pre-commit hook runs tests with coverage automatically.
 
 ## Format & Lint
 

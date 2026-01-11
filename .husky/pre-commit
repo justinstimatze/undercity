@@ -19,7 +19,7 @@ echo "Running build..."
 pnpm build || exit 1
 echo "Build complete!"
 
-# Run tests (quick run, no watch mode)
-echo "Running tests..."
-pnpm test --run 2>&1 || exit 1
+# Run tests with coverage
+echo "Running tests with coverage..."
+pnpm test:coverage 2>&1 || exit 1
 echo "Tests complete!"
