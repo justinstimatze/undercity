@@ -49,25 +49,29 @@
     {
       "id": "task-fix-push-before-verify",
       "objective": "[critical] Prevent agents from pushing during task execution - agents should only commit locally, orchestrator controls all pushes after verification passes. Currently agents can bypass verification by pushing directly via Bash",
-      "status": "pending",
+      "status": "completed",
       "priority": 5,
       "createdAt": "2026-01-11T08:00:00.000Z",
       "tags": [
         "critical",
         "verification",
         "security"
-      ]
+      ],
+      "completedAt": "2026-01-11T21:48:36.177Z",
+      "commitSha": "01d777f"
     },
     {
       "id": "task-fix-review-escalation",
       "objective": "[review] Fix review pass logic - opus gets only 2 passes then 'escalates' to nothing, 'converged' is misleading when issues still found. Opus should get more attempts as final tier, messaging should be accurate",
-      "status": "pending",
+      "status": "completed",
       "priority": 6,
       "createdAt": "2026-01-11T07:50:00.000Z",
       "tags": [
         "review",
         "escalation"
-      ]
+      ],
+      "completedAt": "2026-01-11T21:48:36.178Z",
+      "commitSha": "63c2e62"
     },
     {
       "id": "task-improve-streaming-output",
@@ -94,12 +98,13 @@
     {
       "id": "task-cleanup-orphaned-experiments",
       "objective": "[cleanup] Remove orphaned experiments framework - src/experiments/ directory (A/B framework not wired to anything)",
-      "status": "pending",
+      "status": "complete",
       "priority": 3,
       "createdAt": "2026-01-11T07:15:00.000Z",
       "tags": [
         "cleanup"
-      ]
+      ],
+      "completedAt": "2026-01-11T21:48:36.178Z"
     },
     {
       "id": "task-docs-readme-agent-format",
@@ -115,13 +120,15 @@
     {
       "id": "task-docs-architecture-agent-format",
       "objective": "[docs] Rewrite ARCHITECTURE.md for agent consumption - file→function→behavior mappings, decision trees for when to use what, no redundancy",
-      "status": "pending",
+      "status": "completed",
       "priority": 11,
       "createdAt": "2026-01-11T07:05:00.000Z",
       "tags": [
         "docs",
         "agent-optimization"
-      ]
+      ],
+      "completedAt": "2026-01-11T21:48:36.179Z",
+      "commitSha": "6d269c6"
     },
     {
       "id": "task-docs-api-reference",
@@ -457,5 +464,5 @@
       "createdAt": "2026-01-11T20:44:18.807Z"
     }
   ],
-  "lastUpdated": "2026-01-11T20:44:18.807Z"
+  "lastUpdated": "2026-01-11T21:48:36.179Z"
 }
