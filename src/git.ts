@@ -628,7 +628,10 @@ export class Elevator {
 			modifiedFiles,
 		};
 		this.queue.push(item);
-		gitLogger.debug({ branch, waypointId, agentId, modifiedFilesCount: modifiedFiles?.length ?? 0 }, "Added to elevator");
+		gitLogger.debug(
+			{ branch, waypointId, agentId, modifiedFilesCount: modifiedFiles?.length ?? 0 },
+			"Added to elevator",
+		);
 		return item;
 	}
 

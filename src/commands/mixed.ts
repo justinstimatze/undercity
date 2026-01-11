@@ -4,7 +4,7 @@
  */
 import chalk from "chalk";
 import { getConfigSource, loadConfig, mergeWithConfig } from "../config.js";
-import { UndercityOracle } from "../oracle.js";
+import { type OracleCard, UndercityOracle } from "../oracle.js";
 import { Persistence } from "../persistence.js";
 import { RateLimitTracker } from "../rate-limit.js";
 import type { CommandModule } from "./types.js";
@@ -352,7 +352,7 @@ export const mixedCommands: CommandModule = {
 				}
 
 				// Cost
-				console.log(chalk.bold("\nTotal Cost:") + ` $${metrics.cost.total.toFixed(2)}`);
+				console.log(`${chalk.bold("\nTotal Cost:")} $${metrics.cost.total.toFixed(2)}`);
 
 				console.log(chalk.dim("\nFor live monitoring, run: undercity watch"));
 			});
@@ -431,7 +431,7 @@ export const mixedCommands: CommandModule = {
 					console.log();
 
 					try {
-						const cards = oracle.drawSpread(count, options.category as any);
+						const cards = oracle.drawSpread(count, options.category as OracleCard["category"]);
 
 						for (let i = 0; i < cards.length; i++) {
 							const card = cards[i];

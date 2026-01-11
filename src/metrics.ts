@@ -12,6 +12,17 @@ import { assessComplexityFast } from "./complexity.js";
 import { RateLimitTracker } from "./rate-limit.js";
 import type { AgentType, AttemptRecord, EfficiencyAnalytics, QuestMetrics, TokenUsage } from "./types.js";
 
+/** Type for SDK messages that may contain token usage info */
+interface SdkMessage {
+	usage?: { input_tokens?: number; output_tokens?: number; inputTokens?: number; outputTokens?: number };
+	metadata?: { usage?: SdkMessage["usage"] };
+	meta?: { usage?: SdkMessage["usage"] };
+	inputTokens?: number;
+	outputTokens?: number;
+	input_tokens?: number;
+	output_tokens?: number;
+}
+
 const METRICS_DIR = path.join(process.cwd(), ".undercity");
 const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl");
 
@@ -96,7 +107,7 @@ export class MetricsTracker {
 	/**
 	 * Record model escalation
 	 */
-	recordEscalation(fromModel: "haiku" | "sonnet" | "opus", toModel: "haiku" | "sonnet" | "opus"): void {
+	recordEscalation(_fromModel: "haiku" | "sonnet" | "opus", toModel: "haiku" | "sonnet" | "opus"): void {
 		this.wasEscalated = true;
 		this.finalModel = toModel;
 	}
@@ -139,7 +150,7 @@ export class MetricsTracker {
 			return null;
 		}
 
-		const msg = message as any;
+		const msg = message as SdkMessage;
 
 		// Try different property paths based on SDK version
 		let inputTokens = 0;

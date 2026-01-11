@@ -823,7 +823,14 @@ export class RateLimitTracker {
 	} {
 		if (!responseHeaders) return {};
 
-		const result: any = {};
+		const result: {
+			retryAfter?: number;
+			limit?: number;
+			remaining?: number;
+			reset?: Date;
+			resetEpoch?: number;
+			windowSize?: string;
+		} = {};
 
 		// Retry-After (RFC 7231)
 		const retryAfter = responseHeaders["retry-after"] || responseHeaders["Retry-After"];

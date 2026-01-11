@@ -11,6 +11,11 @@ import { getAllQuests, getQuestBoardAnalytics, getReadyQuestsForBatch } from "./
 import { QuestAnalyzer } from "./quest-analyzer.js";
 import { type CompatibilityResult, type QuestDependency, QuestScheduler, type QuestSet } from "./quest-scheduler.js";
 
+/** Interface for accessing private scheduler methods in analyzer */
+interface SchedulerPrivateMethods {
+	checkQuestCompatibility(quest1: Quest, quest2: Quest): CompatibilityResult;
+}
+
 export interface QuestBoardInsights {
 	totalQuests: number;
 	pendingQuests: number;
@@ -243,7 +248,7 @@ export class QuestBoardAnalyzer {
 		if (compatibility.compatible) {
 			recommendedAction = "These quests can run in parallel safely";
 		} else {
-			const blockingConflicts = conflicts.filter((c: any) => c.severity === "blocking");
+			const blockingConflicts = conflicts.filter((c) => c.severity === "blocking");
 			if (blockingConflicts.length > 0) {
 				recommendedAction = "Run sequentially due to blocking conflicts";
 			} else {
@@ -333,7 +338,7 @@ export class QuestBoardAnalyzer {
 		// This delegates to the scheduler's compatibility checking logic
 		// We create a minimal quest set to use the scheduler's method
 		const dummyScheduler = new QuestScheduler(this.analyzer, this.fileTracker);
-		return (dummyScheduler as any).checkQuestCompatibility(quest1, quest2);
+		return (dummyScheduler as unknown as SchedulerPrivateMethods).checkQuestCompatibility(quest1, quest2);
 	}
 
 	/**

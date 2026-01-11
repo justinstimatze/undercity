@@ -439,9 +439,7 @@ export class KnowledgeTracker {
 				? successfulTasks.reduce((sum, t) => sum + (t.totalTokens || 0), 0) / successfulTasks.length
 				: 0;
 		const avgTokensFailed =
-			failedTasks.length > 0
-				? failedTasks.reduce((sum, t) => sum + (t.totalTokens || 0), 0) / failedTasks.length
-				: 0;
+			failedTasks.length > 0 ? failedTasks.reduce((sum, t) => sum + (t.totalTokens || 0), 0) / failedTasks.length : 0;
 
 		// Check for escalation patterns (indicates routing issues)
 		const tasksWithEscalation = metrics.filter((m) => (m.escalations || 0) > 0);
@@ -557,8 +555,7 @@ export class KnowledgeTracker {
 				? {
 						totalTasks: metricsData.length,
 						successRate: metricsData.filter((m) => m.success).length / metricsData.length,
-						avgTokensPerTask:
-							metricsData.reduce((sum, m) => sum + (m.totalTokens || 0), 0) / metricsData.length,
+						avgTokensPerTask: metricsData.reduce((sum, m) => sum + (m.totalTokens || 0), 0) / metricsData.length,
 						avgDurationMs: metricsData.reduce((sum, m) => sum + (m.durationMs || 0), 0) / metricsData.length,
 						bottleneck: bottleneckAnalysis.bottleneck,
 						promptQualityScore: bottleneckAnalysis.promptQualityScore,
@@ -572,9 +569,7 @@ export class KnowledgeTracker {
 			(k) => (k.successCount || 0) <= 2 || (k.metrics.successRating || 0) < 3,
 		).length;
 
-		const promptsWithInterventionData = allKnowledge.filter(
-			(k) => k.metrics.requiredHumanIntervention !== undefined,
-		);
+		const promptsWithInterventionData = allKnowledge.filter((k) => k.metrics.requiredHumanIntervention !== undefined);
 		const humanInterventionRate =
 			promptsWithInterventionData.length > 0
 				? promptsWithInterventionData.filter((k) => k.metrics.requiredHumanIntervention).length /
@@ -615,9 +610,7 @@ export class KnowledgeTracker {
 			if (bottleneckAnalysis.bottleneck === "prompt_quality") {
 				score += 4;
 				rationale.push("Bottleneck Analysis: Prompt quality identified as primary issue");
-				rationale.push(
-					`Prompt Quality Score: ${bottleneckAnalysis.promptQualityScore}/100 (DSPy could help optimize)`,
-				);
+				rationale.push(`Prompt Quality Score: ${bottleneckAnalysis.promptQualityScore}/100 (DSPy could help optimize)`);
 			} else if (bottleneckAnalysis.bottleneck === "routing") {
 				score += 1;
 				rationale.push("Bottleneck Analysis: Routing/model selection is the primary issue");
@@ -661,9 +654,7 @@ export class KnowledgeTracker {
 				}
 			} else {
 				rationale.push("DSPy RECOMMENDED: Prompt quality is the bottleneck and could benefit from optimization");
-				rationale.push(
-					"Suggested approach: Use DSPy for few-shot learning on underperforming task categories",
-				);
+				rationale.push("Suggested approach: Use DSPy for few-shot learning on underperforming task categories");
 			}
 
 			return {
@@ -722,9 +713,7 @@ export class KnowledgeTracker {
 		const recommendDSPy = score >= 5 && confidence > 0.7;
 
 		if (!recommendDSPy) {
-			rationale.push(
-				"DSPy NOT RECOMMENDED based on current data - continue collecting metrics for better assessment",
-			);
+			rationale.push("DSPy NOT RECOMMENDED based on current data - continue collecting metrics for better assessment");
 		}
 
 		return {

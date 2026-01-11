@@ -7,6 +7,12 @@ import type { Quest } from "../quest.js";
 import { QuestAnalyzer } from "../quest-analyzer.js";
 import { QuestScheduler } from "../quest-scheduler.js";
 
+// Type for accessing private methods in tests
+interface SchedulerTestMethods {
+	calculateParallelismScore(questSet: Quest[], compatibilityMatrix: { compatibilityScore: number }[][]): number;
+	estimateSetDuration(questSet: Quest[]): number;
+}
+
 describe("QuestScheduler", () => {
 	let scheduler: QuestScheduler;
 	let analyzer: QuestAnalyzer;
@@ -309,7 +315,10 @@ describe("QuestScheduler", () => {
 				})),
 			);
 
-			const score = (scheduler as any).calculateParallelismScore(questSet, compatibilityMatrix);
+			const score = (scheduler as unknown as SchedulerTestMethods).calculateParallelismScore(
+				questSet,
+				compatibilityMatrix,
+			);
 
 			expect(score).toBeGreaterThan(0.5); // Should get good parallelism score
 			expect(score).toBeLessThanOrEqual(1.0);
@@ -321,7 +330,7 @@ describe("QuestScheduler", () => {
 				{ ...createTestQuest("quest-2", "High complexity", ["pkg2"]), tags: ["high"] },
 			];
 
-			const duration = (scheduler as any).estimateSetDuration(questSet);
+			const duration = (scheduler as unknown as SchedulerTestMethods).estimateSetDuration(questSet);
 
 			// Should take the maximum duration (high complexity = 45 minutes)
 			expect(duration).toBe(45 * 60 * 1000);

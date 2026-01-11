@@ -209,7 +209,7 @@ export function launchDashboard(): void {
 	let lastLogLines: string[] = [];
 	let lastLogMtime = 0;
 	let lastMetricsMtime = 0;
-	let outputLineCount = 0;
+	let _outputLineCount = 0;
 
 	function getWorkers(): WorkerInfo[] {
 		try {
@@ -229,7 +229,7 @@ export function launchDashboard(): void {
 
 			const seen = new Set<number>();
 			for (const m of matches) {
-				const pid = parseInt(m[1]);
+				const pid = parseInt(m[1], 10);
 				if (!seen.has(pid)) {
 					seen.add(pid);
 					workers.push({
@@ -365,7 +365,7 @@ export function launchDashboard(): void {
 			const newLines = logLines.filter((l) => !lastLogLines.includes(l));
 
 			for (const line of newLines) {
-				outputLineCount++;
+				_outputLineCount++;
 				const truncated = line.slice(0, 55);
 				if (line.includes("ERROR") || line.includes("FAIL")) {
 					logBox.log(`{red-fg}${truncated}{/}`);
