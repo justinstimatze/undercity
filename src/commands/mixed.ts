@@ -9,6 +9,7 @@ import chalk from "chalk";
 import { getConfigSource, loadConfig, mergeWithConfig } from "../config.js";
 import { UndercityOracle } from "../oracle.js";
 import { Persistence } from "../persistence.js";
+import { RateLimitTracker } from "../rate-limit.js";
 import type { CommandModule } from "./types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -231,6 +232,88 @@ export const mixedCommands: CommandModule = {
 					}
 				},
 			);
+
+		// Limits command - quick snapshot of usage (use 'watch' for live monitoring)
+		program
+			.command("limits")
+			.description("Show current usage snapshot (use 'watch' for live dashboard)")
+			.action(async () => {
+				const { loadLiveMetrics } = await import("../live-metrics.js");
+
+				const metrics = loadLiveMetrics();
+				const persistence = new Persistence();
+				const savedState = persistence.getRateLimitState();
+				const tracker = new RateLimitTracker(savedState ?? undefined);
+
+				// Calculate totals from byModel (more reliable than top-level tokens)
+				const models = metrics.byModel;
+				const totalInput = models.opus.input + models.sonnet.input + models.haiku.input;
+				const totalOutput = models.opus.output + models.sonnet.output + models.haiku.output;
+				const totalTokens = totalInput + totalOutput;
+
+				// Check if there's any data
+				if (totalTokens === 0 && metrics.queries.total === 0) {
+					console.log(chalk.dim("\n📊 No usage data yet."));
+					console.log(chalk.dim("   Run 'undercity grind' to start processing quests.\n"));
+					return;
+				}
+
+				// When was this data from?
+				const lastUpdated = new Date(metrics.updatedAt);
+				const ageMs = Date.now() - metrics.updatedAt;
+				const ageMinutes = Math.floor(ageMs / 60000);
+
+				console.log(chalk.bold("\n📊 Undercity Usage"));
+				if (ageMinutes > 5) {
+					console.log(chalk.dim(`   Last updated: ${lastUpdated.toLocaleString()} (${ageMinutes}m ago)\n`));
+				} else {
+					console.log();
+				}
+
+				// Check rate limit pause status
+				const isPaused = tracker.isPaused();
+				if (isPaused) {
+					const pauseState = tracker.getPauseState();
+					console.log(chalk.yellow.bold("⏳ RATE LIMIT PAUSE ACTIVE"));
+					console.log(chalk.yellow(`  Reason: ${pauseState.reason || "Rate limit hit"}`));
+					console.log(chalk.yellow(`  Remaining: ${tracker.formatRemainingTime()}`));
+					console.log(chalk.yellow(`  Resume at: ${pauseState.resumeAt?.toLocaleString() || "unknown"}\n`));
+				}
+
+				// Session stats
+				console.log(chalk.bold("Session:"));
+				console.log(
+					`  Queries: ${metrics.queries.successful}/${metrics.queries.total}${metrics.queries.rateLimited > 0 ? chalk.yellow(` (${metrics.queries.rateLimited} rate limited)`) : ""}\n`,
+				);
+
+				// Token totals (calculated from byModel)
+				console.log(chalk.bold("Tokens:"));
+				console.log(`  Input:  ${totalInput.toLocaleString()}`);
+				console.log(`  Output: ${totalOutput.toLocaleString()}`);
+				console.log(`  Total:  ${totalTokens.toLocaleString()}\n`);
+
+				// Model breakdown
+				console.log(chalk.bold("By Model:"));
+				if (models.opus.input > 0 || models.opus.output > 0) {
+					const opusTotal = models.opus.input + models.opus.output;
+					console.log(`  opus:   ${opusTotal.toLocaleString().padStart(10)} tokens  $${models.opus.cost.toFixed(2)}`);
+				}
+				if (models.sonnet.input > 0 || models.sonnet.output > 0) {
+					const sonnetTotal = models.sonnet.input + models.sonnet.output;
+					console.log(
+						`  sonnet: ${sonnetTotal.toLocaleString().padStart(10)} tokens  $${models.sonnet.cost.toFixed(2)}`,
+					);
+				}
+				if (models.haiku.input > 0 || models.haiku.output > 0) {
+					const haikuTotal = models.haiku.input + models.haiku.output;
+					console.log(`  haiku:  ${haikuTotal.toLocaleString().padStart(10)} tokens  $${models.haiku.cost.toFixed(2)}`);
+				}
+
+				// Cost
+				console.log(chalk.bold("\nTotal Cost:") + ` $${metrics.cost.total.toFixed(2)}`);
+
+				console.log(chalk.dim("\nFor live monitoring, run: undercity watch"));
+			});
 
 		// Init command
 		program

@@ -14,6 +14,8 @@
 
 import { execSync } from "node:child_process";
 import chalk from "chalk";
+import { Persistence } from "./persistence.js";
+import { RateLimitTracker } from "./rate-limit.js";
 import { SoloOrchestrator, type TaskResult } from "./solo.js";
 import { WorktreeManager } from "./worktree-manager.js";
 
@@ -72,6 +74,8 @@ export class ParallelSoloOrchestrator {
 	private reviewPasses: boolean;
 	private annealingAtOpus: boolean;
 	private worktreeManager: WorktreeManager;
+	private persistence: Persistence;
+	private rateLimitTracker: RateLimitTracker;
 
 	constructor(options: ParallelSoloOptions = {}) {
 		this.maxConcurrent = options.maxConcurrent ?? 3;
@@ -82,6 +86,11 @@ export class ParallelSoloOrchestrator {
 		this.reviewPasses = options.reviewPasses ?? true; // Default to review enabled
 		this.annealingAtOpus = options.annealingAtOpus ?? false;
 		this.worktreeManager = new WorktreeManager();
+
+		// Initialize persistence and rate limit tracker
+		this.persistence = new Persistence();
+		const savedRateLimitState = this.persistence.getRateLimitState();
+		this.rateLimitTracker = new RateLimitTracker(savedRateLimitState ?? undefined);
 	}
 
 	/**
@@ -91,12 +100,44 @@ export class ParallelSoloOrchestrator {
 		const startTime = Date.now();
 		const results: ParallelTaskResult[] = [];
 
+		// Check if rate limited - try to auto-resume first
+		this.rateLimitTracker.checkAutoResume();
+
+		if (this.rateLimitTracker.isPaused()) {
+			const pauseState = this.rateLimitTracker.getPauseState();
+			const remaining = this.rateLimitTracker.formatRemainingTime();
+			console.log(chalk.yellow.bold(`\n⏳ Rate Limit Pause Active`));
+			console.log(chalk.yellow(`  Reason: ${pauseState.reason || "Rate limit hit"}`));
+			console.log(chalk.yellow(`  Remaining: ${remaining}`));
+			console.log(chalk.yellow(`  Resume at: ${pauseState.resumeAt?.toLocaleString() || "unknown"}`));
+			console.log(chalk.dim(`\n  Run 'undercity limits' to check rate limit state.`));
+
+			return {
+				results: [],
+				successful: 0,
+				failed: 0,
+				merged: 0,
+				mergeFailed: 0,
+				durationMs: Date.now() - startTime,
+			};
+		}
+
 		// Limit to maxConcurrent
 		const tasksToRun = tasks.slice(0, this.maxConcurrent);
 
 		console.log(chalk.cyan.bold(`\n⚡ Parallel Solo Mode`));
 		console.log(chalk.dim(`  Running ${tasksToRun.length} tasks concurrently`));
 		console.log(chalk.dim(`  Model: ${this.startingModel} → escalate if needed\n`));
+
+		// Show rate limit usage if approaching threshold
+		const usageSummary = this.rateLimitTracker.getUsageSummary();
+		if (usageSummary.percentages.fiveHour > 0.5 || usageSummary.percentages.weekly > 0.5) {
+			console.log(
+				chalk.yellow(
+					`  ⚠ Rate limit usage: ${(usageSummary.percentages.fiveHour * 100).toFixed(0)}% (5h) / ${(usageSummary.percentages.weekly * 100).toFixed(0)}% (week)`,
+				),
+			);
+		}
 
 		// Phase 1: Create worktrees and prepare tasks
 		const preparedTasks: Array<{
@@ -181,6 +222,30 @@ export class ParallelSoloOrchestrator {
 		const parallelResults = await Promise.all(taskPromises);
 		results.push(...parallelResults);
 
+		// Record token usage for rate limit tracking
+		for (const taskResult of parallelResults) {
+			if (taskResult.result?.tokenUsage) {
+				// Record each attempt's usage
+				for (const attemptUsage of taskResult.result.tokenUsage.attempts) {
+					const model = (attemptUsage.model as "haiku" | "sonnet" | "opus") || this.startingModel;
+					this.rateLimitTracker.recordQuest(
+						taskResult.taskId,
+						model,
+						attemptUsage.inputTokens,
+						attemptUsage.outputTokens,
+						{
+							durationMs: taskResult.result.durationMs,
+						},
+					);
+				}
+			}
+
+			// Check for rate limit errors
+			if (taskResult.mergeError?.includes("429") || taskResult.result?.error?.includes("429")) {
+				this.rateLimitTracker.recordRateLimitHit(this.startingModel, taskResult.mergeError || taskResult.result?.error);
+			}
+		}
+
 		// Phase 3: Merge successful branches serially
 		const successfulTasks = results.filter((r) => r.result?.status === "complete" && r.branch);
 
@@ -236,6 +301,17 @@ export class ParallelSoloOrchestrator {
 		}
 		console.log(`  ${chalk.dim("⏱")}  Duration: ${Math.round(durationMs / 1000)}s`);
 
+		// Save rate limit state
+		this.persistence.saveRateLimitState(this.rateLimitTracker.getState());
+
+		// Show updated rate limit usage
+		const finalUsage = this.rateLimitTracker.getUsageSummary();
+		console.log(
+			chalk.dim(
+				`  📊 Rate limit: ${(finalUsage.percentages.fiveHour * 100).toFixed(0)}% (5h) / ${(finalUsage.percentages.weekly * 100).toFixed(0)}% (week)`,
+			),
+		);
+
 		return {
 			results,
 			successful,
@@ -253,10 +329,34 @@ export class ParallelSoloOrchestrator {
 	 * run verification, then push directly to main.
 	 */
 	private async mergeBranch(_branch: string, taskId: string, worktreePath: string): Promise<void> {
+		const { existsSync, statSync } = await import("node:fs");
+
+		// Validate worktree path before proceeding
+		if (!worktreePath) {
+			throw new Error(`Worktree path is empty for ${taskId}`);
+		}
+
+		if (!existsSync(worktreePath)) {
+			throw new Error(`Worktree path does not exist for ${taskId}: ${worktreePath}`);
+		}
+
+		try {
+			const stats = statSync(worktreePath);
+			if (!stats.isDirectory()) {
+				throw new Error(`Worktree path is not a directory for ${taskId}: ${worktreePath}`);
+			}
+		} catch (statError) {
+			throw new Error(`Cannot stat worktree path for ${taskId}: ${worktreePath} - ${statError}`);
+		}
+
 		const mainBranch = this.worktreeManager.getMainBranch();
 
 		// Fetch latest main into the worktree
-		execInDir(`git fetch origin ${mainBranch}`, worktreePath);
+		try {
+			execInDir(`git fetch origin ${mainBranch}`, worktreePath);
+		} catch (fetchError) {
+			throw new Error(`Git fetch failed for ${taskId} in ${worktreePath}: ${fetchError}`);
+		}
 
 		// Rebase onto origin/main
 		try {
