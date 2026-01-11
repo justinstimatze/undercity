@@ -304,6 +304,22 @@ export class WorktreeManager {
 				// Don't throw - let the task continue and fail at verification stage with clearer error
 			}
 
+			// Block direct pushes from worktree - orchestrator controls all pushes after verification
+			// Setting push URL to a blocked path ensures any git push attempt fails with a clear error
+			gitLogger.info({ sessionId }, "Blocking direct pushes from worktree");
+			try {
+				execSync('git remote set-url --push origin "PUSH_BLOCKED_USE_ORCHESTRATOR"', {
+					cwd: worktreePath,
+					encoding: "utf-8",
+					stdio: ["pipe", "pipe", "pipe"],
+				});
+			} catch (blockError) {
+				gitLogger.warn(
+					{ sessionId, error: String(blockError) },
+					"Failed to block pushes in worktree - agents may bypass verification",
+				);
+			}
+
 			const worktreeInfo: WorktreeInfo = {
 				sessionId,
 				path: worktreePath,

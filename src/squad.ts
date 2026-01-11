@@ -266,6 +266,13 @@ GIT COMMITS:
 - NO emojis in commit messages - keep them plain and professional
 - Format: "Short description of what changed"
 - Don't add attribution lines (Co-Authored-By, etc.)
+- NEVER run "git push" - the orchestrator handles all pushes after verification
+
+CRITICAL - DO NOT PUSH:
+- You may ONLY commit locally (git add, git commit)
+- NEVER run "git push" or any push command
+- The orchestrator will push after verification passes
+- If you push, you bypass the verification gate
 
 When done, summarize what you changed and confirm build status.`,
 		tools: ["Read", "Edit", "Write", "Bash", "Grep", "Glob"],

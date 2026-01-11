@@ -47,6 +47,18 @@
       ]
     },
     {
+      "id": "task-fix-push-before-verify",
+      "objective": "[critical] Prevent agents from pushing during task execution - agents should only commit locally, orchestrator controls all pushes after verification passes. Currently agents can bypass verification by pushing directly via Bash",
+      "status": "pending",
+      "priority": 5,
+      "createdAt": "2026-01-11T08:00:00.000Z",
+      "tags": [
+        "critical",
+        "verification",
+        "security"
+      ]
+    },
+    {
       "id": "task-fix-review-escalation",
       "objective": "[review] Fix review pass logic - opus gets only 2 passes then 'escalates' to nothing, 'converged' is misleading when issues still found. Opus should get more attempts as final tier, messaging should be accurate",
       "status": "pending",
