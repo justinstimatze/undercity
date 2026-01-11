@@ -112,13 +112,14 @@
     {
       "id": "task-docs-readme-agent-format",
       "objective": "[docs] Rewrite README.md for agent consumption - remove prose/marketing, use tables and key-value structure, explicit command→behavior mappings",
-      "status": "pending",
+      "status": "complete",
       "priority": 10,
       "createdAt": "2026-01-11T07:05:00.000Z",
       "tags": [
         "docs",
         "agent-optimization"
-      ]
+      ],
+      "completedAt": "2026-01-11T23:47:58.165Z"
     },
     {
       "id": "task-docs-architecture-agent-format",
@@ -136,24 +137,26 @@
     {
       "id": "task-docs-api-reference",
       "objective": "[docs] Create API.md - every exported function with signature, params, return type, error conditions, example usage",
-      "status": "pending",
+      "status": "complete",
       "priority": 12,
       "createdAt": "2026-01-11T07:05:00.000Z",
       "tags": [
         "docs",
         "agent-optimization"
-      ]
+      ],
+      "completedAt": "2026-01-11T23:47:58.166Z"
     },
     {
       "id": "task-docs-decision-tree",
       "objective": "[docs] Create DECISIONS.md - when to use solo vs grind, when to escalate, which model for which task type, routing logic explained",
-      "status": "pending",
+      "status": "complete",
       "priority": 13,
       "createdAt": "2026-01-11T07:05:00.000Z",
       "tags": [
         "docs",
         "agent-optimization"
-      ]
+      ],
+      "completedAt": "2026-01-11T23:47:58.166Z"
     },
     {
       "id": "task-feedback-metrics-reader",
@@ -528,7 +531,7 @@
       "id": "task-mkab3cik-8i42",
       "objective": "[cli] Add --priority flag to 'undercity add' command for explicit task prioritization",
       "status": "pending",
-      "priority": 48,
+      "priority": 3,
       "createdAt": "2026-01-11T22:29:10.556Z"
     },
     {
@@ -626,14 +629,14 @@
       "id": "task-mkadr4x3-g1d4",
       "objective": "[critical] Disable automatic Opus reviews - only escalate to Opus if sonnet review finds critical issues. Default reviewPasses to false or skip Opus tier. 95% of tokens currently wasted on unnecessary Opus reviews",
       "status": "pending",
-      "priority": 62,
+      "priority": 1,
       "createdAt": "2026-01-11T23:43:39.687Z"
     },
     {
       "id": "task-mkadr7nx-xo41",
       "objective": "[efficiency] Cap review escalation by task complexity - simple tasks (docs, cleanup, refactor) should get haiku/sonnet review but not escalate to Opus. Only complex tasks escalate to Opus when needed",
       "status": "pending",
-      "priority": 63,
+      "priority": 2,
       "createdAt": "2026-01-11T23:43:43.245Z"
     },
     {
@@ -644,5 +647,5 @@
       "createdAt": "2026-01-11T23:45:49.854Z"
     }
   ],
-  "lastUpdated": "2026-01-11T23:45:49.854Z"
+  "lastUpdated": "2026-01-11T23:47:58.171Z"
 }
