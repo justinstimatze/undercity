@@ -71,8 +71,8 @@ describe("DualLogger", () => {
 		await new Promise((resolve) => setTimeout(resolve, 50));
 
 		const logContent = readFileSync(logger.getCurrentLogPath(), "utf-8");
-		expect(logContent).toContain("=== Undercity Raid Log ===");
-		expect(logContent).toContain("Raid ID: test-raid-123");
+		expect(logContent).toContain("=== Undercity Session Log ===");
+		expect(logContent).toContain("Session ID: test-raid-123");
 	});
 
 	it("should write to both console and file", async () => {
@@ -104,7 +104,7 @@ describe("DualLogger", () => {
 		expect(logContent).toContain("=== End Log ===");
 	});
 
-	it("should rotate logs when raid ends", async () => {
+	it("should rotate logs when session ends", async () => {
 		logger.start("test-raid-123");
 		logger.writeLine("Test content");
 
@@ -123,7 +123,7 @@ describe("DualLogger", () => {
 
 		// Archived log should exist
 		const files = require("node:fs").readdirSync(logDir);
-		const archivedLog = files.find((file: string) => file.startsWith("raid-test-raid-123"));
+		const archivedLog = files.find((file: string) => file.startsWith("session-test-raid-123"));
 		expect(archivedLog).toBeTruthy();
 
 		if (archivedLog) {

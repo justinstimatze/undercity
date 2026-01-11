@@ -3,13 +3,13 @@
 /**
  * Undercity CLI - Main Entry Point
  *
- * Comprehensive command-line interface for Undercity, a multi-raider orchestrator for Claude Max.
- * Provides AI-driven development workflows with automated raid management, task tracking, parallel
+ * Comprehensive command-line interface for Undercity, a multi-agent orchestrator for Claude Max.
+ * Provides AI-driven development workflows with automated session management, task tracking, parallel
  * processing capabilities, and strategic planning utilities. The tool coordinates multiple AI agents
  * to execute complex development tasks with minimal human intervention.
  *
  * Core Features:
- * - Raid Management: Automated planning, execution, and extraction of development tasks
+ * - Session Management: Automated planning, execution, and extraction of development tasks
  * - Task Tracking: Persistent task queues with priority management and dependency resolution
  * - Parallel Processing: Multi-agent coordination for concurrent task execution
  * - Strategic Planning: AI-powered planning with human approval workflows
@@ -17,7 +17,7 @@
  * - Merge Orchestration: Automated git workflows with conflict resolution
  * - Oracle Insights: Oblique strategy cards for creative problem-solving
  *
- * Multi-raider orchestrator for Claude Max - Gas Town for normal people.
+ * Multi-agent orchestrator for Claude Max - Gas Town for normal people.
  */
 
 import { readFileSync } from "node:fs";
@@ -46,7 +46,7 @@ const program = new Command();
 
 program
 	.name("undercity")
-	.description("Multi-raider orchestrator for Claude Max - Gas Town for budget extraction")
+	.description("Multi-agent orchestrator for Claude Max - Gas Town for budget extraction")
 	.version(getVersion());
 
 // Register all command modules

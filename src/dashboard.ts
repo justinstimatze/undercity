@@ -175,9 +175,9 @@ export function launchDashboard(): void {
 		},
 	}) as LogWidget;
 
-	// MIDDLE RIGHT - QUESTS
+	// MIDDLE RIGHT - TASKS
 	const taskBox = grid.set(7, 6, 2, 6, blessed.box, {
-		label: " QUESTS ",
+		label: " TASKS ",
 		tags: true,
 		border: { type: "line" },
 		style: {
@@ -398,7 +398,7 @@ export function launchDashboard(): void {
 			commitsBox.setContent(`{gray-fg}No commits{/}`);
 		}
 
-		// QUESTS
+		// TASKS
 		const stats = getTaskStats();
 		if (stats.total === 0) {
 			taskBox.setContent(`{gray-fg}No tasks{/}`);

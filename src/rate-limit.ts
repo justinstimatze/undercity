@@ -70,7 +70,7 @@ export class RateLimitTracker {
 	/**
 	 * Record a task's token usage
 	 */
-	recordQuest(
+	recordTask(
 		taskId: string,
 		model: "haiku" | "sonnet" | "opus",
 		inputTokens: number,

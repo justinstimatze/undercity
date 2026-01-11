@@ -66,7 +66,7 @@ export interface ComplexityAssessment {
 	model: "haiku" | "sonnet" | "opus";
 	/** Whether to use full agent chain or solo mode */
 	useFullChain: boolean;
-	/** Whether sheriff review is recommended */
+	/** Whether reviewer check is recommended */
 	needsReview: boolean;
 	/** Estimated scope (files likely to change) */
 	estimatedScope: "single-file" | "few-files" | "many-files" | "cross-package";

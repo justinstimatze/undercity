@@ -44,7 +44,7 @@ async function logMetricsToFile(metrics: TaskMetrics): Promise<void> {
 }
 
 /**
- * Tracks efficiency metrics for tasks and raids
+ * Tracks efficiency metrics for tasks and sessions
  */
 export class MetricsTracker {
 	private taskStartTime?: Date;
@@ -201,7 +201,7 @@ export class MetricsTracker {
 
 		// Record in rate limit tracker if we have enough info
 		if (this.taskId && model) {
-			this.rateLimitTracker.recordQuest(this.taskId, model, usage.inputTokens, usage.outputTokens, {
+			this.rateLimitTracker.recordTask(this.taskId, model, usage.inputTokens, usage.outputTokens, {
 				sessionId: this.sessionId,
 				timestamp: new Date(),
 			});
@@ -223,7 +223,7 @@ export class MetricsTracker {
 	/**
 	 * Record task failure
 	 */
-	recordQuestFailure(error: string): void {
+	recordTaskFailure(error: string): void {
 		this.currentError = error;
 	}
 

@@ -2,7 +2,7 @@
  * Knowledge Tracking Module
  *
  * Tracks successful prompts, approaches, and learnings across different task types
- * Builds institutional knowledge to improve future raid performance
+ * Builds institutional knowledge to improve future session performance
  *
  * DSPy Evaluation:
  * This module includes assessment logic for determining whether DSPy integration

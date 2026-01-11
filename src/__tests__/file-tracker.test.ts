@@ -17,23 +17,23 @@ describe("FileTracker", () => {
 
 	describe("startTracking", () => {
 		it("creates a new tracking entry for an agent", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
 
 			const entry = tracker.getEntry("agent-1");
 			expect(entry).toBeDefined();
 			expect(entry?.agentId).toBe("agent-1");
 			expect(entry?.stepId).toBe("step-1");
-			expect(entry?.sessionId).toBe("raid-1");
+			expect(entry?.sessionId).toBe("session-1");
 			expect(entry?.files).toEqual([]);
 			expect(entry?.startedAt).toBeInstanceOf(Date);
 			expect(entry?.endedAt).toBeUndefined();
 		});
 
 		it("overwrites existing entry if tracking same agent", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
 			tracker.recordFileAccess("agent-1", "file.ts", "write");
 
-			tracker.startTracking("agent-1", "step-2", "raid-1");
+			tracker.startTracking("agent-1", "step-2", "session-1");
 
 			const entry = tracker.getEntry("agent-1");
 			expect(entry?.stepId).toBe("step-2");
@@ -43,7 +43,7 @@ describe("FileTracker", () => {
 
 	describe("stopTracking", () => {
 		it("marks entry as ended", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
 			tracker.stopTracking("agent-1");
 
 			const entry = tracker.getEntry("agent-1");
@@ -58,7 +58,7 @@ describe("FileTracker", () => {
 
 	describe("recordFileAccess", () => {
 		it("records file operations for an agent", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
 
 			tracker.recordFileAccess("agent-1", "src/file.ts", "read");
 			tracker.recordFileAccess("agent-1", "src/file.ts", "write");
@@ -75,7 +75,7 @@ describe("FileTracker", () => {
 		it("normalizes absolute paths to relative", () => {
 			const customCwd = "/home/user/project";
 			tracker = new FileTracker(undefined, customCwd);
-			tracker.startTracking("agent-1", "step-1", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
 
 			tracker.recordFileAccess("agent-1", "/home/user/project/src/file.ts", "write");
 
@@ -91,7 +91,7 @@ describe("FileTracker", () => {
 
 	describe("getModifiedFiles", () => {
 		it("returns only files with write operations", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
 			tracker.recordFileAccess("agent-1", "read-only.ts", "read");
 			tracker.recordFileAccess("agent-1", "written.ts", "write");
 			tracker.recordFileAccess("agent-1", "edited.ts", "edit");
@@ -108,7 +108,7 @@ describe("FileTracker", () => {
 		});
 
 		it("returns unique file paths", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
 			tracker.recordFileAccess("agent-1", "file.ts", "write");
 			tracker.recordFileAccess("agent-1", "file.ts", "write");
 			tracker.recordFileAccess("agent-1", "file.ts", "edit");
@@ -125,7 +125,7 @@ describe("FileTracker", () => {
 
 	describe("getAllTouchedFiles", () => {
 		it("returns all files including reads", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
 			tracker.recordFileAccess("agent-1", "read.ts", "read");
 			tracker.recordFileAccess("agent-1", "write.ts", "write");
 
@@ -139,8 +139,8 @@ describe("FileTracker", () => {
 
 	describe("detectConflicts", () => {
 		it("detects conflicts when multiple agents modify same file", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
-			tracker.startTracking("agent-2", "step-2", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.startTracking("agent-2", "step-2", "session-1");
 
 			tracker.recordFileAccess("agent-1", "shared.ts", "write");
 			tracker.recordFileAccess("agent-2", "shared.ts", "edit");
@@ -155,8 +155,8 @@ describe("FileTracker", () => {
 		});
 
 		it("does not report conflicts for read-only access", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
-			tracker.startTracking("agent-2", "step-2", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.startTracking("agent-2", "step-2", "session-1");
 
 			tracker.recordFileAccess("agent-1", "file.ts", "read");
 			tracker.recordFileAccess("agent-2", "file.ts", "read");
@@ -166,8 +166,8 @@ describe("FileTracker", () => {
 		});
 
 		it("excludes specified agent from conflict check", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
-			tracker.startTracking("agent-2", "step-2", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.startTracking("agent-2", "step-2", "session-1");
 
 			tracker.recordFileAccess("agent-1", "file.ts", "write");
 			tracker.recordFileAccess("agent-2", "file.ts", "write");
@@ -179,8 +179,8 @@ describe("FileTracker", () => {
 		});
 
 		it("excludes completed agents from conflict detection", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
-			tracker.startTracking("agent-2", "step-2", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.startTracking("agent-2", "step-2", "session-1");
 
 			tracker.recordFileAccess("agent-1", "file.ts", "write");
 			tracker.recordFileAccess("agent-2", "file.ts", "write");
@@ -194,8 +194,8 @@ describe("FileTracker", () => {
 		});
 
 		it("reports multiple conflicts", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
-			tracker.startTracking("agent-2", "step-2", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.startTracking("agent-2", "step-2", "session-1");
 
 			tracker.recordFileAccess("agent-1", "file1.ts", "write");
 			tracker.recordFileAccess("agent-2", "file1.ts", "write");
@@ -212,7 +212,7 @@ describe("FileTracker", () => {
 
 	describe("wouldConflict", () => {
 		it("checks if files would conflict with active agents", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
 			tracker.recordFileAccess("agent-1", "existing.ts", "write");
 
 			const conflicts = tracker.wouldConflict(["existing.ts", "new.ts"]);
@@ -222,7 +222,7 @@ describe("FileTracker", () => {
 		});
 
 		it("excludes specified agent from check", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
 			tracker.recordFileAccess("agent-1", "file.ts", "write");
 
 			const conflicts = tracker.wouldConflict(["file.ts"], "agent-1");
@@ -231,7 +231,7 @@ describe("FileTracker", () => {
 		});
 
 		it("excludes completed agents", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
 			tracker.recordFileAccess("agent-1", "file.ts", "write");
 			tracker.stopTracking("agent-1");
 
@@ -243,8 +243,8 @@ describe("FileTracker", () => {
 
 	describe("getActiveEntries", () => {
 		it("returns only non-completed entries", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
-			tracker.startTracking("agent-2", "step-2", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.startTracking("agent-2", "step-2", "session-1");
 			tracker.stopTracking("agent-1");
 
 			const active = tracker.getActiveEntries();
@@ -254,13 +254,13 @@ describe("FileTracker", () => {
 		});
 	});
 
-	describe("clearRaid", () => {
-		it("removes all entries for a specific raid", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
-			tracker.startTracking("agent-2", "step-2", "raid-1");
-			tracker.startTracking("agent-3", "step-3", "raid-2");
+	describe("clearSession", () => {
+		it("removes all entries for a specific session", () => {
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.startTracking("agent-2", "step-2", "session-1");
+			tracker.startTracking("agent-3", "step-3", "session-2");
 
-			tracker.clearRaid("raid-1");
+			tracker.clearSession("session-1");
 
 			expect(tracker.getEntry("agent-1")).toBeUndefined();
 			expect(tracker.getEntry("agent-2")).toBeUndefined();
@@ -270,8 +270,8 @@ describe("FileTracker", () => {
 
 	describe("clearCompleted", () => {
 		it("removes only completed entries", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
-			tracker.startTracking("agent-2", "step-2", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.startTracking("agent-2", "step-2", "session-1");
 			tracker.stopTracking("agent-1");
 
 			tracker.clearCompleted();
@@ -283,8 +283,8 @@ describe("FileTracker", () => {
 
 	describe("getSummary", () => {
 		it("returns accurate tracking summary", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
-			tracker.startTracking("agent-2", "step-2", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.startTracking("agent-2", "step-2", "session-1");
 			tracker.recordFileAccess("agent-1", "file1.ts", "write");
 			tracker.recordFileAccess("agent-1", "file2.ts", "read");
 			tracker.recordFileAccess("agent-2", "file1.ts", "edit");
@@ -301,7 +301,7 @@ describe("FileTracker", () => {
 
 	describe("getState", () => {
 		it("returns the full state for persistence", () => {
-			tracker.startTracking("agent-1", "step-1", "raid-1");
+			tracker.startTracking("agent-1", "step-1", "session-1");
 			tracker.recordFileAccess("agent-1", "file.ts", "write");
 
 			const state = tracker.getState();
@@ -319,7 +319,7 @@ describe("FileTracker", () => {
 					"agent-1": {
 						agentId: "agent-1",
 						stepId: "step-1",
-						sessionId: "raid-1",
+						sessionId: "session-1",
 						files: [{ path: "file.ts", operation: "write", timestamp: new Date() }],
 						startedAt: new Date(),
 					},

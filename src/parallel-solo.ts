@@ -182,7 +182,7 @@ export class ParallelSoloOrchestrator {
 			if (result.tokenUsage) {
 				for (const attemptUsage of result.tokenUsage.attempts) {
 					const model = (attemptUsage.model as "haiku" | "sonnet" | "opus") || this.startingModel;
-					this.rateLimitTracker.recordQuest(taskId, model, attemptUsage.inputTokens, attemptUsage.outputTokens, {
+					this.rateLimitTracker.recordTask(taskId, model, attemptUsage.inputTokens, attemptUsage.outputTokens, {
 						durationMs: result.durationMs,
 					});
 				}
@@ -369,7 +369,7 @@ export class ParallelSoloOrchestrator {
 				}
 
 				// Stop tracking for this task
-				this.fileTracker.stopQuestTracking(taskId);
+				this.fileTracker.stopTaskTracking(taskId);
 
 				const status = result.status === "complete" ? chalk.green("✓") : chalk.red("✗");
 				console.log(chalk.dim(`  [${taskId}] ${status} ${result.status}`));
@@ -393,7 +393,7 @@ export class ParallelSoloOrchestrator {
 				};
 			} catch (error) {
 				// Stop tracking even on error
-				this.fileTracker.stopQuestTracking(taskId);
+				this.fileTracker.stopTaskTracking(taskId);
 
 				// Update recovery state
 				this.updateTaskStatus(taskId, "failed", { error: String(error) });
@@ -420,7 +420,7 @@ export class ParallelSoloOrchestrator {
 				// Record each attempt's usage
 				for (const attemptUsage of taskResult.result.tokenUsage.attempts) {
 					const model = (attemptUsage.model as "haiku" | "sonnet" | "opus") || this.startingModel;
-					this.rateLimitTracker.recordQuest(
+					this.rateLimitTracker.recordTask(
 						taskResult.taskId,
 						model,
 						attemptUsage.inputTokens,

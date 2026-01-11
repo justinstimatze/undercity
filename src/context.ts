@@ -7,7 +7,7 @@
  *
  * Context limits by agent type:
  * - Scout: Just the goal (~1K chars)
- * - Planner: Full flute report (~10K chars)
+ * - Planner: Full scout report (~10K chars)
  * - Builder: Implementation details only (~5K chars)
  * - Reviewer: Review requirements (~3K chars)
  */
@@ -229,14 +229,14 @@ export function smartTruncate(content: string, maxLength: number): string {
 /**
  * Main function: Summarize context for a specific agent type
  *
- * This is the primary API for the raid orchestrator to use.
+ * This is the primary API for the session orchestrator to use.
  * It extracts only the relevant parts of a plan for each agent type,
  * significantly reducing token usage.
  */
 export function summarizeContextForAgent(fullContext: string, agentType: AgentType, goal?: string): string {
 	const limit = CONTEXT_LIMITS[agentType];
 
-	// For flute, just return the goal
+	// For scout, just return the goal
 	if (agentType === "scout") {
 		if (goal) {
 			return smartTruncate(goal, limit);

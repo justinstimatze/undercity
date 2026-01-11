@@ -32,7 +32,7 @@ const ORACLE_DECK: OracleCard[] = [
 		loreContext: "Survivor's truth: 'The path you don't take might be the one that leads home.'",
 	},
 	{
-		text: "What would a rival raider exploit?",
+		text: "What would a rival agent exploit?",
 		category: "questioning",
 		loreContext: "Radio chatter: 'Think like the competition. They're thinking about you.'",
 	},

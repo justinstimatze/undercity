@@ -1,7 +1,7 @@
 /**
  * File Tracker Module
  *
- * Tracks which files each agent is touching during a raid.
+ * Tracks which files each agent is touching during a session.
  * This enables conflict detection when running parallel fabricators.
  *
  * Key features:
@@ -117,7 +117,7 @@ export class FileTracker {
 	 * Stop tracking files for a task
 	 * NEW: Support for task-level tracking
 	 */
-	stopQuestTracking(taskId: string): void {
+	stopTaskTracking(taskId: string): void {
 		this.stopTracking(taskId);
 	}
 
@@ -338,16 +338,16 @@ export class FileTracker {
 	}
 
 	/**
-	 * Clear tracking for a specific raid
+	 * Clear tracking for a specific session
 	 */
-	clearRaid(sessionId: string): void {
+	clearSession(sessionId: string): void {
 		for (const [agentId, entry] of Object.entries(this.state.entries)) {
 			if (entry.sessionId === sessionId) {
 				delete this.state.entries[agentId];
 			}
 		}
 		this.state.lastUpdated = new Date();
-		trackerLogger.debug({ sessionId }, "Cleared file tracking for raid");
+		trackerLogger.debug({ sessionId }, "Cleared file tracking for session");
 	}
 
 	/**
@@ -396,7 +396,7 @@ export class FileTracker {
 		}
 
 		// Check for file conflicts between different tasks
-		const fileQuestMap = new Map<string, string[]>(); // file -> task[]
+		const fileTaskMap = new Map<string, string[]>(); // file -> task[]
 
 		for (const [taskId, entries] of taskEntries) {
 			const taskFiles = new Set<string>();
@@ -412,14 +412,14 @@ export class FileTracker {
 
 			// Track which tasks touch which files
 			for (const file of taskFiles) {
-				const existing = fileQuestMap.get(file) || [];
+				const existing = fileTaskMap.get(file) || [];
 				existing.push(taskId);
-				fileQuestMap.set(file, existing);
+				fileTaskMap.set(file, existing);
 			}
 		}
 
 		// Find files touched by multiple tasks
-		for (const [file, tasks] of fileQuestMap) {
+		for (const [file, tasks] of fileTaskMap) {
 			if (tasks.length > 1) {
 				conflicts.push({
 					taskIds: tasks,
@@ -436,7 +436,7 @@ export class FileTracker {
 	 * Check if adding a task would cause conflicts
 	 * NEW: Pre-flight conflict check for task scheduling
 	 */
-	wouldQuestConflict(taskId: string, estimatedFiles: string[]): boolean {
+	wouldTaskConflict(taskId: string, estimatedFiles: string[]): boolean {
 		const writeOps: FileOperation[] = ["write", "edit", "delete"];
 		const normalizedFiles = estimatedFiles.map((f) => this.normalizePath(f));
 
@@ -464,8 +464,8 @@ export class FileTracker {
 	 * Get files currently being modified by active tasks
 	 * NEW: Query active file modifications across all tasks
 	 */
-	getActiveQuestFiles(): Map<string, string[]> {
-		const fileQuestMap = new Map<string, string[]>();
+	getActiveTaskFiles(): Map<string, string[]> {
+		const fileTaskMap = new Map<string, string[]>();
 		const writeOps: FileOperation[] = ["write", "edit", "delete"];
 
 		for (const [_agentId, entry] of Object.entries(this.state.entries)) {
@@ -473,16 +473,16 @@ export class FileTracker {
 
 			for (const touch of entry.files) {
 				if (writeOps.includes(touch.operation)) {
-					const existing = fileQuestMap.get(touch.path) || [];
+					const existing = fileTaskMap.get(touch.path) || [];
 					if (!existing.includes(entry.sessionId)) {
 						existing.push(entry.sessionId);
-						fileQuestMap.set(touch.path, existing);
+						fileTaskMap.set(touch.path, existing);
 					}
 				}
 			}
 		}
 
-		return fileQuestMap;
+		return fileTaskMap;
 	}
 
 	/**
@@ -521,17 +521,17 @@ export class FileTracker {
 	 * Clear tracking for all tasks except specified ones
 	 * NEW: Support for selective task cleanup
 	 */
-	clearInactiveTasks(activeQuestIds: string[]): void {
-		const activeRaidIds = new Set(activeQuestIds);
+	clearInactiveTasks(activeTaskIds: string[]): void {
+		const activeSessionIds = new Set(activeTaskIds);
 
 		for (const [agentId, entry] of Object.entries(this.state.entries)) {
-			if (!activeRaidIds.has(entry.sessionId) && entry.endedAt) {
+			if (!activeSessionIds.has(entry.sessionId) && entry.endedAt) {
 				delete this.state.entries[agentId];
 			}
 		}
 
 		this.state.lastUpdated = new Date();
-		trackerLogger.debug({ activeTasks: activeQuestIds.length }, "Cleared inactive task tracking");
+		trackerLogger.debug({ activeTasks: activeTaskIds.length }, "Cleared inactive task tracking");
 	}
 }
 

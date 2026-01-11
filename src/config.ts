@@ -48,7 +48,7 @@ export interface UndercityRc {
 	// Grind options
 	parallel?: number;
 
-	// Legacy raid options
+	// Legacy session options
 	autoApprove?: boolean;
 	maxSquad?: number;
 	maxRetries?: number;

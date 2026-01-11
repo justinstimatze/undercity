@@ -6,7 +6,7 @@
  *
  * Features:
  * - Writes all streaming output to both console and log file
- * - Log rotation per raid (archived logs are named by raid ID)
+ * - Log rotation per session (archived logs are named by session ID)
  * - Thread-safe log file operations
  * - Maintains current.log as the active log file
  */
@@ -37,7 +37,7 @@ export class DualLogger {
 	}
 
 	/**
-	 * Start dual logging for a new raid
+	 * Start dual logging for a new session
 	 */
 	start(sessionId?: string): void {
 		this.ensureLogDirectory();
@@ -53,7 +53,7 @@ export class DualLogger {
 
 		// Write header
 		const timestamp = new Date().toISOString();
-		const header = `=== Undercity Raid Log ===\nStarted: ${timestamp}\n${sessionId ? `Raid ID: ${sessionId}\n` : ""}${"=".repeat(50)}\n\n`;
+		const header = `=== Undercity Session Log ===\nStarted: ${timestamp}\n${sessionId ? `Session ID: ${sessionId}\n` : ""}${"=".repeat(50)}\n\n`;
 
 		this.writeToLogFile(header);
 
@@ -78,7 +78,7 @@ export class DualLogger {
 
 		if (this.logStream) {
 			this.logStream.end(() => {
-				// Rotate log if we have a raid ID (after stream is closed)
+				// Rotate log if we have a session ID (after stream is closed)
 				if (sessionId) {
 					this.rotateCurrentLog(sessionId);
 				}
@@ -130,7 +130,7 @@ export class DualLogger {
 		try {
 			// Generate archive filename
 			const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-			const archiveName = sessionId ? `raid-${sessionId}-${timestamp}.log` : `archived-${timestamp}.log`;
+			const archiveName = sessionId ? `session-${sessionId}-${timestamp}.log` : `archived-${timestamp}.log`;
 
 			const archivePath = join(this.logDir, archiveName);
 
