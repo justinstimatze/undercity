@@ -22,7 +22,7 @@
 ## Installation
 
 ```bash
-git clone https://github.com/anthropics/undercity.git
+git clone https://github.com/justinstimatze/undercity.git
 cd undercity
 pnpm install && pnpm build
 ln -sf $(pwd)/bin/undercity.js ~/.local/bin/undercity
@@ -81,10 +81,11 @@ ln -sf $(pwd)/bin/undercity.js ~/.local/bin/undercity
 | Medium | sonnet | Features, refactoring, multi-file | Medium |
 | Complex | opus | Architecture, critical debugging | Highest |
 
-**Routing Logic:**
-- Task complexity assessed by `src/task-decomposer.ts`
-- Execution grouped by model tier (haiku → sonnet → opus)
-- Automatic escalation on failure
+| Property | Value |
+|----------|-------|
+| Assessment | `src/task-decomposer.ts` |
+| Execution order | haiku → sonnet → opus (cheapest first) |
+| On failure | Auto-escalate to next tier |
 
 ## State Files
 
@@ -123,7 +124,12 @@ Task Complete
 | Lint | `pnpm lint` | Fix attempt → escalation |
 | Build | `pnpm build` | Fix attempt → escalation |
 
-**Escalation Path:** Same model → Higher model tier → Opus → Human notification
+| Escalation | Path |
+|------------|------|
+| Step 1 | Retry with same model |
+| Step 2 | Escalate to higher tier |
+| Step 3 | Escalate to opus |
+| Step 4 | Human notification |
 
 ## Configuration
 
@@ -134,15 +140,10 @@ Task Complete
 | `~/.undercityrc` | 3 | JSON | `{"model": "sonnet"}` |
 | Built-in defaults | 4 (lowest) | Hardcoded | `parallel: 1` |
 
-**Required Environment:**
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-```
-
-**Optional Environment:**
-```bash
-export LOG_LEVEL=debug  # debug|info|warn|error
-```
+| Environment Variable | Required | Values |
+|---------------------|----------|--------|
+| `ANTHROPIC_API_KEY` | Yes | `sk-ant-...` |
+| `LOG_LEVEL` | No | `debug` \| `info` \| `warn` \| `error` |
 
 ## Error Recovery
 
@@ -163,16 +164,14 @@ export LOG_LEVEL=debug  # debug|info|warn|error
 | `pnpm lint` | Check code style |
 | `pnpm semantic-check` | Analyze semantic density |
 
-**File Structure:**
-```
-src/
-├── cli.ts                 # CLI entry point
-├── commands/              # Command implementations
-├── parallel-solo.ts       # Main orchestrator
-├── task.ts               # Task board CRUD
-├── git.ts                # Git operations
-└── types.ts              # Core types
-```
+| File | Purpose |
+|------|---------|
+| `src/cli.ts` | CLI entry point |
+| `src/commands/` | Command implementations |
+| `src/parallel-solo.ts` | Main orchestrator |
+| `src/task.ts` | Task board CRUD |
+| `src/git.ts` | Git operations |
+| `src/types.ts` | Core types |
 
 ## Output Modes
 
@@ -195,8 +194,10 @@ src/
 | `/resume` | POST | Resume grind |
 | `/stop` | POST | Stop daemon |
 
-**Start:** `undercity serve -p 7331`
-**Status:** `undercity daemon status`
+| Operation | Command |
+|-----------|---------|
+| Start | `undercity serve -p 7331` |
+| Status | `undercity daemon status` |
 
 ## Rate Limits
 
@@ -205,5 +206,7 @@ src/
 | 1M tokens | 5 hours | Auto-pause |
 | 5M tokens | 1 week | Auto-pause |
 
-**Check:** `undercity limits`
-**Monitor:** `undercity watch`
+| Operation | Command |
+|-----------|---------|
+| Check | `undercity limits` |
+| Monitor | `undercity watch` |
