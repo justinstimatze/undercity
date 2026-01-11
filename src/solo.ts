@@ -106,6 +106,8 @@ export interface TaskResult {
 		/** Total tokens across all attempts */
 		total: number;
 	};
+	/** Tickets for issues that couldn't be resolved - queue as child tasks */
+	unresolvedTickets?: UnresolvedTicket[];
 }
 
 /**
@@ -164,6 +166,23 @@ export interface ReviewResult {
 }
 
 /**
+ * Ticket for unresolved issues that review couldn't fix.
+ * These get queued as child tasks for the builder to handle.
+ */
+export interface UnresolvedTicket {
+	/** Short title for the ticket */
+	title: string;
+	/** Detailed description with context */
+	description: string;
+	/** What was tried and why it failed */
+	context: string;
+	/** Priority based on issue severity */
+	priority: "high" | "medium" | "low";
+	/** Files involved */
+	files?: string[];
+}
+
+/**
  * Solo Orchestrator
  *
  * Runs tasks sequentially with verification and adaptive escalation.
@@ -200,6 +219,9 @@ export class SoloOrchestrator {
 	/** Track retries at same model tier (reset on escalation) */
 	private sameModelRetries: number = 0;
 
+	/** Pending tickets from review that couldn't be resolved */
+	private pendingTickets: UnresolvedTicket[] = [];
+
 	constructor(options: SoloOptions = {}) {
 		this.maxAttempts = options.maxAttempts ?? 3;
 		this.startingModel = options.startingModel ?? "sonnet";
@@ -235,6 +257,7 @@ export class SoloOrchestrator {
 		this.attemptRecords = [];
 		this.tokenUsageThisTask = [];
 		this.sameModelRetries = 0;
+		this.pendingTickets = []; // Clear tickets from previous task
 
 		// Ensure clean state before starting (in case previous task left dirty state)
 		this.cleanupDirtyState();
@@ -349,7 +372,11 @@ export class SoloOrchestrator {
 					if (reviewLevel.review) {
 						const reviewResult = await this.runEscalatingReview(task, reviewLevel.annealing);
 						if (!reviewResult.converged) {
-							// Review couldn't resolve all issues - either verification broke or exhausted passes
+							// Review couldn't resolve all issues - store tickets for later
+							if (reviewResult.unresolvedTickets && reviewResult.unresolvedTickets.length > 0) {
+								// Store tickets - they'll be passed through if we fail completely
+								this.pendingTickets = reviewResult.unresolvedTickets;
+							}
 							console.log(chalk.yellow(`  Review could not fully resolve issues, retrying task...`));
 							this.lastFeedback = `Review found issues that couldn't be fully resolved: ${reviewResult.issuesFound.join(", ")}`;
 							continue;
@@ -472,6 +499,8 @@ export class SoloOrchestrator {
 				attempts: tokenUsageThisAttempt,
 				total: tokenUsageThisAttempt.reduce((sum, usage) => sum + usage.totalTokens, 0),
 			},
+			// Include tickets for issues that couldn't be resolved - caller can queue these
+			unresolvedTickets: this.pendingTickets.length > 0 ? this.pendingTickets : undefined,
 		};
 	}
 
@@ -989,6 +1018,8 @@ When done, provide a brief summary of what you changed.`;
 		reviewPasses: number;
 		finalTier: ModelTier;
 		annealingInsights?: string[];
+		/** Tickets for issues that couldn't be fixed - queue these as child tasks */
+		unresolvedTickets?: UnresolvedTicket[];
 	}> {
 		const tiers: ModelTier[] = ["haiku", "sonnet", "opus"];
 		const allIssuesFound: string[] = [];
@@ -1093,13 +1124,24 @@ When done, provide a brief summary of what you changed.`;
 			if (lastPassHadIssues) {
 				if (tier === "opus") {
 					// Opus is final tier - no escalation path
-					console.log(chalk.yellow(`  [opus] Exhausted ${maxPasses} passes - issues may remain unresolved`));
+					// Generate tickets for unresolved issues so they can be queued as child tasks
+					console.log(
+						chalk.yellow(`  [opus] Exhausted ${maxPasses} passes - generating tickets for unresolved issues`),
+					);
+					const tickets = this.generateTicketsFromIssues(task, allIssuesFound);
+					if (tickets.length > 0) {
+						console.log(chalk.cyan(`  Generated ${tickets.length} ticket(s) for unresolved issues:`));
+						for (const ticket of tickets) {
+							console.log(chalk.dim(`    - [${ticket.priority}] ${ticket.title}`));
+						}
+					}
 					return {
 						converged: false,
 						issuesFound: allIssuesFound,
 						reviewPasses: totalPasses,
 						finalTier: "opus",
 						annealingInsights: annealingInsights.length > 0 ? annealingInsights : undefined,
+						unresolvedTickets: tickets.length > 0 ? tickets : undefined,
 					};
 				}
 				console.log(chalk.yellow(`  [${tier}] Exhausted ${maxPasses} passes, escalating...`));
@@ -1119,6 +1161,68 @@ When done, provide a brief summary of what you changed.`;
 			finalTier: "opus",
 			annealingInsights: annealingInsights.length > 0 ? annealingInsights : undefined,
 		};
+	}
+
+	/**
+	 * Generate structured tickets from unresolved issues.
+	 * These tickets provide enough context for the builder to fix them.
+	 */
+	private generateTicketsFromIssues(originalTask: string, issues: string[]): UnresolvedTicket[] {
+		if (issues.length === 0) return [];
+
+		// Get current diff for context
+		let diffOutput = "";
+		let changedFiles: string[] = [];
+		try {
+			diffOutput = execSync("git diff HEAD --name-only", {
+				encoding: "utf-8",
+				cwd: this.workingDirectory,
+			});
+			changedFiles = diffOutput.trim().split("\n").filter(Boolean);
+		} catch {
+			// ignore
+		}
+
+		// Group similar issues and create tickets
+		const tickets: UnresolvedTicket[] = [];
+
+		// Deduplicate and prioritize issues
+		const uniqueIssues = [...new Set(issues)].filter((i) => i.length > 10);
+
+		for (const issue of uniqueIssues) {
+			// Determine priority based on keywords
+			let priority: "high" | "medium" | "low" = "medium";
+			const lowerIssue = issue.toLowerCase();
+			if (
+				lowerIssue.includes("security") ||
+				lowerIssue.includes("critical") ||
+				lowerIssue.includes("crash") ||
+				lowerIssue.includes("data loss")
+			) {
+				priority = "high";
+			} else if (lowerIssue.includes("style") || lowerIssue.includes("naming") || lowerIssue.includes("comment")) {
+				priority = "low";
+			}
+
+			// Create a concise title from the issue
+			const title = issue.length > 80 ? issue.slice(0, 77) + "..." : issue;
+
+			tickets.push({
+				title,
+				description: `Fix issue found during review of: ${originalTask}\n\nIssue: ${issue}`,
+				context: `Review attempted to fix this but couldn't resolve it after multiple passes. The builder should address this specific issue.`,
+				priority,
+				files: changedFiles.length > 0 ? changedFiles : undefined,
+			});
+		}
+
+		// Sort by priority (high first)
+		tickets.sort((a, b) => {
+			const order = { high: 0, medium: 1, low: 2 };
+			return order[a.priority] - order[b.priority];
+		});
+
+		return tickets;
 	}
 
 	/**
