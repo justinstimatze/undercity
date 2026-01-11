@@ -76,6 +76,23 @@ undercity tasks add "Critical security fix" --priority 0
 # Multiple tasks (edit tasks.json directly)
 ```
 
+## Editing Tasks
+
+To update a task's objective or properties, use jq:
+
+```bash
+# Update objective
+cat .undercity/tasks.json | jq '(.tasks[] | select(.id == "task-xxx")) |= . + {objective: "New objective"}' > /tmp/tasks.json && mv /tmp/tasks.json .undercity/tasks.json
+
+# Update tags
+cat .undercity/tasks.json | jq '(.tasks[] | select(.id == "task-xxx")) |= . + {tags: ["feature", "critical"]}' > /tmp/tasks.json && mv /tmp/tasks.json .undercity/tasks.json
+
+# Delete a task
+cat .undercity/tasks.json | jq '.tasks |= map(select(.id != "task-xxx"))' > /tmp/tasks.json && mv /tmp/tasks.json .undercity/tasks.json
+```
+
+To find a task ID, use: `cat .undercity/tasks.json | jq '.tasks[] | {id, objective}'`
+
 ## Recovery
 
 If a grind session crashes:
