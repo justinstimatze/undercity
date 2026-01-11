@@ -9,6 +9,22 @@
       "tags": ["cleanup", "tests"]
     },
     {
+      "id": "task-fix-watch-dashboard",
+      "objective": "[dashboard] Fix watch dashboard - burn rate graph not updating, cache hit graph not updating, tasks pane not refreshing dynamically, SDK metrics showing 0 tokens/burn",
+      "status": "pending",
+      "priority": 5,
+      "createdAt": "2026-01-11T07:45:00.000Z",
+      "tags": ["dashboard", "metrics"]
+    },
+    {
+      "id": "task-fix-review-escalation",
+      "objective": "[review] Fix review pass logic - opus gets only 2 passes then 'escalates' to nothing, 'converged' is misleading when issues still found. Opus should get more attempts as final tier, messaging should be accurate",
+      "status": "pending",
+      "priority": 6,
+      "createdAt": "2026-01-11T07:50:00.000Z",
+      "tags": ["review", "escalation"]
+    },
+    {
       "id": "task-cleanup-dead-code",
       "objective": "[cleanup] Remove dead code - enhanced-metrics.ts (no imports), knowledge-tracker.ts (unused), src/examples/ (dead demos)",
       "status": "pending",
