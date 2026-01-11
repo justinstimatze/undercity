@@ -27,6 +27,14 @@ dist/
 notes/
 /experiments/
 
+# Temporary docs, logs, and samples (don't commit)
+*-SUMMARY.md
+*-VERIFICATION.md
+*-evaluation.md
+sample-*.md
+overnight-*.log
+*.log
+
 # Large data files
 *.csv
 *.jsonl
