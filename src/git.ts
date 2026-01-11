@@ -776,7 +776,7 @@ export class Elevator {
 
 			try {
 				execGit(["rebase", this.mainBranch], worktreePath);
-			} catch (rebaseError) {
+			} catch (_rebaseError) {
 				// Abort the rebase to clean up
 				try {
 					execGit(["rebase", "--abort"], worktreePath);
@@ -973,7 +973,7 @@ export class Elevator {
 		this.processing = true;
 		const originalBranch = getCurrentBranch();
 		const cwd = process.cwd(); // Capture current working directory
-		let branchPreserved = false;
+		let _branchPreserved = false;
 
 		try {
 			// Check if this branch is owned by a worktree
@@ -1000,7 +1000,7 @@ export class Elevator {
 				item.status = "conflict";
 				item.error = "Rebase failed - manual resolution required";
 				item.completedAt = new Date();
-				branchPreserved = true; // Preserve branch for manual recovery
+				_branchPreserved = true; // Preserve branch for manual recovery
 				return item;
 			}
 
@@ -1013,7 +1013,7 @@ export class Elevator {
 				item.status = "test_failed";
 				item.error = testResult.output;
 				item.completedAt = new Date();
-				branchPreserved = true; // Preserve branch for manual recovery
+				_branchPreserved = true; // Preserve branch for manual recovery
 				return item;
 			}
 
@@ -1032,7 +1032,7 @@ export class Elevator {
 				item.error = mergeResult.error || "Merge failed - manual resolution required";
 				item.conflictFiles = mergeResult.conflictFiles;
 				item.completedAt = new Date();
-				branchPreserved = true; // Preserve branch for manual recovery
+				_branchPreserved = true; // Preserve branch for manual recovery
 				gitLogger.warn(
 					{ branch: item.branch, conflictFiles: mergeResult.conflictFiles },
 					"Branch preserved for manual recovery - truly unresolvable conflicts",
@@ -1063,7 +1063,7 @@ export class Elevator {
 			item.status = "conflict";
 			item.error = error instanceof Error ? error.message : String(error);
 			item.completedAt = new Date();
-			branchPreserved = true; // Preserve branch for manual recovery
+			_branchPreserved = true; // Preserve branch for manual recovery
 			gitLogger.warn({ branch: item.branch, error: item.error }, "Branch preserved for manual recovery");
 			return item;
 		} finally {

@@ -5,7 +5,7 @@
  * Quests are processed sequentially in full-auto mode.
  */
 
-import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 
 export interface Quest {
 	id: string;
@@ -314,8 +314,8 @@ export function getReadyQuestsForBatch(count: number = 3): Quest[] {
 			selectedQuests.push(quest);
 
 			// Mark packages and files as used
-			questPackages.forEach((pkg) => usedPackages.add(pkg));
-			questFiles.forEach((file) => usedFiles.add(file));
+			for (const pkg of questPackages) usedPackages.add(pkg);
+			for (const file of questFiles) usedFiles.add(file);
 		}
 	}
 

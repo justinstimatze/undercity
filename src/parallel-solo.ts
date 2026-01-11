@@ -245,7 +245,7 @@ export class ParallelSoloOrchestrator {
 	 * Strategy: Work from within the worktree to rebase onto origin/main,
 	 * run verification, then push directly to main.
 	 */
-	private async mergeBranch(branch: string, taskId: string, worktreePath: string): Promise<void> {
+	private async mergeBranch(_branch: string, taskId: string, worktreePath: string): Promise<void> {
 		const mainBranch = this.worktreeManager.getMainBranch();
 
 		// Fetch latest main into the worktree

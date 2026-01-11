@@ -10,7 +10,7 @@
  * All state is stored as JSON files in .undercity/
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { persistenceLogger } from "./logger.js";
 import type {

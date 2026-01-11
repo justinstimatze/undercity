@@ -26,7 +26,7 @@ import { CheckpointManager } from "./checkpoint-manager.js";
 import { extractImplementationContext, extractReviewContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
 import { EfficiencyTracker } from "./efficiency-tracker.js";
-import { ErrorEscalationManager, type EscalationDecision } from "./error-escalation.js";
+import { ErrorEscalationManager } from "./error-escalation.js";
 import { FileTracker, parseFileOperation } from "./file-tracker.js";
 import {
 	calculateCodebaseFingerprint,

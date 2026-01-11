@@ -17,7 +17,6 @@ import type {
 	RecoveryState,
 	RecoveryStrategy,
 	Waypoint,
-	WaypointStatus,
 } from "./types.js";
 
 /**
@@ -400,7 +399,7 @@ export class RecoveryOrchestrator {
 	 */
 	private async executeCheckpointRestore(
 		waypoint: Waypoint,
-		context: {
+		_context: {
 			agentType: AgentType;
 			progressDescription?: string;
 		},

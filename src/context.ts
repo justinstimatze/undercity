@@ -818,7 +818,7 @@ function findRelatedPatterns(task: string, cwd: string): string[] {
 /**
  * Detect constraints and requirements
  */
-function detectConstraints(task: string, cwd: string): string[] {
+function detectConstraints(_task: string, cwd: string): string[] {
 	const constraints: string[] = [];
 
 	// Check for TypeScript strict mode
@@ -1004,7 +1004,7 @@ export function extractFunctionSignaturesWithTypes(filePath: string, cwd: string
 				const name = variable.getName();
 				const type = variable.getType().getText();
 				// Simplify type if too long
-				const shortType = type.length > 80 ? type.slice(0, 77) + "..." : type;
+				const shortType = type.length > 80 ? `${type.slice(0, 77)}...` : type;
 				signatures.push(`${fileName}: export const ${name}: ${shortType}`);
 			}
 		}
@@ -1042,13 +1042,13 @@ function formatFunctionSignature(func: FunctionDeclaration, fileName: string): s
 				const paramName = p.getName();
 				const paramType = p.getType().getText();
 				// Shorten long types
-				const shortType = paramType.length > 40 ? paramType.slice(0, 37) + "..." : paramType;
+				const shortType = paramType.length > 40 ? `${paramType.slice(0, 37)}...` : paramType;
 				return `${paramName}: ${shortType}`;
 			})
 			.join(", ");
 
 		const returnType = func.getReturnType().getText();
-		const shortReturn = returnType.length > 40 ? returnType.slice(0, 37) + "..." : returnType;
+		const shortReturn = returnType.length > 40 ? `${returnType.slice(0, 37)}...` : returnType;
 		const asyncPrefix = func.isAsync() ? "async " : "";
 
 		return `${fileName}: ${asyncPrefix}function ${name}(${params}): ${shortReturn}`;
@@ -1068,13 +1068,13 @@ function formatMethodSignature(method: MethodDeclaration, className: string, fil
 			.map((p) => {
 				const paramName = p.getName();
 				const paramType = p.getType().getText();
-				const shortType = paramType.length > 30 ? paramType.slice(0, 27) + "..." : paramType;
+				const shortType = paramType.length > 30 ? `${paramType.slice(0, 27)}...` : paramType;
 				return `${paramName}: ${shortType}`;
 			})
 			.join(", ");
 
 		const returnType = method.getReturnType().getText();
-		const shortReturn = returnType.length > 30 ? returnType.slice(0, 27) + "..." : returnType;
+		const shortReturn = returnType.length > 30 ? `${returnType.slice(0, 27)}...` : returnType;
 		const asyncPrefix = method.isAsync() ? "async " : "";
 
 		return `${fileName}: ${className}.${asyncPrefix}${name}(${params}): ${shortReturn}`;
@@ -1126,7 +1126,7 @@ export function extractTypeDefinitionsFromFile(filePath: string, cwd: string): s
 		for (const typeAlias of typeAliases) {
 			const name = typeAlias.getName();
 			const typeText = typeAlias.getType().getText();
-			const shortType = typeText.length > 60 ? typeText.slice(0, 57) + "..." : typeText;
+			const shortType = typeText.length > 60 ? `${typeText.slice(0, 57)}...` : typeText;
 			definitions.push(`type ${name} = ${shortType}`);
 		}
 
@@ -1191,14 +1191,14 @@ export function getTypeDefinition(typeName: string, cwd: string): string | null 
 			const iface = sourceFile.getInterface(typeName);
 			if (iface) {
 				const text = iface.getText();
-				return text.length > 500 ? text.slice(0, 497) + "..." : text;
+				return text.length > 500 ? `${text.slice(0, 497)}...` : text;
 			}
 
 			// Look for type alias
 			const typeAlias = sourceFile.getTypeAlias(typeName);
 			if (typeAlias) {
 				const text = typeAlias.getText();
-				return text.length > 500 ? text.slice(0, 497) + "..." : text;
+				return text.length > 500 ? `${text.slice(0, 497)}...` : text;
 			}
 		}
 

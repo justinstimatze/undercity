@@ -11,7 +11,7 @@ import type { AgentRecoveryConfig, AgentType, Waypoint, WaypointCheckpoint } fro
 /**
  * Default checkpoint intervals by agent type
  */
-const DEFAULT_CHECKPOINT_INTERVALS: Record<AgentType, number> = {
+const _DEFAULT_CHECKPOINT_INTERVALS: Record<AgentType, number> = {
 	flute: 0, // No checkpoints needed for fast recon
 	logistics: 5, // Checkpoint planning progress every 5 minutes
 	quester: 2, // Aggressive checkpointing every 2 minutes
@@ -263,7 +263,7 @@ export class CheckpointManager {
 	 * Assess risk level for checkpoint
 	 */
 	private assessRiskLevel(
-		waypoint: Waypoint,
+		_waypoint: Waypoint,
 		context: {
 			modifiedFiles?: string[];
 			completionPercent?: number;

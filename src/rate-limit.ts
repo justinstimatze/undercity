@@ -498,7 +498,7 @@ export class RateLimitTracker {
 	/**
 	 * Estimate resume time based on usage patterns when no retry-after header
 	 */
-	private estimateResumeTime(model: "haiku" | "sonnet" | "opus", now: Date): Date {
+	private estimateResumeTime(_model: "haiku" | "sonnet" | "opus", now: Date): Date {
 		const usage = this.getCurrentUsage();
 		const config = this.state.config;
 

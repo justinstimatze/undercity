@@ -5,12 +5,12 @@
  * Provides tokens-per-completion ratios and historical analytics.
  */
 
-import fs from "fs/promises";
-import path from "path";
-import { RateLimitTracker } from "./rate-limit.js";
-import type { AgentType, EfficiencyAnalytics, QuestMetrics, TokenUsage } from "./types.js";
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { ComplexityLevel } from "./complexity.js";
 import { assessComplexityFast } from "./complexity.js";
+import { RateLimitTracker } from "./rate-limit.js";
+import type { AgentType, EfficiencyAnalytics, QuestMetrics, TokenUsage } from "./types.js";
 
 const METRICS_DIR = path.join(process.cwd(), ".undercity");
 const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl");
@@ -369,7 +369,7 @@ export class MetricsTracker {
 			.map((m) => m.startedAt)
 			.filter((d) => d)
 			.map((d) => (d instanceof Date ? d : new Date(d)))
-			.filter((d) => !isNaN(d.getTime()));
+			.filter((d) => !Number.isNaN(d.getTime()));
 
 		const analysisPeriod =
 			dates.length > 0
@@ -435,7 +435,7 @@ export async function loadQuestMetrics(): Promise<QuestMetrics[]> {
 		}
 
 		return metrics;
-	} catch (error) {
+	} catch (_error) {
 		// File doesn't exist or can't be read
 		return [];
 	}
