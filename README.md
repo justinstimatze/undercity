@@ -131,12 +131,14 @@ undercity/
 
 ### Agent Types
 
+Cheapest capable model for each role:
+
 | Type | Model | Purpose |
 |------|-------|---------|
 | scout | Haiku | Fast reconnaissance, read-only |
-| planner | Opus | Specification writing |
-| builder | Opus | Code implementation |
-| reviewer | Opus | Quality assurance |
+| planner | Sonnet | Specification writing |
+| builder | Sonnet | Code implementation |
+| reviewer | Opus | Quality assurance (final gate) |
 
 ## License
 
