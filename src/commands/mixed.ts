@@ -253,6 +253,16 @@ export const mixedCommands: CommandModule = {
 
 					try {
 						// Get tasks from task board
+						// Pre-flight validation: check for duplicate work BEFORE loading tasks
+						const { reconcileTasks } = await import("../task.js");
+						output.info("Running pre-flight validation...");
+						const preflightResult = await reconcileTasks({ lookbackCommits: 50, dryRun: false });
+						if (preflightResult.duplicatesFound > 0) {
+							output.success(`Pre-flight: marked ${preflightResult.duplicatesFound} task(s) as duplicate`, {
+								tasks: preflightResult.tasksMarked.map((t) => t.taskId),
+							});
+						}
+
 						const {
 							getAllItems,
 							markTaskComplete,

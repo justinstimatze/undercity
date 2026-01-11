@@ -88,12 +88,15 @@
     {
       "id": "task-cleanup-local-llm",
       "objective": "[cleanup] Remove local LLM experiment - local-llm.ts, diff-experiment-runner.ts, experiments/diff-generator.ts, and CLI quick-ollama-test command",
-      "status": "pending",
+      "status": "duplicate",
       "priority": 2,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": [
         "cleanup"
-      ]
+      ],
+      "completedAt": "2026-01-11T22:55:40.005Z",
+      "duplicateOfCommit": "787194b",
+      "resolution": "Work already completed before task was added"
     },
     {
       "id": "task-cleanup-orphaned-experiments",
@@ -527,7 +530,98 @@
       "status": "pending",
       "priority": 48,
       "createdAt": "2026-01-11T22:29:10.556Z"
+    },
+    {
+      "id": "task-mkabr067-c0o7",
+      "objective": "[refactor] Split commands/mixed.ts register function - complexity 131, nesting depth 6. Extract command handlers into separate functions",
+      "status": "pending",
+      "priority": 49,
+      "createdAt": "2026-01-11T22:47:34.303Z"
+    },
+    {
+      "id": "task-mkabr0mo-16c9",
+      "objective": "[refactor] Split commands/task.ts register function - complexity 92, 19 nested blocks. Extract command handlers into separate functions",
+      "status": "pending",
+      "priority": 50,
+      "createdAt": "2026-01-11T22:47:34.896Z"
+    },
+    {
+      "id": "task-mkabr12w-2712",
+      "objective": "[refactor] Refactor parallel-solo.ts runParallel method - complexity 54, 5 nested blocks. Break into smaller coordinating methods",
+      "status": "pending",
+      "priority": 51,
+      "createdAt": "2026-01-11T22:47:35.480Z"
+    },
+    {
+      "id": "task-mkabr1hq-3vlz",
+      "objective": "[refactor] Refactor solo.ts runTask method - complexity 35. Extract validation, execution, and error handling into separate methods",
+      "status": "pending",
+      "priority": 52,
+      "createdAt": "2026-01-11T22:47:36.014Z"
+    },
+    {
+      "id": "task-mkabr1wy-2lt4",
+      "objective": "[refactor] Refactor solo.ts runEscalatingReview method - complexity 28, 8 nested blocks. Simplify escalation logic",
+      "status": "pending",
+      "priority": 53,
+      "createdAt": "2026-01-11T22:47:36.562Z"
+    },
+    {
+      "id": "task-mkabr2cc-esya",
+      "objective": "[refactor] Split solo.ts into smaller modules - 1239 lines (threshold 1000). Extract review logic, execution logic to separate files",
+      "status": "pending",
+      "priority": 54,
+      "createdAt": "2026-01-11T22:47:37.116Z"
+    },
+    {
+      "id": "task-mkabr2sc-ffur",
+      "objective": "[refactor] Refactor git.ts Elevator.processNext method - complexity 18, 2 nested blocks. Simplify merge processing logic",
+      "status": "pending",
+      "priority": 55,
+      "createdAt": "2026-01-11T22:47:37.692Z"
+    },
+    {
+      "id": "task-mkabr37z-vjy8",
+      "objective": "[refactor] Refactor git.ts Elevator.processWorktreeBranch method - complexity 17. Extract rebase and merge strategies",
+      "status": "pending",
+      "priority": 56,
+      "createdAt": "2026-01-11T22:47:38.255Z"
+    },
+    {
+      "id": "task-mkabr3n6-rrk6",
+      "objective": "[refactor] Consolidate duplicated code in task.ts - blockTask, markTaskCanceled, markTaskObsolete, unblockTask share structure. Create common helper",
+      "status": "pending",
+      "priority": 57,
+      "createdAt": "2026-01-11T22:47:38.802Z"
+    },
+    {
+      "id": "task-mkabr42j-4igg",
+      "objective": "[refactor] Reduce primitive obsession in task.ts - 89% primitive args. Introduce typed parameter objects where appropriate",
+      "status": "pending",
+      "priority": 58,
+      "createdAt": "2026-01-11T22:47:39.355Z"
+    },
+    {
+      "id": "task-mkabr4hw-4fob",
+      "objective": "[refactor] Reduce primitive obsession in solo.ts - 64% primitive args. Introduce typed parameter objects for agent execution",
+      "status": "pending",
+      "priority": 59,
+      "createdAt": "2026-01-11T22:47:39.908Z"
+    },
+    {
+      "id": "task-mkabr4xb-c1dm",
+      "objective": "[refactor] Simplify solo.ts runSingleReview method - complexity 19, nesting depth 4. Extract review validation and result processing",
+      "status": "pending",
+      "priority": 60,
+      "createdAt": "2026-01-11T22:47:40.463Z"
+    },
+    {
+      "id": "task-mkabr5cd-qpfc",
+      "objective": "[refactor] Simplify solo.ts generateTicketsFromIssues method - complexity 12, 2 complex conditionals. Use lookup table or strategy pattern",
+      "status": "pending",
+      "priority": 61,
+      "createdAt": "2026-01-11T22:47:41.005Z"
     }
   ],
-  "lastUpdated": "2026-01-11T22:43:44.672Z"
+  "lastUpdated": "2026-01-11T22:55:40.005Z"
 }
