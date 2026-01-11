@@ -76,22 +76,23 @@ undercity grind --dry-run
 undercity grind --parallel 3
 ```
 
-### Parallel Mode
+### Worktree Isolation (Default)
 
-Run multiple quests concurrently using isolated git worktrees:
+All tasks run in isolated git worktrees by default. This keeps your working directory clean and enables parallelism.
 
 ```bash
-undercity grind --parallel 3    # Run 3 quests in parallel
+undercity grind                 # Process all quests (1 at a time, isolated)
+undercity grind -p 3            # Process 3 quests concurrently
+undercity grind -n 5 -p 2       # Process 5 quests, 2 at a time
+undercity grind --sequential    # Legacy mode (no worktree isolation)
 ```
 
 **How it works:**
-1. Creates isolated git worktrees for each task
-2. Runs SoloOrchestrators concurrently (one per worktree)
-3. Each task gets its own branch
+1. Creates isolated git worktree for each task
+2. Each task gets its own branch
+3. Runs concurrently (up to `-p` limit)
 4. Successful branches merge serially (rebase → verify → merge)
 5. Worktrees cleaned up after completion
-
-This maximizes throughput while maintaining clean git history.
 
 ### Quest Board
 

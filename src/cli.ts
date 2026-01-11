@@ -1886,7 +1886,8 @@ program
 	.option("-n, --count <n>", "Process only N quests then stop", "0")
 	.option("-s, --stream", "Stream raider activity")
 	.option("-m, --model <tier>", "Starting model tier: haiku, sonnet, opus", "sonnet")
-	.option("-p, --parallel <n>", "Run N quests in parallel using isolated worktrees", "0")
+	.option("-p, --parallel <n>", "Max concurrent quests in isolated worktrees (default: 1)", "1")
+	.option("--sequential", "Disable worktree isolation (legacy mode)")
 	.option("--supervised", "Use supervised mode (Opus orchestrates workers)")
 	.option("--worker <tier>", "Worker model for supervised mode", "sonnet")
 	.option("--no-local", "Disable local tools and local LLM routing")
@@ -1899,6 +1900,7 @@ program
 			stream?: boolean;
 			model?: string;
 			parallel?: string;
+			sequential?: boolean;
 			supervised?: boolean;
 			worker?: string;
 			local?: boolean;
@@ -1906,57 +1908,88 @@ program
 			review?: boolean;
 			annealing?: boolean;
 		}) => {
-			// Handle parallel mode separately - uses worktree isolation
-			const parallelCount = Number.parseInt(options.parallel || "0", 10);
-			if (parallelCount > 0) {
+			// Default: worktree isolation (parallel mode), even for single tasks
+			const parallelCount = Number.parseInt(options.parallel || "1", 10);
+			if (!options.sequential && parallelCount > 0) {
 				const { ParallelSoloOrchestrator } = await import("./parallel-solo.js");
 				const { getAllQuests, markQuestInProgress, markQuestComplete, markQuestFailed } = await import("./quest.js");
 
+				const maxCount = Number.parseInt(options.count || "0", 10);
 				const allQuests = getAllQuests();
-				const pendingQuests = allQuests.filter((q) => q.status === "pending").slice(0, parallelCount);
+				let pendingQuests = allQuests.filter((q) => q.status === "pending");
+
+				// Apply count limit if specified
+				if (maxCount > 0) {
+					pendingQuests = pendingQuests.slice(0, maxCount);
+				}
 
 				if (pendingQuests.length === 0) {
 					console.log(chalk.gray("No pending quests to process"));
 					return;
 				}
 
-				console.log(chalk.cyan.bold(`\n⚡ Parallel Mode: ${pendingQuests.length} quests in isolated worktrees\n`));
+				const concurrency = Math.min(parallelCount, pendingQuests.length);
+				console.log(
+					chalk.cyan.bold(`\n⚡ Worktree Mode: ${pendingQuests.length} quest(s), ${concurrency} concurrent\n`),
+				);
 
-				// Mark quests as in-progress
-				const batchId = `parallel-${Date.now()}`;
-				for (const quest of pendingQuests) {
-					markQuestInProgress(quest.id, batchId);
-				}
+				let totalSuccessful = 0;
+				let totalMerged = 0;
+				let totalMergeFailed = 0;
+				let totalDurationMs = 0;
 
-				const orchestrator = new ParallelSoloOrchestrator({
-					maxConcurrent: parallelCount,
-					startingModel: (options.model as "haiku" | "sonnet" | "opus") || "sonnet",
-					autoCommit: true,
-					stream: options.stream,
-					verbose: options.stream,
-				});
+				// Process in batches of parallelCount
+				for (let i = 0; i < pendingQuests.length; i += parallelCount) {
+					const batch = pendingQuests.slice(i, i + parallelCount);
+					const batchNum = Math.floor(i / parallelCount) + 1;
+					const totalBatches = Math.ceil(pendingQuests.length / parallelCount);
 
-				const result = await orchestrator.runParallel(pendingQuests.map((q) => q.objective));
-
-				// Update quest statuses based on results
-				for (let i = 0; i < result.results.length; i++) {
-					const taskResult = result.results[i];
-					const quest = pendingQuests[i];
-					if (taskResult.result?.status === "complete" && taskResult.merged) {
-						markQuestComplete(quest.id);
-					} else {
-						markQuestFailed(quest.id, taskResult.mergeError || taskResult.result?.error || "Unknown error");
+					if (totalBatches > 1) {
+						console.log(chalk.dim(`\n━━━ Batch ${batchNum}/${totalBatches} ━━━`));
 					}
+
+					// Mark quests as in-progress
+					const batchId = `parallel-${Date.now()}`;
+					for (const quest of batch) {
+						markQuestInProgress(quest.id, batchId);
+					}
+
+					const orchestrator = new ParallelSoloOrchestrator({
+						maxConcurrent: parallelCount,
+						startingModel: (options.model as "haiku" | "sonnet" | "opus") || "sonnet",
+						autoCommit: true,
+						stream: options.stream,
+						verbose: options.stream,
+					});
+
+					const result = await orchestrator.runParallel(batch.map((q) => q.objective));
+
+					// Update quest statuses based on results
+					for (let j = 0; j < result.results.length; j++) {
+						const taskResult = result.results[j];
+						const quest = batch[j];
+						if (taskResult.result?.status === "complete" && taskResult.merged) {
+							markQuestComplete(quest.id);
+						} else {
+							markQuestFailed(quest.id, taskResult.mergeError || taskResult.result?.error || "Unknown error");
+						}
+					}
+
+					totalSuccessful += result.successful;
+					totalMerged += result.merged;
+					totalMergeFailed += result.mergeFailed;
+					totalDurationMs += result.durationMs;
 				}
 
 				// Summary
-				console.log(chalk.cyan.bold("\n━━━ Parallel Batch Complete ━━━"));
-				console.log(`  Successful: ${result.successful}/${result.results.length}`);
-				console.log(`  Merged: ${result.merged}`);
-				if (result.mergeFailed > 0) {
-					console.log(chalk.yellow(`  Merge failed: ${result.mergeFailed}`));
+				console.log(chalk.cyan.bold("\n━━━ Grind Complete ━━━"));
+				console.log(`  Processed: ${pendingQuests.length} quest(s)`);
+				console.log(`  Successful: ${totalSuccessful}`);
+				console.log(`  Merged: ${totalMerged}`);
+				if (totalMergeFailed > 0) {
+					console.log(chalk.yellow(`  Merge failed: ${totalMergeFailed}`));
 				}
-				console.log(`  Duration: ${(result.durationMs / 1000).toFixed(1)}s`);
+				console.log(`  Duration: ${(totalDurationMs / 1000).toFixed(1)}s`);
 
 				return;
 			}
