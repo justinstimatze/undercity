@@ -1,155 +1,215 @@
 # Undercity
 
-Multi-agent orchestrator for Claude Max. Use undercity for continuous implementation - start a raid, walk away.
+Multi-agent orchestrator for autonomous task execution. Processes tasks from board with verification, crash recovery, and parallel execution.
 
-## When to Use Undercity
+## Core Concepts
 
-Use undercity CLI for complex, multi-step tasks that benefit from:
-- **Planning before execution**: Flute + Logistics create specs before Questers build
-- **Parallel agents**: Multiple agents working on different aspects
-- **Crash recovery**: State persists in `.undercity/` for resumption
-- **Clean merges**: Serial rebase + test + elevator
+**Task Board** (`.undercity/tasks.json`):
+- Queue of work items with priorities
+- Add via `undercity add "task description"`
+- Persists across runs
+
+**Grind** (main execution mode):
+- Autonomous task processing
+- Parallel execution in isolated git worktrees
+- Model routing by complexity (haiku → sonnet → opus)
+- Built-in verification (typecheck, test, lint)
+- Crash recovery from `.undercity/parallel-recovery.json`
+
+**Workers**:
+- SDK agents executing in worktrees
+- No direct push access (orchestrator controls merges)
+- Verification loop before commit
 
 ## Basic Commands
 
 ```bash
-# Launch a raid via the Tubes (or resume existing)
-undercity slingshot "Add dark mode toggle"
+# Task board
+undercity add "task description"           # Add task
+undercity tasks                            # List all tasks
+undercity tasks pending                    # Show pending only
 
-# Check status
-undercity status
+# Autonomous execution
+undercity grind                            # Process all tasks
+undercity grind -n 10                      # Process 10 tasks
+undercity grind --parallel 3               # Max 3 concurrent
 
-# Approve the plan (after planning phase)
-undercity approve
+# Monitoring
+undercity status                           # Current state
+undercity watch                            # Live dashboard
+undercity limits                           # Rate limit status
 
-# View squad members
-undercity squad
-
-# View waypoints
-undercity waypoints
-
-# Complete the raid
-undercity extract
-
-# Surrender if needed
-undercity surrender
+# Daemon (for overnight)
+pnpm daemon:start                          # Start HTTP daemon
+pnpm daemon:status                         # Check status
+pnpm daemon:logs                           # View logs
 ```
 
-## Raid Flow
+## Task Execution Flow
 
 ```
-undercity slingshot "goal"
-    |
-    v
-[PLAN] Flute (Haiku) -> Logistics (Opus) -> Human approval
-    |
-    v
-[EXECUTE] Questers (Sonnet) -> Sheriff (Opus) -> Elevator
-    |
-    v
-[EXTRACT] Complete
+Task Board (.undercity/tasks.json)
+    ↓
+Grind picks task → Assess complexity
+    ↓
+Route to model tier:
+    - Simple (haiku): typos, docs, trivial fixes
+    - Medium (sonnet): features, refactoring, most code
+    - Complex (opus): architecture, critical bugs
+    ↓
+Create worktree (.undercity/worktrees/task-{id}/)
+    ↓
+Worker executes → Verification loop
+    ↓
+    ├─ typecheck fails? → Fix or escalate
+    ├─ tests fail? → Fix or escalate
+    ├─ lint fails? → Fix or escalate
+    └─ All pass → Commit to worktree
+    ↓
+Queue for merge → MergeQueue processes serially
+    ↓
+Rebase onto local main → Verify → Fast-forward merge
+    ↓
+Task marked complete
 ```
 
-## Persistence Hierarchy
+## Persistence Files
 
-| Layer | Purpose | File |
-|-------|---------|------|
-| Safe Pocket | Critical state surviving crashes | `.undercity/pocket.json` |
-| Inventory | Active raid state (waypoints, squad) | `.undercity/inventory.json` |
-| Loadout | Pre-raid configuration | `.undercity/loadout.json` |
-| Stash | Long-term storage between raids | `.undercity/stash.json` |
+| File | Purpose | When Used |
+|------|---------|-----------|
+| `tasks.json` | Task board | Always (tracked in git) |
+| `pocket.json` | Active session state | During execution |
+| `parallel-recovery.json` | Crash recovery state | During parallel execution |
+| `rate-limit-state.json` | Token usage tracking | Always |
+| `grind-events.jsonl` | Execution audit log | During grind |
+| `worktree-state.json` | Active worktree tracking | During parallel execution |
 
-## The Extraction Principle (GUPP)
+## Model Routing
 
-> "If there is work in progress, continue it first."
+Tasks routed by complexity assessment:
 
-On session start:
-1. Check `.undercity/pocket.json`
-2. If raid active, resume from last state
-3. Don't start new work until previous raid completes
+**Haiku** (fast, cheap):
+- Documentation updates
+- Typo fixes
+- Simple refactoring
+- Test additions (non-complex)
 
-## Agent Types
+**Sonnet** (balanced):
+- Feature implementation
+- Bug fixes
+- Refactoring with logic changes
+- Most standard tasks
 
-| Agent | Model | Tools | Purpose |
-|-------|-------|-------|---------|
-| Flute | Haiku | Read, Grep, Glob | Fast codebase reconnaissance |
-| Logistics | Opus | Read, Grep, Glob | BMAD-style spec creation |
-| Quester | Sonnet | Read, Edit, Write, Bash, Grep, Glob | Code implementation |
-| Sheriff | Opus | Read, Bash, Grep, Glob | Quality review with Rule of Five |
+**Opus** (expensive, capable):
+- Architecture changes
+- Complex debugging
+- Critical path changes
+- Security-sensitive code
 
-## Rule of Five
+## Verification Loop
 
-Every output reviewed 5 times with different lenses:
-1. **Correctness**: Does this solve the problem?
-2. **Edge cases**: What could go wrong?
-3. **Security**: Any OWASP top 10 issues?
-4. **Performance**: Any concerning patterns?
-5. **Maintainability**: Will future developers understand this?
+Every task goes through:
+1. **Typecheck** (`pnpm typecheck`)
+2. **Tests** (`pnpm test`)
+3. **Lint** (`pnpm lint`)
+4. **Build** (`pnpm build`)
+
+Failures trigger:
+- Immediate fix attempt (same model)
+- Escalation (haiku → sonnet → opus)
+- User notification (after max retries)
+
+## Crash Recovery
+
+If grind crashes:
+```bash
+undercity grind  # Auto-resumes from parallel-recovery.json
+```
+
+Recovery state includes:
+- Tasks in progress
+- Worktree paths
+- Partial results
+- Error context
+
+## Rate Limiting
+
+Conservative defaults:
+- 1M tokens per 5 hours
+- 5M tokens per week
+- Auto-pause at 95% usage
+- Resume when usage drops
+
+Check status: `undercity limits`
+
+## Worktree Isolation
+
+Each task runs in isolated worktree:
+- Branch from local main HEAD
+- No conflicts with other tasks
+- Merge serially via MergeQueue
+- Push blocked (orchestrator controls)
+
+Benefits:
+- True parallelism
+- No git conflicts
+- Clean rollback per task
+- Verification in isolation
+
+## Interactive vs Autonomous
+
+**Interactive (dispatch mode)**:
+- Add tasks to board
+- Monitor progress
+- Quick fixes (trivial changes)
+- Coordination, not execution
+
+**Autonomous (grind mode)**:
+- Process task board
+- Parallel execution
+- Verification loops
+- Persistent state
+
+Default: Add to board, let grind execute.
 
 ## Dependencies
 
-Use established libraries instead of reinventing the wheel. Check npm for well-maintained packages before writing custom implementations.
+Prefer established libraries over custom implementations.
 
-**Do:**
-- Use popular, well-maintained packages (check downloads, last publish date, GitHub stars)
-- Prefer packages from known publishers (@anthropic-ai, @types, etc.)
-- Verify package name spelling carefully - **slopsquatting is real**
+**Check before installing:**
+- npm downloads (popularity)
+- Last publish date (maintained)
+- GitHub stars/issues
+- Publisher reputation
+- Package name spelling (typosquatting risk)
 
-**Don't:**
-- Install packages with suspicious names or typos
-- Use unmaintained packages (no updates in 2+ years)
-- Add dependencies for trivial functionality (left-pad syndrome)
+**Avoid:**
+- Unmaintained packages (2+ years stale)
+- Suspicious names/typos
+- Trivial utilities (left-pad syndrome)
 
-When in doubt, check the package on npm and GitHub before installing.
+## Agent-Optimized Docs
 
-## Interactive Sessions: Dispatch, Don't Do
+Documentation should optimize for agent efficiency:
 
-When working interactively with a human, be a dispatcher - coordinate work, don't execute it.
-
-**Default behavior**: When the user asks for something, add it to `.undercity/tasks.json` with appropriate priority. Let grind execute.
-
-| Request Type | Action | Priority Range |
-|--------------|--------|----------------|
-| Critical/blocking | Add task | 1-3 |
-| Normal work | Add task | 4-10 |
-| Nice-to-have | Add task | 10+ |
-| Trivial (typos, quick answers) | Just do it | N/A |
-
-**Dispatch does NOT:**
-- Implement features directly (that's what grind agents do)
-- Write large amounts of code in interactive sessions
-- Do work that should be tracked and verified
-
-**Dispatch DOES:**
-- Curate and prioritize the task board
-- Monitor grind progress (`git status`, `git worktree list`, task board)
-- Analyze problems and break them into tasks
-- Answer questions and provide guidance
-- Make quick fixes that aren't worth tracking
-
-**Why**: Grind provides verification, persistence, and parallel execution. Interactive sessions are for directing, not doing.
-
-## Advocate for Agent Convenience
-
-Docs, architecture, and tooling should optimize for what makes agents effective - not what looks good to humans.
-
-When proposing changes, ask:
-- "What do I wish I knew before starting this task?"
-- "What file do I always have to hunt for?"
-- "What decision do I keep having to re-derive?"
-
-Good agent docs:
-- Decision trees, not explanations
+**Good:**
+- Decision trees
 - File → behavior mappings
-- Common tasks with exact commands
+- Exact commands for common tasks
 - Gotchas and edge cases upfront
 
-Skip: marketing, motivation, history, prose. I can infer "why" - tell me "what" and "where".
+**Bad:**
+- Marketing prose
+- Motivation/history
+- Long explanations of "why"
+- Human-friendly formatting over clarity
+
+Agents can infer intent - provide facts and mappings.
 
 ## When NOT to Use Undercity
 
 Skip undercity for:
 - Simple questions or explanations
-- Typo fixes or trivial changes
-- Quick debugging (use regular Claude)
-- Tasks that don't need planning
+- Single-file trivial changes (typos)
+- Quick interactive debugging
+- Tasks not worth verification overhead

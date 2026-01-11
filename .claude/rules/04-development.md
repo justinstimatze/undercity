@@ -80,11 +80,14 @@ PM2 config in `ecosystem.config.cjs`.
 Uses Pino for structured logging. Import from `./logger.js`:
 
 ```typescript
-import { raidLogger, squadLogger } from "./logger.js";
+import { sessionLogger, agentLogger, gitLogger } from "./logger.js";
 
-raidLogger.info({ raidId, goal }, "Starting raid");
-squadLogger.debug({ agentId, task }, "Agent spawned");
+sessionLogger.info({ sessionId, goal }, "Starting execution");
+agentLogger.debug({ agentId, task }, "Worker spawned");
+gitLogger.info({ branch }, "Creating worktree");
 ```
+
+Available loggers: `sessionLogger`, `agentLogger`, `gitLogger`, `persistenceLogger`, `cacheLogger`, `serverLogger`
 
 Set `LOG_LEVEL` environment variable to control verbosity (debug, info, warn, error).
 

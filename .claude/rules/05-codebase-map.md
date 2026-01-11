@@ -12,7 +12,7 @@
 | **parallel-solo.ts** | Main production orchestrator, parallel execution | ParallelSoloOrchestrator |
 | **task.ts** | Task board CRUD (add, get, mark status) | addGoal, getAllItems, markComplete, etc. |
 | **worktree-manager.ts** | Git worktree isolation per task | WorktreeManager |
-| **git.ts** | Git operations, Elevator (serial merge queue) | Elevator, getCurrentBranch, rebase, merge |
+| **git.ts** | Git operations, MergeQueue (serial merge pipeline) | Elevator, getCurrentBranch, rebase, merge |
 | **rate-limit.ts** | 429 handling, exponential backoff | RateLimitTracker |
 | **file-tracker.ts** | Pre-merge file conflict detection | FileTracker |
 | **live-metrics.ts** | Token usage, cost tracking | saveLiveMetrics, loadLiveMetrics |
@@ -35,7 +35,7 @@
 - Run a single task → `solo.ts` (deprecated) or `parallel-solo.ts` (preferred)
 - Run tasks in parallel → `parallel-solo.ts`
 - Isolate tasks in git worktrees → `worktree-manager.ts`
-- Merge branches serially → `git.ts` (Elevator class)
+- Merge branches serially → `git.ts` (Elevator/MergeQueue class)
 - Handle rate limits → `rate-limit.ts`
 - Check file conflicts → `file-tracker.ts`
 - Track token usage → `live-metrics.ts`

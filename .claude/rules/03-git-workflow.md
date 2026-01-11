@@ -33,11 +33,11 @@ git diff --staged
 3. Review staged changes with `git diff --staged`
 4. Commit with a focused message
 
-**Swarm workflow (Rule of Five):**
-- Sheriff reviews staged changes, not committed changes
-- Quester and sheriff iterate on staged work before commit
-- Multiple review passes happen pre-commit, not post-commit
-- Only commit after sheriff approval
+**Verification workflow:**
+- Verification runs on staged changes before commit
+- Worker and reviewer iterate on staged work pre-commit
+- Multiple verification passes happen before commit
+- Only commit after verification passes
 
 **Why this matters**: Bulk staging leads to accidentally committing local experiments, notes, and other files that shouldn't be in the repo. Review before commit catches issues earlier.
 
@@ -54,7 +54,7 @@ feat: Add feature
 Co-Authored-By: Claude <noreply@anthropic.com>
 
 # GOOD
-Add raid status command with squad visibility
+Add status command with active worker visibility
 ```
 
 ## Code Review Process
