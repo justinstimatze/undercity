@@ -652,16 +652,19 @@ export interface EfficiencyAnalytics {
 	/** Token usage breakdown by agent type */
 	tokensByAgentType: Record<AgentType, { total: number; avgPerQuest: number }>;
 	/** Success rates per complexity level with escalation guidance */
-	successRateByComplexity: Record<ComplexityLevel, {
-		/** Success rate for this complexity level */
-		rate: number;
-		/** Total quests at this complexity level */
-		totalQuests: number;
-		/** Average tokens used per quest */
-		avgTokensPerQuest: number;
-		/** Recommended escalation trigger threshold */
-		escalationTrigger: number;
-	}>;
+	successRateByComplexity: Record<
+		ComplexityLevel,
+		{
+			/** Success rate for this complexity level */
+			rate: number;
+			/** Total quests at this complexity level */
+			totalQuests: number;
+			/** Average tokens used per quest */
+			avgTokensPerQuest: number;
+			/** Recommended escalation trigger threshold */
+			escalationTrigger: number;
+		}
+	>;
 	/** Analysis time period */
 	analysisPeriod: {
 		from: Date;

@@ -255,11 +255,14 @@ export class MetricsTracker {
 		const successRate = (completedQuests.length / totalQuests) * 100;
 
 		// Calculate complexity breakdowns
-		const complexityBreakdown: Record<string, {
-			totalQuests: number;
-			successfulQuests: number;
-			totalTokens: number;
-		}> = {
+		const complexityBreakdown: Record<
+			string,
+			{
+				totalQuests: number;
+				successfulQuests: number;
+				totalTokens: number;
+			}
+		> = {
 			trivial: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
 			simple: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
 			standard: { totalQuests: 0, successfulQuests: 0, totalTokens: 0 },
@@ -335,35 +338,49 @@ export class MetricsTracker {
 		}
 
 		// Compute complexity-level success rates and metrics
-		const successRateByComplexity = Object.entries(complexityBreakdown).reduce((acc, [complexity, data]) => {
-			acc[complexity as ComplexityLevel] = {
-				rate: data.totalQuests > 0 ? (data.successfulQuests / data.totalQuests) * 100 : 0,
-				totalQuests: data.totalQuests,
-				avgTokensPerQuest: data.totalQuests > 0 ? data.totalTokens / data.totalQuests : 0,
-				// Escalation trigger - more aggressive for higher complexity levels
-				escalationTrigger: complexity === "trivial" ? 0 :
-					complexity === "simple" ? 0.1 :
-					complexity === "standard" ? 0.3 :
-					complexity === "complex" ? 0.5 :
-					0.8,
-			};
-			return acc;
-		}, {} as Record<ComplexityLevel, { rate: number; totalQuests: number; avgTokensPerQuest: number; escalationTrigger: number }>);
+		const successRateByComplexity = Object.entries(complexityBreakdown).reduce(
+			(acc, [complexity, data]) => {
+				acc[complexity as ComplexityLevel] = {
+					rate: data.totalQuests > 0 ? (data.successfulQuests / data.totalQuests) * 100 : 0,
+					totalQuests: data.totalQuests,
+					avgTokensPerQuest: data.totalQuests > 0 ? data.totalTokens / data.totalQuests : 0,
+					// Escalation trigger - more aggressive for higher complexity levels
+					escalationTrigger:
+						complexity === "trivial"
+							? 0
+							: complexity === "simple"
+								? 0.1
+								: complexity === "standard"
+									? 0.3
+									: complexity === "complex"
+										? 0.5
+										: 0.8,
+				};
+				return acc;
+			},
+			{} as Record<
+				ComplexityLevel,
+				{ rate: number; totalQuests: number; avgTokensPerQuest: number; escalationTrigger: number }
+			>,
+		);
 
 		// Analysis period
 		const dates = questMetrics
 			.map((m) => m.startedAt)
-			.filter(d => d)
-			.map(d => d instanceof Date ? d : new Date(d))
-			.filter(d => !isNaN(d.getTime()));
+			.filter((d) => d)
+			.map((d) => (d instanceof Date ? d : new Date(d)))
+			.filter((d) => !isNaN(d.getTime()));
 
-		const analysisPeriod = dates.length > 0 ? {
-			from: new Date(Math.min(...dates.map((d) => d.getTime()))),
-			to: new Date(Math.max(...dates.map((d) => d.getTime()))),
-		} : {
-			from: new Date(),
-			to: new Date(),
-		};
+		const analysisPeriod =
+			dates.length > 0
+				? {
+						from: new Date(Math.min(...dates.map((d) => d.getTime()))),
+						to: new Date(Math.max(...dates.map((d) => d.getTime()))),
+					}
+				: {
+						from: new Date(),
+						to: new Date(),
+					};
 
 		return {
 			totalQuests,

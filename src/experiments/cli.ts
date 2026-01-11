@@ -4,7 +4,7 @@
  * Command line interface for managing experiments
  */
 
-import { writeFileSync, existsSync } from "node:fs";
+import { writeFileSync, existsSync, renameSync, unlinkSync } from "node:fs";
 import { ExperimentFramework } from "./framework.js";
 import { QuestExperimentIntegrator } from "./integration.js";
 import { ExperimentTemplates } from "./examples.js";
@@ -19,6 +19,30 @@ export class ExperimentCLI {
     this.framework = new ExperimentFramework(storagePath);
     this.integrator = new QuestExperimentIntegrator(this.framework);
     this.templates = new ExperimentTemplates(this.framework);
+  }
+
+  /**
+   * Atomic file write helper to prevent partial reads during watch
+   */
+  private writeFileAtomic(filePath: string, content: string): void {
+    const tempPath = `${filePath}.tmp`;
+    try {
+      // Write to temporary file first
+      writeFileSync(tempPath, content, {
+        encoding: "utf-8",
+        flag: "w",
+      });
+
+      // Atomically rename temporary file to target file
+      // This ensures the file is never in a partially written state
+      renameSync(tempPath, filePath);
+    } catch (error) {
+      // Clean up temporary file if it exists
+      if (existsSync(tempPath)) {
+        unlinkSync(tempPath);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -254,7 +278,7 @@ export class ExperimentCLI {
       const report = this.integrator.generateExperimentReport(experimentId);
 
       if (outputPath) {
-        writeFileSync(outputPath, report);
+        this.writeFileAtomic(outputPath, report);
         console.log(`✅ Report saved to: ${outputPath}`);
       } else {
         console.log(report);
@@ -333,7 +357,7 @@ export class ExperimentCLI {
         return;
       }
 
-      writeFileSync(outputPath, JSON.stringify(experiment, null, 2));
+      this.writeFileAtomic(outputPath, JSON.stringify(experiment, null, 2));
       console.log(`✅ Exported experiment to: ${outputPath}`);
     } catch (error) {
       console.error(`❌ Failed to export experiment: ${error}`);

@@ -140,7 +140,9 @@ export function getFileMetrics(files: string[], repoRoot: string = process.cwd()
 				const content = fs.readFileSync(fullPath, "utf-8");
 				fm.lines = content.split("\n").length;
 				// Simple function detection - count function/method declarations
-				const funcMatches = content.match(/(?:function\s+\w+|(?:async\s+)?(?:\w+\s*)?(?:=>|\(.*\)\s*(?:=>|{))|\w+\s*\([^)]*\)\s*{)/g);
+				const funcMatches = content.match(
+					/(?:function\s+\w+|(?:async\s+)?(?:\w+\s*)?(?:=>|\(.*\)\s*(?:=>|{))|\w+\s*\([^)]*\)\s*{)/g,
+				);
 				fm.functions = funcMatches?.length || 0;
 			}
 		} catch {
@@ -150,16 +152,16 @@ export function getFileMetrics(files: string[], repoRoot: string = process.cwd()
 		// Get git history for this file
 		try {
 			// Commits in last 90 days
-			const commitCount = execSync(
-				`git log --oneline --since="90 days ago" -- "${file}" 2>/dev/null | wc -l`,
-				{ encoding: "utf-8", cwd: repoRoot }
-			).trim();
+			const commitCount = execSync(`git log --oneline --since="90 days ago" -- "${file}" 2>/dev/null | wc -l`, {
+				encoding: "utf-8",
+				cwd: repoRoot,
+			}).trim();
 			fm.recentCommits = parseInt(commitCount, 10) || 0;
 
 			// Bug fix commits (contain "fix" in message)
 			const fixCount = execSync(
 				`git log --oneline --since="90 days ago" --grep="fix" -i -- "${file}" 2>/dev/null | wc -l`,
-				{ encoding: "utf-8", cwd: repoRoot }
+				{ encoding: "utf-8", cwd: repoRoot },
 			).trim();
 			fm.bugFixes = parseInt(fixCount, 10) || 0;
 		} catch {
@@ -214,9 +216,7 @@ export function getFileMetrics(files: string[], repoRoot: string = process.cwd()
 		}
 	}
 
-	metrics.git.avgChangeFrequency = fileMetricsList.length > 0
-		? totalCommits / fileMetricsList.length
-		: 0;
+	metrics.git.avgChangeFrequency = fileMetricsList.length > 0 ? totalCommits / fileMetricsList.length : 0;
 
 	if (healthCount > 0) {
 		metrics.avgCodeHealth = healthSum / healthCount;
@@ -416,7 +416,7 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 			needsReview: false,
 			estimatedScope: "single-file",
 			score: 1,
-			signals: ["no task description provided"]
+			signals: ["no task description provided"],
 		};
 	}
 	const taskLower = task.toLowerCase();
@@ -636,7 +636,7 @@ export function assessComplexityQuantitative(
 
 	// Add critical keyword signals (security, auth, payment, etc.)
 	const criticalSignals = keywordAssessment.signals.filter(
-		(s) => s.startsWith("critical:") || s.includes("security") || s.includes("auth") || s.includes("payment")
+		(s) => s.startsWith("critical:") || s.includes("security") || s.includes("auth") || s.includes("payment"),
 	);
 	if (criticalSignals.length > 0) {
 		combinedScore += criticalSignals.length * 2;
@@ -688,9 +688,7 @@ export function assessComplexityQuantitative(
 	const config = levelConfig[level];
 
 	// Confidence is higher when we have good metrics
-	const confidence = metrics.fileCount > 0
-		? Math.min(0.95, 0.7 + (metricsSignals.length * 0.05))
-		: 0.5; // Low confidence if no files found
+	const confidence = metrics.fileCount > 0 ? Math.min(0.95, 0.7 + metricsSignals.length * 0.05) : 0.5; // Low confidence if no files found
 
 	return {
 		level,
@@ -731,7 +729,7 @@ export async function assessComplexityFull(
 			const assessment = assessComplexityQuantitative(task, targetFiles, repoRoot);
 			raidLogger.debug(
 				{ task: task.slice(0, 50), files: targetFiles.length, score: assessment.score },
-				"Quantitative complexity assessment"
+				"Quantitative complexity assessment",
 			);
 			return assessment;
 		}

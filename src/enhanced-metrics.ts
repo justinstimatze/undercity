@@ -270,7 +270,7 @@ export class EnhancedMetricsCollector {
 		outputTokens: number,
 		operation: "planning" | "execution" | "review" | "rework" | "escalation",
 		agentType: AgentType,
-		successful: boolean
+		successful: boolean,
 	): void {
 		const totalTokens = inputTokens + outputTokens;
 
@@ -325,7 +325,7 @@ export class EnhancedMetricsCollector {
 		reason: string,
 		previousAttempts: number,
 		tokensBeforeEscalation: number,
-		triggerError?: string
+		triggerError?: string,
 	): void {
 		this.escalationCount++;
 		this.escalationReasons.push(reason);
@@ -410,7 +410,7 @@ export class EnhancedMetricsCollector {
 		// Calculate first attempt time
 		this.timingBreakdown.firstAttemptMs = Math.min(
 			this.timingBreakdown.planningMs + this.timingBreakdown.executionMs,
-			totalDurationMs
+			totalDurationMs,
 		);
 
 		// Calculate efficiency ratio
@@ -455,7 +455,9 @@ export class EnhancedMetricsCollector {
 	/**
 	 * Append metrics to the JSONL file
 	 */
-	private async appendToMetricsFile(metrics: EnhancedQuestMetrics | ModelEscalationEvent | TokenUsageEvent): Promise<void> {
+	private async appendToMetricsFile(
+		metrics: EnhancedQuestMetrics | ModelEscalationEvent | TokenUsageEvent,
+	): Promise<void> {
 		try {
 			// Ensure directory exists
 			await fs.mkdir(METRICS_DIR, { recursive: true });
@@ -592,9 +594,7 @@ export class EnhancedMetricsQuery {
 		const cutoffDate = new Date();
 		cutoffDate.setDate(cutoffDate.getDate() - days);
 
-		const recentMetrics = questMetrics.filter(m =>
-			m.startedAt && new Date(m.startedAt) >= cutoffDate
-		);
+		const recentMetrics = questMetrics.filter((m) => m.startedAt && new Date(m.startedAt) >= cutoffDate);
 
 		const tokensByModel: Record<"haiku" | "sonnet" | "opus", number> = {
 			haiku: 0,
@@ -624,7 +624,7 @@ export class EnhancedMetricsQuery {
 		// Calculate daily usage
 		const dailyUsage = new Map<string, { tokens: number; quests: number }>();
 		for (const metrics of recentMetrics) {
-			const date = new Date(metrics.startedAt).toISOString().split('T')[0];
+			const date = new Date(metrics.startedAt).toISOString().split("T")[0];
 			const existing = dailyUsage.get(date) || { tokens: 0, quests: 0 };
 			existing.tokens += metrics.tokenUsage.efficiency.totalTokens;
 			existing.quests += 1;

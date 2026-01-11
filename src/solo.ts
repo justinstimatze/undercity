@@ -24,11 +24,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
 import { AnnealingReview } from "./annealing-review.js";
 import { formatErrorsForAgent, getCache, parseTypeScriptErrors } from "./cache.js";
-import {
-	assessComplexityFast,
-	assessComplexityQuantitative,
-	type ComplexityAssessment,
-} from "./complexity.js";
+import { assessComplexityFast, assessComplexityQuantitative, type ComplexityAssessment } from "./complexity.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
 import { createAndCheckout } from "./git.js";

@@ -126,35 +126,33 @@ export function addQuests(objectives: string[]): Quest[] {
  */
 export function getNextQuest(): Quest | undefined {
 	const board = loadQuestBoard();
-	const pendingQuests = board.quests.filter((quest) =>
-		quest.status === "pending" &&
-		(!quest.dependsOn ||
-			quest.dependsOn.every(depId =>
-				board.quests.find(q => q.id === depId && q.status === "complete")
-			)
-		)
+	const pendingQuests = board.quests.filter(
+		(quest) =>
+			quest.status === "pending" &&
+			(!quest.dependsOn ||
+				quest.dependsOn.every((depId) => board.quests.find((q) => q.id === depId && q.status === "complete"))),
 	);
 
 	// Compute priority with more sophisticated scoring
-	const scoredQuests = pendingQuests.map(quest => {
+	const scoredQuests = pendingQuests.map((quest) => {
 		let score = quest.priority ?? 999;
 
 		// Boost and penalize based on various factors
 		const boostTags: { [key: string]: number } = {
-			"critical": -50,  // Highest priority
-			"bugfix": -30,
-			"security": -25,
-			"performance": -20,
-			"refactor": -10,
+			critical: -50, // Highest priority
+			bugfix: -30,
+			security: -25,
+			performance: -20,
+			refactor: -10,
 		};
 
 		// Complexity-based scoring
 		const complexityScore: { [key: string]: number } = {
-			"trivial": -20,
-			"low": -10,
-			"medium": 0,
-			"high": 10,
-			"critical": 20
+			trivial: -20,
+			low: -10,
+			medium: 0,
+			high: 10,
+			critical: 20,
 		};
 
 		if (quest.tags) {
@@ -267,16 +265,16 @@ export function getReadyQuestsForBatch(count: number = 3): Quest[] {
 	const pendingQuests = board.quests.filter((quest) => quest.status === "pending");
 
 	// Compute priority with more sophisticated scoring
-	const scoredQuests = pendingQuests.map(quest => {
+	const scoredQuests = pendingQuests.map((quest) => {
 		let score = quest.priority ?? 999;
 
 		// Boost priority based on tags
 		const boostTags: { [key: string]: number } = {
-			"critical": -50,  // Highest priority
-			"bugfix": -30,
-			"security": -25,
-			"performance": -20,
-			"refactor": -10,
+			critical: -50, // Highest priority
+			bugfix: -30,
+			security: -25,
+			performance: -20,
+			refactor: -10,
 		};
 
 		if (quest.tags) {
@@ -309,15 +307,15 @@ export function getReadyQuestsForBatch(count: number = 3): Quest[] {
 		const questPackages = quest.computedPackages ?? quest.packageHints ?? [];
 		const questFiles = quest.estimatedFiles ?? [];
 
-		const hasConflict = questPackages.some(pkg => usedPackages.has(pkg)) ||
-			questFiles.some(file => usedFiles.has(file));
+		const hasConflict =
+			questPackages.some((pkg) => usedPackages.has(pkg)) || questFiles.some((file) => usedFiles.has(file));
 
 		if (!hasConflict) {
 			selectedQuests.push(quest);
 
 			// Mark packages and files as used
-			questPackages.forEach(pkg => usedPackages.add(pkg));
-			questFiles.forEach(file => usedFiles.add(file));
+			questPackages.forEach((pkg) => usedPackages.add(pkg));
+			questFiles.forEach((file) => usedFiles.add(file));
 		}
 	}
 
