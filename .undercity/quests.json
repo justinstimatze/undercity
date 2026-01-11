@@ -72,10 +72,11 @@
     {
       "id": "quest-ux-status-flicker",
       "objective": "[ux] Fix status flicker - atomic state file writes to prevent partial reads during watch",
-      "status": "pending",
+      "status": "complete",
       "priority": 20,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-11T03:00:00.000Z"
     },
     {
       "id": "quest-portability-external",
@@ -476,7 +477,15 @@
       "status": "pending",
       "priority": 72,
       "createdAt": "2026-01-11T02:15:00.000Z"
+    },
+    {
+      "id": "quest-pino-logger-migration",
+      "objective": "[cleanup] Migrate all logging to pino - replace console.log/info/warn/error with pino logger across 19 files in src/",
+      "status": "pending",
+      "priority": 73,
+      "createdAt": "2026-01-10T18:00:00.000Z",
+      "note": "Files using console.*: mixed.ts, parallel-solo.ts, diff-experiment-runner.ts, cli-backup.ts, live-metrics.ts, solo.ts, raid.ts, commands/analysis.ts, commands/quest.ts, commands/utils.ts, examples/*.ts, metrics.ts, tui-dashboard.ts, config.ts, rate-limit.ts, enhanced-metrics.ts"
     }
   ],
-  "lastUpdated": "2026-01-11T02:13:39.783Z"
+  "lastUpdated": "2026-01-10T18:00:00.000Z"
 }

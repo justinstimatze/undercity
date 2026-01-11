@@ -474,10 +474,9 @@ Implement the second waypoint here
 	});
 
 	describe("real-world plan format", () => {
-		it("parses intel.txt style format", () => {
+		it("parses section-based plan format with priority headers", () => {
 			const content = `
 # Undercity quest board - the space pencil roadmap
-# Run: undercity load intel.txt && undercity work -y
 
 # =============================================================================
 # CRITICAL: Self-Improvement Loop (agents can't add new quests)

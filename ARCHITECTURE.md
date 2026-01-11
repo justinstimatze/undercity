@@ -37,7 +37,7 @@
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
 │         │                │                │                │               │
 │    Solo: ❌         Solo: ❌         Solo: ❌         Solo: ❌              │
-│  PSolo: ✅        PSolo: ❌        PSolo: ❌        PSolo: ❌              │
+│  PSolo: ✅        PSolo: ✅        PSolo: ✅        PSolo: ❌              │
 │   Raid: ✅         Raid: ✅         Raid: ✅          Raid: ✅              │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -52,16 +52,16 @@
 | **Quest Board** | ❌ | ✅ | ❌ |
 | **Live Metrics** | ✅ | ✅ (via Solo) | ✅ |
 | **RateLimitTracker** | ❌ | ✅ | ✅ |
-| **FileTracker** | ❌ | ❌ | ✅ |
-| **Recovery** | ❌ | ❌ | ✅ |
+| **FileTracker** | ❌ | ✅ | ✅ |
+| **Recovery** | ❌ | ✅ | ✅ |
 | **EfficiencyTracker** | ❌ | ❌ | ✅ |
 
 ## The Problem
 
 **grind** (ParallelSolo) is the main autonomous mode but has some remaining gaps:
 - ~~No rate limit awareness → can crash on 429~~ ✅ DONE
-- No file conflict detection → parallel tasks can fight
-- No recovery → failures leave state inconsistent
+- ~~No file conflict detection → parallel tasks can fight~~ ✅ DONE
+- ~~No recovery → failures leave state inconsistent~~ ✅ DONE
 
 **RaidOrchestrator** has all the infrastructure but requires human approval and is complex.
 
@@ -95,9 +95,9 @@ ParallelSoloOrchestrator
 ├── Elevator ✅
 ├── Quest Board ✅
 ├── Live Metrics ✅ (via Solo)
-├── RateLimitTracker ✅ (just added)
-├── FileTracker ← ADD THIS (optional, for parallel safety)
-└── Basic Recovery ← ADD THIS (save/resume state)
+├── RateLimitTracker ✅
+├── FileTracker ✅ (conflict detection before merge)
+└── Basic Recovery ✅ (save/resume state)
 ```
 
 **New CLI Commands:**
@@ -126,8 +126,10 @@ Infrastructure:
   src/rate-limit.ts → API rate limit tracking (now shared)
   src/persistence.ts → state persistence
 
-Raid-Only (should be shared):
-  src/file-tracker.ts → conflict detection
+Shared Infrastructure (from Raid):
+  src/file-tracker.ts → conflict detection (now shared with PSolo)
+
+Raid-Only (candidates for sharing):
   src/efficiency-tracker.ts → performance metrics
   src/checkpoint-manager.ts → recovery checkpoints
   src/error-escalation.ts → pattern-based error handling

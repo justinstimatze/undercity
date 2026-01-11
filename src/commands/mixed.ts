@@ -188,6 +188,37 @@ export const mixedCommands: CommandModule = {
 						reviewPasses: options.review !== false,
 					});
 
+					// Check for interrupted batch and offer to resume
+					if (orchestrator.hasActiveRecovery()) {
+						const recoveryInfo = orchestrator.getRecoveryInfo();
+						if (recoveryInfo) {
+							console.log(chalk.yellow.bold("⚠ Interrupted batch detected"));
+							console.log(chalk.yellow(`  Batch: ${recoveryInfo.batchId}`));
+							console.log(chalk.yellow(`  Started: ${recoveryInfo.startedAt.toLocaleString()}`));
+							console.log(
+								chalk.yellow(
+									`  Tasks: ${recoveryInfo.tasksComplete} complete, ${recoveryInfo.tasksFailed} failed, ${recoveryInfo.tasksPending} pending`,
+								),
+							);
+							console.log();
+
+							// Auto-resume the pending tasks
+							console.log(chalk.cyan("  Resuming interrupted batch..."));
+							const pendingTasks = await orchestrator.resumeRecovery();
+
+							if (pendingTasks.length > 0) {
+								const result = await orchestrator.runParallel(pendingTasks);
+								console.log(chalk.green.bold("\n📊 Recovery Complete"));
+								console.log(`  Resumed: ${result.results.length}`);
+								console.log(`  Successful: ${result.successful}`);
+								console.log(`  Failed: ${result.failed}`);
+								console.log(`  Merged: ${result.merged}`);
+								return;
+							}
+							console.log(chalk.dim("  No pending tasks to resume"));
+						}
+					}
+
 					try {
 						// Get tasks from quest board
 						const { getAllItems, markQuestComplete, markQuestFailed } = await import("../quest.js");

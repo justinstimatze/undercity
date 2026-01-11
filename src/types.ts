@@ -878,6 +878,58 @@ export interface WorktreeState {
 	lastUpdated: Date;
 }
 
+// ============== Parallel Recovery Types ==============
+
+/**
+ * Task state for parallel recovery
+ */
+export interface ParallelTaskState {
+	/** Task ID */
+	taskId: string;
+	/** Task description */
+	task: string;
+	/** Worktree path */
+	worktreePath: string;
+	/** Branch name */
+	branch: string;
+	/** Task status */
+	status: "pending" | "running" | "complete" | "failed" | "merged";
+	/** Error message if failed */
+	error?: string;
+	/** Modified files if completed */
+	modifiedFiles?: string[];
+	/** Started timestamp */
+	startedAt?: Date;
+	/** Completed timestamp */
+	completedAt?: Date;
+}
+
+/**
+ * Recovery state for ParallelSoloOrchestrator
+ * Simpler than Raid recovery - just tracks batch state for resume
+ */
+export interface ParallelRecoveryState {
+	/** Unique batch ID */
+	batchId: string;
+	/** When the batch started */
+	startedAt: Date;
+	/** All tasks in the batch */
+	tasks: ParallelTaskState[];
+	/** Model being used */
+	model: "haiku" | "sonnet" | "opus";
+	/** Options used for this batch */
+	options: {
+		maxConcurrent: number;
+		autoCommit: boolean;
+		reviewPasses: boolean;
+		annealingAtOpus: boolean;
+	};
+	/** Whether batch is complete */
+	isComplete: boolean;
+	/** Last updated timestamp */
+	lastUpdated: Date;
+}
+
 // ============== Error Recovery Types ==============
 
 /**

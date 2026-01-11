@@ -40,8 +40,6 @@ import { raidLogger, squadLogger } from "./logger.js";
 import { MetricsTracker } from "./metrics.js";
 import { getMetricsCollector, type TaskMetrics } from "./metrics-collector.js";
 import { Persistence } from "./persistence.js";
-import { parseIntelFile } from "./plan-parser.js";
-import { addQuests } from "./quest.js";
 import { RaidPhaseTracker } from "./raid-phase-tracker.js";
 import { RateLimitTracker } from "./rate-limit.js";
 import { RecoveryOrchestrator } from "./recovery-orchestrator.js";
@@ -628,77 +626,10 @@ export class RaidOrchestrator {
 	}
 
 	/**
-	 * Parse intel.txt file and add new quests to the quest board
-	 *
-	 * This keeps quests.json as the runtime state while intel.txt serves as the source of truth.
-	 * Silently ignores errors to avoid disrupting raids.
-	 */
-	private parseAndAddIntelQuests(): void {
-		try {
-			// Try to read intel.txt from the current working directory
-			const intelPath = "intel.txt";
-			let intelContent: string;
-
-			try {
-				intelContent = readFileSync(intelPath, "utf-8");
-			} catch (readError) {
-				// File doesn't exist or can't be read - this is fine, just log it
-				this.log("intel.txt not found or not readable", {
-					intelPath,
-					error: readError instanceof Error ? readError.message : String(readError),
-					note: "Continuing without intel parsing",
-				});
-				return;
-			}
-
-			// Validate file content
-			if (!intelContent || intelContent.trim().length === 0) {
-				this.log("intel.txt is empty", { intelPath });
-				return;
-			}
-
-			// Parse the intel file to extract new quests
-			const newQuests = parseIntelFile(intelContent, intelPath);
-
-			if (newQuests && newQuests.length > 0) {
-				// Add new quests to the quest board
-				const objectives = newQuests.map((quest) => quest.objective);
-				const addedQuests = addQuests(objectives);
-
-				this.log("Parsed intel.txt and added new quests", {
-					intelPath,
-					questsFound: newQuests.length,
-					questsAdded: addedQuests.length,
-				});
-
-				// Log informational message for visibility
-				console.log(
-					chalk.green("✓") + chalk.dim(` Parsed intel.txt - added ${addedQuests.length} new quests to quest board`),
-				);
-
-				// Show skipped duplicates if any
-				if (addedQuests.length < newQuests.length) {
-					console.log(chalk.yellow("  ") + chalk.dim(`(${newQuests.length - addedQuests.length} duplicates skipped)`));
-				}
-			} else {
-				this.log("No new quests found in intel.txt", { intelPath });
-			}
-		} catch (error) {
-			// Silent fallback - intel parsing should never disrupt raids
-			this.log("Error parsing intel.txt", {
-				error: error instanceof Error ? error.message : String(error),
-				stack: error instanceof Error ? error.stack : undefined,
-				note: "Silent fallback - continuing raid normally",
-			});
-		}
-	}
-
-	/**
 	 * Planning Phase (BMAD-style)
 	 *
-	 * 1. Parse intel.txt and add new quests to quest board
-	 * 2. Flute analyzes the codebase (or uses cached results)
-	 * 3. Logistics creates detailed spec
+	 * 1. Flute analyzes the codebase (or uses cached results)
+	 * 2. Logistics creates detailed spec
 	 */
 	private async startPlanningPhase(raid: Raid): Promise<void> {
 		this.log("Starting planning phase...");
@@ -709,9 +640,6 @@ export class RaidOrchestrator {
 			raid.timings = this.phaseTracker.getState();
 			this.persistence.saveRaid(raid);
 		}
-
-		// Parse intel.txt and add new quests to the quest board
-		this.parseAndAddIntelQuests();
 
 		// Check for auto-resume from rate limit pause
 		this.checkRateLimitAutoResume();

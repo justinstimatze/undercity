@@ -14,9 +14,11 @@
 
 import { execSync } from "node:child_process";
 import chalk from "chalk";
+import { FileTracker } from "./file-tracker.js";
 import { Persistence } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
 import { SoloOrchestrator, type TaskResult } from "./solo.js";
+import type { ParallelRecoveryState, ParallelTaskState } from "./types.js";
 import { WorktreeManager } from "./worktree-manager.js";
 
 export interface ParallelSoloOptions {
@@ -37,6 +39,7 @@ export interface ParallelTaskResult {
 	branch: string;
 	merged: boolean;
 	mergeError?: string;
+	modifiedFiles?: string[]; // Files modified by this task
 }
 
 export interface ParallelBatchResult {
@@ -56,10 +59,38 @@ function generateTaskId(): string {
 }
 
 /**
+ * Generate a unique batch ID
+ */
+function generateBatchId(): string {
+	return `batch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/**
  * Run a command in a specific directory
  */
 function execInDir(command: string, cwd: string): string {
 	return execSync(command, { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+}
+
+/**
+ * Get the list of modified files in a worktree compared to main branch
+ */
+function getModifiedFilesInWorktree(worktreePath: string, mainBranch: string): string[] {
+	try {
+		// Get files that differ from main branch
+		const output = execInDir(`git diff --name-only origin/${mainBranch}...HEAD`, worktreePath);
+		if (!output) return [];
+		return output.split("\n").filter((f) => f.trim().length > 0);
+	} catch {
+		// If git diff fails, try to get uncommitted changes
+		try {
+			const output = execInDir("git diff --name-only HEAD", worktreePath);
+			if (!output) return [];
+			return output.split("\n").filter((f) => f.trim().length > 0);
+		} catch {
+			return [];
+		}
+	}
 }
 
 /**
@@ -76,6 +107,7 @@ export class ParallelSoloOrchestrator {
 	private worktreeManager: WorktreeManager;
 	private persistence: Persistence;
 	private rateLimitTracker: RateLimitTracker;
+	private fileTracker: FileTracker;
 
 	constructor(options: ParallelSoloOptions = {}) {
 		this.maxConcurrent = options.maxConcurrent ?? 3;
@@ -87,10 +119,14 @@ export class ParallelSoloOrchestrator {
 		this.annealingAtOpus = options.annealingAtOpus ?? false;
 		this.worktreeManager = new WorktreeManager();
 
-		// Initialize persistence and rate limit tracker
+		// Initialize persistence and trackers
 		this.persistence = new Persistence();
 		const savedRateLimitState = this.persistence.getRateLimitState();
 		this.rateLimitTracker = new RateLimitTracker(savedRateLimitState ?? undefined);
+
+		// Initialize file tracker for conflict detection
+		const savedFileTrackingState = this.persistence.getFileTracking();
+		this.fileTracker = new FileTracker(savedFileTrackingState);
 	}
 
 	/**
@@ -140,6 +176,7 @@ export class ParallelSoloOrchestrator {
 		}
 
 		// Phase 1: Create worktrees and prepare tasks
+		const batchId = generateBatchId();
 		const preparedTasks: Array<{
 			task: string;
 			taskId: string;
@@ -172,11 +209,30 @@ export class ParallelSoloOrchestrator {
 			}
 		}
 
+		// Save recovery state before running tasks
+		if (preparedTasks.length > 0) {
+			const recoveryState = this.createRecoveryState(batchId, preparedTasks);
+			this.persistence.saveParallelRecoveryState(recoveryState);
+			console.log(chalk.dim(`  Recovery state saved: ${batchId}`));
+		}
+
 		// Phase 2: Run tasks in parallel
 		console.log(chalk.cyan(`\n━━━ Executing ${preparedTasks.length} tasks in parallel ━━━\n`));
 
+		// Get main branch for file tracking
+		const mainBranch = this.worktreeManager.getMainBranch();
+
+		// Clear completed file tracking entries from previous runs
+		this.fileTracker.clearCompleted();
+
 		const taskPromises = preparedTasks.map(async (prepared) => {
 			const { task, taskId, worktreePath, branch } = prepared;
+
+			// Start file tracking for this task
+			this.fileTracker.startQuestTracking(taskId, taskId);
+
+			// Mark task as running
+			this.updateTaskStatus(taskId, "running");
 
 			try {
 				console.log(chalk.dim(`  [${taskId}] Starting: ${task.substring(0, 50)}...`));
@@ -194,8 +250,27 @@ export class ParallelSoloOrchestrator {
 
 				const result = await orchestrator.runTask(task);
 
+				// Get modified files from git diff
+				const modifiedFiles = getModifiedFilesInWorktree(worktreePath, mainBranch);
+
+				// Record file operations in tracker
+				for (const file of modifiedFiles) {
+					this.fileTracker.recordFileAccess(taskId, file, "edit", taskId, worktreePath);
+				}
+
+				// Stop tracking for this task
+				this.fileTracker.stopQuestTracking(taskId);
+
 				const status = result.status === "complete" ? chalk.green("✓") : chalk.red("✗");
 				console.log(chalk.dim(`  [${taskId}] ${status} ${result.status}`));
+
+				if (modifiedFiles.length > 0 && this.verbose) {
+					console.log(chalk.dim(`  [${taskId}] Modified ${modifiedFiles.length} files`));
+				}
+
+				// Update recovery state
+				const taskStatus = result.status === "complete" ? "complete" : "failed";
+				this.updateTaskStatus(taskId, taskStatus, { modifiedFiles });
 
 				return {
 					task,
@@ -204,8 +279,15 @@ export class ParallelSoloOrchestrator {
 					worktreePath,
 					branch,
 					merged: false,
+					modifiedFiles,
 				};
 			} catch (error) {
+				// Stop tracking even on error
+				this.fileTracker.stopQuestTracking(taskId);
+
+				// Update recovery state
+				this.updateTaskStatus(taskId, "failed", { error: String(error) });
+
 				console.log(chalk.red(`  [${taskId}] Error: ${error}`));
 				return {
 					task,
@@ -250,19 +332,32 @@ export class ParallelSoloOrchestrator {
 		const successfulTasks = results.filter((r) => r.result?.status === "complete" && r.branch);
 
 		if (successfulTasks.length > 0) {
+			// Detect file conflicts between tasks before merging
+			const fileConflicts = this.detectFileConflicts(successfulTasks);
+			if (fileConflicts.size > 0) {
+				console.log(chalk.yellow(`\n⚠ Potential file conflicts detected:`));
+				for (const [file, taskIds] of fileConflicts) {
+					console.log(chalk.yellow(`  ${file}: ${taskIds.join(", ")}`));
+				}
+				console.log(chalk.dim(`  Serial merge will handle these (later tasks may need rebase)\n`));
+			}
+
 			console.log(chalk.cyan(`\n━━━ Merging ${successfulTasks.length} successful branches ━━━\n`));
 
 			for (const taskResult of successfulTasks) {
 				try {
-					// Debug: check if worktree still exists
+					// Check if worktree still exists
 					const { existsSync } = await import("node:fs");
 					const worktreeExists = existsSync(taskResult.worktreePath);
-					console.log(chalk.dim(`    [DEBUG] Worktree exists: ${worktreeExists} at ${taskResult.worktreePath}`));
+					if (this.verbose) {
+						console.log(chalk.dim(`    Worktree exists: ${worktreeExists} at ${taskResult.worktreePath}`));
+					}
 					if (!worktreeExists) {
-						console.log(chalk.red(`    [DEBUG] Worktree directory missing!`));
+						throw new Error(`Worktree directory missing: ${taskResult.worktreePath}`);
 					}
 					await this.mergeBranch(taskResult.branch, taskResult.taskId, taskResult.worktreePath);
 					taskResult.merged = true;
+					this.updateTaskStatus(taskResult.taskId, "merged");
 					console.log(chalk.green(`  ✓ Merged: ${taskResult.taskId}`));
 				} catch (error) {
 					taskResult.mergeError = String(error);
@@ -301,8 +396,12 @@ export class ParallelSoloOrchestrator {
 		}
 		console.log(`  ${chalk.dim("⏱")}  Duration: ${Math.round(durationMs / 1000)}s`);
 
-		// Save rate limit state
+		// Save rate limit state and file tracking state
 		this.persistence.saveRateLimitState(this.rateLimitTracker.getState());
+		this.persistence.saveFileTracking(this.fileTracker.getState());
+
+		// Mark batch as complete
+		this.markBatchComplete();
 
 		// Show updated rate limit usage
 		const finalUsage = this.rateLimitTracker.getUsageSummary();
@@ -320,6 +419,34 @@ export class ParallelSoloOrchestrator {
 			mergeFailed,
 			durationMs,
 		};
+	}
+
+	/**
+	 * Detect file conflicts between parallel tasks
+	 * Returns a map of file -> taskIds that modified it
+	 */
+	private detectFileConflicts(tasks: ParallelTaskResult[]): Map<string, string[]> {
+		const fileToTasks = new Map<string, string[]>();
+
+		for (const task of tasks) {
+			if (!task.modifiedFiles) continue;
+
+			for (const file of task.modifiedFiles) {
+				const existing = fileToTasks.get(file) || [];
+				existing.push(task.taskId);
+				fileToTasks.set(file, existing);
+			}
+		}
+
+		// Filter to only files with multiple tasks
+		const conflicts = new Map<string, string[]>();
+		for (const [file, taskIds] of fileToTasks) {
+			if (taskIds.length > 1) {
+				conflicts.set(file, taskIds);
+			}
+		}
+
+		return conflicts;
 	}
 
 	/**
@@ -396,6 +523,183 @@ export class ParallelSoloOrchestrator {
 		} catch {
 			// Non-fatal - main repo update failed but push succeeded
 			console.log(chalk.dim(`    Note: Local main branch not updated, but push succeeded`));
+		}
+	}
+
+	// ============== Recovery Methods ==============
+
+	/**
+	 * Check if there's an active recovery batch
+	 */
+	hasActiveRecovery(): boolean {
+		return this.persistence.hasActiveParallelBatch();
+	}
+
+	/**
+	 * Get details about any active recovery batch
+	 */
+	getRecoveryInfo(): {
+		batchId: string;
+		startedAt: Date;
+		tasksTotal: number;
+		tasksComplete: number;
+		tasksFailed: number;
+		tasksPending: number;
+	} | null {
+		const state = this.persistence.getParallelRecoveryState();
+		if (!state || state.isComplete) {
+			return null;
+		}
+
+		const tasksComplete = state.tasks.filter((t) => t.status === "complete" || t.status === "merged").length;
+		const tasksFailed = state.tasks.filter((t) => t.status === "failed").length;
+		const tasksPending = state.tasks.filter((t) => t.status === "pending" || t.status === "running").length;
+
+		return {
+			batchId: state.batchId,
+			startedAt: new Date(state.startedAt),
+			tasksTotal: state.tasks.length,
+			tasksComplete,
+			tasksFailed,
+			tasksPending,
+		};
+	}
+
+	/**
+	 * Resume an interrupted batch
+	 * Returns the pending tasks that need to be re-run
+	 */
+	async resumeRecovery(): Promise<string[]> {
+		const state = this.persistence.getParallelRecoveryState();
+		if (!state || state.isComplete) {
+			return [];
+		}
+
+		console.log(chalk.yellow.bold(`\n🔄 Resuming interrupted batch: ${state.batchId}`));
+
+		// Clean up any stale worktrees from the previous run
+		for (const task of state.tasks) {
+			if (task.status === "running" && task.worktreePath) {
+				try {
+					this.worktreeManager.removeWorktree(task.taskId, true);
+					console.log(chalk.dim(`  Cleaned up stale worktree: ${task.taskId}`));
+				} catch {
+					// Ignore cleanup errors
+				}
+			}
+		}
+
+		// Get tasks that need to be re-run
+		const pendingTasks = state.tasks.filter((t) => t.status === "pending" || t.status === "running").map((t) => t.task);
+
+		console.log(chalk.dim(`  ${pendingTasks.length} tasks to resume\n`));
+
+		// Clear the old state - runParallel will create new state
+		this.persistence.clearParallelRecoveryState();
+
+		return pendingTasks;
+	}
+
+	/**
+	 * Abandon an interrupted batch without resuming
+	 */
+	abandonRecovery(): void {
+		const state = this.persistence.getParallelRecoveryState();
+		if (!state) {
+			return;
+		}
+
+		console.log(chalk.yellow(`\n⚠ Abandoning batch: ${state.batchId}`));
+
+		// Clean up any worktrees
+		for (const task of state.tasks) {
+			if (task.worktreePath) {
+				try {
+					this.worktreeManager.removeWorktree(task.taskId, true);
+				} catch {
+					// Ignore cleanup errors
+				}
+			}
+		}
+
+		this.persistence.clearParallelRecoveryState();
+		console.log(chalk.dim(`  Batch abandoned and cleaned up\n`));
+	}
+
+	/**
+	 * Create initial recovery state for a new batch
+	 */
+	private createRecoveryState(
+		batchId: string,
+		tasks: Array<{ task: string; taskId: string; worktreePath: string; branch: string }>,
+	): ParallelRecoveryState {
+		const taskStates: ParallelTaskState[] = tasks.map((t) => ({
+			taskId: t.taskId,
+			task: t.task,
+			worktreePath: t.worktreePath,
+			branch: t.branch,
+			status: "pending",
+		}));
+
+		return {
+			batchId,
+			startedAt: new Date(),
+			tasks: taskStates,
+			model: this.startingModel,
+			options: {
+				maxConcurrent: this.maxConcurrent,
+				autoCommit: this.autoCommit,
+				reviewPasses: this.reviewPasses,
+				annealingAtOpus: this.annealingAtOpus,
+			},
+			isComplete: false,
+			lastUpdated: new Date(),
+		};
+	}
+
+	/**
+	 * Update task status in recovery state
+	 */
+	private updateTaskStatus(
+		taskId: string,
+		status: ParallelTaskState["status"],
+		extra?: { error?: string; modifiedFiles?: string[] },
+	): void {
+		const state = this.persistence.getParallelRecoveryState();
+		if (!state) return;
+
+		const task = state.tasks.find((t) => t.taskId === taskId);
+		if (task) {
+			task.status = status;
+			if (status === "running") {
+				task.startedAt = new Date();
+			}
+			if (status === "complete" || status === "failed" || status === "merged") {
+				task.completedAt = new Date();
+			}
+			if (extra?.error) {
+				task.error = extra.error;
+			}
+			if (extra?.modifiedFiles) {
+				task.modifiedFiles = extra.modifiedFiles;
+			}
+		}
+
+		// Check if batch is complete
+		const allDone = state.tasks.every((t) => t.status === "complete" || t.status === "failed" || t.status === "merged");
+		state.isComplete = allDone;
+
+		this.persistence.saveParallelRecoveryState(state);
+	}
+
+	/**
+	 * Mark batch as complete
+	 */
+	private markBatchComplete(): void {
+		const state = this.persistence.getParallelRecoveryState();
+		if (state) {
+			state.isComplete = true;
+			this.persistence.saveParallelRecoveryState(state);
 		}
 	}
 }

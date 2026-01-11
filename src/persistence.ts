@@ -25,6 +25,7 @@ import type {
 	LoadoutPerformanceRecord,
 	LoadoutScore,
 	LoadoutStorage,
+	ParallelRecoveryState,
 	PromptKnowledge,
 	QuestMetrics,
 	Raid,
@@ -862,6 +863,46 @@ export class Persistence {
 		});
 	}
 
+	// ============== Parallel Recovery System ==============
+
+	/**
+	 * Save parallel recovery state
+	 */
+	saveParallelRecoveryState(state: ParallelRecoveryState): void {
+		state.lastUpdated = new Date();
+		this.writeJson("parallel-recovery.json", state);
+	}
+
+	/**
+	 * Get parallel recovery state
+	 */
+	getParallelRecoveryState(): ParallelRecoveryState | null {
+		try {
+			const state = this.readJson<ParallelRecoveryState | null>("parallel-recovery.json", null);
+			return state;
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Check if there's an active (incomplete) parallel batch
+	 */
+	hasActiveParallelBatch(): boolean {
+		const state = this.getParallelRecoveryState();
+		return state !== null && !state.isComplete;
+	}
+
+	/**
+	 * Clear parallel recovery state
+	 */
+	clearParallelRecoveryState(): void {
+		const path = this.getPath("parallel-recovery.json");
+		if (existsSync(path)) {
+			unlinkSync(path);
+		}
+	}
+
 	// ============== Prompt Knowledge ==============
 
 	/**
@@ -979,7 +1020,7 @@ export class Persistence {
 	}
 
 	/**
-	 * Initialize .undercity/ directory and create initial intel.txt
+	 * Initialize .undercity/ directory
 	 *
 	 * @param stateDir Optional custom state directory, defaults to .undercity
 	 */
@@ -987,42 +1028,6 @@ export class Persistence {
 		// Use existing ensureDirectories method
 		this.stateDir = stateDir;
 		this.ensureDirectories();
-
-		// Create initial intel.txt with some default content
-		const intelPath = join(this.stateDir, "intel.txt");
-		const intelContent = `# Undercity Raid Intelligence
-
-## Raid Objectives
-- Maintain clarity of purpose
-- Adapt to emerging challenges
-- Learn and improve continuously
-
-## Notes
-This file serves as a living document for strategic insights and raid reflections.
-
-Last Initialized: ${new Date().toISOString()}
-`;
-
-		// Only create if it doesn't exist (initialization should not overwrite)
-		if (!existsSync(intelPath)) {
-			const tempPath = `${intelPath}.tmp`;
-			try {
-				// Write to temporary file first
-				writeFileSync(tempPath, intelContent, {
-					encoding: "utf-8",
-					flag: "w",
-				});
-
-				// Atomically rename temporary file to target file
-				renameSync(tempPath, intelPath);
-			} catch (error) {
-				// Clean up temporary file if it exists
-				if (existsSync(tempPath)) {
-					unlinkSync(tempPath);
-				}
-				throw error;
-			}
-		}
 
 		persistenceLogger.info({ stateDir }, "Initialized Undercity state directory");
 	}
