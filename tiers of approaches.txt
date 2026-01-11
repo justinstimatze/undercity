@@ -1,0 +1,12 @@
+example problem
+
+renderer doesn't render ellipses
+
+mud tier: I could generate a bunch of images and have the model check it, token costly and not very effective
+bronze tier: I could generate a bunch of test cases and reproduce until it works
+silver tier: I could generate code that generates a bunch of test cases
+gold tier: I could create a yaml dsl so that I can generate code that generates test cases more easily
+diamond tier: i could create a js api for an embedded js interpreter that allows js scripts to generate the yaml dsl that can generate test cases
+unobtanium tier: I could use the js api generator framework to generate a js api for an embedded js interpreter that allows js scripts to generate the yaml dsl that can generate test cases
+
+the last one results in the least tokens to actually solve the original issue

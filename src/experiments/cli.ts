@@ -4,6 +4,7 @@
  * Command line interface for managing experiments
  */
 
+import { existsSync } from "node:fs";
 import { ExperimentFramework } from "./framework.js";
 import { QuestExperimentIntegrator } from "./integration.js";
 import { ExperimentTemplates } from "./examples.js";
@@ -255,7 +256,7 @@ export class ExperimentCLI {
       const report = this.integrator.generateExperimentReport(experimentId);
 
       if (outputPath) {
-        this.writeFileAtomic(outputPath, report);
+        writeFileAtomic(outputPath, report);
         console.log(`✅ Report saved to: ${outputPath}`);
       } else {
         console.log(report);
@@ -334,7 +335,7 @@ export class ExperimentCLI {
         return;
       }
 
-      this.writeFileAtomic(outputPath, JSON.stringify(experiment, null, 2));
+      writeFileAtomic(outputPath, JSON.stringify(experiment, null, 2));
       console.log(`✅ Exported experiment to: ${outputPath}`);
     } catch (error) {
       console.error(`❌ Failed to export experiment: ${error}`);
