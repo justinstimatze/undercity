@@ -65,6 +65,17 @@ export interface LiveMetrics {
 		totalDurationMs: number;
 		turns: number;
 	};
+	/** Grind progress - tracks current grind run */
+	grind?: {
+		/** Number of tasks completed in current grind run */
+		completed: number;
+		/** Total tasks to process (from -n flag or task board) */
+		total: number;
+		/** Whether -n flag was used (fixed count) or using task board */
+		mode: "fixed" | "board";
+		/** When this grind session started */
+		startedAt: number;
+	};
 }
 
 // Use main worktree so metrics aggregate from all worktrees
@@ -276,4 +287,51 @@ export function getMetricsDisplay(): {
 		queries: `${metrics.queries.successful}/${metrics.queries.total}`,
 		burnRate: `${burnRate}/min`,
 	};
+}
+
+/**
+ * Start tracking a new grind session
+ * @param total Total tasks to process (from -n flag or task board count)
+ * @param mode "fixed" if -n flag used, "board" if processing task board
+ */
+export function startGrindProgress(total: number, mode: "fixed" | "board"): void {
+	const metrics = loadLiveMetrics();
+	metrics.grind = {
+		completed: 0,
+		total,
+		mode,
+		startedAt: Date.now(),
+	};
+	saveLiveMetrics(metrics);
+}
+
+/**
+ * Update grind progress after a task completes
+ */
+export function updateGrindProgress(completed: number, total?: number): void {
+	const metrics = loadLiveMetrics();
+	if (metrics.grind) {
+		metrics.grind.completed = completed;
+		if (total !== undefined) {
+			metrics.grind.total = total;
+		}
+	} else {
+		// Initialize if not started (shouldn't happen but be safe)
+		metrics.grind = {
+			completed,
+			total: total ?? completed,
+			mode: "board",
+			startedAt: Date.now(),
+		};
+	}
+	saveLiveMetrics(metrics);
+}
+
+/**
+ * Clear grind progress when session ends
+ */
+export function clearGrindProgress(): void {
+	const metrics = loadLiveMetrics();
+	metrics.grind = undefined;
+	saveLiveMetrics(metrics);
 }

@@ -171,6 +171,7 @@ export const mixedCommands: CommandModule = {
 					},
 				) => {
 					const { ParallelSoloOrchestrator } = await import("../parallel-solo.js");
+					const { startGrindProgress, updateGrindProgress, clearGrindProgress } = await import("../live-metrics.js");
 
 					const maxCount = Number.parseInt(options.count || "0", 10);
 					const parallelism = Math.min(5, Math.max(1, Number.parseInt(options.parallel || "1", 10)));
@@ -189,13 +190,17 @@ export const mixedCommands: CommandModule = {
 						output.header("Undercity Grind", "Running task directly");
 
 						try {
+							startGrindProgress(1, "fixed");
 							const result = await orchestrator.runParallel([goal]);
+							updateGrindProgress(result.successful);
 							output.summary("Complete", [
 								{ label: "Successful", value: result.successful, status: result.successful > 0 ? "good" : "neutral" },
 								{ label: "Failed", value: result.failed, status: result.failed > 0 ? "bad" : "neutral" },
 								{ label: "Duration", value: `${Math.round(result.durationMs / 1000)}s` },
 							]);
+							clearGrindProgress();
 						} catch (error) {
+							clearGrindProgress();
 							output.error(`Task failed: ${error}`);
 							process.exit(1);
 						}
@@ -280,11 +285,14 @@ export const mixedCommands: CommandModule = {
 						}
 
 						// Lazy decomposition check: assess atomicity and decompose complex tasks
+						// Also collects recommended model for each task
+						type TaskWithModel = (typeof tasksToProcess)[0] & { recommendedModel?: "haiku" | "sonnet" | "opus" };
+						let tasksWithModels: TaskWithModel[] = [];
+
 						if (options.decompose !== false) {
 							const { checkAndDecompose } = await import("../task-decomposer.js");
 
-							output.progress("Checking task atomicity...");
-							const atomicTasks: typeof tasksToProcess = [];
+							output.progress("Checking task atomicity and complexity...");
 
 							for (const task of tasksToProcess) {
 								const result = await checkAndDecompose(task.objective);
@@ -309,32 +317,64 @@ export const mixedCommands: CommandModule = {
 										output.debug(`  Subtask ${i + 1}: ${result.subtasks[i].objective.substring(0, 60)}`);
 									}
 								} else {
-									// Task is atomic, include in this batch
-									atomicTasks.push(task);
+									// Task is atomic - include with recommended model
+									const taskWithModel: TaskWithModel = {
+										...task,
+										recommendedModel: result.recommendedModel || "sonnet",
+									};
+									tasksWithModels.push(taskWithModel);
+									output.debug(`Task "${task.objective.substring(0, 40)}..." → ${result.recommendedModel || "sonnet"}`);
 								}
 							}
 
-							// Update tasksToProcess with only atomic tasks
-							tasksToProcess = atomicTasks;
-
 							// If all tasks were decomposed, refetch to get subtasks
-							if (tasksToProcess.length === 0) {
+							if (tasksWithModels.length === 0) {
 								output.info("All tasks were decomposed. Fetching subtasks...");
 								const refreshedTasks = getAllItems();
 								const newPendingTasks = refreshedTasks.filter(
 									(q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed,
 								);
 								const newRemainingCount = maxCount > 0 ? maxCount - tasksProcessed : newPendingTasks.length;
-								tasksToProcess = maxCount > 0 ? newPendingTasks.slice(0, newRemainingCount) : newPendingTasks;
+								const newTasks = maxCount > 0 ? newPendingTasks.slice(0, newRemainingCount) : newPendingTasks;
 
-								if (tasksToProcess.length === 0) {
+								if (newTasks.length === 0) {
 									output.info("No tasks ready after decomposition");
 									return;
 								}
+
+								// Re-assess the new subtasks
+								for (const task of newTasks) {
+									const result = await checkAndDecompose(task.objective);
+									tasksWithModels.push({
+										...task,
+										recommendedModel: result.recommendedModel || "sonnet",
+									});
+								}
 							}
+						} else {
+							// No decomposition - use default model for all tasks
+							tasksWithModels = tasksToProcess.map((t) => ({
+								...t,
+								recommendedModel: (options.model || "sonnet") as "haiku" | "sonnet" | "opus",
+							}));
 						}
 
-						const tasks = tasksToProcess.map((q) => q.objective);
+						// Group tasks by recommended model for efficient execution
+						const tasksByModel = {
+							haiku: tasksWithModels.filter((t) => t.recommendedModel === "haiku"),
+							sonnet: tasksWithModels.filter((t) => t.recommendedModel === "sonnet"),
+							opus: tasksWithModels.filter((t) => t.recommendedModel === "opus"),
+						};
+
+						// Log model distribution
+						const modelCounts = Object.entries(tasksByModel)
+							.filter(([, tasks]) => tasks.length > 0)
+							.map(([model, tasks]) => `${model}: ${tasks.length}`)
+							.join(", ");
+						output.info(`Task model distribution: ${modelCounts}`);
+
+						// Update tasksToProcess for the loop below
+						tasksToProcess = tasksWithModels;
 
 						// Build a map of objective -> task ID for status updates
 						const objectiveToQuestId = new Map<string, string>();
@@ -342,40 +382,84 @@ export const mixedCommands: CommandModule = {
 							objectiveToQuestId.set(q.objective, q.id);
 						}
 
-						const result = await orchestrator.runParallel(tasks);
+						// Start grind progress tracking
+						const totalToProcess = tasksWithModels.length + tasksProcessed;
+						const mode = maxCount > 0 ? "fixed" : "board";
+						startGrindProgress(totalToProcess, mode);
+						updateGrindProgress(tasksProcessed, totalToProcess);
 
-						// Update task status based on results
-						for (const taskResult of result.results) {
-							const taskId = objectiveToQuestId.get(taskResult.task);
-							if (taskId) {
-								if (taskResult.merged) {
-									markTaskComplete(taskId);
-									output.taskComplete(taskId, "Task merged successfully");
+						// Run tasks grouped by model tier (haiku first = cheapest, then sonnet, then opus)
+						const modelOrder: Array<"haiku" | "sonnet" | "opus"> = ["haiku", "sonnet", "opus"];
+						let completedCount = tasksProcessed;
+						let totalSuccessful = 0;
+						let totalFailed = 0;
+						let totalMerged = 0;
+						let totalDurationMs = 0;
 
-									// Check if this was a subtask and auto-complete parent if all siblings done
-									const task = getTaskById(taskId);
-									if (task?.parentId) {
-										const parentCompleted = completeParentIfAllSubtasksDone(task.parentId);
-										if (parentCompleted) {
-											output.info(`Parent task ${task.parentId} auto-completed (all subtasks done)`);
+						for (const modelTier of modelOrder) {
+							const tierTasks = tasksByModel[modelTier];
+							if (tierTasks.length === 0) continue;
+
+							output.info(`Running ${tierTasks.length} task(s) with ${modelTier}...`);
+
+							// Create orchestrator for this model tier
+							const tierOrchestrator = new ParallelSoloOrchestrator({
+								maxConcurrent: parallelism,
+								autoCommit: options.commit !== false,
+								stream: options.stream || false,
+								verbose: options.verbose || false,
+								startingModel: modelTier,
+								reviewPasses: options.review !== false,
+							});
+
+							const tierObjectives = tierTasks.map((t) => t.objective);
+							const result = await tierOrchestrator.runParallel(tierObjectives);
+
+							// Update task status based on results
+							for (const taskResult of result.results) {
+								const taskId = objectiveToQuestId.get(taskResult.task);
+								if (taskId) {
+									if (taskResult.merged) {
+										markTaskComplete(taskId);
+										output.taskComplete(taskId, `Task merged (${modelTier})`);
+										completedCount++;
+										updateGrindProgress(completedCount, totalToProcess);
+
+										// Check if this was a subtask and auto-complete parent if all siblings done
+										const task = getTaskById(taskId);
+										if (task?.parentId) {
+											const parentCompleted = completeParentIfAllSubtasksDone(task.parentId);
+											if (parentCompleted) {
+												output.info(`Parent task ${task.parentId} auto-completed (all subtasks done)`);
+											}
 										}
+									} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
+										const errorMsg = taskResult.mergeError || "Task failed";
+										markTaskFailed(taskId, errorMsg);
+										output.taskFailed(taskId, `Task failed (${modelTier})`, errorMsg);
+										completedCount++;
+										updateGrindProgress(completedCount, totalToProcess);
 									}
-								} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
-									const errorMsg = taskResult.mergeError || "Task failed";
-									markTaskFailed(taskId, errorMsg);
-									output.taskFailed(taskId, "Task failed", errorMsg);
 								}
 							}
+
+							totalSuccessful += result.successful;
+							totalFailed += result.failed;
+							totalMerged += result.merged;
+							totalDurationMs += result.durationMs;
 						}
 
+						clearGrindProgress();
 						output.summary("Grind Session Complete", [
-							{ label: "Total processed", value: result.results.length + tasksProcessed },
-							{ label: "Successful", value: result.successful, status: result.successful > 0 ? "good" : "neutral" },
-							{ label: "Failed", value: result.failed, status: result.failed > 0 ? "bad" : "neutral" },
-							{ label: "Merged", value: result.merged },
-							{ label: "Duration", value: `${Math.round(result.durationMs / 60000)} minutes` },
+							{ label: "Total processed", value: tasksWithModels.length + tasksProcessed },
+							{ label: "Successful", value: totalSuccessful, status: totalSuccessful > 0 ? "good" : "neutral" },
+							{ label: "Failed", value: totalFailed, status: totalFailed > 0 ? "bad" : "neutral" },
+							{ label: "Merged", value: totalMerged },
+							{ label: "Model distribution", value: modelCounts },
+							{ label: "Duration", value: `${Math.round(totalDurationMs / 60000)} minutes` },
 						]);
 					} catch (error) {
+						clearGrindProgress();
 						output.error(`Grind error: ${error instanceof Error ? error.message : error}`);
 						process.exit(1);
 					}

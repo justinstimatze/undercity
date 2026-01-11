@@ -402,19 +402,35 @@ export function launchDashboard(): void {
 			commitsBox.setContent(`{gray-fg}No commits{/}`);
 		}
 
-		// TASKS
+		// TASKS - show grind progress if active, otherwise task board status
 		const stats = getTaskStats();
-		if (stats.total === 0) {
+		const grindProgress = metrics?.grind;
+
+		if (grindProgress && grindProgress.total > 0) {
+			// Active grind session - show progress
+			const pct = Math.round((grindProgress.completed / grindProgress.total) * 100);
+			const barWidth = 20;
+			const filled = Math.floor((pct / 100) * barWidth);
+			const bar = "█".repeat(filled) + "░".repeat(barWidth - filled);
+			const modeLabel = grindProgress.mode === "fixed" ? "Tasks" : "Board";
+
+			taskBox.setContent(
+				`{bold}{cyan-fg}${modeLabel}: ${grindProgress.completed}/${grindProgress.total}{/}\n` +
+					`{green-fg}${bar}{/} ${pct}%\n` +
+					`{cyan-fg}Active: ${stats.inProgress}{/}  {yellow-fg}Pending: ${stats.pending}{/}`,
+			);
+		} else if (stats.total === 0) {
 			taskBox.setContent(`{gray-fg}No tasks{/}`);
 		} else {
+			// No active grind - show board summary
 			const pct = Math.round((stats.complete / stats.total) * 100);
 			const barWidth = 20;
 			const filled = Math.floor((pct / 100) * barWidth);
 			const bar = "█".repeat(filled) + "░".repeat(barWidth - filled);
 
 			taskBox.setContent(
-				`{green-fg}${bar}{/} ${pct}%\n` +
-					`{yellow-fg}Pending: ${stats.pending}{/}  {cyan-fg}Active: ${stats.inProgress}{/}\n` +
+				`{yellow-fg}${stats.pending} pending{/}\n` +
+					`{green-fg}${bar}{/} ${pct}%\n` +
 					`{green-fg}Done: ${stats.complete}{/}  {red-fg}Failed: ${stats.failed}{/}`,
 			);
 		}

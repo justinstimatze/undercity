@@ -28,6 +28,8 @@ export interface AtomicityCheckResult {
 	estimatedFiles: number;
 	/** Brief reasoning */
 	reasoning: string;
+	/** Recommended starting model based on task complexity */
+	recommendedModel: "haiku" | "sonnet" | "opus";
 }
 
 /**
@@ -66,27 +68,25 @@ export async function checkAtomicity(task: string): Promise<AtomicityCheckResult
 		let result = "";
 
 		for await (const message of query({
-			prompt: `You are assessing whether a coding task can be completed in a SINGLE focused session.
+			prompt: `You are assessing a coding task's complexity to determine execution strategy.
 
 Task: ${task}
 
-A task is ATOMIC if:
-- It can be completed by modifying 1-3 files
-- It has a clear, specific objective
-- It doesn't require multiple unrelated changes
-- It can be tested/verified in one session
+ATOMICITY (can it be done in one session?):
+- ATOMIC: 1-3 files, clear objective, single focus area
+- NOT ATOMIC: many files, multiple objectives, needs research
 
-A task is NOT ATOMIC if:
-- It requires changes across many files or packages
-- It combines multiple unrelated objectives
-- It's vague or requires significant research first
-- It would take multiple sessions to complete properly
+MODEL SELECTION (which AI model should execute this?):
+- "haiku": Simple tasks - file deletions, small edits, clear single-file changes
+- "sonnet": Medium tasks - new features, bug fixes, moderate complexity
+- "opus": Complex tasks - architectural changes, multi-system integration, ambiguous requirements
 
 Respond with ONLY this JSON, no other text:
 {
   "isAtomic": true/false,
   "confidence": 0.0-1.0,
   "estimatedFiles": number,
+  "recommendedModel": "haiku" | "sonnet" | "opus",
   "reasoning": "brief explanation"
 }`,
 			options: {
@@ -104,21 +104,30 @@ Respond with ONLY this JSON, no other text:
 		const jsonMatch = result.match(/\{[\s\S]*\}/);
 		if (jsonMatch) {
 			const parsed = JSON.parse(jsonMatch[0]);
+			// Validate and normalize recommendedModel
+			const validModels = ["haiku", "sonnet", "opus"] as const;
+			const rawModel = String(parsed.recommendedModel || "sonnet").toLowerCase();
+			const recommendedModel = validModels.includes(rawModel as (typeof validModels)[number])
+				? (rawModel as "haiku" | "sonnet" | "opus")
+				: "sonnet";
+
 			return {
 				isAtomic: Boolean(parsed.isAtomic),
 				confidence: Number(parsed.confidence) || 0.5,
 				estimatedFiles: Number(parsed.estimatedFiles) || 1,
 				reasoning: String(parsed.reasoning || ""),
+				recommendedModel,
 			};
 		}
 
-		// Default to atomic if parsing fails (don't block on assessment failure)
+		// Default to atomic with sonnet if parsing fails (don't block on assessment failure)
 		logger.warn({ task, result }, "Failed to parse atomicity check, defaulting to atomic");
 		return {
 			isAtomic: true,
 			confidence: 0.3,
 			estimatedFiles: 1,
 			reasoning: "Failed to parse assessment, proceeding with task",
+			recommendedModel: "sonnet",
 		};
 	} catch (error) {
 		logger.error({ task, error }, "Atomicity check failed");
@@ -128,6 +137,7 @@ Respond with ONLY this JSON, no other text:
 			confidence: 0.2,
 			estimatedFiles: 1,
 			reasoning: "Assessment failed, proceeding with task",
+			recommendedModel: "sonnet",
 		};
 	}
 }
@@ -245,6 +255,8 @@ export async function checkAndDecompose(
 	action: "proceed" | "decomposed" | "skip";
 	subtasks?: Subtask[];
 	reasoning: string;
+	/** Recommended model for task execution */
+	recommendedModel?: "haiku" | "sonnet" | "opus";
 }> {
 	const { forceDecompose = false, minConfidence = 0.6 } = options;
 
@@ -282,6 +294,7 @@ export async function checkAndDecompose(
 		return {
 			action: "proceed",
 			reasoning: atomicity.reasoning,
+			recommendedModel: atomicity.recommendedModel,
 		};
 	}
 
@@ -309,11 +322,13 @@ export async function checkAndDecompose(
 		return {
 			action: "proceed",
 			reasoning: `Decomposition attempted but failed: ${decomposition.reasoning}. Proceeding with original task.`,
+			recommendedModel: atomicity.recommendedModel,
 		};
 	}
 
 	return {
 		action: "proceed",
 		reasoning: atomicity.reasoning,
+		recommendedModel: atomicity.recommendedModel,
 	};
 }
