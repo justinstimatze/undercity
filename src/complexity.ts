@@ -27,6 +27,34 @@ import { raidLogger } from "./logger.js";
 export type ComplexityLevel = "trivial" | "simple" | "standard" | "complex" | "critical";
 
 /**
+ * Team composition based on complexity (inspired by Zeroshot)
+ *
+ * Complexity determines how many validators review the work:
+ * - trivial: Single agent, no validation (fast path)
+ * - simple: Worker + 1 validator
+ * - standard: Planner + worker + 2 validators
+ * - complex: Planner + worker + 3 validators
+ * - critical: Planner (opus) + worker + 5 validators
+ *
+ * Key insight from Zeroshot: validators who didn't write the code
+ * can't lie about whether tests pass. Independent review catches more bugs.
+ */
+export interface TeamComposition {
+	/** Whether planning phase is needed */
+	needsPlanning: boolean;
+	/** Model for planning (if needed) */
+	plannerModel?: "haiku" | "sonnet" | "opus";
+	/** Model for implementation */
+	workerModel: "haiku" | "sonnet" | "opus";
+	/** Number of independent validators */
+	validatorCount: number;
+	/** Model for validators */
+	validatorModel: "haiku" | "sonnet" | "opus";
+	/** Whether validators must be independent (didn't write code) */
+	independentValidators: boolean;
+}
+
+/**
  * Result of complexity assessment
  */
 export interface ComplexityAssessment {
@@ -48,6 +76,8 @@ export interface ComplexityAssessment {
 	score: number;
 	/** Quantitative metrics used (if available) */
 	metrics?: QuantitativeMetrics;
+	/** Team composition for this complexity level */
+	team: TeamComposition;
 }
 
 /**
@@ -341,6 +371,75 @@ export function scoreFromMetrics(metrics: QuantitativeMetrics): {
 }
 
 /**
+ * Get team composition for a complexity level
+ *
+ * Inspired by Zeroshot's complexity-based team sizing:
+ * - trivial: Single agent, no validation (fast path)
+ * - simple: Worker + 1 validator
+ * - standard: Planner + worker + 2 validators
+ * - complex: Planner + worker + 3 validators
+ * - critical: Planner (opus) + worker + 5 validators
+ *
+ * Model ceiling can restrict expensive models (e.g., force sonnet max)
+ */
+export function getTeamComposition(
+	level: ComplexityLevel,
+	modelCeiling?: "haiku" | "sonnet" | "opus",
+): TeamComposition {
+	// Helper to apply model ceiling
+	const capModel = (model: "haiku" | "sonnet" | "opus"): "haiku" | "sonnet" | "opus" => {
+		if (!modelCeiling) return model;
+		const order = ["haiku", "sonnet", "opus"];
+		const ceilingIdx = order.indexOf(modelCeiling);
+		const modelIdx = order.indexOf(model);
+		return modelIdx > ceilingIdx ? modelCeiling : model;
+	};
+
+	const compositions: Record<ComplexityLevel, TeamComposition> = {
+		trivial: {
+			needsPlanning: false,
+			workerModel: capModel("haiku"),
+			validatorCount: 0,
+			validatorModel: "haiku",
+			independentValidators: false,
+		},
+		simple: {
+			needsPlanning: false,
+			workerModel: capModel("sonnet"),
+			validatorCount: 1,
+			validatorModel: capModel("haiku"),
+			independentValidators: true,
+		},
+		standard: {
+			needsPlanning: true,
+			plannerModel: capModel("sonnet"),
+			workerModel: capModel("sonnet"),
+			validatorCount: 2,
+			validatorModel: capModel("sonnet"),
+			independentValidators: true,
+		},
+		complex: {
+			needsPlanning: true,
+			plannerModel: capModel("opus"),
+			workerModel: capModel("sonnet"),
+			validatorCount: 3,
+			validatorModel: capModel("sonnet"),
+			independentValidators: true,
+		},
+		critical: {
+			needsPlanning: true,
+			plannerModel: capModel("opus"),
+			workerModel: capModel("sonnet"),
+			validatorCount: 5,
+			validatorModel: capModel("sonnet"),
+			independentValidators: true,
+		},
+	};
+
+	return compositions[level];
+}
+
+/**
  * Keywords and patterns that indicate complexity
  */
 const COMPLEXITY_SIGNALS = {
@@ -417,6 +516,7 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 			estimatedScope: "single-file",
 			score: 1,
 			signals: ["no task description provided"],
+			team: getTeamComposition("simple"),
 		};
 	}
 	const taskLower = task.toLowerCase();
@@ -515,6 +615,7 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 		estimatedScope,
 		signals,
 		score,
+		team: getTeamComposition(level),
 	};
 }
 
@@ -598,6 +699,7 @@ Complexity guide:
 				estimatedScope: scope,
 				signals: [...fastAssessment.signals, `llm:${parsed.reasoning}`],
 				score: fastAssessment.score,
+				team: getTeamComposition(level),
 			};
 		}
 	} catch (error) {
@@ -700,6 +802,7 @@ export function assessComplexityQuantitative(
 		signals: combinedSignals,
 		score: combinedScore,
 		metrics,
+		team: getTeamComposition(level),
 	};
 }
 

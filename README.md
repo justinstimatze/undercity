@@ -260,6 +260,8 @@ The themed commands still exist (`undercity slingshot`, etc.) but are **deprecat
 - **Gas Town** (Steve Yegge): GUPP principle, persistence philosophy
 - **Jeffrey Emanuel**: Rule of Five (via Gas Town)
 - **Beads** (Steve Yegge): Git-backed state
+- **Zeroshot** ([covibes/zeroshot](https://github.com/covibes/zeroshot)): Complexity-based team composition, independent validators, model ceiling controls
+- **Sisyphus** ([oh-my-opencode](https://github.com/code-yeongyu/oh-my-opencode)): 7-section structured delegation prompts, phase-based workflows
 
 **Extraction shooter theme** from ARC Raiders - because it's fun, even if the raid model got simplified.
 

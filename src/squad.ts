@@ -10,9 +10,159 @@
  * - Sheriff: Quality reviewer with Rule of Five (Opus, read + tests)
  *
  * Based on Claude Agent SDK's AgentDefinition type.
+ *
+ * Includes structured delegation prompts inspired by Sisyphus (oh-my-opencode):
+ * - 7-section format: TASK, EXPECTED OUTCOME, REQUIRED SKILLS, REQUIRED TOOLS,
+ *   MUST DO, MUST NOT DO, CONTEXT
+ * - Clear boundaries for subagent work
+ * - Explicit tool whitelists
  */
 
 import type { AgentDefinition, AgentType, SquadMember, Waypoint } from "./types.js";
+
+/**
+ * Structured delegation prompt format (inspired by Sisyphus)
+ *
+ * This 7-section format ensures clear, unambiguous task delegation.
+ * Each section serves a specific purpose:
+ * - TASK: What to accomplish (atomic goal)
+ * - EXPECTED OUTCOME: What success looks like
+ * - REQUIRED SKILLS: Domain knowledge needed
+ * - REQUIRED TOOLS: Explicit tool whitelist
+ * - MUST DO: Exhaustive requirements
+ * - MUST NOT DO: Forbidden behaviors
+ * - CONTEXT: Constraints, patterns, dependencies
+ */
+export interface DelegationPrompt {
+	/** Atomic goal - what to accomplish */
+	task: string;
+	/** What success looks like */
+	expectedOutcome: string;
+	/** Domain knowledge needed */
+	requiredSkills?: string[];
+	/** Explicit tool whitelist */
+	requiredTools: string[];
+	/** Exhaustive requirements */
+	mustDo: string[];
+	/** Forbidden behaviors */
+	mustNotDo: string[];
+	/** Constraints, patterns, dependencies */
+	context?: string;
+}
+
+/**
+ * Build a structured delegation prompt string from a DelegationPrompt object
+ */
+export function buildDelegationPrompt(prompt: DelegationPrompt): string {
+	const sections: string[] = [];
+
+	sections.push(`## TASK\n${prompt.task}`);
+	sections.push(`## EXPECTED OUTCOME\n${prompt.expectedOutcome}`);
+
+	if (prompt.requiredSkills && prompt.requiredSkills.length > 0) {
+		sections.push(`## REQUIRED SKILLS\n${prompt.requiredSkills.map((s) => `- ${s}`).join("\n")}`);
+	}
+
+	sections.push(`## REQUIRED TOOLS\n${prompt.requiredTools.map((t) => `- ${t}`).join("\n")}`);
+	sections.push(`## MUST DO\n${prompt.mustDo.map((r) => `- ${r}`).join("\n")}`);
+	sections.push(`## MUST NOT DO\n${prompt.mustNotDo.map((r) => `- ${r}`).join("\n")}`);
+
+	if (prompt.context) {
+		sections.push(`## CONTEXT\n${prompt.context}`);
+	}
+
+	return sections.join("\n\n");
+}
+
+/**
+ * Create a delegation prompt for exploration tasks
+ */
+export function createExplorationPrompt(goal: string, focusAreas?: string[]): DelegationPrompt {
+	return {
+		task: `Explore the codebase to understand: ${goal}`,
+		expectedOutcome: "A structured report of findings including relevant files, patterns, and potential challenges",
+		requiredSkills: ["Code navigation", "Pattern recognition"],
+		requiredTools: ["Read", "Grep", "Glob"],
+		mustDo: [
+			"Search for relevant files using Glob patterns",
+			"Read key files to understand structure",
+			"Identify existing patterns and conventions",
+			"Report findings in structured format",
+			...(focusAreas ? [`Focus on: ${focusAreas.join(", ")}`] : []),
+		],
+		mustNotDo: [
+			"Modify any files",
+			"Execute commands that change state",
+			"Make implementation decisions",
+			"Spend more than 5 minutes on exploration",
+		],
+	};
+}
+
+/**
+ * Create a delegation prompt for implementation tasks
+ */
+export function createImplementationPrompt(
+	task: string,
+	spec: string,
+	targetFiles: string[],
+	patterns?: string[],
+): DelegationPrompt {
+	return {
+		task,
+		expectedOutcome: "Working implementation that passes typecheck and follows existing patterns",
+		requiredSkills: ["TypeScript", "Code patterns"],
+		requiredTools: ["Read", "Edit", "Write", "Bash", "Grep", "Glob"],
+		mustDo: [
+			"Follow the spec exactly",
+			"Match existing code patterns",
+			"Run typecheck after changes",
+			"Handle edge cases identified in spec",
+			...(targetFiles.length > 0 ? [`Modify these files: ${targetFiles.join(", ")}`] : []),
+		],
+		mustNotDo: [
+			"Expand scope beyond the spec",
+			"Refactor unrelated code",
+			"Add features not in the spec",
+			"Skip typecheck verification",
+			"Use any types",
+		],
+		context: patterns ? `Existing patterns to follow:\n${patterns.map((p) => `- ${p}`).join("\n")}` : undefined,
+	};
+}
+
+/**
+ * Create a delegation prompt for validation tasks
+ */
+export function createValidationPrompt(
+	task: string,
+	expectedChanges: string[],
+	isIndependent: boolean,
+): DelegationPrompt {
+	return {
+		task: `Validate the implementation: ${task}`,
+		expectedOutcome: "Validation report with pass/fail status and specific issues if any",
+		requiredSkills: ["Code review", "Testing", "Security awareness"],
+		requiredTools: ["Read", "Bash", "Grep", "Glob"],
+		mustDo: [
+			"Run typecheck (pnpm typecheck)",
+			"Run tests (pnpm test --run)",
+			"Check for security issues (OWASP top 10)",
+			"Verify edge cases are handled",
+			"Compare implementation against spec",
+			...(expectedChanges.length > 0 ? [`Verify changes in: ${expectedChanges.join(", ")}`] : []),
+		],
+		mustNotDo: [
+			"Fix issues yourself - only report them",
+			"Skip any verification steps",
+			"Approve without running tests",
+			...(isIndependent ? ["Assume correctness without verification"] : []),
+		],
+		context: isIndependent
+			? "You are an INDEPENDENT validator - you did not write this code. Be skeptical and thorough."
+			: undefined,
+	};
+}
 
 /**
  * Squad agent definitions for the Claude SDK
