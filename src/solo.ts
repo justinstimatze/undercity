@@ -156,9 +156,11 @@ export interface ReviewResult {
 	model: ModelTier;
 	foundIssues: boolean;
 	issues: string[];
-	suggestion?: string;
+	suggestion?: string; // Deprecated - review now fixes directly
 	/** True if this pass found no issues (clean pass) */
 	passedClean: boolean;
+	/** True if the review agent made changes to fix issues */
+	madeChanges?: boolean;
 }
 
 /**
@@ -519,6 +521,7 @@ Be concise and specific. Focus on actionable insights.`;
 					permissionMode: "bypassPermissions",
 					allowDangerouslySkipPermissions: true,
 					maxTurns: 1, // Single response, no tool use needed
+					settingSources: ["project"], // Load disallowedTools from settings
 				},
 			})) {
 				if (message.type === "result" && message.subtype === "success") {
@@ -686,6 +689,11 @@ Guidelines:
 - Ensure your changes compile and don't break existing functionality
 - Run typecheck before finishing to verify your changes
 - If you encounter issues you cannot resolve, explain what's blocking you
+
+CRITICAL - GIT RULES:
+- You may commit locally (git add, git commit)
+- NEVER run "git push" - the orchestrator handles all pushes after verification
+- Pushing bypasses the verification gate and is strictly forbidden
 
 When done, provide a brief summary of what you changed.`;
 
@@ -1000,27 +1008,30 @@ When done, provide a brief summary of what you changed.`;
 				const finalReview = await this.runSingleReview(task, "opus");
 				totalPasses++;
 
-				if (finalReview.foundIssues) {
-					console.log(chalk.yellow(`  [opus] Final check: Found issues`));
+				if (finalReview.passedClean) {
+					console.log(chalk.green(`  [opus] Final check: Converged ✓`));
+				} else if (finalReview.madeChanges) {
+					console.log(chalk.cyan(`  [opus] Final check: Fixed issues`));
 					for (const issue of finalReview.issues) {
 						console.log(chalk.dim(`    - ${issue.slice(0, 80)}`));
 						allIssuesFound.push(issue);
 					}
-					if (finalReview.suggestion) {
-						await this.applyReviewFix(task, finalReview);
-						const verification = await this.verifyWork();
-						if (!verification.passed) {
-							return {
-								converged: false,
-								issuesFound: allIssuesFound,
-								reviewPasses: totalPasses,
-								finalTier: "opus",
-								annealingInsights,
-							};
-						}
+					const verification = await this.verifyWork();
+					if (!verification.passed) {
+						return {
+							converged: false,
+							issuesFound: allIssuesFound,
+							reviewPasses: totalPasses,
+							finalTier: "opus",
+							annealingInsights,
+						};
 					}
-				} else {
-					console.log(chalk.green(`  [opus] Final check: Converged ✓`));
+				} else if (finalReview.foundIssues) {
+					console.log(chalk.yellow(`  [opus] Final check: Found issues (no fix applied)`));
+					for (const issue of finalReview.issues) {
+						console.log(chalk.dim(`    - ${issue.slice(0, 80)}`));
+						allIssuesFound.push(issue);
+					}
 				}
 				continue;
 			}
@@ -1037,32 +1048,41 @@ When done, provide a brief summary of what you changed.`;
 
 				const review = await this.runSingleReview(task, tier);
 
-				if (review.foundIssues) {
+				if (review.passedClean) {
+					// No issues found - tier is clean
+					console.log(chalk.green(`  [${tier}] Pass ${tierPasses}/${maxPasses}: No issues found ✓`));
+					break;
+				}
+
+				if (review.madeChanges) {
+					// Review found and fixed issues
 					tierFoundIssues = true;
-					console.log(chalk.yellow(`  [${tier}] Pass ${tierPasses}/${maxPasses}: Found issues`));
+					console.log(chalk.cyan(`  [${tier}] Pass ${tierPasses}/${maxPasses}: Fixed issues`));
 					for (const issue of review.issues) {
 						console.log(chalk.dim(`    - ${issue.slice(0, 80)}`));
 						allIssuesFound.push(issue);
 					}
 
-					if (review.suggestion) {
-						await this.applyReviewFix(task, review);
-						const verification = await this.verifyWork();
-						if (!verification.passed) {
-							console.log(chalk.red(`  [${tier}] Verification failed after fix`));
-							return {
-								converged: false,
-								issuesFound: allIssuesFound,
-								reviewPasses: totalPasses,
-								finalTier: tier,
-							};
-						}
+					// Verify the fixes
+					const verification = await this.verifyWork();
+					if (!verification.passed) {
+						console.log(chalk.red(`  [${tier}] Verification failed after fix`));
+						return {
+							converged: false,
+							issuesFound: allIssuesFound,
+							reviewPasses: totalPasses,
+							finalTier: tier,
+						};
 					}
-				} else {
-					// No issues found on this pass
-					console.log(chalk.green(`  [${tier}] Pass ${tierPasses}/${maxPasses}: No issues found ✓`));
-					// Tier is clean - move to next tier (or finish if opus)
-					break;
+					// Fix verified - continue to check for more issues
+				} else if (review.foundIssues) {
+					// Found issues but didn't fix - just log and continue
+					tierFoundIssues = true;
+					console.log(chalk.yellow(`  [${tier}] Pass ${tierPasses}/${maxPasses}: Found issues (no fix applied)`));
+					for (const issue of review.issues) {
+						console.log(chalk.dim(`    - ${issue.slice(0, 80)}`));
+						allIssuesFound.push(issue);
+					}
 				}
 			}
 
@@ -1073,9 +1093,7 @@ When done, provide a brief summary of what you changed.`;
 			if (lastPassHadIssues) {
 				if (tier === "opus") {
 					// Opus is final tier - no escalation path
-					console.log(
-						chalk.yellow(`  [opus] Exhausted ${maxPasses} passes - issues may remain unresolved`),
-					);
+					console.log(chalk.yellow(`  [opus] Exhausted ${maxPasses} passes - issues may remain unresolved`));
 					return {
 						converged: false,
 						issuesFound: allIssuesFound,
@@ -1154,6 +1172,7 @@ Provide ONE key insight (1-2 sentences). If nothing notable, say "Nothing notabl
 						model: MODEL_NAMES.opus,
 						permissionMode: "bypassPermissions",
 						allowDangerouslySkipPermissions: true,
+						settingSources: ["project"], // Load disallowedTools from settings
 					},
 				})) {
 					if (message.type === "result" && message.subtype === "success") {
@@ -1178,109 +1197,123 @@ Provide ONE key insight (1-2 sentences). If nothing notable, say "Nothing notabl
 	}
 
 	/**
-	 * Run a single review pass with the specified model
+	 * Run a review pass that can directly fix issues.
+	 *
+	 * Unlike the old approach (read-only review → parse text → maybe fix),
+	 * this gives the review agent edit tools to fix issues directly.
+	 * Much more robust - no fragile text parsing.
 	 */
 	private async runSingleReview(task: string, model: ModelTier): Promise<ReviewResult> {
 		const modelId = MODEL_NAMES[model];
 
 		let diffOutput = "";
+		let filesChangedBefore = 0;
 		try {
 			diffOutput = execSync("git diff HEAD", {
 				encoding: "utf-8",
 				cwd: this.workingDirectory,
 				maxBuffer: 1024 * 1024,
 			});
+			// Count files changed before review
+			const statusOutput = execSync("git status --porcelain", {
+				encoding: "utf-8",
+				cwd: this.workingDirectory,
+			});
+			filesChangedBefore = statusOutput.trim().split("\n").filter(Boolean).length;
 		} catch {
 			diffOutput = "Unable to get diff";
 		}
 
-		const reviewPrompt = `You are reviewing code changes before commit. Be concise.
+		// Review prompt that encourages fixing, not just finding
+		const reviewPrompt = `You are reviewing code changes. Your job is to FIND AND FIX issues.
 
-Task: ${task}
+Task that was implemented: ${task}
 
-Changes:
+Current changes:
 \`\`\`diff
 ${diffOutput.slice(0, 8000)}
 \`\`\`
 
-Look for: bugs, edge cases, security issues, task mismatches.
+Review for: bugs, edge cases, security issues, incomplete implementation, task mismatches.
 
-If issues found:
-ISSUES FOUND:
-- [list each]
-SUGGESTED FIX:
-[brief fix]
+IMPORTANT: If you find issues, FIX THEM directly using the Edit tool. Don't just describe what's wrong.
 
-If good:
-NO ISSUES FOUND - Ready to commit.`;
+After reviewing:
+- If you fixed issues, end with: ISSUES FIXED: [brief summary]
+- If no issues found, end with: LGTM - Ready to commit`;
 
 		try {
 			let response = "";
+			let madeChanges = false;
 
 			for await (const message of query({
 				prompt: reviewPrompt,
 				options: {
-					maxTurns: 1,
+					maxTurns: 5, // Give it enough turns to review AND fix
 					model: modelId,
 					permissionMode: "bypassPermissions",
 					allowDangerouslySkipPermissions: true,
+					settingSources: ["project"],
 				},
 			})) {
 				if (message.type === "result" && message.subtype === "success") {
 					response = message.result;
 				}
+				// Track if agent used edit tools
+				if (message.type === "assistant" && message.message?.content) {
+					const content = message.message.content;
+					if (Array.isArray(content)) {
+						for (const block of content) {
+							if (block.type === "tool_use" && (block.name === "Edit" || block.name === "Write")) {
+								madeChanges = true;
+							}
+						}
+					}
+				}
 			}
 
-			const foundIssues = !response.includes("NO ISSUES FOUND");
+			// Check if files changed during review (more reliable than tracking tool calls)
+			let filesChangedAfter = 0;
+			try {
+				const statusOutput = execSync("git status --porcelain", {
+					encoding: "utf-8",
+					cwd: this.workingDirectory,
+				});
+				filesChangedAfter = statusOutput.trim().split("\n").filter(Boolean).length;
+			} catch {
+				// ignore
+			}
+			const reviewMadeChanges = madeChanges || filesChangedAfter !== filesChangedBefore;
+
+			// Parse response for status
+			const lgtm = response.includes("LGTM") || response.includes("Ready to commit");
+			const fixedIssues = response.includes("ISSUES FIXED");
+
+			// Extract what was fixed if mentioned
 			const issues: string[] = [];
-			let suggestion: string | undefined;
-
-			if (foundIssues) {
-				const issuesMatch = response.match(/ISSUES FOUND:([\s\S]*?)(?:SUGGESTED FIX:|$)/i);
-				if (issuesMatch) {
-					const issueLines = issuesMatch[1].split("\n").filter((l) => l.trim().startsWith("-"));
-					issues.push(...issueLines.map((l) => l.replace(/^-\s*/, "").trim()));
-				}
-				const suggestionMatch = response.match(/SUGGESTED FIX:([\s\S]*?)$/i);
-				if (suggestionMatch) {
-					suggestion = suggestionMatch[1].trim();
+			if (fixedIssues) {
+				const fixedMatch = response.match(/ISSUES FIXED:(.+?)(?:\n|$)/i);
+				if (fixedMatch) {
+					issues.push(fixedMatch[1].trim());
 				}
 			}
 
-			return { model, foundIssues, issues, suggestion, passedClean: !foundIssues };
+			// foundIssues = reviewer found something to fix
+			// passedClean = nothing wrong, ready to commit
+			const foundIssues = !lgtm || fixedIssues || reviewMadeChanges;
+			const passedClean = lgtm && !reviewMadeChanges;
+
+			return {
+				model,
+				foundIssues,
+				issues,
+				suggestion: undefined, // No longer used - fixes applied directly
+				passedClean,
+				madeChanges: reviewMadeChanges,
+			};
 		} catch (error) {
 			this.log("Review failed", { error: String(error), model });
 			return { model, foundIssues: false, issues: [], passedClean: true };
-		}
-	}
-
-	/**
-	 * Apply a fix suggested by review
-	 */
-	private async applyReviewFix(_task: string, review: ReviewResult): Promise<void> {
-		const fixPrompt = `The code review found these issues:
-${review.issues.map((i) => `- ${i}`).join("\n")}
-
-Suggested fix: ${review.suggestion}
-
-Please fix these issues. Make minimal changes.`;
-
-		try {
-			for await (const message of query({
-				prompt: fixPrompt,
-				options: {
-					maxTurns: 3,
-					model: MODEL_NAMES[this.currentModel],
-					permissionMode: "bypassPermissions",
-					allowDangerouslySkipPermissions: true,
-				},
-			})) {
-				if (this.stream) {
-					this.streamMessage(message);
-				}
-			}
-		} catch (error) {
-			this.log("Failed to apply review fix", { error: String(error) });
 		}
 	}
 
@@ -1591,7 +1624,11 @@ ${context ? `Context: ${context}` : ""}
 Guidelines:
 - Make minimal, focused changes
 - Follow existing patterns
-- Ensure changes compile`;
+- Ensure changes compile
+
+CRITICAL - GIT RULES:
+- You may commit locally (git add, git commit)
+- NEVER run "git push" - the orchestrator handles all pushes after verification`;
 
 		for await (const message of query({
 			prompt,
