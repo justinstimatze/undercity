@@ -30,7 +30,6 @@ export const mixedCommands: CommandModule = {
 			.option("--supervised", "Use supervised mode (Opus orchestrates workers)")
 			.option("--worker <tier>", "Worker model for supervised mode: haiku, sonnet", "sonnet")
 			.option("-d, --dry-run", "Show complexity assessment without executing")
-			.option("--no-local", "Disable local tools and local LLM routing")
 			.option("--review", "Enable escalating review passes before commit (haiku → sonnet → opus)")
 			.option("--annealing", "Use annealing review at opus tier (multi-angle advisory)")
 			.action(
@@ -45,7 +44,6 @@ export const mixedCommands: CommandModule = {
 						supervised?: boolean;
 						worker?: string;
 						dryRun?: boolean;
-						local?: boolean;
 						review?: boolean;
 						annealing?: boolean;
 					},
