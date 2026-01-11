@@ -117,13 +117,25 @@ function withLock<T>(lockPath: string, fn: () => T): T {
 export interface Task {
 	id: string;
 	objective: string;
-	status: "pending" | "in_progress" | "complete" | "failed" | "blocked";
+	status:
+		| "pending"
+		| "in_progress"
+		| "complete"
+		| "failed"
+		| "blocked"
+		| "duplicate" // Already completed in another commit
+		| "canceled" // User decided not to do this
+		| "obsolete"; // No longer relevant/needed
 	priority?: number;
 	createdAt: Date;
 	startedAt?: Date;
 	completedAt?: Date;
 	sessionId?: string;
 	error?: string;
+
+	// For duplicate/canceled/obsolete tasks
+	resolution?: string; // Why it was marked this way
+	duplicateOfCommit?: string; // SHA of commit that completed this work
 
 	// NEW: Task Matchmaking Fields
 	packageHints?: string[]; // Manual package hints
@@ -356,6 +368,63 @@ export function markTaskFailed(id: string, error: string, path: string = DEFAULT
 }
 
 /**
+ * Mark a task as duplicate (work already done)
+ */
+export function markTaskDuplicate(
+	id: string,
+	commitSha: string,
+	resolution: string,
+	path: string = DEFAULT_TASK_BOARD_PATH,
+): void {
+	withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const task = board.tasks.find((q) => q.id === id);
+		if (task) {
+			task.status = "duplicate";
+			task.completedAt = new Date();
+			task.duplicateOfCommit = commitSha;
+			task.resolution = resolution;
+			delete task.error; // Clear any error since this isn't a failure
+			saveTaskBoard(board, path);
+		}
+	});
+}
+
+/**
+ * Mark a task as canceled (won't do)
+ */
+export function markTaskCanceled(id: string, reason: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+	withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const task = board.tasks.find((q) => q.id === id);
+		if (task) {
+			task.status = "canceled";
+			task.completedAt = new Date();
+			task.resolution = reason;
+			delete task.error;
+			saveTaskBoard(board, path);
+		}
+	});
+}
+
+/**
+ * Mark a task as obsolete (no longer needed)
+ */
+export function markTaskObsolete(id: string, reason: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+	withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const task = board.tasks.find((q) => q.id === id);
+		if (task) {
+			task.status = "obsolete";
+			task.completedAt = new Date();
+			task.resolution = reason;
+			delete task.error;
+			saveTaskBoard(board, path);
+		}
+	});
+}
+
+/**
  * Get task board summary
  */
 export function getTaskBoardSummary(): {
@@ -364,6 +433,9 @@ export function getTaskBoardSummary(): {
 	complete: number;
 	failed: number;
 	blocked: number;
+	duplicate: number;
+	canceled: number;
+	obsolete: number;
 } {
 	const board = loadTaskBoard();
 	return {
@@ -372,6 +444,9 @@ export function getTaskBoardSummary(): {
 		complete: board.tasks.filter((q) => q.status === "complete").length,
 		failed: board.tasks.filter((q) => q.status === "failed").length,
 		blocked: board.tasks.filter((q) => q.status === "blocked").length,
+		duplicate: board.tasks.filter((q) => q.status === "duplicate").length,
+		canceled: board.tasks.filter((q) => q.status === "canceled").length,
+		obsolete: board.tasks.filter((q) => q.status === "obsolete").length,
 	};
 }
 
@@ -710,6 +785,96 @@ export function completeParentIfAllSubtasksDone(parentTaskId: string, path: stri
 export function getTaskById(taskId: string, path: string = DEFAULT_TASK_BOARD_PATH): Task | undefined {
 	const board = loadTaskBoard(path);
 	return board.tasks.find((t) => t.id === taskId);
+}
+
+/**
+ * Reconcile tasks with git history to detect duplicates
+ * Scans recent commits and checks actual diffs to find completed work
+ */
+export async function reconcileTasks(options: { lookbackCommits?: number; dryRun?: boolean; path?: string }): Promise<{
+	duplicatesFound: number;
+	tasksMarked: Array<{ taskId: string; commitSha: string; message: string; confidence: string }>;
+}> {
+	const { lookbackCommits = 100, dryRun = false, path = DEFAULT_TASK_BOARD_PATH } = options;
+	const board = loadTaskBoard(path);
+	const { execSync } = await import("node:child_process");
+
+	// Get recent commits with stats
+	const commits = execSync(`git log --oneline --stat -${lookbackCommits}`, { encoding: "utf-8" })
+		.trim()
+		.split("\n\n") // Commits separated by blank lines
+		.map((block) => {
+			const lines = block.trim().split("\n");
+			const [sha, ...messageParts] = lines[0].split(" ");
+			const message = messageParts.join(" ");
+
+			// Extract changed files from stat lines (ignore last line which is summary)
+			const files = lines
+				.slice(1, -1)
+				.map((line) => line.trim().split("|")[0]?.trim())
+				.filter(Boolean);
+
+			return { sha, message, files };
+		});
+
+	const tasksToReconcile = board.tasks.filter(
+		(t) => t.status === "pending" || t.status === "failed" || t.status === "in_progress",
+	);
+
+	const tasksMarked: Array<{ taskId: string; commitSha: string; message: string; confidence: string }> = [];
+
+	for (const task of tasksToReconcile) {
+		// Extract keywords from task objective
+		const keywords = task.objective
+			.toLowerCase()
+			.replace(/[[\]]/g, "") // Remove brackets
+			.split(/\s+/)
+			.filter((word) => word.length > 3 && !["task", "this", "that", "with", "from", "should"].includes(word));
+
+		// Extract file hints from task objective (e.g., "fix src/task.ts" -> ["src/task.ts"])
+		const fileHints = task.objective.match(/[\w-]+\/[\w.-]+\.[\w]+/g) || [];
+
+		// Find commits that match
+		for (const commit of commits) {
+			const commitLower = commit.message.toLowerCase();
+			const keywordMatches = keywords.filter((keyword) => commitLower.includes(keyword)).length;
+			const keywordScore = keywordMatches / Math.max(keywords.length, 1);
+
+			// Check if any files in task hints match changed files
+			const fileMatches = fileHints.filter((hint) => commit.files.some((file) => file.includes(hint))).length;
+			const fileScore = fileHints.length > 0 ? fileMatches / fileHints.length : 0;
+
+			// Combined confidence: both keywords and files must match
+			const confidence = fileHints.length > 0 ? keywordScore * 0.6 + fileScore * 0.4 : keywordScore;
+
+			// Only mark as duplicate if high confidence (>70%)
+			if (confidence > 0.7 && keywordMatches >= 2) {
+				const confidenceLabel = confidence > 0.9 ? "high" : confidence > 0.8 ? "medium" : "low";
+
+				tasksMarked.push({
+					taskId: task.id,
+					commitSha: commit.sha,
+					message: commit.message,
+					confidence: confidenceLabel,
+				});
+
+				if (!dryRun) {
+					markTaskDuplicate(
+						task.id,
+						commit.sha,
+						`Auto-detected (${confidenceLabel} confidence): work completed in commit ${commit.sha}`,
+						path,
+					);
+				}
+				break; // Found match, move to next task
+			}
+		}
+	}
+
+	return {
+		duplicatesFound: tasksMarked.length,
+		tasksMarked,
+	};
 }
 
 // Legacy aliases for backwards compatibility during migration

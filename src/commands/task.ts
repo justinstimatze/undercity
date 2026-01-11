@@ -579,5 +579,48 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 				console.log(chalk.dim("Run 'undercity task-analyze' for detailed parallelization analysis"));
 				console.log(chalk.dim("Run 'undercity grind --parallel 3' to process tasks in parallel"));
 			});
+
+		// Reconcile command - detect duplicate tasks from git history
+		program
+			.command("reconcile")
+			.description("Detect and mark tasks that are already completed in git history")
+			.option("--dry-run", "Show what would be marked without making changes")
+			.option("--lookback <number>", "Number of commits to search (default: 100)", "100")
+			.action(async (options) => {
+				const { reconcileTasks } = await import("../task.js");
+
+				console.log(chalk.bold("Reconciling tasks with git history..."));
+				console.log();
+
+				try {
+					const result = await reconcileTasks({
+						lookbackCommits: Number.parseInt(options.lookback),
+						dryRun: options.dryRun,
+					});
+
+					if (result.duplicatesFound === 0) {
+						console.log(chalk.green("✓ No duplicates found. All tasks are up to date."));
+					} else {
+						console.log(chalk.yellow(`Found ${result.duplicatesFound} duplicate task(s):`));
+						console.log();
+
+						for (const marked of result.tasksMarked) {
+							console.log(chalk.cyan(`  ${marked.taskId}`));
+							console.log(chalk.gray(`    ${marked.commitSha}: ${marked.message}`));
+						}
+
+						console.log();
+
+						if (options.dryRun) {
+							console.log(chalk.dim("(Dry run - no changes made. Run without --dry-run to apply)"));
+						} else {
+							console.log(chalk.green(`✓ Marked ${result.duplicatesFound} task(s) as duplicate`));
+						}
+					}
+				} catch (error) {
+					console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+					process.exit(1);
+				}
+			});
 	},
 };
