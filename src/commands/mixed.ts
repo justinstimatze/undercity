@@ -2,28 +2,12 @@
  * Mixed commands (solo, grind, utility, experiment commands)
  * These are combined due to their varied nature and to complete the refactoring efficiently.
  */
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { getConfigSource, loadConfig, mergeWithConfig } from "../config.js";
 import { UndercityOracle } from "../oracle.js";
 import { Persistence } from "../persistence.js";
 import { RateLimitTracker } from "../rate-limit.js";
 import type { CommandModule } from "./types.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// Get version from package.json
-function getVersion(): string {
-	try {
-		const pkgPath = join(__dirname, "..", "..", "package.json");
-		const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-		return pkg.version || "0.1.0";
-	} catch {
-		return "0.1.0";
-	}
-}
 
 export const mixedCommands: CommandModule = {
 	register(program) {
