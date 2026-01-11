@@ -322,6 +322,36 @@ export const analysisCommands: CommandModule = {
 					process.exit(1);
 				}
 			});
+
+		// Semantic check command
+		program
+			.command("semantic-check")
+			.description("Analyze semantic density and code efficiency")
+			.option("--fix", "Auto-fix issues")
+			.option("--human", "Human-readable output")
+			.option("--output <file>", "Save report to file")
+			.action(async (options) => {
+				const { runSemanticCheck } = await import("../semantic-analyzer/index.js");
+				const { SemanticFixer } = await import("../semantic-analyzer/index.js");
+
+				const report = await runSemanticCheck({
+					rootDir: process.cwd(),
+					human: options.human,
+					output: options.output,
+				});
+
+				if (options.fix) {
+					const fixer = new SemanticFixer();
+					fixer.applyFixes(report, process.cwd());
+					console.log(chalk.green("\n✓ Fixes applied"));
+				}
+
+				// Exit with error code if high priority issues found
+				const highPriorityCount = report.actions.filter((a) => a.priority === "high").length;
+				if (highPriorityCount > 0 && !options.fix) {
+					process.exit(1);
+				}
+			});
 	},
 };
 

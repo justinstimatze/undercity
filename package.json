@@ -35,6 +35,8 @@
     "daemon:logs": "pm2 logs undercity",
     "daemon:kill": "pm2 kill",
     "cleanup": "bash ./scripts/cleanup-state.sh",
+    "semantic-check": "node ./bin/undercity.js semantic-check",
+    "semantic-check:fix": "node ./bin/undercity.js semantic-check --fix",
     "lint": "biome lint ./src",
     "lint:fix": "biome lint --write ./src",
     "format": "biome format ./src",
@@ -62,10 +64,12 @@
   ],
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.0",
+    "@anthropic-ai/tokenizer": "^0.0.4",
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.11.0",
     "chalk": "^5.4.1",
     "commander": "^13.1.0",
+    "glob": "^13.0.0",
     "pino": "^10.1.0",
     "pino-pretty": "^13.1.3",
     "ts-morph": "^27.0.2"
