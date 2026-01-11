@@ -376,10 +376,12 @@
     {
       "id": "quest-mk86lots-qz2m",
       "objective": "[grind] Improve verification retry logic - allow multiple fix attempts at same tier before escalating",
-      "status": "pending",
+      "status": "failed",
       "priority": 40,
       "createdAt": "2026-01-10T10:47:55.888Z",
-      "raidId": ""
+      "raidId": "",
+      "completedAt": "2026-01-11T02:13:39.783Z",
+      "error": "Error: spawnSync /bin/sh ENOENT"
     },
     {
       "id": "quest-postmortem",
@@ -395,8 +397,86 @@
       "objective": "[refactor] Split cli.ts into separate command modules - file is too large at 700+ lines, extract each command to its own file",
       "status": "pending",
       "priority": 42,
-      "createdAt": "2026-01-10T23:50:52.089Z"
+      "createdAt": "2026-01-10T23:50:52.089Z",
+      "note": "Reset after ENOENT failure"
+    },
+    {
+      "id": "quest-continuous-quest-sync",
+      "objective": "[continuous] Sync quest board with grind - mark quests complete when merged, update status during execution",
+      "status": "pending",
+      "priority": 50,
+      "createdAt": "2026-01-11T02:15:00.000Z"
+    },
+    {
+      "id": "quest-continuous-pacing",
+      "objective": "[continuous] Add comfortable pacing mode - --pace flag to throttle task rate (e.g. --pace 5m waits 5 min between tasks)",
+      "status": "pending",
+      "priority": 51,
+      "createdAt": "2026-01-11T02:15:00.000Z"
+    },
+    {
+      "id": "quest-continuous-reload",
+      "objective": "[continuous] Self-reload on code changes - detect src/*.ts changes after merge, rebuild, save checkpoint, exec self with --resume",
+      "status": "pending",
+      "priority": 52,
+      "createdAt": "2026-01-11T02:15:00.000Z"
+    },
+    {
+      "id": "quest-continuous-infinite",
+      "objective": "[continuous] Add --continuous flag to grind - never exit, wait for new quests when board empty, integrate with PM for quest generation",
+      "status": "pending",
+      "priority": 53,
+      "createdAt": "2026-01-11T02:15:00.000Z"
+    },
+    {
+      "id": "quest-pm-breakdown",
+      "objective": "[pm] Auto-decompose complex quests - PM analyzes high-level quests, breaks into concrete subtasks with clear scope, links parent/child",
+      "status": "pending",
+      "priority": 60,
+      "createdAt": "2026-01-11T02:15:00.000Z"
+    },
+    {
+      "id": "quest-pm-discard",
+      "objective": "[pm] Quest hygiene - PM reviews pending quests, discards stale/duplicate/already-done/misaligned quests, logs reasoning",
+      "status": "pending",
+      "priority": 61,
+      "createdAt": "2026-01-11T02:15:00.000Z"
+    },
+    {
+      "id": "quest-pm-generate",
+      "objective": "[pm] Metrics-driven quest generation - PM analyzes failure patterns, escalation rates, gaps in coverage, creates improvement quests",
+      "status": "pending",
+      "priority": 62,
+      "createdAt": "2026-01-11T02:15:00.000Z"
+    },
+    {
+      "id": "quest-pm-prioritize",
+      "objective": "[pm] Smart prioritization - PM ranks quests by impact/effort ratio, considers dependencies, reorders board for optimal throughput",
+      "status": "pending",
+      "priority": 63,
+      "createdAt": "2026-01-11T02:15:00.000Z"
+    },
+    {
+      "id": "quest-logging-parallel",
+      "objective": "[logging] Wire dual logging for parallel grind - capture streaming output from worktree workers to log files",
+      "status": "pending",
+      "priority": 70,
+      "createdAt": "2026-01-11T02:15:00.000Z"
+    },
+    {
+      "id": "quest-verify-spell-nonblocking",
+      "objective": "[verify] Make spell check non-blocking - spell failures should warn but not fail verification or trigger escalation",
+      "status": "pending",
+      "priority": 71,
+      "createdAt": "2026-01-11T02:15:00.000Z"
+    },
+    {
+      "id": "quest-checkpoint-resume",
+      "objective": "[continuous] Checkpoint and resume - save grind state periodically, resume from checkpoint after crash or restart",
+      "status": "pending",
+      "priority": 72,
+      "createdAt": "2026-01-11T02:15:00.000Z"
     }
   ],
-  "lastUpdated": "2026-01-10T23:50:52.089Z"
+  "lastUpdated": "2026-01-11T02:13:39.783Z"
 }
