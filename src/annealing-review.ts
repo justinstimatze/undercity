@@ -286,6 +286,16 @@ const DEFAULT_CONFIG: Required<AnnealingConfig> = {
 };
 
 export class AnnealingReview {
+	/**
+	 * Temperature parameter controls the randomness and depth of review passes
+	 * - High temperature (>0.6): Broad, unconventional perspectives from Major Arcana
+	 * - Medium temperature (0.3-0.6): Mixed perspectives, balanced exploration
+	 * - Low temperature (<0.3): Focused, tactical Minor Arcana reviews
+	 *
+	 * Analogous to simulated annealing in optimization, where:
+	 * - High temperatures allow more radical exploration
+	 * - Low temperatures converge on specific, refined insights
+	 */
 	private oracle: UndercityOracle;
 	private config: Required<AnnealingConfig>;
 	private usedMajor: Set<string> = new Set();
