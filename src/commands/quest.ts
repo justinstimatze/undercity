@@ -3,7 +3,7 @@
  */
 import { readFileSync } from "node:fs";
 import chalk from "chalk";
-import { Persistence } from "../persistence.js";
+import { ParallelSoloOrchestrator } from "../parallel-solo.js";
 import {
 	generateTaskContext,
 	getPlanProgress,
@@ -26,11 +26,8 @@ import {
 	markFailed,
 	markInProgress,
 } from "../quest.js";
-import { QuestBatchOrchestrator } from "../quest-batch-orchestrator.js";
 import { QuestBoardAnalyzer } from "../quest-board-analyzer.js";
-import { RaidOrchestrator } from "../raid.js";
 import type { CommandModule } from "./types.js";
-import { showDeprecationWarning } from "./utils.js";
 
 export const questCommands: CommandModule = {
 	register(program) {
@@ -134,7 +131,9 @@ export const questCommands: CommandModule = {
 					}
 					console.log(chalk.dim(`  Sections: ${plan.sections.length}`));
 					console.log(
-						chalk.dim(`  Tasks: ${progress.total} (${progress.pending} pending, ${progress.completed} marked complete)`),
+						chalk.dim(
+							`  Tasks: ${progress.total} (${progress.pending} pending, ${progress.completed} marked complete)`,
+						),
 					);
 					console.log();
 
@@ -253,17 +252,17 @@ export const questCommands: CommandModule = {
 						}
 
 						let step = 0;
-						let lastResult = "";
 
 						while (step < maxSteps) {
 							step++;
 
 							// Create fresh orchestrator for each step
-							const orchestrator = new RaidOrchestrator({
-								autoApprove: true,
+							const orchestrator = new ParallelSoloOrchestrator({
+								startingModel: "sonnet",
+								maxConcurrent: 1,
 								autoCommit: true,
+								stream: options.stream ?? false,
 								verbose: true,
-								streamOutput: options.stream,
 							});
 
 							let goal: string;
@@ -282,72 +281,53 @@ export const questCommands: CommandModule = {
 								const taskContext = generateTaskContext(parsedPlan, currentTask.id);
 								const progress = getPlanProgress(parsedPlan);
 
-								// Build progress context from previous result
-								const progressNote = step > 1 ? `\n\nPREVIOUS STEP RESULT:\n${lastResult.substring(0, 1500)}` : "";
-
 								goal = `Implement this specific waypoint:
 
 ${currentTask.content}
 
-${taskContext}${progressNote}
+${taskContext}
 
 After completing this waypoint, summarize what you did. If this waypoint is impossible or already done, explain why and say "TASK SKIPPED".`;
 
 								console.log(
-									chalk.cyan(`\n━━━ Waypoint ${step}/${progress.total}: ${currentTask.content.substring(0, 50)}... ━━━`),
+									chalk.cyan(
+										`\n━━━ Waypoint ${step}/${progress.total}: ${currentTask.content.substring(0, 50)}... ━━━`,
+									),
 								);
 								if (currentTask.section) {
 									console.log(chalk.dim(`    Section: ${currentTask.section}`));
 								}
 							} else {
 								// Legacy mode: pass whole plan each iteration
-								const progressContext =
-									step > 1
-										? `\n\nPREVIOUS STEP RESULT:\n${lastResult.substring(0, 2000)}\n\nContinue with the next logical step.`
-										: "";
+								const stepContext = step > 1 ? `\n\nThis is step ${step}. Continue with the next logical step.` : "";
 
 								goal = `Execute this implementation plan with good judgment. Read the plan, determine the next logical step that hasn't been done yet, and implement it. If something is already complete, skip it. If the plan is fully complete, respond with "PLAN COMPLETE".
 
 PLAN FILE CONTENTS:
-${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan truncated]" : ""}${progressContext}`;
+${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan truncated]" : ""}${stepContext}`;
 
 								console.log(chalk.cyan(`\n━━━ Step ${step} ━━━`));
 							}
 
-							const _raid = await orchestrator.start(goal);
-							const _finalRaid = orchestrator.getCurrentRaid();
-
-							// Get the result for context
-							const waypoints = orchestrator.getStatus().waypoints;
-							const questerTask = waypoints.find((t) => t.type === "quester");
-							lastResult = questerTask?.result || "";
-
-							// Check for completion markers
-							if (lastResult.toLowerCase().includes("plan complete")) {
-								console.log(chalk.green("\n✓ Plan execution complete!"));
-								break;
-							}
+							const result = await orchestrator.runParallel([goal]);
+							const taskResult = result.results[0]?.result;
+							const taskSucceeded = taskResult?.status === "complete";
 
 							// Mark current waypoint as completed in parsed plan (for new mode)
 							if (parsedPlan && !options.legacy) {
 								const tasksByPriority = getTasksByPriority(parsedPlan).filter((t) => !t.completed);
 								const currentTask = tasksByPriority[0];
 
-								if (currentTask && !lastResult.toLowerCase().includes("waypoint skipped")) {
+								if (currentTask && taskSucceeded) {
 									parsedPlan = markTaskCompleted(parsedPlan, currentTask.id);
 									const progress = getPlanProgress(parsedPlan);
 									console.log(chalk.green(`  ✓ Waypoint complete (${progress.completed}/${progress.total})`));
-								} else if (currentTask && lastResult.toLowerCase().includes("waypoint skipped")) {
-									// Also mark skipped waypoints as completed so we move on
+								} else if (currentTask && !taskSucceeded) {
+									// Task failed - mark as skipped and continue
 									parsedPlan = markTaskCompleted(parsedPlan, currentTask.id);
-									console.log(chalk.yellow("  ⊘ Waypoint skipped"));
+									console.log(chalk.yellow(`  ⊘ Waypoint failed: ${taskResult?.error || "Unknown error"}`));
 								}
 							}
-
-							// Clear state for next step
-							orchestrator.surrender();
-							const persistence = new Persistence();
-							persistence.clearAll();
 
 							if (!options.continuous) {
 								console.log(chalk.dim("\nRun with -c to continue automatically"));
@@ -404,53 +384,36 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 
 					console.log(chalk.cyan(`\n━━━ Quest ${processed + 1}: ${nextGoal.objective.substring(0, 50)}... ━━━`));
 
-					const orchestrator = new RaidOrchestrator({
-						autoApprove: true,
+					const orchestrator = new ParallelSoloOrchestrator({
+						startingModel: "sonnet",
+						maxConcurrent: 1,
 						autoCommit: true,
+						stream: options.stream ?? false,
 						verbose: true,
-						streamOutput: options.stream,
 					});
 
-					markInProgress(nextGoal.id, "");
+					markInProgress(nextGoal.id, `grind-${Date.now()}`);
 
 					try {
-						const raid = await orchestrator.start(nextGoal.objective);
-						markInProgress(nextGoal.id, raid.id);
+						const result = await orchestrator.runParallel([nextGoal.objective]);
+						const taskResult = result.results[0]?.result;
 
-						const finalRaid = orchestrator.getCurrentRaid();
-
-						if (finalRaid?.status === "complete") {
+						if (taskResult?.status === "complete") {
 							markComplete(nextGoal.id);
 							console.log(chalk.green(`✓ Quest complete: ${nextGoal.objective.substring(0, 40)}...`));
-						} else if (finalRaid?.status === "merge_failed") {
-							// CRITICAL: Merge failed - branches preserved for recovery
-							markFailed(nextGoal.id, "Merge failed - branches preserved for manual recovery");
-							console.log(chalk.red(`✗ Quest merge failed: ${nextGoal.objective.substring(0, 40)}...`));
-							console.log(chalk.yellow("  Work branches preserved. Use 'git branch' to see them."));
-							console.log(chalk.yellow("  Manually merge or cherry-pick to recover the work."));
-						} else if (finalRaid?.status === "failed") {
-							markFailed(nextGoal.id, "Raid failed");
-							console.log(chalk.red(`✗ Quest failed: ${nextGoal.objective.substring(0, 40)}...`));
 						} else {
-							// Raid didn't complete properly - don't auto-complete, mark as failed
-							const status = finalRaid?.status ?? "unknown";
-							markFailed(nextGoal.id, `Raid ended with status: ${status}`);
-							console.log(chalk.red(`✗ Quest incomplete (status: ${status}): ${nextGoal.objective.substring(0, 40)}...`));
+							const errorMsg = taskResult?.error || "Unknown error";
+							markFailed(nextGoal.id, errorMsg);
+							console.log(chalk.red(`✗ Quest failed: ${nextGoal.objective.substring(0, 40)}...`));
+							if (taskResult?.error) {
+								console.log(chalk.dim(`  Error: ${taskResult.error.substring(0, 100)}`));
+							}
 						}
-
-						// Clear raid state for next goal
-						orchestrator.surrender();
-						const persistence = new Persistence();
-						persistence.clearAll();
 
 						processed++;
 					} catch (error) {
 						markFailed(nextGoal.id, error instanceof Error ? error.message : String(error));
 						console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
-
-						// Clear state and continue with next goal
-						const persistence = new Persistence();
-						persistence.clearAll();
 					}
 				}
 
@@ -459,117 +422,6 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 					`\nFinal: ${chalk.green(summary.complete)} complete, ${chalk.red(summary.failed)} failed, ${chalk.yellow(summary.pending)} pending`,
 				);
 			});
-
-		// Quest batch command - process multiple quests in parallel (DEPRECATED)
-		program
-			.command("quest-batch")
-			.description("[DEPRECATED] Process multiple quests in parallel (use 'grind --parallel' instead)")
-			.option("-n, --max-quests <n>", "Maximum concurrent quests (1-5)", "3")
-			.option("--dry-run", "Show quest matchmaking without executing")
-			.option("--analyze-only", "Analyze quests and show compatibility matrix")
-			.option("-a, --auto-approve", "Auto-approve plans without human review")
-			.option("-y, --yes", "Auto-approve and auto-commit")
-			.option("-s, --stream", "Stream raider activity")
-			.option("-v, --verbose", "Verbose logging")
-			.option("--risk-threshold <n>", "Risk threshold for parallel execution (0-1)", "0.7")
-			.option("--conflict-resolution <strategy>", "Conflict resolution strategy", "balanced")
-			.action(
-				async (options: {
-					maxQuests?: string;
-					dryRun?: boolean;
-					analyzeOnly?: boolean;
-					autoApprove?: boolean;
-					yes?: boolean;
-					stream?: boolean;
-					verbose?: boolean;
-					riskThreshold?: string;
-					conflictResolution?: string;
-				}) => {
-					showDeprecationWarning("quest-batch", "undercity grind --parallel 3");
-
-					const maxQuests = Math.min(5, Math.max(1, Number.parseInt(options.maxQuests || "3", 10)));
-					const riskThreshold = Math.min(1, Math.max(0, Number.parseFloat(options.riskThreshold || "0.7")));
-					const conflictResolution = (options.conflictResolution || "balanced") as
-						| "conservative"
-						| "aggressive"
-						| "balanced";
-
-					console.log(chalk.bold("Quest Batch Processing"));
-					console.log();
-
-					const orchestrator = new QuestBatchOrchestrator({
-						maxParallelQuests: maxQuests,
-						autoApprove: options.autoApprove || options.yes,
-						autoCommit: options.yes,
-						verbose: options.verbose,
-						streamOutput: options.stream,
-						riskThreshold,
-						conflictResolution,
-					});
-
-					try {
-						if (options.analyzeOnly) {
-							// Just show compatibility analysis
-							const analysis = await orchestrator.analyzeBatch(maxQuests);
-
-							console.log(chalk.cyan(`Available quests: ${analysis.availableQuests.length}`));
-							console.log(chalk.cyan(`Quest sets found: ${analysis.questSets.length}`));
-							console.log();
-
-							if (analysis.optimalSet) {
-								console.log(chalk.bold("Optimal Quest Set:"));
-								for (const quest of analysis.optimalSet.quests) {
-									console.log(`  • ${quest.objective.substring(0, 60)}${quest.objective.length > 60 ? "..." : ""}`);
-								}
-								console.log();
-								console.log(`Risk Level: ${analysis.optimalSet.riskLevel}`);
-								console.log(`Parallelism Score: ${analysis.optimalSet.parallelismScore.toFixed(2)}`);
-								console.log(`Estimated Duration: ${Math.round(analysis.optimalSet.estimatedDuration / 60000)} minutes`);
-							}
-
-							console.log();
-							console.log(chalk.green(analysis.recommendedAction));
-							return;
-						}
-
-						if (options.dryRun) {
-							// Show what would be executed
-							const analysis = await orchestrator.analyzeBatch(maxQuests);
-							console.log(chalk.cyan("Dry run - no quests will be executed"));
-							console.log();
-							console.log(chalk.green(analysis.recommendedAction));
-							return;
-						}
-
-						// Execute the batch
-						console.log(chalk.cyan(`Starting parallel quest processing (max: ${maxQuests})`));
-						console.log(chalk.dim(`Risk threshold: ${riskThreshold}, Conflict resolution: ${conflictResolution}`));
-						console.log();
-
-						const result = await orchestrator.processBatch(maxQuests);
-
-						console.log();
-						console.log(chalk.bold("Batch Results:"));
-						console.log(`${chalk.green("✓")} Completed: ${result.completedQuests.length}`);
-						console.log(`${chalk.red("✗")} Failed: ${result.failedQuests.length}`);
-						console.log(`${chalk.yellow("⚡")} Conflicts: ${result.conflicts.length}`);
-						console.log(`${chalk.cyan("⏱")} Duration: ${Math.round(result.totalDuration / 60000)} minutes`);
-
-						if (result.conflicts.length > 0) {
-							console.log();
-							console.log(chalk.yellow("Conflicts detected:"));
-							for (const conflict of result.conflicts) {
-								console.log(`  • ${conflict.conflictingFiles.join(", ")} (${conflict.severity})`);
-							}
-						}
-					} catch (error) {
-						console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
-						process.exit(1);
-					} finally {
-						await orchestrator.shutdown();
-					}
-				},
-			);
 
 		// Quest analyze command - analyze quest board for parallelization opportunities
 		program
@@ -727,7 +579,7 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 				}
 
 				console.log(chalk.dim("Run 'undercity quest-analyze' for detailed parallelization analysis"));
-				console.log(chalk.dim("Run 'undercity quest-batch' to process quests in parallel"));
+				console.log(chalk.dim("Run 'undercity grind --parallel 3' to process quests in parallel"));
 			});
 	},
 };

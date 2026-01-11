@@ -40,12 +40,13 @@ export {
 	resetLiveMetrics,
 	saveLiveMetrics,
 } from "./live-metrics.js";
+// Orchestration
+export { ParallelSoloOrchestrator } from "./parallel-solo.js";
 // Performance management
 export { getPerformanceManager } from "./performance-manager.js";
 // Persistence layer
 export { Persistence } from "./persistence.js";
-// Raid orchestration
-export { RaidOrchestrator } from "./raid.js";
+export { SoloOrchestrator } from "./solo.js";
 // Squad management
 export {
 	createSquadMember,

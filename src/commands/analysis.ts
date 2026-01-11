@@ -2,7 +2,7 @@
  * Analysis and metrics commands
  */
 import chalk from "chalk";
-import { RaidOrchestrator } from "../raid.js";
+import { ParallelSoloOrchestrator } from "../parallel-solo.js";
 import type { CommandModule } from "./types.js";
 
 export const analysisCommands: CommandModule = {
@@ -48,7 +48,9 @@ export const analysisCommands: CommandModule = {
 				console.log(chalk.dim("Identify which tasks need escalation most\n"));
 
 				// Sort complexity levels by escalation need (lowest success rate first)
-				const complexityLevels = Object.entries(analytics.successRateByComplexity).sort(([, a], [, b]) => a.rate - b.rate);
+				const complexityLevels = Object.entries(analytics.successRateByComplexity).sort(
+					([, a], [, b]) => a.rate - b.rate,
+				);
 
 				for (const [level, data] of complexityLevels) {
 					const statusColor = data.rate >= 80 ? chalk.green : data.rate >= 60 ? chalk.yellow : chalk.red;
@@ -64,7 +66,11 @@ export const analysisCommands: CommandModule = {
 					// Show escalation data if any escalations occurred
 					if (data.escalatedCount > 0) {
 						const escColor =
-							data.escalationSuccessRate >= 80 ? chalk.green : data.escalationSuccessRate >= 60 ? chalk.yellow : chalk.red;
+							data.escalationSuccessRate >= 80
+								? chalk.green
+								: data.escalationSuccessRate >= 60
+									? chalk.yellow
+									: chalk.red;
 						console.log(
 							`  ${chalk.dim(`Escalated: ${data.escalatedCount} quests (${escColor(`${data.escalationSuccessRate.toFixed(1)}%`)} success)`)}`,
 						);
@@ -129,7 +135,9 @@ export const analysisCommands: CommandModule = {
 
 						// Identify if escalation is effective
 						const effectiveEscalations = escalationByLevel.filter((e) => e.successAfterEscalation >= 70);
-						const ineffectiveEscalations = escalationByLevel.filter((e) => e.successAfterEscalation < 50 && e.count >= 3);
+						const ineffectiveEscalations = escalationByLevel.filter(
+							(e) => e.successAfterEscalation < 50 && e.count >= 3,
+						);
 
 						if (effectiveEscalations.length > 0) {
 							console.log(
@@ -178,7 +186,9 @@ export const analysisCommands: CommandModule = {
 				for (const [model, tokens] of Object.entries(tokenTrends.tokensByModel)) {
 					const percentage = modelTotal > 0 ? ((tokens / modelTotal) * 100).toFixed(1) : "0.0";
 					const modelColor = model === "opus" ? chalk.red : model === "sonnet" ? chalk.yellow : chalk.green;
-					console.log(`  ${modelColor(model.padEnd(8))}: ${tokens.toLocaleString().padStart(10)} tokens (${percentage}%)`);
+					console.log(
+						`  ${modelColor(model.padEnd(8))}: ${tokens.toLocaleString().padStart(10)} tokens (${percentage}%)`,
+					);
 				}
 				console.log();
 
@@ -330,26 +340,39 @@ async function runBenchmark(): Promise<void> {
 	console.log(chalk.cyan("🚀 Starting Undercity Benchmark"));
 	console.log(chalk.dim("Running standard set of performance tasks"));
 
-	const orchestrator = new RaidOrchestrator({
+	const orchestrator = new ParallelSoloOrchestrator({
+		startingModel: "sonnet",
+		maxConcurrent: 2,
+		autoCommit: true,
+		stream: true,
 		verbose: true,
-		streamOutput: true,
-		autoApprove: true,
-		maxSquadSize: 3,
-		maxParallel: 2,
 	});
 
 	const startTime = Date.now();
 	console.log();
+
+	let successCount = 0;
+	let failCount = 0;
 
 	try {
 		for (const task of benchmarkTasks) {
 			console.log(chalk.blue(`\n📋 Task: ${task}`));
 
 			try {
-				await orchestrator.start(task);
-				await orchestrator.approvePlan();
-				await orchestrator.extract();
+				const result = await orchestrator.runParallel([task]);
+				const taskResult = result.results[0]?.result;
+				if (taskResult?.status === "complete") {
+					successCount++;
+					console.log(chalk.green(`✓ Task completed`));
+				} else {
+					failCount++;
+					console.error(chalk.red(`Task failed: ${task}`));
+					if (taskResult?.error) {
+						console.error(chalk.dim(taskResult.error));
+					}
+				}
 			} catch (taskError) {
+				failCount++;
 				console.error(chalk.red(`Task failed: ${task}`));
 				console.error(chalk.dim(String(taskError)));
 			}
@@ -363,10 +386,13 @@ async function runBenchmark(): Promise<void> {
 
 		const metrics = metricsCollector.getMetricsSummary(new Date(startTime), new Date(endTime));
 		console.log(chalk.bold("\nBenchmark Summary:"));
-		console.log(`Total Tasks: ${metrics.totalTasks}`);
-		console.log(`Success Rate: ${(metrics.successRate * 100).toFixed(2)}%`);
-		console.log(`Average Tokens Used: ${metrics.avgTokens.toFixed(2)}`);
-		console.log(`Average Task Duration: ${(metrics.avgTimeTakenMs / 1000).toFixed(2)} seconds`);
+		console.log(`Total Tasks: ${benchmarkTasks.length}`);
+		console.log(`Success: ${successCount}, Failed: ${failCount}`);
+		console.log(`Success Rate: ${((successCount / benchmarkTasks.length) * 100).toFixed(2)}%`);
+		if (metrics.totalTasks > 0) {
+			console.log(`Average Tokens Used: ${metrics.avgTokens.toFixed(2)}`);
+			console.log(`Average Task Duration: ${(metrics.avgTimeTakenMs / 1000).toFixed(2)} seconds`);
+		}
 	} catch (error) {
 		console.error(chalk.red("Benchmark failed:"), error);
 		process.exit(1);

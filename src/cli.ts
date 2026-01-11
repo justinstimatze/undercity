@@ -27,7 +27,6 @@ import { Command } from "commander";
 import { analysisCommands } from "./commands/analysis.js";
 import { mixedCommands } from "./commands/mixed.js";
 import { questCommands } from "./commands/quest.js";
-import { raidCommands } from "./commands/raid.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -51,7 +50,6 @@ program
 	.version(getVersion());
 
 // Register all command modules
-raidCommands.register(program);
 questCommands.register(program);
 analysisCommands.register(program);
 mixedCommands.register(program);
