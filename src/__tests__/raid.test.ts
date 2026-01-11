@@ -44,7 +44,16 @@ vi.mock("node:fs", () => {
 			mockDirs.add(path);
 		}),
 		createWriteStream: vi.fn(() => createMockWriteStream()),
-		renameSync: vi.fn(),
+		renameSync: vi.fn((oldPath: string, newPath: string): void => {
+			const content = mockFiles.get(oldPath);
+			if (content !== undefined) {
+				mockFiles.set(newPath, content);
+				mockFiles.delete(oldPath);
+			}
+		}),
+		unlinkSync: vi.fn((path: string): void => {
+			mockFiles.delete(path);
+		}),
 	};
 });
 

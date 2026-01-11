@@ -28,6 +28,16 @@ vi.mock("node:fs", () => ({
 	mkdirSync: vi.fn((path: string, _options?: { recursive?: boolean }): void => {
 		mockDirs.add(path);
 	}),
+	renameSync: vi.fn((oldPath: string, newPath: string): void => {
+		const content = mockFiles.get(oldPath);
+		if (content !== undefined) {
+			mockFiles.set(newPath, content);
+			mockFiles.delete(oldPath);
+		}
+	}),
+	unlinkSync: vi.fn((path: string): void => {
+		mockFiles.delete(path);
+	}),
 }));
 
 // Import after mocking
