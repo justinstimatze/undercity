@@ -189,14 +189,35 @@ export const mixedCommands: CommandModule = {
 
 					try {
 						// Get tasks from quest board
-						const { getAllItems } = await import("../quest.js");
+						const { getAllItems, markQuestComplete, markQuestFailed } = await import("../quest.js");
 						const allQuests = getAllItems();
 						const pendingQuests = allQuests.filter((q) => q.status === "pending");
 
 						const questsToProcess = maxCount > 0 ? pendingQuests.slice(0, maxCount) : pendingQuests;
 						const tasks = questsToProcess.map((q) => q.objective);
 
+						// Build a map of objective -> quest ID for status updates
+						const objectiveToQuestId = new Map<string, string>();
+						for (const q of questsToProcess) {
+							objectiveToQuestId.set(q.objective, q.id);
+						}
+
 						const result = await orchestrator.runParallel(tasks);
+
+						// Update quest status based on results
+						for (const taskResult of result.results) {
+							const questId = objectiveToQuestId.get(taskResult.task);
+							if (questId) {
+								if (taskResult.merged) {
+									markQuestComplete(questId);
+									console.log(chalk.dim(`  Quest ${questId} marked complete`));
+								} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
+									const error = taskResult.mergeError || "Task failed";
+									markQuestFailed(questId, error);
+									console.log(chalk.dim(`  Quest ${questId} marked failed: ${error}`));
+								}
+							}
+						}
 
 						console.log(chalk.green.bold("\n📊 Grind Session Complete"));
 						console.log(`  Total processed: ${result.results.length}`);

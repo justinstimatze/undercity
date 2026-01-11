@@ -189,6 +189,13 @@ export class ParallelSoloOrchestrator {
 
 			for (const taskResult of successfulTasks) {
 				try {
+					// Debug: check if worktree still exists
+					const { existsSync } = await import("node:fs");
+					const worktreeExists = existsSync(taskResult.worktreePath);
+					console.log(chalk.dim(`    [DEBUG] Worktree exists: ${worktreeExists} at ${taskResult.worktreePath}`));
+					if (!worktreeExists) {
+						console.log(chalk.red(`    [DEBUG] Worktree directory missing!`));
+					}
 					await this.mergeBranch(taskResult.branch, taskResult.taskId, taskResult.worktreePath);
 					taskResult.merged = true;
 					console.log(chalk.green(`  ✓ Merged: ${taskResult.taskId}`));
