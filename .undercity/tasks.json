@@ -462,7 +462,63 @@
       "status": "pending",
       "priority": 40,
       "createdAt": "2026-01-11T20:44:18.807Z"
+    },
+    {
+      "id": "task-mkab29o6-im06",
+      "objective": "[grind] Add pre-flight task validation - before starting task, check git history for duplicates and mark as duplicate instead of executing",
+      "status": "pending",
+      "priority": 41,
+      "createdAt": "2026-01-11T22:28:20.214Z"
+    },
+    {
+      "id": "task-mkab2a0b-wlyi",
+      "objective": "[grind] Auto-detect completed tasks after merge - scan tasks.json and mark matching tasks as complete when commits are merged",
+      "status": "pending",
+      "priority": 42,
+      "createdAt": "2026-01-11T22:28:20.651Z"
+    },
+    {
+      "id": "task-mkab2acp-lxmz",
+      "objective": "[grind] Improve task filtering in runParallel - skip tasks already completed, skip fuzzy matches against recent commits",
+      "status": "pending",
+      "priority": 43,
+      "createdAt": "2026-01-11T22:28:21.097Z"
+    },
+    {
+      "id": "task-mkab2aof-ygpz",
+      "objective": "[grind] Enhanced verification retry logic - opus tier should get 7 attempts instead of 2, progressive escalation with more retries per tier",
+      "status": "pending",
+      "priority": 44,
+      "createdAt": "2026-01-11T22:28:21.519Z"
+    },
+    {
+      "id": "task-mkab2b12-h2rm",
+      "objective": "[grind] Task conflict detection - before starting task, check if similar task (>70% similarity) is already running",
+      "status": "pending",
+      "priority": 45,
+      "createdAt": "2026-01-11T22:28:21.974Z"
+    },
+    {
+      "id": "task-mkab2bct-bb5k",
+      "objective": "[grind] Improve agent prompts - add instruction to check git log before implementing, return TASK_ALREADY_COMPLETE if work exists",
+      "status": "pending",
+      "priority": 46,
+      "createdAt": "2026-01-11T22:28:22.397Z"
+    },
+    {
+      "id": "task-mkab2bog-89d5",
+      "objective": "[docs] Add reconciliation to grind workflow docs - explain when to run reconcile, how confidence scoring works",
+      "status": "pending",
+      "priority": 47,
+      "createdAt": "2026-01-11T22:28:22.816Z"
+    },
+    {
+      "id": "task-mkab3cik-8i42",
+      "objective": "[cli] Add --priority flag to 'undercity add' command for explicit task prioritization",
+      "status": "pending",
+      "priority": 48,
+      "createdAt": "2026-01-11T22:29:10.556Z"
     }
   ],
-  "lastUpdated": "2026-01-11T21:48:36.179Z"
+  "lastUpdated": "2026-01-11T22:29:10.556Z"
 }

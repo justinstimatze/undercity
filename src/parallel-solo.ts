@@ -289,6 +289,16 @@ export class ParallelSoloOrchestrator {
 		// Clear completed file tracking entries from previous runs
 		this.fileTracker.clearCompleted();
 
+		// Pre-flight validation: check for duplicate work
+		const { reconcileTasks } = await import("./task.js");
+		output.info("Running pre-flight validation...");
+		const preflightResult = await reconcileTasks({ lookbackCommits: 50, dryRun: false });
+		if (preflightResult.duplicatesFound > 0) {
+			output.success(`Pre-flight: marked ${preflightResult.duplicatesFound} task(s) as duplicate`, {
+				tasks: preflightResult.tasksMarked.map((t) => t.taskId),
+			});
+		}
+
 		// Process tasks in batches of maxConcurrent
 		const batchId = generateBatchId();
 		const allPreparedTasks: Array<{

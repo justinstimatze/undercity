@@ -984,6 +984,36 @@ export class Elevator {
 				item.status = "complete";
 				item.completedAt = new Date();
 
+				// Auto-detect and mark related tasks as complete
+				try {
+					const { execSync } = await import("node:child_process");
+					const commitSha = execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
+					const commitMessage = execSync("git log -1 --format=%s", { encoding: "utf-8" }).trim();
+
+					const { getAllItems, markTaskComplete } = await import("./task.js");
+					const pendingTasks = getAllItems().filter((t) => t.status === "pending" || t.status === "in_progress");
+
+					for (const task of pendingTasks) {
+						// Extract keywords from task objective
+						const keywords = task.objective
+							.toLowerCase()
+							.replace(/[[\]]/g, "")
+							.split(/\s+/)
+							.filter((word) => word.length > 3);
+
+						// Check if commit message matches task
+						const messageLower = commitMessage.toLowerCase();
+						const matches = keywords.filter((k) => messageLower.includes(k)).length;
+
+						if (matches >= Math.max(2, keywords.length * 0.5)) {
+							gitLogger.info({ taskId: task.id, commitSha }, "Auto-marking task as complete based on commit");
+							markTaskComplete(task.id);
+						}
+					}
+				} catch (error) {
+					gitLogger.debug({ error: String(error) }, "Failed to auto-detect completed tasks (non-fatal)");
+				}
+
 				// Remove from queue
 				this.queue = this.queue.filter((i) => i !== item);
 
@@ -1187,6 +1217,36 @@ export class Elevator {
 			deleteBranch(item.branch);
 			item.status = "complete";
 			item.completedAt = new Date();
+
+			// Auto-detect and mark related tasks as complete
+			try {
+				const { execSync } = await import("node:child_process");
+				const commitSha = execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
+				const commitMessage = execSync("git log -1 --format=%s", { encoding: "utf-8" }).trim();
+
+				const { getAllItems, markTaskComplete } = await import("./task.js");
+				const pendingTasks = getAllItems().filter((t) => t.status === "pending" || t.status === "in_progress");
+
+				for (const task of pendingTasks) {
+					// Extract keywords from task objective
+					const keywords = task.objective
+						.toLowerCase()
+						.replace(/[[\]]/g, "")
+						.split(/\s+/)
+						.filter((word) => word.length > 3);
+
+					// Check if commit message matches task
+					const messageLower = commitMessage.toLowerCase();
+					const matches = keywords.filter((k) => messageLower.includes(k)).length;
+
+					if (matches >= Math.max(2, keywords.length * 0.5)) {
+						gitLogger.info({ taskId: task.id, commitSha }, "Auto-marking task as complete based on commit");
+						markTaskComplete(task.id);
+					}
+				}
+			} catch (error) {
+				gitLogger.debug({ error: String(error) }, "Failed to auto-detect completed tasks (non-fatal)");
+			}
 
 			// Remove from queue
 			this.queue = this.queue.filter((i) => i !== item);
