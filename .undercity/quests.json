@@ -101,10 +101,11 @@
     {
       "id": "quest-metrics-jsonl",
       "objective": "[metrics] Log to .undercity/metrics.jsonl - queryable history of quest durations, token usage, model escalations",
-      "status": "pending",
+      "status": "complete",
       "priority": 40,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "raidId": ""
+      "completedAt": "2026-01-10T10:31:40.791Z",
+      "note": "Implemented via recordMetric() in metrics.ts, file exists at .undercity/metrics.jsonl"
     },
     {
       "id": "quest-metrics-success-rate",
@@ -125,26 +126,29 @@
     {
       "id": "quest-parallel-solo",
       "objective": "[parallel] Add parallel solo mode - run multiple solo tasks on different branches concurrently",
-      "status": "pending",
+      "status": "complete",
       "priority": 60,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "raidId": ""
+      "completedAt": "2026-01-10T19:00:00.000Z",
+      "note": "Implemented as ParallelSoloOrchestrator - uses worktrees for isolation, runs parallel workers"
     },
     {
       "id": "quest-tui-dashboard",
       "objective": "[tui] Build a TUI dashboard - combine status display and streaming logs in one view",
-      "status": "pending",
+      "status": "complete",
       "priority": 100,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "raidId": ""
+      "completedAt": "2026-01-11T01:00:00.000Z",
+      "note": "Implemented as dashboard.ts with 'undercity watch' command - live status updates"
     },
     {
       "id": "quest-config-file",
       "objective": "[qol] Add config file support (.undercityrc) for default options like --stream, model choices",
-      "status": "pending",
+      "status": "complete",
       "priority": 110,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "raidId": ""
+      "completedAt": "2026-01-10T18:00:00.000Z",
+      "note": "Implemented in config.ts with 'undercity config' command and .undercity/config.json"
     },
     {
       "id": "quest-mk83qv1v-o4go",
@@ -327,26 +331,29 @@
     {
       "id": "quest-mk84nczb-fo84",
       "objective": "[integration] Wire grind to use git worktrees - each parallel task gets isolated worktree, merge via elevator queue",
-      "status": "pending",
+      "status": "complete",
       "priority": 34,
       "createdAt": "2026-01-10T09:53:14.615Z",
-      "raidId": ""
+      "completedAt": "2026-01-10T19:00:00.000Z",
+      "note": "Implemented in worktree-manager.ts, used by ParallelSoloOrchestrator"
     },
     {
       "id": "quest-mk84ndbx-dams",
       "objective": "[integration] Parallel grind workers - spawn N workers, each in own worktree, coordinate via shared state",
-      "status": "pending",
+      "status": "complete",
       "priority": 35,
       "createdAt": "2026-01-10T09:53:15.069Z",
-      "raidId": ""
+      "completedAt": "2026-01-10T19:00:00.000Z",
+      "note": "Implemented in ParallelSoloOrchestrator - spawns workers in worktrees, coordinates via Persistence"
     },
     {
       "id": "quest-mk84ndok-07cb",
       "objective": "[integration] Merge queue for parallel grind - workers complete tasks, queue for serial merge (rebase, test, merge)",
-      "status": "pending",
+      "status": "complete",
       "priority": 36,
       "createdAt": "2026-01-10T09:53:15.524Z",
-      "raidId": ""
+      "completedAt": "2026-01-10T19:00:00.000Z",
+      "note": "Implemented as Elevator class in git.ts - serial rebase→test→merge queue"
     },
     {
       "id": "quest-mk84ndzs-qga5",
@@ -377,12 +384,10 @@
     {
       "id": "quest-mk86lots-qz2m",
       "objective": "[grind] Improve verification retry logic - allow multiple fix attempts at same tier before escalating",
-      "status": "failed",
+      "status": "pending",
       "priority": 40,
       "createdAt": "2026-01-10T10:47:55.888Z",
-      "raidId": "",
-      "completedAt": "2026-01-11T02:13:39.783Z",
-      "error": "Error: spawnSync /bin/sh ENOENT"
+      "note": "Reset after ENOENT failure (shell environment issue, not task issue)"
     },
     {
       "id": "quest-postmortem",
@@ -396,10 +401,11 @@
     {
       "id": "quest-mk8ykjw9-4e4x",
       "objective": "[refactor] Split cli.ts into separate command modules - file is too large at 700+ lines, extract each command to its own file",
-      "status": "pending",
+      "status": "complete",
       "priority": 42,
       "createdAt": "2026-01-10T23:50:52.089Z",
-      "note": "Reset after ENOENT failure"
+      "completedAt": "2026-01-11T02:00:00.000Z",
+      "note": "Split into commands/analysis.ts, commands/mixed.ts, commands/quest.ts"
     },
     {
       "id": "quest-continuous-quest-sync",
@@ -460,9 +466,11 @@
     {
       "id": "quest-logging-parallel",
       "objective": "[logging] Wire dual logging for parallel grind - capture streaming output from worktree workers to log files",
-      "status": "pending",
+      "status": "complete",
       "priority": 70,
-      "createdAt": "2026-01-11T02:15:00.000Z"
+      "createdAt": "2026-01-11T02:15:00.000Z",
+      "completedAt": "2026-01-11T03:00:00.000Z",
+      "note": "Implemented in dual-logger.ts - logs to both console and .undercity/logs/"
     },
     {
       "id": "quest-verify-spell-nonblocking",
@@ -481,11 +489,12 @@
     {
       "id": "quest-pino-logger-migration",
       "objective": "[cleanup] Migrate all logging to pino - replace console.log/info/warn/error with pino logger across 19 files in src/",
-      "status": "pending",
+      "status": "complete",
       "priority": 73,
       "createdAt": "2026-01-10T18:00:00.000Z",
-      "note": "Files using console.*: mixed.ts, parallel-solo.ts, diff-experiment-runner.ts, cli-backup.ts, live-metrics.ts, solo.ts, raid.ts, commands/analysis.ts, commands/quest.ts, commands/utils.ts, examples/*.ts, metrics.ts, tui-dashboard.ts, config.ts, rate-limit.ts, enhanced-metrics.ts"
+      "completedAt": "2026-01-11T04:00:00.000Z",
+      "note": "16 files now use pino logger. Console usage remains in examples/ (intentional for demos) and some CLI output."
     }
   ],
-  "lastUpdated": "2026-01-10T18:00:00.000Z"
+  "lastUpdated": "2026-01-11T04:30:00.000Z"
 }
