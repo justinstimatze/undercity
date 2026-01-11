@@ -285,6 +285,19 @@ const DEFAULT_CONFIG: Required<AnnealingConfig> = {
 	passesPerTemperature: 1,
 };
 
+/**
+ * Annealing Review: A sophisticated code review system inspired by simulated annealing
+ *
+ * This class generates systematic, multi-perspective review passes that simulate
+ * the cooling process in metallurgy. By drawing from Tarot-inspired archetypes,
+ * it creates a dynamic review process that explores code from various analytical angles.
+ *
+ * Key features:
+ * - Progressive refinement through temperature-based review passes
+ * - Major and Minor Arcana provide diverse review perspectives
+ * - Supports customizable review configurations
+ * - Ensures comprehensive, multi-lens code analysis
+ */
 export class AnnealingReview {
 	/**
 	 * Temperature parameter controls the randomness and depth of review passes

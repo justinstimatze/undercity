@@ -72,7 +72,7 @@ undercity grind --limit 5
 # Just show what would run
 undercity grind --dry-run
 
-# Run quests in parallel (uses git worktrees)
+# Run quests in parallel (isolated worktrees)
 undercity grind --parallel 3
 ```
 
@@ -88,10 +88,10 @@ undercity grind --parallel 3    # Run 3 quests in parallel
 1. Creates isolated git worktrees for each task
 2. Runs SoloOrchestrators concurrently (one per worktree)
 3. Each task gets its own branch
-4. Successful branches merge serially (rebase → typecheck → merge)
+4. Successful branches merge serially (rebase → verify → merge)
 5. Worktrees cleaned up after completion
 
-This is useful for processing independent quests faster while maintaining clean git history.
+This maximizes throughput while maintaining clean git history.
 
 ### Quest Board
 
@@ -107,33 +107,32 @@ undercity quests
 undercity quest clear
 ```
 
-### Metrics & Improvement
+### Metrics
 
 ```bash
 # View performance metrics
 undercity metrics
-
-# Generate improvement quests from metrics
-undercity improve
 ```
 
 ## How It Works
 
 ### Complexity Routing
 
-Tasks are analyzed for complexity signals:
+Tasks are analyzed using quantitative code metrics:
 
-| Signal | Points | Example |
-|--------|--------|---------|
-| Multiple files | +2 | "Update auth across services" |
-| New feature | +2 | "Add dark mode" |
-| Refactoring | +2 | "Extract helper functions" |
-| Simple fix | -1 | "Fix typo" |
+| Signal | What It Measures |
+|--------|------------------|
+| Lines of code | Total lines in target files |
+| Function count | Number of functions to modify |
+| CodeScene health | Code quality scores when available |
+| Git hotspots | Frequently changed files |
+| Bug-prone files | Files with many "fix" commits |
+| Cross-package | Changes spanning multiple packages |
 
 **Routing:**
-- Low complexity → Haiku (fast, cheap)
-- Medium → Sonnet (balanced)
-- High → Opus (best quality)
+- Trivial/Simple → Haiku (fast, cheap)
+- Standard → Sonnet (balanced)
+- Complex/Critical → Opus (best quality)
 
 ### Verification Loop
 
@@ -195,10 +194,10 @@ undercity/
 ├── src/
 │   ├── solo.ts           # Core task execution with escalation
 │   ├── parallel-solo.ts  # Parallel execution via worktrees
-│   ├── worktree-manager.ts # Git worktree management
-│   ├── complexity.ts     # Task routing
+│   ├── worktree-manager.ts # Git worktree isolation
+│   ├── complexity.ts     # Quantitative task analysis
 │   ├── context.ts        # Pre-flight briefing generation
-│   ├── verification.ts   # biome/typecheck/build/test runner
+│   ├── annealing-review.ts # Multi-angle review system
 │   └── cli.ts            # Command interface
 └── .undercity/
     ├── quests.json       # Quest board
@@ -212,21 +211,21 @@ undercity/
 The goal is **fully autonomous, dynamically optimal** - no human gating, no manual tuning.
 
 **Current (working):**
-- Complexity-based model routing (auto-select haiku/sonnet/opus)
+- Quantitative complexity analysis (lines, functions, CodeScene health, git history)
 - Adaptive escalation with same-tier retries for trivial errors
+- Escalating review system (haiku → sonnet → opus)
+- Annealing review at opus tier (tarot-inspired multi-angle analysis)
 - Post-mortem analysis on tier escalation
 - Error category tracking for learning
-- Parallel execution via git worktrees (`grind --parallel`)
 
 **Next:**
 - **Auto-planning**: Complex tasks get a planning phase, trivial ones skip it
-- **Dynamic parallelism**: Auto-detect optimal parallel count based on system resources
 - **Learning from metrics**: Route better based on what's worked before
+- **Knowledge tracking**: Build understanding of codebase over time
 
 **Future:**
 - **Self-improving prompts**: Analyze failures, tune prompts automatically
 - **Predictive routing**: Learn which task patterns need which models
-- **Distributed workers**: Spread load across machines
 
 ## Legacy: The Raid Model
 
@@ -236,7 +235,6 @@ The original design used extraction shooter metaphors (raids, flutes, questers, 
 - Quest terminology (tasks → quests)
 - GUPP principle ("If work exists, continue it")
 - Persistence hierarchy (crash recovery)
-- Elevator merge queue (for future parallel mode)
 
 **What we simplified:**
 - Planning/execution phases → auto-plan based on complexity (coming)

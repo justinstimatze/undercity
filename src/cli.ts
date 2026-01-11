@@ -1886,7 +1886,7 @@ program
 	.option("-n, --count <n>", "Process only N quests then stop", "0")
 	.option("-s, --stream", "Stream raider activity")
 	.option("-m, --model <tier>", "Starting model tier: haiku, sonnet, opus", "sonnet")
-	.option("-p, --parallel <n>", "Run N quests in parallel using worktrees", "0")
+	.option("-p, --parallel <n>", "Run N quests in parallel using isolated worktrees", "0")
 	.option("--supervised", "Use supervised mode (Opus orchestrates workers)")
 	.option("--worker <tier>", "Worker model for supervised mode", "sonnet")
 	.option("--no-local", "Disable local tools and local LLM routing")
@@ -1906,7 +1906,7 @@ program
 			review?: boolean;
 			annealing?: boolean;
 		}) => {
-			// Handle parallel mode separately
+			// Handle parallel mode separately - uses worktree isolation
 			const parallelCount = Number.parseInt(options.parallel || "0", 10);
 			if (parallelCount > 0) {
 				const { ParallelSoloOrchestrator } = await import("./parallel-solo.js");
@@ -1919,6 +1919,8 @@ program
 					console.log(chalk.gray("No pending quests to process"));
 					return;
 				}
+
+				console.log(chalk.cyan.bold(`\n⚡ Parallel Mode: ${pendingQuests.length} quests in isolated worktrees\n`));
 
 				// Mark quests as in-progress
 				const batchId = `parallel-${Date.now()}`;
@@ -1946,6 +1948,15 @@ program
 						markQuestFailed(quest.id, taskResult.mergeError || taskResult.result?.error || "Unknown error");
 					}
 				}
+
+				// Summary
+				console.log(chalk.cyan.bold("\n━━━ Parallel Batch Complete ━━━"));
+				console.log(`  Successful: ${result.successful}/${result.results.length}`);
+				console.log(`  Merged: ${result.merged}`);
+				if (result.mergeFailed > 0) {
+					console.log(chalk.yellow(`  Merge failed: ${result.mergeFailed}`));
+				}
+				console.log(`  Duration: ${(result.durationMs / 1000).toFixed(1)}s`);
 
 				return;
 			}
@@ -2278,164 +2289,6 @@ program
 			);
 		},
 	);
-
-// ===== Self-Improvement Commands =====
-
-program
-	.command("experiments")
-	.description("Manage A/B experiments for self-improvement")
-	.option("--list", "List active experiments")
-	.option("--start", "Start a new experiment (interactive)")
-	.option("--stop <id>", "Stop an experiment")
-	.option("--status <id>", "Show experiment status")
-	.action(async (options) => {
-		try {
-			const { getImprovementPersistence } = await import("./improvement-persistence.js");
-			const { selfImprovementAgent } = await import("./self-improvement.js");
-
-			const persistence = getImprovementPersistence();
-
-			if (options.list) {
-				const experiments = persistence.getActiveExperiments();
-				const experimentIds = Object.keys(experiments);
-
-				console.log(chalk.cyan.bold("\n🧪 Active Experiments"));
-
-				if (experimentIds.length === 0) {
-					console.log(chalk.yellow("  No active experiments"));
-					return;
-				}
-
-				for (const id of experimentIds) {
-					const config = experiments[id];
-					const status = selfImprovementAgent.getExperimentStatus(id);
-
-					console.log(`\n  ${chalk.bold(id)}`);
-					console.log(`    Hypothesis: ${config.hypothesis}`);
-					console.log(
-						`    Progress: ${status.resultsCount}/${config.targetSampleSize} (${(status.completionRate * 100).toFixed(1)}%)`,
-					);
-					console.log(`    Variants: ${config.variants.map((v) => v.name).join(", ")}`);
-				}
-			} else if (options.start) {
-				console.log(chalk.cyan.bold("\n🧪 Starting New Experiment"));
-				console.log(chalk.yellow("  Interactive experiment creation not yet implemented"));
-				console.log(chalk.dim("  Use the API to create experiments programmatically"));
-			} else if (options.stop) {
-				const removed = selfImprovementAgent.stopExperiment(options.stop);
-				persistence.removeActiveExperiment(options.stop);
-
-				if (removed) {
-					console.log(chalk.green(`\n  ✓ Stopped experiment: ${options.stop}`));
-				} else {
-					console.log(chalk.red(`\n  ✗ Experiment not found: ${options.stop}`));
-				}
-			} else if (options.status) {
-				const status = selfImprovementAgent.getExperimentStatus(options.status);
-
-				if (!status.config) {
-					console.log(chalk.red(`\n  ✗ Experiment not found: ${options.status}`));
-					return;
-				}
-
-				console.log(chalk.cyan.bold(`\n🧪 Experiment Status: ${options.status}`));
-				console.log(`  Hypothesis: ${status.config.hypothesis}`);
-				console.log(
-					`  Progress: ${status.resultsCount}/${status.config.targetSampleSize} (${(status.completionRate * 100).toFixed(1)}%)`,
-				);
-
-				if (status.preliminaryResults) {
-					const { EfficiencyAnalyzer } = await import("./efficiency-analyzer.js");
-					const analyzer = new EfficiencyAnalyzer();
-					const insights = analyzer.generateInsights(status.preliminaryResults);
-
-					console.log(chalk.bold("\n  Preliminary Results:"));
-					insights.slice(0, 3).forEach((insight) => {
-						console.log(`    ${insight}`);
-					});
-				} else {
-					console.log(chalk.yellow("\n  Not enough data for preliminary analysis"));
-				}
-			} else {
-				// Default: show summary
-				const experiments = persistence.getActiveExperiments();
-				console.log(chalk.cyan.bold("\n🧪 Experiments Overview"));
-				console.log(`  Active experiments: ${Object.keys(experiments).length}`);
-				console.log(chalk.dim("  Use --list to see details, --start to create, or --stop <id> to stop"));
-			}
-		} catch (error) {
-			console.error(chalk.red("Failed to manage experiments:"), error instanceof Error ? error.message : String(error));
-		}
-	});
-
-program
-	.command("improve")
-	.description("Generate and show improvement quests based on empirical data")
-	.option("--generate", "Generate new improvement quests from current metrics")
-	.option("--add", "Add generated quests to the quest board")
-	.action(async (options: { generate?: boolean; add?: boolean }) => {
-		try {
-			const { selfImprovementAgent } = await import("./self-improvement.js");
-
-			console.log(chalk.dim("  Analyzing metrics and generating improvement quests..."));
-			const quests = await selfImprovementAgent.generateImprovementQuests();
-
-			if (options.add && quests.length > 0) {
-				for (const quest of quests.slice(0, 5)) {
-					addGoal(`[${quest.category}] ${quest.title}`);
-				}
-				console.log(chalk.green(`  ✓ Added ${Math.min(5, quests.length)} improvement quests to the board`));
-			}
-
-			console.log(chalk.cyan.bold("\n🎯 Improvement Quests"));
-
-			if (quests.length === 0) {
-				console.log(chalk.yellow("  No improvement quests available"));
-				if (!options.generate) {
-					console.log(chalk.dim("  Use --generate to create quests from current data"));
-				}
-				return;
-			}
-
-			// Show top 10 quests
-			const topQuests = quests.slice(0, 10);
-
-			for (const quest of topQuests) {
-				const priorityColors: Record<string, typeof chalk.red> = {
-					critical: chalk.red,
-					high: chalk.yellow,
-					medium: chalk.blue,
-					low: chalk.gray,
-				};
-				const priorityColor = priorityColors[quest.priority] || chalk.white;
-
-				const categoryEmojis: Record<string, string> = {
-					performance: "⚡",
-					quality: "✨",
-					efficiency: "🔧",
-					reliability: "🛡️",
-					usability: "👤",
-				};
-				const categoryEmoji = categoryEmojis[quest.category] || "📌";
-
-				console.log(
-					`\n  ${categoryEmoji} ${priorityColor(quest.priority.toUpperCase())} - Impact: ${quest.estimatedImpact}`,
-				);
-				console.log(`    ${chalk.bold(quest.title)}`);
-				console.log(`    ${chalk.dim(quest.description.slice(0, 100))}${quest.description.length > 100 ? "..." : ""}`);
-				console.log(`    ${chalk.dim(`Data: ${quest.dataSource} | Effort: ${quest.estimatedEffort}`)}`);
-			}
-
-			if (quests.length > 10) {
-				console.log(chalk.dim(`\n  ... and ${quests.length - 10} more quests`));
-			}
-		} catch (error) {
-			console.error(
-				chalk.red("Failed to show improvement quests:"),
-				error instanceof Error ? error.message : String(error),
-			);
-		}
-	});
 
 // Parse and run
 program.parse();
