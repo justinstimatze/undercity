@@ -135,6 +135,11 @@ export interface Task {
 	// Computed during matchmaking
 	computedPackages?: string[]; // Auto-detected package boundaries
 	riskScore?: number; // File overlap risk (0-1)
+
+	// Task decomposition fields
+	parentId?: string; // ID of parent task (if this is a subtask)
+	subtaskIds?: string[]; // IDs of subtasks (if this was decomposed)
+	isDecomposed?: boolean; // True if this task was decomposed into subtasks
 }
 
 export interface TaskBoard {
@@ -247,6 +252,7 @@ export function getNextTask(): Task | undefined {
 	const pendingTasks = board.tasks.filter(
 		(task) =>
 			task.status === "pending" &&
+			!task.isDecomposed && // Skip decomposed tasks - execute subtasks instead
 			(!task.dependsOn ||
 				task.dependsOn.every((depId) => board.tasks.find((q) => q.id === depId && q.status === "complete"))),
 	);
@@ -388,7 +394,9 @@ export function getAllTasks(): Task[] {
  */
 export function getReadyTasksForBatch(count: number = 3): Task[] {
 	const board = loadTaskBoard();
-	const pendingTasks = board.tasks.filter((task) => task.status === "pending");
+	const pendingTasks = board.tasks.filter(
+		(task) => task.status === "pending" && !task.isDecomposed, // Skip decomposed tasks
+	);
 
 	// Compute priority with more sophisticated scoring
 	const scoredTasks = pendingTasks.map((task) => {
@@ -568,6 +576,101 @@ export function updateTaskAnalysis(
 			saveTaskBoard(board, path);
 		}
 	});
+}
+
+/**
+ * Decompose a task into subtasks
+ *
+ * Marks the parent task as decomposed and creates subtask entries.
+ * Subtasks inherit priority from parent (with small increments for ordering).
+ *
+ * @returns Array of created subtask IDs
+ */
+export function decomposeTaskIntoSubtasks(
+	parentTaskId: string,
+	subtasks: Array<{
+		objective: string;
+		estimatedFiles?: string[];
+		order: number;
+	}>,
+	path: string = DEFAULT_TASK_BOARD_PATH,
+): string[] {
+	return withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const parentTask = board.tasks.find((t) => t.id === parentTaskId);
+
+		if (!parentTask) {
+			throw new Error(`Parent task not found: ${parentTaskId}`);
+		}
+
+		// Mark parent as decomposed (no longer directly executable)
+		parentTask.isDecomposed = true;
+		parentTask.status = "pending"; // Keep pending but won't be picked up due to isDecomposed
+
+		// Create subtasks
+		const subtaskIds: string[] = [];
+		const basePriority = parentTask.priority ?? 999;
+
+		for (const subtask of subtasks) {
+			const subtaskId = generateTaskId();
+			const newTask: Task = {
+				id: subtaskId,
+				objective: subtask.objective,
+				status: "pending",
+				priority: basePriority + subtask.order * 0.1, // Preserve order within parent's priority
+				createdAt: new Date(),
+				parentId: parentTaskId,
+				estimatedFiles: subtask.estimatedFiles,
+				// Inherit some properties from parent
+				tags: parentTask.tags,
+				packageHints: parentTask.packageHints,
+			};
+			board.tasks.push(newTask);
+			subtaskIds.push(subtaskId);
+		}
+
+		// Update parent with subtask references
+		parentTask.subtaskIds = subtaskIds;
+
+		saveTaskBoard(board, path);
+		return subtaskIds;
+	});
+}
+
+/**
+ * Check if all subtasks of a parent are complete
+ */
+export function areAllSubtasksComplete(parentTaskId: string, path: string = DEFAULT_TASK_BOARD_PATH): boolean {
+	const board = loadTaskBoard(path);
+	const parentTask = board.tasks.find((t) => t.id === parentTaskId);
+
+	if (!parentTask || !parentTask.subtaskIds || parentTask.subtaskIds.length === 0) {
+		return false;
+	}
+
+	return parentTask.subtaskIds.every((subtaskId) => {
+		const subtask = board.tasks.find((t) => t.id === subtaskId);
+		return subtask?.status === "complete";
+	});
+}
+
+/**
+ * Mark a decomposed parent task as complete if all subtasks are done
+ */
+export function completeParentIfAllSubtasksDone(parentTaskId: string, path: string = DEFAULT_TASK_BOARD_PATH): boolean {
+	if (areAllSubtasksComplete(parentTaskId, path)) {
+		markTaskComplete(parentTaskId, path);
+		return true;
+	}
+	return false;
+}
+
+/**
+ * Get task by ID
+ */
+export function getTaskById(taskId: string, path: string = DEFAULT_TASK_BOARD_PATH): Task | undefined {
+	const board = loadTaskBoard(path);
+	return board.tasks.find((t) => t.id === taskId);
 }
 
 // Legacy aliases for backwards compatibility during migration

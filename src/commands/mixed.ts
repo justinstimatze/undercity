@@ -152,6 +152,7 @@ export const mixedCommands: CommandModule = {
 			.option("--no-commit", "Don't auto-commit on success")
 			.option("--no-typecheck", "Skip typecheck verification")
 			.option("--no-review", "Skip review passes")
+			.option("--no-decompose", "Skip atomicity check and task decomposition")
 			.action(
 				async (
 					goal: string | undefined,
@@ -166,6 +167,7 @@ export const mixedCommands: CommandModule = {
 						commit?: boolean;
 						typecheck?: boolean;
 						review?: boolean;
+						decompose?: boolean;
 					},
 				) => {
 					const { ParallelSoloOrchestrator } = await import("../parallel-solo.js");
@@ -248,15 +250,20 @@ export const mixedCommands: CommandModule = {
 
 					try {
 						// Get tasks from task board
-						const { getAllItems, markTaskComplete, markTaskFailed } = await import("../task.js");
+						const { getAllItems, markTaskComplete, markTaskFailed, decomposeTaskIntoSubtasks } = await import(
+							"../task.js"
+						);
 						const allTasks = getAllItems();
 						// Include both "pending" and "in_progress" tasks
 						// in_progress tasks may be stale from a previous crashed session
-						const pendingTasks = allTasks.filter((q) => q.status === "pending" || q.status === "in_progress");
+						// Also filter out decomposed tasks (their subtasks will be picked up instead)
+						const pendingTasks = allTasks.filter(
+							(q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed,
+						);
 
 						// Account for tasks already processed during recovery
 						const remainingCount = maxCount > 0 ? maxCount - tasksProcessed : 0;
-						const tasksToProcess = maxCount > 0 ? pendingTasks.slice(0, remainingCount) : pendingTasks;
+						let tasksToProcess = maxCount > 0 ? pendingTasks.slice(0, remainingCount) : pendingTasks;
 
 						// Skip if no tasks to process (either none pending or -n limit reached)
 						if (tasksToProcess.length === 0) {
@@ -265,6 +272,61 @@ export const mixedCommands: CommandModule = {
 							}
 							// If tasksProcessed > 0, we already showed recovery summary
 							return;
+						}
+
+						// Lazy decomposition check: assess atomicity and decompose complex tasks
+						if (options.decompose !== false) {
+							const { checkAndDecompose } = await import("../task-decomposer.js");
+
+							output.progress("Checking task atomicity...");
+							const atomicTasks: typeof tasksToProcess = [];
+
+							for (const task of tasksToProcess) {
+								const result = await checkAndDecompose(task.objective);
+
+								if (result.action === "decomposed" && result.subtasks && result.subtasks.length > 0) {
+									// Task was decomposed - add subtasks to board
+									output.info(
+										`Decomposed "${task.objective.substring(0, 50)}..." into ${result.subtasks.length} subtasks`,
+									);
+
+									decomposeTaskIntoSubtasks(
+										task.id,
+										result.subtasks.map((st) => ({
+											objective: st.objective,
+											estimatedFiles: st.estimatedFiles,
+											order: st.order,
+										})),
+									);
+
+									// Log subtask creation
+									for (let i = 0; i < result.subtasks.length; i++) {
+										output.debug(`  Subtask ${i + 1}: ${result.subtasks[i].objective.substring(0, 60)}`);
+									}
+								} else {
+									// Task is atomic, include in this batch
+									atomicTasks.push(task);
+								}
+							}
+
+							// Update tasksToProcess with only atomic tasks
+							tasksToProcess = atomicTasks;
+
+							// If all tasks were decomposed, refetch to get subtasks
+							if (tasksToProcess.length === 0) {
+								output.info("All tasks were decomposed. Fetching subtasks...");
+								const refreshedTasks = getAllItems();
+								const newPendingTasks = refreshedTasks.filter(
+									(q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed,
+								);
+								const newRemainingCount = maxCount > 0 ? maxCount - tasksProcessed : newPendingTasks.length;
+								tasksToProcess = maxCount > 0 ? newPendingTasks.slice(0, newRemainingCount) : newPendingTasks;
+
+								if (tasksToProcess.length === 0) {
+									output.info("No tasks ready after decomposition");
+									return;
+								}
+							}
 						}
 
 						const tasks = tasksToProcess.map((q) => q.objective);
