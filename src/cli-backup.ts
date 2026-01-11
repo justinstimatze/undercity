@@ -2537,7 +2537,23 @@ program
 				annealing: false,
 			};
 
-			fs.writeFileSync(configPath, `${JSON.stringify(sampleConfig, null, 2)}\n`);
+			const tempPath = `${configPath}.tmp`;
+			try {
+				// Write to temporary file first
+				fs.writeFileSync(tempPath, `${JSON.stringify(sampleConfig, null, 2)}\n`, {
+					encoding: "utf-8",
+					flag: "w",
+				});
+
+				// Atomically rename temporary file to target file
+				fs.renameSync(tempPath, configPath);
+			} catch (error) {
+				// Clean up temporary file if it exists
+				if (fs.existsSync(tempPath)) {
+					fs.unlinkSync(tempPath);
+				}
+				throw error;
+			}
 			console.log(chalk.green(`Created config file: ${configPath}`));
 			console.log(chalk.dim("Edit this file to customize your defaults."));
 			return;

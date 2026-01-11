@@ -5,7 +5,7 @@
  * against cloud models for simple code diff generation tasks.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { ExperimentFramework } from "./experiments/framework.js";
 import { QuestExperimentIntegrator } from "./experiments/integration.js";
 import type { ExperimentOutcome } from "./experiments/types.js";
@@ -302,7 +302,25 @@ export class DiffExperimentRunner {
    */
   saveResults(experimentId: string, outputPath: string): void {
     const report = this.generateReport(experimentId);
-    writeFileSync(outputPath, report);
+    const tempPath = `${outputPath}.tmp`;
+
+    try {
+      // Write to temporary file first
+      writeFileSync(tempPath, report, {
+        encoding: "utf-8",
+        flag: "w",
+      });
+
+      // Atomically rename temporary file to target file
+      renameSync(tempPath, outputPath);
+    } catch (error) {
+      // Clean up temporary file if it exists
+      if (existsSync(tempPath)) {
+        unlinkSync(tempPath);
+      }
+      throw error;
+    }
+
     console.log(`✅ Results saved to: ${outputPath}`);
   }
 }
