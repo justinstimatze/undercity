@@ -14,7 +14,6 @@ export default defineConfig({
 				"src/index.ts",
 				"src/cli.ts",
 				"src/commands/**",
-				"src/experiments/**",
 			],
 			// Thresholds commented out - enable when ready to enforce
 			// thresholds: {
