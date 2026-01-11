@@ -129,7 +129,7 @@ export class Persistence {
 	}
 
 	// ============== Inventory ==============
-	// Active raid state (steps, squad)
+	// Active session state (steps, squad)
 
 	getInventory(): Inventory {
 		return this.readJson<Inventory>("inventory.json", {
@@ -201,7 +201,7 @@ export class Persistence {
 	}
 
 	// ============== Loadout ==============
-	// Pre-raid configuration
+	// Pre-session configuration
 
 	getLoadout(): Loadout {
 		return this.readJson<Loadout>("loadout.json", {
@@ -338,7 +338,7 @@ export class Persistence {
 	}
 
 	// ============== Git Worktree State ==============
-	// Track active worktrees for raid isolation
+	// Track active worktrees for session isolation
 
 	getWorktreeState(): WorktreeState {
 		return this.readJson<WorktreeState>("worktree-state.json", {
@@ -364,7 +364,7 @@ export class Persistence {
 		this.saveWorktreeState(state);
 	}
 
-	getWorktreeForRaid(sessionId: string): WorktreeInfo | null {
+	getWorktreeForSession(sessionId: string): WorktreeInfo | null {
 		const state = this.getWorktreeState();
 		return state.worktrees[sessionId] || null;
 	}
@@ -766,9 +766,9 @@ export class Persistence {
 	}
 
 	/**
-	 * Get task metrics filtered by raid ID
+	 * Get task metrics filtered by session ID
 	 */
-	getTaskMetricsByRaid(sessionId: string): TaskMetrics[] {
+	getTaskMetricsBySession(sessionId: string): TaskMetrics[] {
 		return this.getTaskMetrics().filter((m) => m.sessionId === sessionId);
 	}
 

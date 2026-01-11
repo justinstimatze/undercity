@@ -229,7 +229,7 @@ export class SoloOrchestrator {
 		this.cleanupDirtyState();
 
 		const taskId = `solo_${Date.now()}`;
-		const sessionId = `raid_${Date.now()}`;
+		const sessionId = `session_${Date.now()}`;
 
 		console.log(chalk.cyan(`\n━━━ Task: ${task.substring(0, 60)}${task.length > 60 ? "..." : ""} ━━━`));
 

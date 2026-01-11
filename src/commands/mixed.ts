@@ -15,7 +15,7 @@ export const mixedCommands: CommandModule = {
 		program
 			.command("solo <goal>")
 			.description("[DEPRECATED: use 'grind <goal>'] Run a single task with verification")
-			.option("-s, --stream", "Stream raider activity")
+			.option("-s, --stream", "Stream agent activity")
 			.option("-v, --verbose", "Verbose logging")
 			.option("-m, --model <tier>", "Starting model tier: haiku, sonnet, opus", "sonnet")
 			.option("--no-commit", "Don't auto-commit on success")
@@ -137,7 +137,7 @@ export const mixedCommands: CommandModule = {
 			.description("Run tasks: pass a goal directly, or process from task board")
 			.option("-n, --count <n>", "Process only N tasks then stop", "0")
 			.option("-p, --parallel <n>", "Maximum concurrent tasks (1-5)", "1")
-			.option("-s, --stream", "Stream raider activity")
+			.option("-s, --stream", "Stream agent activity")
 			.option("-v, --verbose", "Verbose logging")
 			.option("--supervised", "Use supervised mode")
 			.option("-m, --model <tier>", "Starting model tier", "sonnet")
@@ -366,7 +366,7 @@ export const mixedCommands: CommandModule = {
 				const persistence = new Persistence(options.directory);
 				persistence.initializeUndercity(options.directory);
 				console.log(chalk.green(`✓ Initialized Undercity state directory: ${options.directory || ".undercity"}`));
-				console.log(chalk.dim("  Ready to launch raids and manage tasks"));
+				console.log(chalk.dim("  Ready to launch sessions and manage tasks"));
 			});
 
 		// Setup command
@@ -694,7 +694,7 @@ export const mixedCommands: CommandModule = {
 		// Experiment command (simplified)
 		program
 			.command("experiment")
-			.description("Run A/B experiments on raid configurations")
+			.description("Run A/B experiments on session configurations")
 			.argument("<action>", "Action to perform (list, show, start, analyze)")
 			.argument("[idOrTemplate]", "Experiment ID or template name")
 			.action(async (action: string, idOrTemplate: string | undefined) => {

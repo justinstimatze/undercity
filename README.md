@@ -48,9 +48,9 @@ undercity solo "Refactor auth module" --model opus
 
 ```bash
 undercity grind                 # Process all tasks
-undercity grind --limit 5       # Limit to 5 tasks
-undercity grind --parallel 3    # Run 3 tasks concurrently
-undercity grind --dry-run       # Preview what would run
+undercity grind -n 5            # Process 5 tasks then stop
+undercity grind -p 3            # Run 3 tasks concurrently
+undercity grind --no-commit     # Don't auto-commit on success
 ```
 
 ### Task Board

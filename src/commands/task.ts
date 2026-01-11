@@ -193,7 +193,7 @@ export const taskCommands: CommandModule = {
 		program
 			.command("plan <file>")
 			.description("Execute a plan file with good judgment (uses logistics to determine next steps)")
-			.option("-s, --stream", "Stream raider activity")
+			.option("-s, --stream", "Stream agent activity")
 			.option("-c, --continuous", "Keep executing until plan is complete")
 			.option("-n, --steps <n>", "Max steps to execute (default: unlimited in continuous mode)")
 			.option("--legacy", "Use legacy mode (re-read whole plan each iteration)")
@@ -354,7 +354,7 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 			.command("work")
 			.description("Process the backlog continuously (run in separate terminal)")
 			.option("-n, --count <n>", "Process only N goals then stop", "0")
-			.option("-s, --stream", "Stream raider activity")
+			.option("-s, --stream", "Stream agent activity")
 			.action(async (options: { count?: string; stream?: boolean }) => {
 				const maxCount = Number.parseInt(options.count || "0", 10);
 				let processed = 0;

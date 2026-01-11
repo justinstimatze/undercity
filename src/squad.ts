@@ -1,7 +1,7 @@
 /**
  * Squad Module
  *
- * Defines the agent types and manages the squad of raiders.
+ * Defines the agent types and manages the squad of agents.
  *
  * Agent Types:
  * - Scout: Fast codebase reconnaissance (Haiku, read-only)
@@ -170,7 +170,7 @@ export function createValidationPrompt(
 /**
  * Squad agent definitions for the Claude SDK
  *
- * These define the four raider types that go topside.
+ * These define the four agent types for task execution.
  */
 export const SQUAD_AGENTS: Record<AgentType, AgentDefinition> = {
 	// Scout - Fast recon, read-only, Haiku for speed/cost

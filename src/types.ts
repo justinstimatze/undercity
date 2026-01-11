@@ -714,7 +714,7 @@ export interface EfficiencyOutcome {
 	id: string;
 	/** Task ID this outcome relates to */
 	taskId: string;
-	/** Raid ID this outcome relates to */
+	/** Session ID this outcome relates to */
 	sessionId: string;
 	/** Experiment ID if part of an A/B test */
 	experimentId?: string;
@@ -835,7 +835,7 @@ export interface WorktreeInfo {
  * State tracking for git worktrees
  */
 export interface WorktreeState {
-	/** Active worktrees by raid ID */
+	/** Active worktrees by session ID */
 	worktrees: Record<string, WorktreeInfo>;
 	/** Last updated timestamp */
 	lastUpdated: Date;
@@ -869,7 +869,7 @@ export interface ParallelTaskState {
 
 /**
  * Recovery state for ParallelSoloOrchestrator
- * Simpler than Raid recovery - just tracks batch state for resume
+ * Simpler than Session recovery - just tracks batch state for resume
  */
 export interface ParallelRecoveryState {
 	/** Unique batch ID */

@@ -1,10 +1,42 @@
 {
   "tasks": [
     {
+      "id": "task-cleanup-test-vocabulary",
+      "objective": "[cleanup] Update test files vocabulary - replace 'raid' with 'session' in test data (helpers.ts, persistence.test.ts, dual-logger.test.ts, cli.test.ts)",
+      "status": "pending",
+      "priority": 0,
+      "createdAt": "2026-01-11T07:40:00.000Z",
+      "tags": ["cleanup", "tests"]
+    },
+    {
+      "id": "task-cleanup-dead-code",
+      "objective": "[cleanup] Remove dead code - enhanced-metrics.ts (no imports), knowledge-tracker.ts (unused), src/examples/ (dead demos)",
+      "status": "pending",
+      "priority": 1,
+      "createdAt": "2026-01-11T07:15:00.000Z",
+      "tags": ["cleanup"]
+    },
+    {
+      "id": "task-cleanup-local-llm",
+      "objective": "[cleanup] Remove local LLM experiment - local-llm.ts, diff-experiment-runner.ts, experiments/diff-generator.ts, and CLI quick-ollama-test command",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-11T07:10:00.000Z",
+      "tags": ["cleanup"]
+    },
+    {
+      "id": "task-cleanup-orphaned-experiments",
+      "objective": "[cleanup] Remove orphaned experiments framework - src/experiments/ directory (A/B framework not wired to anything)",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-11T07:15:00.000Z",
+      "tags": ["cleanup"]
+    },
+    {
       "id": "task-docs-readme-agent-format",
       "objective": "[docs] Rewrite README.md for agent consumption - remove prose/marketing, use tables and key-value structure, explicit command→behavior mappings",
       "status": "pending",
-      "priority": 0,
+      "priority": 10,
       "createdAt": "2026-01-11T07:05:00.000Z",
       "tags": ["docs", "agent-optimization"]
     },
@@ -12,7 +44,7 @@
       "id": "task-docs-architecture-agent-format",
       "objective": "[docs] Rewrite ARCHITECTURE.md for agent consumption - file→function→behavior mappings, decision trees for when to use what, no redundancy",
       "status": "pending",
-      "priority": 0,
+      "priority": 11,
       "createdAt": "2026-01-11T07:05:00.000Z",
       "tags": ["docs", "agent-optimization"]
     },
@@ -20,7 +52,7 @@
       "id": "task-docs-api-reference",
       "objective": "[docs] Create API.md - every exported function with signature, params, return type, error conditions, example usage",
       "status": "pending",
-      "priority": 0,
+      "priority": 12,
       "createdAt": "2026-01-11T07:05:00.000Z",
       "tags": ["docs", "agent-optimization"]
     },
@@ -28,7 +60,7 @@
       "id": "task-docs-decision-tree",
       "objective": "[docs] Create DECISIONS.md - when to use solo vs grind, when to escalate, which model for which task type, routing logic explained",
       "status": "pending",
-      "priority": 0,
+      "priority": 13,
       "createdAt": "2026-01-11T07:05:00.000Z",
       "tags": ["docs", "agent-optimization"]
     },
@@ -36,7 +68,7 @@
       "id": "task-feedback-metrics-reader",
       "objective": "[feedback] Create metrics reader - load metrics.jsonl, parse outcomes, compute success rates by model/complexity",
       "status": "pending",
-      "priority": 1,
+      "priority": 20,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": ["feedback-loop", "metrics"]
     },
@@ -44,7 +76,7 @@
       "id": "task-feedback-routing-adjustment",
       "objective": "[feedback] Wire metrics to routing - adjust complexity thresholds based on historical success rates per model tier",
       "status": "pending",
-      "priority": 2,
+      "priority": 21,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": ["feedback-loop", "routing"],
       "dependsOn": ["task-feedback-metrics-reader"]
@@ -53,7 +85,7 @@
       "id": "task-feedback-introspect-command",
       "objective": "[feedback] Add 'undercity introspect' command - analyze own metrics, identify improvement opportunities, generate tasks",
       "status": "pending",
-      "priority": 3,
+      "priority": 22,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": ["feedback-loop", "self-improvement"],
       "dependsOn": ["task-feedback-metrics-reader"]
@@ -62,7 +94,7 @@
       "id": "task-feedback-ab-integration",
       "objective": "[feedback] Wire experiment framework to grind - randomly assign tasks to variants, track which routing/prompts work better",
       "status": "pending",
-      "priority": 4,
+      "priority": 23,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": ["feedback-loop", "experiments"]
     },
@@ -70,40 +102,16 @@
       "id": "task-feedback-pattern-learning",
       "objective": "[feedback] Learn task patterns - cluster similar tasks by objective keywords, track which patterns succeed at which tiers",
       "status": "pending",
-      "priority": 5,
+      "priority": 24,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": ["feedback-loop", "learning"],
       "dependsOn": ["task-feedback-metrics-reader"]
     },
     {
-      "id": "task-metrics-success-rate",
-      "objective": "[metrics] Track success rate per complexity level - which tasks need escalation most?",
-      "status": "pending",
-      "priority": 10,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "tags": ["metrics"]
-    },
-    {
-      "id": "task-grind-improvements",
-      "objective": "[grind] Improve grind command - better task selection, skip already-complete, priority ordering",
-      "status": "pending",
-      "priority": 11,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "tags": ["grind"]
-    },
-    {
-      "id": "task-conflict-detection",
-      "objective": "[integration] Conflict detection - if two workers touch same files, flag before merge attempt",
-      "status": "pending",
-      "priority": 12,
-      "createdAt": "2026-01-10T09:53:15.928Z",
-      "tags": ["parallel"]
-    },
-    {
       "id": "task-context-ast-indexer",
       "objective": "[context] Build AST indexer - parse TypeScript files, extract function/class/type definitions, store in queryable format for fast lookup",
       "status": "pending",
-      "priority": 6,
+      "priority": 30,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": ["context", "tooling"]
     },
@@ -111,7 +119,7 @@
       "id": "task-context-dependency-graph",
       "objective": "[context] Build dependency graph - map imports/exports between files, identify which files are affected by changes to a given file",
       "status": "pending",
-      "priority": 7,
+      "priority": 31,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": ["context", "tooling"]
     },
@@ -119,7 +127,7 @@
       "id": "task-context-file-summaries",
       "objective": "[context] Pre-compute file summaries - for each file, generate a 1-2 line description of purpose/exports, cache for fast context loading",
       "status": "pending",
-      "priority": 8,
+      "priority": 32,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": ["context", "tooling"]
     },
@@ -127,24 +135,40 @@
       "id": "task-context-smart-context",
       "objective": "[context] Smart context selection - given a task, automatically identify which files/functions are relevant using AST + dependency graph",
       "status": "pending",
-      "priority": 9,
+      "priority": 33,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": ["context", "tooling"],
       "dependsOn": ["task-context-ast-indexer", "task-context-dependency-graph"]
     },
     {
-      "id": "task-cleanup-local-llm",
-      "objective": "[cleanup] Remove local LLM experiment code - delete local-llm.ts, diff-generator.ts, diff-experiment-runner.ts and related imports",
+      "id": "task-metrics-success-rate",
+      "objective": "[metrics] Track success rate per complexity level - which tasks need escalation most?",
       "status": "pending",
-      "priority": 13,
-      "createdAt": "2026-01-11T07:10:00.000Z",
-      "tags": ["cleanup"]
+      "priority": 40,
+      "createdAt": "2026-01-10T08:50:00.000Z",
+      "tags": ["metrics"]
+    },
+    {
+      "id": "task-grind-improvements",
+      "objective": "[grind] Improve grind command - better task selection, skip already-complete, priority ordering",
+      "status": "pending",
+      "priority": 41,
+      "createdAt": "2026-01-10T08:50:00.000Z",
+      "tags": ["grind"]
+    },
+    {
+      "id": "task-conflict-detection",
+      "objective": "[integration] Conflict detection - if two workers touch same files, flag before merge attempt",
+      "status": "pending",
+      "priority": 42,
+      "createdAt": "2026-01-10T09:53:15.928Z",
+      "tags": ["parallel"]
     },
     {
       "id": "task-verify-retry-logic",
       "objective": "[grind] Improve verification retry logic - allow multiple fix attempts at same tier before escalating",
       "status": "pending",
-      "priority": 14,
+      "priority": 43,
       "createdAt": "2026-01-10T10:47:55.888Z",
       "tags": ["grind", "verification"]
     },
@@ -152,7 +176,7 @@
       "id": "task-dspy-evaluation",
       "objective": "[learning] Evaluate DSPy for prompt optimization - assess if prompt quality is the bottleneck vs routing/model selection",
       "status": "pending",
-      "priority": 20,
+      "priority": 50,
       "createdAt": "2026-01-10T09:51:35.101Z",
       "tags": ["learning", "prompts"]
     },
@@ -160,7 +184,7 @@
       "id": "task-continuous-sync",
       "objective": "[continuous] Sync task board with grind - mark tasks complete when merged, update status during execution",
       "status": "pending",
-      "priority": 30,
+      "priority": 60,
       "createdAt": "2026-01-11T02:15:00.000Z",
       "tags": ["continuous"]
     },
@@ -168,10 +192,84 @@
       "id": "task-spell-nonblocking",
       "objective": "[verify] Make spell check non-blocking - spell failures should warn but not fail verification",
       "status": "pending",
-      "priority": 31,
+      "priority": 61,
       "createdAt": "2026-01-11T02:15:00.000Z",
       "tags": ["verification"]
+    },
+    {
+      "id": "task-onboard-init",
+      "objective": "[onboard] Create 'undercity init' command - interactive/auto-detecting setup for new projects, creates .undercity/ structure",
+      "status": "pending",
+      "priority": 70,
+      "createdAt": "2026-01-11T07:30:00.000Z",
+      "tags": ["onboarding", "portability"]
+    },
+    {
+      "id": "task-onboard-detect-tooling",
+      "objective": "[onboard] Auto-detect project tooling - scan package.json/configs for package manager, test runner, linter, build system",
+      "status": "pending",
+      "priority": 71,
+      "createdAt": "2026-01-11T07:30:00.000Z",
+      "tags": ["onboarding", "portability"]
+    },
+    {
+      "id": "task-onboard-verify-abstraction",
+      "objective": "[onboard] Abstract verification loop - replace hardcoded 'pnpm check && pnpm build && pnpm test' with configurable project-specific commands",
+      "status": "pending",
+      "priority": 72,
+      "createdAt": "2026-01-11T07:30:00.000Z",
+      "tags": ["onboarding", "portability"],
+      "dependsOn": ["task-onboard-detect-tooling"]
+    },
+    {
+      "id": "task-onboard-scout-rules",
+      "objective": "[onboard] Scout-generated rules - use scout agent to analyze codebase and generate .claude/rules/ with architecture, patterns, conventions",
+      "status": "pending",
+      "priority": 73,
+      "createdAt": "2026-01-11T07:30:00.000Z",
+      "tags": ["onboarding", "portability"]
+    },
+    {
+      "id": "task-onboard-project-profile",
+      "objective": "[onboard] Create project profile system - .undercity/profile.json storing learned patterns, failure modes, optimal thresholds per project",
+      "status": "pending",
+      "priority": 74,
+      "createdAt": "2026-01-11T07:30:00.000Z",
+      "tags": ["onboarding", "learning"]
+    },
+    {
+      "id": "task-onboard-self-tune",
+      "objective": "[onboard] Self-tuning after tasks - analyze verification failures, adjust complexity routing, update project profile automatically",
+      "status": "pending",
+      "priority": 75,
+      "createdAt": "2026-01-11T07:30:00.000Z",
+      "tags": ["onboarding", "learning"],
+      "dependsOn": ["task-onboard-project-profile", "task-feedback-metrics-reader"]
+    },
+    {
+      "id": "task-portable-package",
+      "objective": "[portable] Make undercity installable as npm package - 'npx undercity init' or 'pnpm add -D undercity' workflow",
+      "status": "pending",
+      "priority": 80,
+      "createdAt": "2026-01-11T07:30:00.000Z",
+      "tags": ["portability", "distribution"]
+    },
+    {
+      "id": "task-agent-optimize-oracle",
+      "objective": "[agent-opt] Rewrite oracle cards for agent utility - replace poetic lore with concrete examples, action patterns, or decision heuristics that actually help agents",
+      "status": "pending",
+      "priority": 14,
+      "createdAt": "2026-01-11T07:35:00.000Z",
+      "tags": ["agent-optimization", "prompts"]
+    },
+    {
+      "id": "task-agent-optimize-prompts",
+      "objective": "[agent-opt] Audit all agent prompts (squad definitions) - optimize for task completion, remove fluff, add concrete behavioral guidelines",
+      "status": "pending",
+      "priority": 15,
+      "createdAt": "2026-01-11T07:35:00.000Z",
+      "tags": ["agent-optimization", "prompts"]
     }
   ],
-  "lastUpdated": "2026-01-11T07:00:00.000Z"
+  "lastUpdated": "2026-01-11T07:40:00.000Z"
 }

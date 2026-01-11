@@ -383,7 +383,7 @@ export class FileTracker {
 		const conflicts: CrossTaskConflict[] = [];
 		const writeOps: FileOperation[] = ["write", "edit", "delete"];
 
-		// Group entries by task (raid) - active tasks only
+		// Group entries by task (session) - active tasks only
 		const taskEntries = new Map<string, FileTrackingEntry[]>();
 		for (const entry of Object.values(this.state.entries)) {
 			if (!entry.endedAt) {
