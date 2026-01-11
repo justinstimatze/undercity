@@ -100,12 +100,45 @@
       "tags": ["parallel"]
     },
     {
-      "id": "task-local-llm-experiment",
-      "objective": "[experiment] Test local LLM code generation - try having Ollama generate diffs for simple edits, measure success rate vs haiku",
+      "id": "task-context-ast-indexer",
+      "objective": "[context] Build AST indexer - parse TypeScript files, extract function/class/type definitions, store in queryable format for fast lookup",
+      "status": "pending",
+      "priority": 6,
+      "createdAt": "2026-01-11T07:10:00.000Z",
+      "tags": ["context", "tooling"]
+    },
+    {
+      "id": "task-context-dependency-graph",
+      "objective": "[context] Build dependency graph - map imports/exports between files, identify which files are affected by changes to a given file",
+      "status": "pending",
+      "priority": 7,
+      "createdAt": "2026-01-11T07:10:00.000Z",
+      "tags": ["context", "tooling"]
+    },
+    {
+      "id": "task-context-file-summaries",
+      "objective": "[context] Pre-compute file summaries - for each file, generate a 1-2 line description of purpose/exports, cache for fast context loading",
+      "status": "pending",
+      "priority": 8,
+      "createdAt": "2026-01-11T07:10:00.000Z",
+      "tags": ["context", "tooling"]
+    },
+    {
+      "id": "task-context-smart-context",
+      "objective": "[context] Smart context selection - given a task, automatically identify which files/functions are relevant using AST + dependency graph",
+      "status": "pending",
+      "priority": 9,
+      "createdAt": "2026-01-11T07:10:00.000Z",
+      "tags": ["context", "tooling"],
+      "dependsOn": ["task-context-ast-indexer", "task-context-dependency-graph"]
+    },
+    {
+      "id": "task-cleanup-local-llm",
+      "objective": "[cleanup] Remove local LLM experiment code - delete local-llm.ts, diff-generator.ts, diff-experiment-runner.ts and related imports",
       "status": "pending",
       "priority": 13,
-      "createdAt": "2026-01-10T10:22:44.046Z",
-      "tags": ["experiment", "local-llm"]
+      "createdAt": "2026-01-11T07:10:00.000Z",
+      "tags": ["cleanup"]
     },
     {
       "id": "task-verify-retry-logic",
