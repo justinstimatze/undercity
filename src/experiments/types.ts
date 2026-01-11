@@ -4,7 +4,6 @@
  * Defines types for A/B experiments, variant assignment, and statistical analysis
  */
 
-import type { LocalModel } from "../local-llm.js";
 import type { AgentType, ContextSize, ModelChoice, ParallelismLevel } from "../types.js";
 
 /**
@@ -29,13 +28,7 @@ export interface VariantParameters {
 	/** Auto-approval setting */
 	autoApprove?: boolean;
 	/** Custom parameters for specific hypotheses */
-	customParameters?: Record<string, any>;
-	/** Local model choice for diff generation experiments */
-	localModel?: LocalModel;
-	/** Use local LLM for code generation */
-	useLocalLLM?: boolean;
-	/** Diff generation strategy */
-	diffStrategy?: "full-file" | "minimal-diff" | "context-aware";
+	customParameters?: Record<string, unknown>;
 }
 
 /**
@@ -70,12 +63,6 @@ export interface SuccessMetrics {
 	avgReworkCount: number;
 	/** Human satisfaction score (1-5) if available */
 	humanSatisfaction?: number;
-	/** Diff generation success rate (for code generation experiments) */
-	diffSuccessRate?: number;
-	/** Average diff application success rate */
-	diffApplicationSuccessRate?: number;
-	/** Average time to generate diff in milliseconds */
-	avgDiffGenerationTimeMs?: number;
 }
 
 /**
@@ -103,20 +90,7 @@ export interface ExperimentOutcome {
 	/** When the outcome was recorded */
 	recordedAt: Date;
 	/** Additional metadata */
-	metadata?: Record<string, any>;
-	/** Diff generation specific metrics */
-	diffMetrics?: {
-		/** Whether diff was successfully generated */
-		diffGenerated: boolean;
-		/** Whether diff was successfully applied */
-		diffApplied: boolean;
-		/** Time taken to generate diff */
-		diffGenerationTimeMs: number;
-		/** Model used for diff generation */
-		diffModel?: string;
-		/** Size of generated diff in characters */
-		diffSize?: number;
-	};
+	metadata?: Record<string, unknown>;
 }
 
 /**

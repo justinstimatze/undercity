@@ -685,21 +685,5 @@ export const mixedCommands: CommandModule = {
 				}
 			});
 
-		// Quick Ollama test
-		program
-			.command("quick-ollama-test")
-			.description("Run a quick Ollama vs Haiku diff generation test")
-			.action(async () => {
-				console.log("🧪 Running quick Ollama experiment...");
-
-				try {
-					const { runQuickOllamaExperiment } = await import("../diff-experiment-runner.js");
-					const experimentId = await runQuickOllamaExperiment();
-					console.log(`✅ Quick experiment completed: ${experimentId}`);
-					console.log(`Use 'undercity experiment show ${experimentId}' to see results`);
-				} catch (error) {
-					console.error(`❌ Quick experiment failed: ${error}`);
-				}
-			});
 	},
 };

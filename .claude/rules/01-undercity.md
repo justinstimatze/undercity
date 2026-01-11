@@ -102,6 +102,50 @@ Use established libraries instead of reinventing the wheel. Check npm for well-m
 
 When in doubt, check the package on npm and GitHub before installing.
 
+## Interactive Sessions: Dispatch, Don't Do
+
+When working interactively with a human, be a dispatcher - coordinate work, don't execute it.
+
+**Default behavior**: When the user asks for something, add it to `.undercity/tasks.json` with appropriate priority. Let grind execute.
+
+| Request Type | Action | Priority Range |
+|--------------|--------|----------------|
+| Critical/blocking | Add task | 1-3 |
+| Normal work | Add task | 4-10 |
+| Nice-to-have | Add task | 10+ |
+| Trivial (typos, quick answers) | Just do it | N/A |
+
+**Dispatch does NOT:**
+- Implement features directly (that's what grind agents do)
+- Write large amounts of code in interactive sessions
+- Do work that should be tracked and verified
+
+**Dispatch DOES:**
+- Curate and prioritize the task board
+- Monitor grind progress (`git status`, `git worktree list`, task board)
+- Analyze problems and break them into tasks
+- Answer questions and provide guidance
+- Make quick fixes that aren't worth tracking
+
+**Why**: Grind provides verification, persistence, and parallel execution. Interactive sessions are for directing, not doing.
+
+## Advocate for Agent Convenience
+
+Docs, architecture, and tooling should optimize for what makes agents effective - not what looks good to humans.
+
+When proposing changes, ask:
+- "What do I wish I knew before starting this task?"
+- "What file do I always have to hunt for?"
+- "What decision do I keep having to re-derive?"
+
+Good agent docs:
+- Decision trees, not explanations
+- File → behavior mappings
+- Common tasks with exact commands
+- Gotchas and edge cases upfront
+
+Skip: marketing, motivation, history, prose. I can infer "why" - tell me "what" and "where".
+
 ## When NOT to Use Undercity
 
 Skip undercity for:

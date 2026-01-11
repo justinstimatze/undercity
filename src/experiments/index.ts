@@ -3,7 +3,6 @@
  */
 
 export * from "./cli.js";
-export * from "./diff-generator.js";
 export * from "./examples.js";
 export * from "./framework.js";
 export * from "./integration.js";
@@ -21,4 +20,3 @@ export function createExperimentCLI(storagePath?: string) {
 
 import { ExperimentCLI } from "./cli.js";
 import { ExperimentFramework } from "./framework.js";
-import { TaskExperimentIntegrator } from "./integration.js";
