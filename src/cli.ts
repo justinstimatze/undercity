@@ -27,6 +27,7 @@ import { Command } from "commander";
 import { analysisCommands } from "./commands/analysis.js";
 import { mixedCommands } from "./commands/mixed.js";
 import { taskCommands } from "./commands/task.js";
+import { configureOutput, type OutputMode } from "./output.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -47,7 +48,19 @@ const program = new Command();
 program
 	.name("undercity")
 	.description("Multi-agent orchestrator for Claude Max - Gas Town for budget extraction")
-	.version(getVersion());
+	.version(getVersion())
+	.option("--human", "Human-readable output (default: structured JSON for agents)")
+	.option("--agent", "Structured JSON output (default when not a TTY)")
+	.hook("preAction", () => {
+		// Configure output mode based on global flags
+		const opts = program.opts();
+		if (opts.human) {
+			configureOutput({ mode: "human" as OutputMode });
+		} else if (opts.agent) {
+			configureOutput({ mode: "agent" as OutputMode });
+		}
+		// Otherwise auto-detect (done in output.ts)
+	});
 
 // Register all command modules
 taskCommands.register(program);

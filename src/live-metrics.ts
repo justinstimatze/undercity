@@ -13,7 +13,7 @@ import { join } from "node:path";
  * Get the main git worktree path (not a linked worktree).
  * This ensures metrics always write to the main repo's .undercity/
  */
-function getMainWorktreePath(): string {
+export function getMainWorktreePath(): string {
 	try {
 		// Get main worktree from git
 		const result = execSync("git worktree list --porcelain 2>/dev/null | head -1 | cut -d' ' -f2", {

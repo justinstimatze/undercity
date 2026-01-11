@@ -5,6 +5,7 @@
 import chalk from "chalk";
 import { getConfigSource, loadConfig, mergeWithConfig } from "../config.js";
 import { type OracleCard, UndercityOracle } from "../oracle.js";
+import * as output from "../output.js";
 import { Persistence } from "../persistence.js";
 import { RateLimitTracker } from "../rate-limit.js";
 import type { CommandModule } from "./types.js";
@@ -177,56 +178,52 @@ export const mixedCommands: CommandModule = {
 
 					// If a goal is passed directly, run it as a single task
 					if (goal) {
-						console.log(chalk.cyan.bold("\n⚡ Undercity Grind"));
-						console.log(chalk.dim("  Running task directly"));
-						console.log();
+						output.header("Undercity Grind", "Running task directly");
 
 						try {
 							const result = await orchestrator.runParallel([goal]);
-							console.log(chalk.green.bold("\n📊 Complete"));
-							console.log(`  Successful: ${result.successful}`);
-							console.log(`  Failed: ${result.failed}`);
-							console.log(`  Duration: ${Math.round(result.durationMs / 1000)}s`);
+							output.summary("Complete", [
+								{ label: "Successful", value: result.successful, status: result.successful > 0 ? "good" : "neutral" },
+								{ label: "Failed", value: result.failed, status: result.failed > 0 ? "bad" : "neutral" },
+								{ label: "Duration", value: `${Math.round(result.durationMs / 1000)}s` },
+							]);
 						} catch (error) {
-							console.log(chalk.red(`\n✗ Error: ${error}`));
+							output.error(`Task failed: ${error}`);
 							process.exit(1);
 						}
 						return;
 					}
 
 					// No goal provided - process from task board
-					console.log(chalk.cyan.bold("\n⚙️ Undercity Grind Mode"));
-					console.log(chalk.dim("  Autonomous operation • Rate limit handling • Infinite processing"));
-					console.log();
+					output.header("Undercity Grind Mode", "Autonomous operation • Rate limit handling • Infinite processing");
 
 					// Check for interrupted batch and offer to resume
 					if (orchestrator.hasActiveRecovery()) {
 						const recoveryInfo = orchestrator.getRecoveryInfo();
 						if (recoveryInfo) {
-							console.log(chalk.yellow.bold("⚠ Interrupted batch detected"));
-							console.log(chalk.yellow(`  Batch: ${recoveryInfo.batchId}`));
-							console.log(chalk.yellow(`  Started: ${recoveryInfo.startedAt.toLocaleString()}`));
-							console.log(
-								chalk.yellow(
-									`  Tasks: ${recoveryInfo.tasksComplete} complete, ${recoveryInfo.tasksFailed} failed, ${recoveryInfo.tasksPending} pending`,
-								),
-							);
-							console.log();
+							output.warning("Interrupted batch detected", {
+								batchId: recoveryInfo.batchId,
+								startedAt: recoveryInfo.startedAt.toISOString(),
+								tasksComplete: recoveryInfo.tasksComplete,
+								tasksFailed: recoveryInfo.tasksFailed,
+								tasksPending: recoveryInfo.tasksPending,
+							});
 
 							// Auto-resume the pending tasks
-							console.log(chalk.cyan("  Resuming interrupted batch..."));
+							output.progress("Resuming interrupted batch...");
 							const pendingTasks = await orchestrator.resumeRecovery();
 
 							if (pendingTasks.length > 0) {
 								const result = await orchestrator.runParallel(pendingTasks);
-								console.log(chalk.green.bold("\n📊 Recovery Complete"));
-								console.log(`  Resumed: ${result.results.length}`);
-								console.log(`  Successful: ${result.successful}`);
-								console.log(`  Failed: ${result.failed}`);
-								console.log(`  Merged: ${result.merged}`);
+								output.summary("Recovery Complete", [
+									{ label: "Resumed", value: result.results.length },
+									{ label: "Successful", value: result.successful, status: "good" },
+									{ label: "Failed", value: result.failed, status: result.failed > 0 ? "bad" : "neutral" },
+									{ label: "Merged", value: result.merged },
+								]);
 								return;
 							}
-							console.log(chalk.dim("  No pending tasks to resume"));
+							output.info("No pending tasks to resume");
 						}
 					}
 
@@ -253,23 +250,24 @@ export const mixedCommands: CommandModule = {
 							if (taskId) {
 								if (taskResult.merged) {
 									markTaskComplete(taskId);
-									console.log(chalk.dim(`  Task ${taskId} marked complete`));
+									output.taskComplete(taskId, "Task merged successfully");
 								} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
-									const error = taskResult.mergeError || "Task failed";
-									markTaskFailed(taskId, error);
-									console.log(chalk.dim(`  Task ${taskId} marked failed: ${error}`));
+									const errorMsg = taskResult.mergeError || "Task failed";
+									markTaskFailed(taskId, errorMsg);
+									output.taskFailed(taskId, "Task failed", errorMsg);
 								}
 							}
 						}
 
-						console.log(chalk.green.bold("\n📊 Grind Session Complete"));
-						console.log(`  Total processed: ${result.results.length}`);
-						console.log(`  Successful: ${result.successful}`);
-						console.log(`  Failed: ${result.failed}`);
-						console.log(`  Merged: ${result.merged}`);
-						console.log(`  Duration: ${Math.round(result.durationMs / 60000)} minutes`);
+						output.summary("Grind Session Complete", [
+							{ label: "Total processed", value: result.results.length },
+							{ label: "Successful", value: result.successful, status: result.successful > 0 ? "good" : "neutral" },
+							{ label: "Failed", value: result.failed, status: result.failed > 0 ? "bad" : "neutral" },
+							{ label: "Merged", value: result.merged },
+							{ label: "Duration", value: `${Math.round(result.durationMs / 60000)} minutes` },
+						]);
 					} catch (error) {
-						console.error(chalk.red(`Grind error: ${error instanceof Error ? error.message : error}`));
+						output.error(`Grind error: ${error instanceof Error ? error.message : error}`);
 						process.exit(1);
 					}
 				},

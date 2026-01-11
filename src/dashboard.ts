@@ -10,7 +10,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import blessed from "blessed";
 import * as contrib from "blessed-contrib";
-import type { LiveMetrics } from "./live-metrics.js";
+import { getMainWorktreePath, type LiveMetrics } from "./live-metrics.js";
 
 // Type helpers for blessed-contrib widgets
 interface LogWidget {
@@ -57,10 +57,11 @@ function getFileMtime(filePath: string): number {
 	}
 }
 
-// Load live metrics from file
+// Load live metrics from file (use main worktree path for consistency)
 function loadLiveMetrics(): LiveMetrics | null {
 	try {
-		const metricsPath = join(process.cwd(), ".undercity", "live-metrics.json");
+		const basePath = getMainWorktreePath();
+		const metricsPath = join(basePath, ".undercity", "live-metrics.json");
 		if (!existsSync(metricsPath)) return null;
 		const content = readFileSync(metricsPath, "utf-8");
 		return JSON.parse(content) as LiveMetrics;
@@ -255,9 +256,10 @@ export function launchDashboard(): void {
 
 	function getTaskStats(): { pending: number; complete: number; failed: number; total: number; inProgress: number } {
 		try {
-			const path = join(process.cwd(), ".undercity", "tasks.json");
-			if (!existsSync(path)) return { pending: 0, complete: 0, failed: 0, total: 0, inProgress: 0 };
-			const data = JSON.parse(readFileSync(path, "utf-8"));
+			const basePath = getMainWorktreePath();
+			const tasksPath = join(basePath, ".undercity", "tasks.json");
+			if (!existsSync(tasksPath)) return { pending: 0, complete: 0, failed: 0, total: 0, inProgress: 0 };
+			const data = JSON.parse(readFileSync(tasksPath, "utf-8"));
 			const q = data.tasks || [];
 			return {
 				pending: q.filter((x: { status: string }) => x.status === "pending").length,
@@ -340,7 +342,8 @@ export function launchDashboard(): void {
 			);
 
 			// Check for metrics file updates to log
-			const metricsPath = join(process.cwd(), ".undercity", "live-metrics.json");
+			const metricsBasePath = getMainWorktreePath();
+			const metricsPath = join(metricsBasePath, ".undercity", "live-metrics.json");
 			const currentMetricsMtime = getFileMtime(metricsPath);
 			if (currentMetricsMtime > lastMetricsMtime && lastMetricsMtime > 0) {
 				activityLog.log(
@@ -356,7 +359,8 @@ export function launchDashboard(): void {
 		}
 
 		// OUTPUT FILE
-		const logPath = join(process.cwd(), ".undercity", "logs", "current.log");
+		const logBasePath = getMainWorktreePath();
+		const logPath = join(logBasePath, ".undercity", "logs", "current.log");
 		const currentMtime = getFileMtime(logPath);
 
 		if (currentMtime > lastLogMtime) {
