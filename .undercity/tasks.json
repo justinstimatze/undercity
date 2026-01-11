@@ -6,7 +6,10 @@
       "status": "completed",
       "priority": 0,
       "createdAt": "2026-01-11T07:40:00.000Z",
-      "tags": ["cleanup", "tests"]
+      "tags": [
+        "cleanup",
+        "tests"
+      ]
     },
     {
       "id": "task-cleanup-dead-code",
@@ -14,23 +17,34 @@
       "status": "completed",
       "priority": 1,
       "createdAt": "2026-01-11T07:15:00.000Z",
-      "tags": ["cleanup"]
+      "tags": [
+        "cleanup"
+      ]
     },
     {
       "id": "task-fix-worktree-deps",
       "objective": "[critical] Fix worktree dependency installation - run 'pnpm install' in worktrees before verification so tests can run. Currently worktrees have no node_modules and verification fails with 'vitest not found'",
-      "status": "pending",
+      "status": "completed",
       "priority": 4,
       "createdAt": "2026-01-11T08:00:00.000Z",
-      "tags": ["critical", "worktree", "verification"]
+      "completedAt": "2026-01-11T08:00:00.000Z",
+      "tags": [
+        "critical",
+        "worktree",
+        "verification"
+      ]
     },
     {
       "id": "task-fix-watch-dashboard",
       "objective": "[dashboard] Fix watch dashboard - burn rate graph not updating, cache hit graph not updating, tasks pane not refreshing dynamically, SDK metrics showing 0 tokens/burn",
-      "status": "pending",
+      "status": "completed",
       "priority": 5,
       "createdAt": "2026-01-11T07:45:00.000Z",
-      "tags": ["dashboard", "metrics"]
+      "completedAt": "2026-01-11T07:54:50.687Z",
+      "tags": [
+        "dashboard",
+        "metrics"
+      ]
     },
     {
       "id": "task-fix-review-escalation",
@@ -38,15 +52,22 @@
       "status": "pending",
       "priority": 6,
       "createdAt": "2026-01-11T07:50:00.000Z",
-      "tags": ["review", "escalation"]
+      "tags": [
+        "review",
+        "escalation"
+      ]
     },
     {
       "id": "task-improve-streaming-output",
       "objective": "[output] Improve terminal streaming output - JSON format should be default (for agent consumption), add --human flag for human-readable output. Current streaming is noisy and not optimized for either use case",
-      "status": "pending",
+      "status": "completed",
       "priority": 7,
       "createdAt": "2026-01-11T08:00:00.000Z",
-      "tags": ["output", "cli"]
+      "completedAt": "2026-01-11T07:54:50.687Z",
+      "tags": [
+        "output",
+        "cli"
+      ]
     },
     {
       "id": "task-cleanup-local-llm",
@@ -54,7 +75,9 @@
       "status": "pending",
       "priority": 2,
       "createdAt": "2026-01-11T07:10:00.000Z",
-      "tags": ["cleanup"]
+      "tags": [
+        "cleanup"
+      ]
     },
     {
       "id": "task-cleanup-orphaned-experiments",
@@ -62,7 +85,9 @@
       "status": "pending",
       "priority": 3,
       "createdAt": "2026-01-11T07:15:00.000Z",
-      "tags": ["cleanup"]
+      "tags": [
+        "cleanup"
+      ]
     },
     {
       "id": "task-docs-readme-agent-format",
@@ -70,7 +95,10 @@
       "status": "pending",
       "priority": 10,
       "createdAt": "2026-01-11T07:05:00.000Z",
-      "tags": ["docs", "agent-optimization"]
+      "tags": [
+        "docs",
+        "agent-optimization"
+      ]
     },
     {
       "id": "task-docs-architecture-agent-format",
@@ -78,7 +106,10 @@
       "status": "pending",
       "priority": 11,
       "createdAt": "2026-01-11T07:05:00.000Z",
-      "tags": ["docs", "agent-optimization"]
+      "tags": [
+        "docs",
+        "agent-optimization"
+      ]
     },
     {
       "id": "task-docs-api-reference",
@@ -86,7 +117,10 @@
       "status": "pending",
       "priority": 12,
       "createdAt": "2026-01-11T07:05:00.000Z",
-      "tags": ["docs", "agent-optimization"]
+      "tags": [
+        "docs",
+        "agent-optimization"
+      ]
     },
     {
       "id": "task-docs-decision-tree",
@@ -94,7 +128,10 @@
       "status": "pending",
       "priority": 13,
       "createdAt": "2026-01-11T07:05:00.000Z",
-      "tags": ["docs", "agent-optimization"]
+      "tags": [
+        "docs",
+        "agent-optimization"
+      ]
     },
     {
       "id": "task-feedback-metrics-reader",
@@ -102,7 +139,10 @@
       "status": "pending",
       "priority": 20,
       "createdAt": "2026-01-11T07:00:00.000Z",
-      "tags": ["feedback-loop", "metrics"]
+      "tags": [
+        "feedback-loop",
+        "metrics"
+      ]
     },
     {
       "id": "task-feedback-routing-adjustment",
@@ -110,8 +150,13 @@
       "status": "pending",
       "priority": 21,
       "createdAt": "2026-01-11T07:00:00.000Z",
-      "tags": ["feedback-loop", "routing"],
-      "dependsOn": ["task-feedback-metrics-reader"]
+      "tags": [
+        "feedback-loop",
+        "routing"
+      ],
+      "dependsOn": [
+        "task-feedback-metrics-reader"
+      ]
     },
     {
       "id": "task-feedback-introspect-command",
@@ -119,8 +164,13 @@
       "status": "pending",
       "priority": 22,
       "createdAt": "2026-01-11T07:00:00.000Z",
-      "tags": ["feedback-loop", "self-improvement"],
-      "dependsOn": ["task-feedback-metrics-reader"]
+      "tags": [
+        "feedback-loop",
+        "self-improvement"
+      ],
+      "dependsOn": [
+        "task-feedback-metrics-reader"
+      ]
     },
     {
       "id": "task-feedback-ab-integration",
@@ -128,7 +178,10 @@
       "status": "pending",
       "priority": 23,
       "createdAt": "2026-01-11T07:00:00.000Z",
-      "tags": ["feedback-loop", "experiments"]
+      "tags": [
+        "feedback-loop",
+        "experiments"
+      ]
     },
     {
       "id": "task-feedback-pattern-learning",
@@ -136,8 +189,13 @@
       "status": "pending",
       "priority": 24,
       "createdAt": "2026-01-11T07:00:00.000Z",
-      "tags": ["feedback-loop", "learning"],
-      "dependsOn": ["task-feedback-metrics-reader"]
+      "tags": [
+        "feedback-loop",
+        "learning"
+      ],
+      "dependsOn": [
+        "task-feedback-metrics-reader"
+      ]
     },
     {
       "id": "task-context-ast-indexer",
@@ -145,7 +203,10 @@
       "status": "pending",
       "priority": 30,
       "createdAt": "2026-01-11T07:10:00.000Z",
-      "tags": ["context", "tooling"]
+      "tags": [
+        "context",
+        "tooling"
+      ]
     },
     {
       "id": "task-context-dependency-graph",
@@ -153,7 +214,10 @@
       "status": "pending",
       "priority": 31,
       "createdAt": "2026-01-11T07:10:00.000Z",
-      "tags": ["context", "tooling"]
+      "tags": [
+        "context",
+        "tooling"
+      ]
     },
     {
       "id": "task-context-file-summaries",
@@ -161,7 +225,10 @@
       "status": "pending",
       "priority": 32,
       "createdAt": "2026-01-11T07:10:00.000Z",
-      "tags": ["context", "tooling"]
+      "tags": [
+        "context",
+        "tooling"
+      ]
     },
     {
       "id": "task-context-smart-context",
@@ -169,8 +236,14 @@
       "status": "pending",
       "priority": 33,
       "createdAt": "2026-01-11T07:10:00.000Z",
-      "tags": ["context", "tooling"],
-      "dependsOn": ["task-context-ast-indexer", "task-context-dependency-graph"]
+      "tags": [
+        "context",
+        "tooling"
+      ],
+      "dependsOn": [
+        "task-context-ast-indexer",
+        "task-context-dependency-graph"
+      ]
     },
     {
       "id": "task-metrics-success-rate",
@@ -178,7 +251,9 @@
       "status": "pending",
       "priority": 40,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "tags": ["metrics"]
+      "tags": [
+        "metrics"
+      ]
     },
     {
       "id": "task-grind-improvements",
@@ -186,7 +261,9 @@
       "status": "pending",
       "priority": 41,
       "createdAt": "2026-01-10T08:50:00.000Z",
-      "tags": ["grind"]
+      "tags": [
+        "grind"
+      ]
     },
     {
       "id": "task-conflict-detection",
@@ -194,7 +271,9 @@
       "status": "pending",
       "priority": 42,
       "createdAt": "2026-01-10T09:53:15.928Z",
-      "tags": ["parallel"]
+      "tags": [
+        "parallel"
+      ]
     },
     {
       "id": "task-verify-retry-logic",
@@ -202,7 +281,10 @@
       "status": "pending",
       "priority": 43,
       "createdAt": "2026-01-10T10:47:55.888Z",
-      "tags": ["grind", "verification"]
+      "tags": [
+        "grind",
+        "verification"
+      ]
     },
     {
       "id": "task-dspy-evaluation",
@@ -210,7 +292,10 @@
       "status": "pending",
       "priority": 50,
       "createdAt": "2026-01-10T09:51:35.101Z",
-      "tags": ["learning", "prompts"]
+      "tags": [
+        "learning",
+        "prompts"
+      ]
     },
     {
       "id": "task-continuous-sync",
@@ -218,7 +303,9 @@
       "status": "pending",
       "priority": 60,
       "createdAt": "2026-01-11T02:15:00.000Z",
-      "tags": ["continuous"]
+      "tags": [
+        "continuous"
+      ]
     },
     {
       "id": "task-spell-nonblocking",
@@ -226,7 +313,9 @@
       "status": "pending",
       "priority": 61,
       "createdAt": "2026-01-11T02:15:00.000Z",
-      "tags": ["verification"]
+      "tags": [
+        "verification"
+      ]
     },
     {
       "id": "task-onboard-init",
@@ -234,7 +323,10 @@
       "status": "pending",
       "priority": 70,
       "createdAt": "2026-01-11T07:30:00.000Z",
-      "tags": ["onboarding", "portability"]
+      "tags": [
+        "onboarding",
+        "portability"
+      ]
     },
     {
       "id": "task-onboard-detect-tooling",
@@ -242,7 +334,10 @@
       "status": "pending",
       "priority": 71,
       "createdAt": "2026-01-11T07:30:00.000Z",
-      "tags": ["onboarding", "portability"]
+      "tags": [
+        "onboarding",
+        "portability"
+      ]
     },
     {
       "id": "task-onboard-verify-abstraction",
@@ -250,8 +345,13 @@
       "status": "pending",
       "priority": 72,
       "createdAt": "2026-01-11T07:30:00.000Z",
-      "tags": ["onboarding", "portability"],
-      "dependsOn": ["task-onboard-detect-tooling"]
+      "tags": [
+        "onboarding",
+        "portability"
+      ],
+      "dependsOn": [
+        "task-onboard-detect-tooling"
+      ]
     },
     {
       "id": "task-onboard-scout-rules",
@@ -259,7 +359,10 @@
       "status": "pending",
       "priority": 73,
       "createdAt": "2026-01-11T07:30:00.000Z",
-      "tags": ["onboarding", "portability"]
+      "tags": [
+        "onboarding",
+        "portability"
+      ]
     },
     {
       "id": "task-onboard-project-profile",
@@ -267,7 +370,10 @@
       "status": "pending",
       "priority": 74,
       "createdAt": "2026-01-11T07:30:00.000Z",
-      "tags": ["onboarding", "learning"]
+      "tags": [
+        "onboarding",
+        "learning"
+      ]
     },
     {
       "id": "task-onboard-self-tune",
@@ -275,8 +381,14 @@
       "status": "pending",
       "priority": 75,
       "createdAt": "2026-01-11T07:30:00.000Z",
-      "tags": ["onboarding", "learning"],
-      "dependsOn": ["task-onboard-project-profile", "task-feedback-metrics-reader"]
+      "tags": [
+        "onboarding",
+        "learning"
+      ],
+      "dependsOn": [
+        "task-onboard-project-profile",
+        "task-feedback-metrics-reader"
+      ]
     },
     {
       "id": "task-portable-package",
@@ -284,7 +396,10 @@
       "status": "pending",
       "priority": 80,
       "createdAt": "2026-01-11T07:30:00.000Z",
-      "tags": ["portability", "distribution"]
+      "tags": [
+        "portability",
+        "distribution"
+      ]
     },
     {
       "id": "task-agent-optimize-oracle",
@@ -292,7 +407,10 @@
       "status": "pending",
       "priority": 14,
       "createdAt": "2026-01-11T07:35:00.000Z",
-      "tags": ["agent-optimization", "prompts"]
+      "tags": [
+        "agent-optimization",
+        "prompts"
+      ]
     },
     {
       "id": "task-agent-optimize-prompts",
@@ -300,8 +418,11 @@
       "status": "pending",
       "priority": 15,
       "createdAt": "2026-01-11T07:35:00.000Z",
-      "tags": ["agent-optimization", "prompts"]
+      "tags": [
+        "agent-optimization",
+        "prompts"
+      ]
     }
   ],
-  "lastUpdated": "2026-01-11T08:15:00.000Z"
+  "lastUpdated": "2026-01-11T07:54:50.687Z"
 }
