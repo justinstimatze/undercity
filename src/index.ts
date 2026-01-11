@@ -68,7 +68,6 @@ export type {
 	SafePocket,
 	SquadMember,
 	SquadMemberStatus,
-	Stash,
 	UndercityConfig,
 	Waypoint,
 	WaypointStatus,

@@ -204,26 +204,6 @@ describe("CLI", () => {
 	});
 });
 
-describe("statusColor utility", () => {
-	// Test the status color mapping logic
-	const statusColors: Record<string, string> = {
-		planning: "blue",
-		awaiting_approval: "yellow",
-		executing: "cyan",
-		reviewing: "magenta",
-		merging: "blue",
-		extracting: "green",
-		complete: "green",
-		failed: "red",
-	};
-
-	it.each(Object.entries(statusColors))("maps %s status to %s color", (status, expectedColor) => {
-		// This tests the mapping logic conceptually
-		// The actual chalk colors aren't easily testable without mocking chalk
-		expect(statusColors[status]).toBe(expectedColor);
-	});
-});
-
 describe("getVersion utility", () => {
 	it("returns a semver-like version string", () => {
 		// Version should be in semver format

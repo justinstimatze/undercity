@@ -3,9 +3,8 @@
  *
  * Handles the persistence hierarchy:
  * - Safe Pocket: Critical state surviving crashes
- * - Inventory: Active raid state
- * - Loadout: Pre-raid config
- * - Stash: Long-term storage between raids
+ * - Inventory: Active session state (waypoints, squad)
+ * - Loadout: Pre-session config
  *
  * All state is stored as JSON files in .undercity/
  */
@@ -31,7 +30,6 @@ import type {
 	RateLimitState,
 	SafePocket,
 	SquadMember,
-	Stash,
 	Waypoint,
 	WorktreeInfo,
 	WorktreeState,
@@ -217,21 +215,6 @@ export class Persistence {
 	saveLoadout(loadout: Loadout): void {
 		loadout.lastUpdated = new Date();
 		this.writeJson("loadout.json", loadout);
-	}
-
-	// ============== Stash ==============
-	// Long-term storage between raids
-
-	getStash(): Stash {
-		return this.readJson<Stash>("stash.json", {
-			completedRaids: [],
-			lastUpdated: new Date(),
-		});
-	}
-
-	saveStash(stash: Stash): void {
-		stash.lastUpdated = new Date();
-		this.writeJson("stash.json", stash);
 	}
 
 	// ============== Loadout Configurations ==============

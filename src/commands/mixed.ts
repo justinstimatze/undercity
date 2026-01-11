@@ -396,17 +396,6 @@ export const mixedCommands: CommandModule = {
 				}
 			});
 
-		// History command
-		program
-			.command("history")
-			.description("Show completed raids from the stash")
-			.option("-n, --count <n>", "Number of raids to show", "10")
-			.action((options: { count?: string }) => {
-				console.log(chalk.bold("Recent Raids"));
-				console.log(chalk.gray("History functionality not yet implemented"));
-				console.log(chalk.dim("This will show completed raids from the stash"));
-			});
-
 		// Oracle command
 		program
 			.command("oracle [situation]")

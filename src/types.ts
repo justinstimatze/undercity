@@ -10,14 +10,13 @@ import type { ComplexityLevel } from "./complexity.js";
  * Raid status - the overall state of a work session
  */
 export type RaidStatus =
-	| "planning" // BMAD phase: Flute + Logistics working
+	| "planning" // Planning phase
 	| "awaiting_approval" // Human needs to approve the plan
-	| "executing" // Gas Town phase: Fabricators working
-	| "reviewing" // Sheriff checking work
-	| "merging" // Serial elevator processing
-	| "merge_failed" // Merge failed - branches preserved for manual recovery
+	| "executing" // Execution phase
+	| "reviewing" // Review phase
+	| "merging" // Serial merge processing
 	| "extracting" // Final extraction in progress
-	| "complete" // Successfully extracted
+	| "complete" // Successfully completed
 	| "failed"; // Something went wrong
 
 /**
@@ -94,11 +93,10 @@ export interface SquadMember {
 }
 
 /**
- * Persistence hierarchy (from ARC Raiders):
- * - Pocket: Critical state surviving crashes (raid ID, goal, status)
- * - Inventory: Active state during raid (agent sessions, waypoints)
- * - Loadout: Pre-raid config (agent types, rules)
- * - Stash: Long-term storage between raids
+ * Persistence hierarchy:
+ * - Pocket: Critical state surviving crashes (session ID, goal, status)
+ * - Inventory: Active state during session (agent sessions, waypoints)
+ * - Loadout: Pre-session config (agent types, rules)
  */
 export interface SafePocket {
 	raidId?: string;
@@ -118,16 +116,6 @@ export interface Loadout {
 	maxSquadSize: number;
 	enabledAgentTypes: AgentType[];
 	autoApprove: boolean; // Skip human approval for plan
-	lastUpdated: Date;
-}
-
-export interface Stash {
-	completedRaids: Array<{
-		id: string;
-		goal: string;
-		completedAt: Date;
-		success: boolean;
-	}>;
 	lastUpdated: Date;
 }
 
