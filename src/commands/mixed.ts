@@ -250,9 +250,14 @@ export const mixedCommands: CommandModule = {
 
 					try {
 						// Get tasks from task board
-						const { getAllItems, markTaskComplete, markTaskFailed, decomposeTaskIntoSubtasks } = await import(
-							"../task.js"
-						);
+						const {
+							getAllItems,
+							markTaskComplete,
+							markTaskFailed,
+							decomposeTaskIntoSubtasks,
+							completeParentIfAllSubtasksDone,
+							getTaskById,
+						} = await import("../task.js");
 						const allTasks = getAllItems();
 						// Include both "pending" and "in_progress" tasks
 						// in_progress tasks may be stale from a previous crashed session
@@ -346,6 +351,15 @@ export const mixedCommands: CommandModule = {
 								if (taskResult.merged) {
 									markTaskComplete(taskId);
 									output.taskComplete(taskId, "Task merged successfully");
+
+									// Check if this was a subtask and auto-complete parent if all siblings done
+									const task = getTaskById(taskId);
+									if (task?.parentId) {
+										const parentCompleted = completeParentIfAllSubtasksDone(task.parentId);
+										if (parentCompleted) {
+											output.info(`Parent task ${task.parentId} auto-completed (all subtasks done)`);
+										}
+									}
 								} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
 									const errorMsg = taskResult.mergeError || "Task failed";
 									markTaskFailed(taskId, errorMsg);
