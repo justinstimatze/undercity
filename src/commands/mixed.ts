@@ -245,7 +245,11 @@ export const mixedCommands: CommandModule = {
 						// Get tasks from task board
 						const { getAllItems, markTaskComplete, markTaskFailed } = await import("../task.js");
 						const allTasks = getAllItems();
-						const pendingTasks = allTasks.filter((q) => q.status === "pending");
+						// Include both "pending" and "in_progress" tasks
+						// in_progress tasks may be stale from a previous crashed session
+						const pendingTasks = allTasks.filter(
+							(q) => q.status === "pending" || q.status === "in_progress",
+						);
 
 						// Account for tasks already processed during recovery
 						const remainingCount = maxCount > 0 ? maxCount - tasksProcessed : 0;
@@ -255,7 +259,7 @@ export const mixedCommands: CommandModule = {
 						// Skip if no tasks to process (either none pending or -n limit reached)
 						if (tasksToProcess.length === 0) {
 							if (pendingTasks.length === 0) {
-								output.info("No pending tasks on the task board");
+								output.info("No pending or in-progress tasks on the task board");
 							}
 							// If tasksProcessed > 0, we already showed recovery summary
 							return;
