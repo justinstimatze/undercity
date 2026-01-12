@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+// CLI entry point - parses commands and routes to appropriate handlers
+
 /**
  * Undercity CLI - Main Entry Point
  *
