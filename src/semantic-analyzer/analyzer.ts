@@ -1,5 +1,5 @@
-import { readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
+import { relative } from "node:path";
 import { glob } from "glob";
 import { IssueDetector } from "./detectors.js";
 import { FactExtractor } from "./fact-extractor.js";
@@ -44,7 +44,7 @@ export class SemanticAnalyzer {
 
 				const analysis = this.analyzeFile(relativePath, content);
 				fileAnalyses.push(analysis);
-			} catch (error) {}
+			} catch (_error) {}
 		}
 
 		// Detect cross-file issues

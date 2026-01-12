@@ -14,7 +14,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 // Import after mocking
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import {
 	GitError,
 	generateBranchName,

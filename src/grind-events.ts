@@ -88,7 +88,7 @@ export function logEvent(
 		...options,
 	};
 
-	const line = JSON.stringify(event) + "\n";
+	const line = `${JSON.stringify(event)}\n`;
 	appendFileSync(getEventsPath(), line);
 }
 
@@ -430,7 +430,7 @@ function rotateEventsIfNeeded(): void {
 	if (lines.length > MAX_EVENTS) {
 		// Keep the last MAX_EVENTS/2 events
 		const keepLines = lines.slice(-Math.floor(MAX_EVENTS / 2));
-		writeFileSync(eventsPath, keepLines.join("\n") + "\n");
+		writeFileSync(eventsPath, `${keepLines.join("\n")}\n`);
 	}
 }
 

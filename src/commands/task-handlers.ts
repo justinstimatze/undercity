@@ -843,7 +843,7 @@ export function handleTriage(options: TriageOptions): void {
 
 	// Health score with color
 	const healthColor = report.healthScore >= 80 ? chalk.green : report.healthScore >= 50 ? chalk.yellow : chalk.red;
-	console.log(`Health Score: ${healthColor(report.healthScore + "%")}`);
+	console.log(`Health Score: ${healthColor(`${report.healthScore}%`)}`);
 	console.log(`Total Tasks: ${report.totalTasks} (${report.pendingTasks} pending)`);
 	console.log();
 
@@ -874,7 +874,7 @@ export function handleTriage(options: TriageOptions): void {
 	};
 
 	for (const [type, issues] of byType) {
-		console.log(chalk.bold(typeLabels[type] || type) + ` (${issues.length})`);
+		console.log(`${chalk.bold(typeLabels[type] || type)} (${issues.length})`);
 		for (const issue of issues.slice(0, 5)) {
 			console.log(chalk.gray(`  ${issue.taskId}`));
 			console.log(`    ${issue.objective.substring(0, 60)}...`);

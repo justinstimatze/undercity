@@ -157,8 +157,6 @@ function getHumanPrefix(type: OutputEvent["type"]): string {
 			return chalk.yellow("  ↑");
 		case "worker_review":
 			return chalk.magenta("  ◆");
-		case "status":
-		case "info":
 		default:
 			return chalk.dim("•");
 	}
@@ -438,7 +436,7 @@ export function summary(
  */
 export function keyValue(key: string, value: string | number | boolean): void {
 	if (globalConfig.mode === "human") {
-		console.log(`  ${chalk.dim(key + ":")} ${value}`);
+		console.log(`  ${chalk.dim(`${key}:`)} ${value}`);
 	} else {
 		outputEvent({ type: "info", message: `${key}: ${value}`, timestamp: now(), data: { [key]: value } });
 	}

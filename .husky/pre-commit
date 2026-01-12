@@ -1,4 +1,9 @@
 #!/bin/bash
+
+# Security scan (secrets detection)
+echo "Running security scans..."
+bash ./scripts/security-scan.sh || exit 1
+
 echo "Running Biome on staged files..."
 
 # Check and fix staged files

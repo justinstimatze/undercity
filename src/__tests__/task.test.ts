@@ -15,7 +15,6 @@ import {
 	blockTask,
 	completeParentIfAllSubtasksDone,
 	decomposeTaskIntoSubtasks,
-	getAllTasks,
 	getTaskById,
 	loadTaskBoard,
 	markTaskCanceled,

@@ -1,4 +1,4 @@
-import type { Fact, FactType } from "./types.js";
+import type { Fact } from "./types.js";
 
 /**
  * Extract facts from code and documentation

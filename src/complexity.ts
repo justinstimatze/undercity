@@ -707,11 +707,14 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 			team: getTeamComposition("simple"),
 		} as ComplexityAssessment;
 
-		sessionLogger.info({
-			task: "Empty task description",
-			assessmentType: "empty_task",
-			recommendedModel: assessment.model,
-		}, "No task description provided - using default model");
+		sessionLogger.info(
+			{
+				task: "Empty task description",
+				assessmentType: "empty_task",
+				recommendedModel: assessment.model,
+			},
+			"No task description provided - using default model",
+		);
 
 		return assessment;
 	}
@@ -732,12 +735,15 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 			localTool,
 		} as ComplexityAssessment;
 
-		sessionLogger.info({
-			task: task.slice(0, 50),
-			assessmentType: "local_tool",
-			recommendedModel: assessment.model,
-			localToolCommand: localTool.command,
-		}, "Local tool detected - using minimal model");
+		sessionLogger.info(
+			{
+				task: task.slice(0, 50),
+				assessmentType: "local_tool",
+				recommendedModel: assessment.model,
+				localToolCommand: localTool.command,
+			},
+			"Local tool detected - using minimal model",
+		);
 
 		return assessment;
 	}
@@ -825,14 +831,17 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 		team: getTeamComposition(level),
 	};
 
-	sessionLogger.info({
-		task: task.slice(0, 50),
-		assessmentType: "keyword_assessment",
-		level,
-		recommendedModel: assessment.model,
-		score,
-		scope: estimatedScope,
-	}, "Complexity determined by keyword heuristics");
+	sessionLogger.info(
+		{
+			task: task.slice(0, 50),
+			assessmentType: "keyword_assessment",
+			level,
+			recommendedModel: assessment.model,
+			score,
+			scope: estimatedScope,
+		},
+		"Complexity determined by keyword heuristics",
+	);
 
 	return assessment;
 }
@@ -905,14 +914,17 @@ Complexity guide:
 				team: getTeamComposition(level),
 			};
 
-			sessionLogger.info({
-				task: task.slice(0, 50),
-				assessmentType: "llm_assessment",
-				level,
-				recommendedModel: assessment.model,
-				llmReasoning: parsed.reasoning,
-				scope,
-			}, "Complexity determined by LLM analysis");
+			sessionLogger.info(
+				{
+					task: task.slice(0, 50),
+					assessmentType: "llm_assessment",
+					level,
+					recommendedModel: assessment.model,
+					llmReasoning: parsed.reasoning,
+					scope,
+				},
+				"Complexity determined by LLM analysis",
+			);
 
 			return assessment;
 		}
@@ -1004,17 +1016,20 @@ export function assessComplexityQuantitative(
 		team: getTeamComposition(level),
 	};
 
-	sessionLogger.info({
-		task: task.slice(0, 50),
-		assessmentType: "quantitative_assessment",
-		level,
-		recommendedModel: assessment.model,
-		fileCount: metrics.fileCount,
-		linesOfCode: metrics.totalLines,
-		functionCount: metrics.functionCount,
-		scope: estimatedScope,
-		score: combinedScore,
-	}, "Complexity determined by quantitative analysis");
+	sessionLogger.info(
+		{
+			task: task.slice(0, 50),
+			assessmentType: "quantitative_assessment",
+			level,
+			recommendedModel: assessment.model,
+			fileCount: metrics.fileCount,
+			linesOfCode: metrics.totalLines,
+			functionCount: metrics.functionCount,
+			scope: estimatedScope,
+			score: combinedScore,
+		},
+		"Complexity determined by quantitative analysis",
+	);
 
 	return assessment;
 }
@@ -1043,13 +1058,16 @@ export async function assessComplexityFull(
 		if (targetFiles.length > 0) {
 			// Use quantitative assessment
 			const assessment = assessComplexityQuantitative(task, targetFiles, repoRoot);
-			sessionLogger.info({
-				task: task.slice(0, 50),
-				assessmentType: "context_preparation",
-				targetFiles: targetFiles.length,
-				recommendedModel: assessment.model,
-				score: assessment.score,
-			}, "Complexity assessed using context preparation");
+			sessionLogger.info(
+				{
+					task: task.slice(0, 50),
+					assessmentType: "context_preparation",
+					targetFiles: targetFiles.length,
+					recommendedModel: assessment.model,
+					score: assessment.score,
+				},
+				"Complexity assessed using context preparation",
+			);
 			return assessment;
 		}
 	} catch (error) {

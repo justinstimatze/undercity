@@ -48,7 +48,9 @@
     "syncpack:fix": "syncpack fix-mismatches",
     "spell": "cspell \"**/*.{ts,md}\" --gitignore",
     "quality:check": "cs check --staged",
-    "codescene:pr": "cs review --base-branch main"
+    "codescene:pr": "cs review --base-branch main",
+    "security": "bash ./scripts/security-scan.sh",
+    "security:full": "gitleaks detect --no-git && semgrep scan --config auto ./src"
   },
   "author": "Justin Stimatze",
   "license": "MIT",

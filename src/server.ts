@@ -338,10 +338,10 @@ export class UndercityServer {
 		this.sendJson(res, 200, {
 			tasks: {
 				total: summary.totalTasks,
-				successRate: summary.totalTasks > 0 ? (summary.successRate * 100).toFixed(1) + "%" : "N/A",
+				successRate: summary.totalTasks > 0 ? `${(summary.successRate * 100).toFixed(1)}%` : "N/A",
 				averageTokens: summary.avgTokens > 0 ? Math.round(summary.avgTokens) : "N/A",
-				averageDuration: summary.avgTimeTakenMs > 0 ? Math.round(summary.avgTimeTakenMs / 1000) + "s" : "N/A",
-				escalationRate: summary.escalationRate > 0 ? (summary.escalationRate * 100).toFixed(1) + "%" : "N/A",
+				averageDuration: summary.avgTimeTakenMs > 0 ? `${Math.round(summary.avgTimeTakenMs / 1000)}s` : "N/A",
+				escalationRate: summary.escalationRate > 0 ? `${(summary.escalationRate * 100).toFixed(1)}%` : "N/A",
 			},
 			models: summary.modelDistribution,
 			board: {

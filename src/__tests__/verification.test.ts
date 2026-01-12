@@ -640,7 +640,7 @@ describe("verification.ts", () => {
 				return "";
 			});
 
-			const result = await verifyWork(true, false, "/test/dir");
+			const _result = await verifyWork(true, false, "/test/dir");
 
 			// quality:check should not be called for test-only changes
 			const qualityCalls = mockExecSync.mock.calls.filter((call) => String(call[0]).includes("pnpm quality:check"));

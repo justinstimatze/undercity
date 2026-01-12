@@ -43,6 +43,19 @@ pnpm syncpack:lint  # Check dependency version consistency
 pnpm syncpack:fix   # Fix version mismatches
 ```
 
+## Security Scanning
+
+```bash
+pnpm security        # Pre-commit security scan (gitleaks + semgrep if installed)
+pnpm security:full   # Full codebase scan
+```
+
+**Tools (install locally for pre-commit):**
+- **gitleaks**: Secrets detection - `brew install gitleaks` (macOS) or download from GitHub
+- **semgrep** (optional): Static security analysis - `pip install semgrep` or `brew install semgrep`
+
+Pre-commit hook runs `gitleaks protect --staged` automatically. CI runs full gitleaks scan via GitHub Action.
+
 ## Code Quality (CodeScene)
 
 ```bash

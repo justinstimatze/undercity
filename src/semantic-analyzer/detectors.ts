@@ -5,7 +5,7 @@ import type { Issue } from "./types.js";
  */
 
 export class IssueDetector {
-	detectRedundantComments(content: string, filePath: string): Issue[] {
+	detectRedundantComments(content: string, _filePath: string): Issue[] {
 		const issues: Issue[] = [];
 		const lines = content.split("\n");
 
@@ -33,7 +33,7 @@ export class IssueDetector {
 		return issues;
 	}
 
-	detectUnclearNaming(content: string, filePath: string): Issue[] {
+	detectUnclearNaming(content: string, _filePath: string): Issue[] {
 		const issues: Issue[] = [];
 		const lines = content.split("\n");
 
@@ -66,7 +66,7 @@ export class IssueDetector {
 		return issues;
 	}
 
-	detectLowDensityProse(content: string, filePath: string): Issue[] {
+	detectLowDensityProse(content: string, _filePath: string): Issue[] {
 		const issues: Issue[] = [];
 		const lines = content.split("\n");
 

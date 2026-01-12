@@ -12,7 +12,6 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
 import { AnnealingReview } from "./annealing-review.js";
 import { sessionLogger } from "./logger.js";
-import type { VerificationResult } from "./verification.js";
 import { verifyWork } from "./verification.js";
 
 /**
@@ -309,7 +308,7 @@ function generateTicketsFromIssues(
 		}
 
 		// Create a concise title from the issue
-		const title = issue.length > 80 ? issue.slice(0, 77) + "..." : issue;
+		const title = issue.length > 80 ? `${issue.slice(0, 77)}...` : issue;
 
 		tickets.push({
 			title,
