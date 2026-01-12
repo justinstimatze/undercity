@@ -321,50 +321,61 @@ export function getNextTask(): Task | undefined {
 }
 
 /**
- * Mark a task as in progress
+ * Helper function to update a task with proper locking
  */
-export function markTaskInProgress(id: string, sessionId: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+function updateTask(id: string, updates: (task: Task) => void, path: string = DEFAULT_TASK_BOARD_PATH): void {
 	withLock(getLockPath(path), () => {
 		const board = loadTaskBoard(path);
 		const task = board.tasks.find((q) => q.id === id);
 		if (task) {
-			task.status = "in_progress";
-			task.startedAt = new Date();
-			task.sessionId = sessionId;
+			updates(task);
 			saveTaskBoard(board, path);
 		}
 	});
+}
+
+/**
+ * Mark a task as in progress
+ */
+export function markTaskInProgress(id: string, sessionId: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+	updateTask(
+		id,
+		(task) => {
+			task.status = "in_progress";
+			task.startedAt = new Date();
+			task.sessionId = sessionId;
+		},
+		path,
+	);
 }
 
 /**
  * Mark a task as complete
  */
 export function markTaskComplete(id: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
-	withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
-		const task = board.tasks.find((q) => q.id === id);
-		if (task) {
+	updateTask(
+		id,
+		(task) => {
 			task.status = "complete";
 			task.completedAt = new Date();
-			saveTaskBoard(board, path);
-		}
-	});
+		},
+		path,
+	);
 }
 
 /**
  * Mark a task as failed
  */
 export function markTaskFailed(id: string, error: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
-	withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
-		const task = board.tasks.find((q) => q.id === id);
-		if (task) {
+	updateTask(
+		id,
+		(task) => {
 			task.status = "failed";
 			task.completedAt = new Date();
 			task.error = error;
-			saveTaskBoard(board, path);
-		}
-	});
+		},
+		path,
+	);
 }
 
 /**
@@ -376,52 +387,49 @@ export function markTaskDuplicate(
 	resolution: string,
 	path: string = DEFAULT_TASK_BOARD_PATH,
 ): void {
-	withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
-		const task = board.tasks.find((q) => q.id === id);
-		if (task) {
+	updateTask(
+		id,
+		(task) => {
 			task.status = "duplicate";
 			task.completedAt = new Date();
 			task.duplicateOfCommit = commitSha;
 			task.resolution = resolution;
 			delete task.error; // Clear any error since this isn't a failure
-			saveTaskBoard(board, path);
-		}
-	});
+		},
+		path,
+	);
 }
 
 /**
  * Mark a task as canceled (won't do)
  */
 export function markTaskCanceled(id: string, reason: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
-	withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
-		const task = board.tasks.find((q) => q.id === id);
-		if (task) {
+	updateTask(
+		id,
+		(task) => {
 			task.status = "canceled";
 			task.completedAt = new Date();
 			task.resolution = reason;
 			delete task.error;
-			saveTaskBoard(board, path);
-		}
-	});
+		},
+		path,
+	);
 }
 
 /**
  * Mark a task as obsolete (no longer needed)
  */
 export function markTaskObsolete(id: string, reason: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
-	withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
-		const task = board.tasks.find((q) => q.id === id);
-		if (task) {
+	updateTask(
+		id,
+		(task) => {
 			task.status = "obsolete";
 			task.completedAt = new Date();
 			task.resolution = reason;
 			delete task.error;
-			saveTaskBoard(board, path);
-		}
-	});
+		},
+		path,
+	);
 }
 
 /**
@@ -454,28 +462,30 @@ export function getTaskBoardSummary(): {
  * Block a task (prevent it from being picked up)
  */
 export function blockTask(id: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
-	withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
-		const task = board.tasks.find((q) => q.id === id);
-		if (task && task.status === "pending") {
-			task.status = "blocked";
-			saveTaskBoard(board, path);
-		}
-	});
+	updateTask(
+		id,
+		(task) => {
+			if (task.status === "pending") {
+				task.status = "blocked";
+			}
+		},
+		path,
+	);
 }
 
 /**
  * Unblock a task (allow it to be picked up again)
  */
 export function unblockTask(id: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
-	withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
-		const task = board.tasks.find((q) => q.id === id);
-		if (task && task.status === "blocked") {
-			task.status = "pending";
-			saveTaskBoard(board, path);
-		}
-	});
+	updateTask(
+		id,
+		(task) => {
+			if (task.status === "blocked") {
+				task.status = "pending";
+			}
+		},
+		path,
+	);
 }
 
 /**
