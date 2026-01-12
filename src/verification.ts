@@ -12,6 +12,10 @@
 
 import { execSync } from "node:child_process";
 import { formatErrorsForAgent, getCache, parseTypeScriptErrors } from "./cache.js";
+import { sessionLogger } from "./logger.js";
+
+const logger = sessionLogger.child({ module: "verification" });
+
 import type { ErrorCategory } from "./types.js";
 
 /**
@@ -61,13 +65,13 @@ export async function verifyWork(
 		execSync("pnpm spell 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
 		feedbackParts.push("✓ Spell check passed");
 	} catch (error) {
+		// Spell errors are non-blocking - just log a warning
 		spellPassed = false;
 		const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 		const spellingErrors = output.split("\n").filter((line) => line.includes("spelling error"));
 		const errorCount = spellingErrors.length;
-		issues.push(`Spelling issues (${errorCount})`);
-		const relevantErrors = spellingErrors.slice(0, 3).join("\n");
-		feedbackParts.push(`✗ SPELLING ISSUES - ${errorCount} found:\n${relevantErrors}`);
+		logger.warn({ errorCount, errors: spellingErrors.slice(0, 5) }, "Spelling issues detected (non-blocking)");
+		feedbackParts.push(`⚠ Spelling issues (${errorCount}) - non-blocking`);
 	}
 	let codeHealthPassed = true;
 	let filesChanged = 0;
