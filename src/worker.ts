@@ -683,30 +683,43 @@ Use this analysis to avoid repeating the same mistakes.`;
 			this.lastPostMortem = undefined;
 		}
 
-		const prompt = `${contextSection}Complete this task:
+		const prompt = `${contextSection}
+═══════════════════════════════════════════════════════════════════════════════
+MANDATORY SCOPE CONSTRAINT - READ THIS FIRST
+═══════════════════════════════════════════════════════════════════════════════
 
+You are a SURGICAL tool. Your job is to make the MINIMUM changes needed.
+
+FORBIDDEN ACTIONS (will cause task rejection):
+• Modifying ANY file not directly required for this specific task
+• Refactoring, cleaning up, or "improving" existing code
+• Adding features, comments, or documentation beyond what's requested
+• Fixing unrelated issues you notice while working
+• Renaming variables/functions unless explicitly requested
+
+THE ONLY FILES YOU MAY TOUCH are those DIRECTLY required to complete the task below.
+If the task says "add a comment to X", you modify ONLY file X. Nothing else.
+
+Scope creep = task failure. Stay focused.
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TASK:
 ${task}${retryContext}${postMortemContext}
 
 Guidelines:
 - Start with the target files listed in the briefing above (if provided)
-- Make the minimal changes needed to complete the task
+- Make the minimal changes needed - nothing more
 - Follow existing code patterns and conventions
-- Ensure your changes compile and don't break existing functionality
 - Run typecheck before finishing to verify your changes
-- If you encounter issues you cannot resolve, explain what's blocking you
+- If blocked, explain what's stopping you
 
-CRITICAL - SCOPE RESTRICTIONS:
-- ONLY modify files directly related to this task
-- Do NOT refactor, clean up, or "improve" unrelated code
-- Do NOT add features beyond what's explicitly requested
-- Stay focused - scope creep wastes tokens and breaks unrelated functionality
-
-CRITICAL - GIT RULES:
+GIT RULES:
 - You may commit locally (git add, git commit)
-- NEVER run "git push" - the orchestrator handles all pushes after verification
-- Pushing bypasses the verification gate and is strictly forbidden
+- NEVER run "git push" - the orchestrator handles all pushes
+- Pushing bypasses verification and is strictly forbidden
 
-When done, provide a brief summary of what you changed.`;
+When done, provide a brief summary of ONLY the files you changed.`;
 
 		// Token usage will be accumulated in this.tokenUsageThisTask
 
