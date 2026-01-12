@@ -275,9 +275,9 @@ export const mixedCommands: CommandModule = {
 						// Include both "pending" and "in_progress" tasks
 						// in_progress tasks may be stale from a previous crashed session
 						// Also filter out decomposed tasks (their subtasks will be picked up instead)
-						const pendingTasks = allTasks.filter(
-							(q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed,
-						);
+						const pendingTasks = allTasks
+							.filter((q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed)
+							.sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
 
 						// Account for tasks already processed during recovery
 						const remainingCount = maxCount > 0 ? maxCount - tasksProcessed : 0;
@@ -339,9 +339,9 @@ export const mixedCommands: CommandModule = {
 							if (tasksWithModels.length === 0) {
 								output.info("All tasks were decomposed. Fetching subtasks...");
 								const refreshedTasks = getAllItems();
-								const newPendingTasks = refreshedTasks.filter(
-									(q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed,
-								);
+								const newPendingTasks = refreshedTasks
+									.filter((q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed)
+									.sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
 								const newRemainingCount = maxCount > 0 ? maxCount - tasksProcessed : newPendingTasks.length;
 								const newTasks = maxCount > 0 ? newPendingTasks.slice(0, newRemainingCount) : newPendingTasks;
 
