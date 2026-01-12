@@ -677,7 +677,56 @@
       "status": "pending",
       "priority": 500,
       "createdAt": "2026-01-12T06:56:44.525Z"
+    },
+    {
+      "id": "task-mkatqd9t-bf40fc",
+      "objective": "In src/commands/mixed.ts, add --dry-run option to grind command definition",
+      "status": "pending",
+      "priority": 900,
+      "createdAt": "2026-01-12T07:10:57.713Z"
+    },
+    {
+      "id": "task-mkatqd9u-890c64",
+      "objective": "In src/commands/mixed-handlers.ts, add dryRun boolean to GrindOptions interface",
+      "status": "pending",
+      "priority": 900,
+      "createdAt": "2026-01-12T07:10:57.714Z"
+    },
+    {
+      "id": "task-mkatqd9v-d4a541",
+      "objective": "In src/commands/mixed-handlers.ts, modify handleGrind function to pass dryRun option to Orchestrator and skip actual execution when dryRun is true",
+      "status": "pending",
+      "priority": 900,
+      "createdAt": "2026-01-12T07:10:57.715Z"
+    },
+    {
+      "id": "task-mkatqd9v-b67501",
+      "objective": "In src/orchestrator.ts, add dryRun boolean to ParallelSoloOptions interface and Orchestrator constructor",
+      "status": "pending",
+      "priority": 900,
+      "createdAt": "2026-01-12T07:10:57.715Z"
+    },
+    {
+      "id": "task-mkatqd9v-549609",
+      "objective": "In src/orchestrator.ts, modify runSingle and runParallel methods to output task plan instead of executing when dryRun is true",
+      "status": "pending",
+      "priority": 900,
+      "createdAt": "2026-01-12T07:10:57.715Z"
+    },
+    {
+      "id": "task-mkatqd9w-a25b4b",
+      "objective": "In src/worker.ts, add dryRun boolean to SoloOptions interface and TaskWorker constructor",
+      "status": "pending",
+      "priority": 900,
+      "createdAt": "2026-01-12T07:10:57.716Z"
+    },
+    {
+      "id": "task-mkatqd9w-f85562",
+      "objective": "In src/worker.ts, modify runTask method to output execution plan instead of calling executeAgent when dryRun is true",
+      "status": "pending",
+      "priority": 900,
+      "createdAt": "2026-01-12T07:10:57.716Z"
     }
   ],
-  "lastUpdated": "2026-01-12T06:56:44.525Z"
+  "lastUpdated": "2026-01-12T07:10:57.716Z"
 }

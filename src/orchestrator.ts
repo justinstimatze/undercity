@@ -22,6 +22,8 @@ import { FileTracker } from "./file-tracker.js";
 import * as output from "./output.js";
 import { Persistence } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
+import { addTask } from "./task.js";
+import { isPlanTask, runPlanner } from "./task-planner.js";
 import type { ParallelRecoveryState, ParallelTaskState } from "./types.js";
 import { type TaskResult, TaskWorker } from "./worker.js";
 import { WorktreeManager } from "./worktree-manager.js";
@@ -184,12 +186,66 @@ export class Orchestrator {
 	}
 
 	/**
+	 * Handle a [plan] task by running the planner and creating implementation tasks
+	 */
+	private async handlePlanTask(task: string): Promise<ParallelBatchResult> {
+		const startTime = Date.now();
+
+		output.header("Plan Mode", "Analyzing objective and creating implementation tasks");
+
+		const planResult = await runPlanner(task, process.cwd());
+
+		if (!planResult.success || planResult.tasks.length === 0) {
+			output.error(`Planning failed: ${planResult.summary}`);
+			return {
+				results: [],
+				successful: 0,
+				failed: 1,
+				merged: 0,
+				mergeFailed: 0,
+				durationMs: Date.now() - startTime,
+			};
+		}
+
+		// Add generated tasks to the board
+		output.info(`Generated ${planResult.tasks.length} implementation tasks`);
+		for (const plannedTask of planResult.tasks) {
+			const newTask = addTask(plannedTask.objective, plannedTask.priority);
+			output.success(`Added: ${newTask.objective.substring(0, 60)}...`);
+		}
+
+		// Show any notes from planning
+		if (planResult.notes.length > 0) {
+			output.info("Planning notes:");
+			for (const note of planResult.notes) {
+				output.info(`  - ${note}`);
+			}
+		}
+
+		output.success(`Plan complete: ${planResult.summary}`);
+
+		return {
+			results: [],
+			successful: 1, // Plan itself succeeded
+			failed: 0,
+			merged: 0,
+			mergeFailed: 0,
+			durationMs: Date.now() - startTime,
+		};
+	}
+
+	/**
 	 * Run a single task directly without worktree overhead
 	 *
 	 * This is an optimization for when only one task needs to run.
 	 * It runs SoloOrchestrator directly in the current directory.
 	 */
 	async runSingle(task: string): Promise<ParallelBatchResult> {
+		// Check for [plan] prefix - route to planner instead of worker
+		if (isPlanTask(task)) {
+			return this.handlePlanTask(task);
+		}
+
 		const startTime = Date.now();
 
 		// Check if rate limited
@@ -296,12 +352,38 @@ export class Orchestrator {
 	 * without worktree overhead.
 	 */
 	async runParallel(tasks: string[]): Promise<ParallelBatchResult> {
+		// Separate plan tasks from implementation tasks
+		// Plan tasks are processed first since they generate new tasks
+		const planTasks = tasks.filter(isPlanTask);
+		const implTasks = tasks.filter((t) => !isPlanTask(t));
+
+		// Process plan tasks first (serially, they add to the queue)
+		if (planTasks.length > 0) {
+			output.info(`Processing ${planTasks.length} plan task(s) first...`);
+			for (const planTask of planTasks) {
+				await this.handlePlanTask(planTask);
+			}
+		}
+
+		// If only plan tasks, we're done
+		if (implTasks.length === 0) {
+			return {
+				results: [],
+				successful: planTasks.length,
+				failed: 0,
+				merged: 0,
+				mergeFailed: 0,
+				durationMs: 0,
+			};
+		}
+
 		// Optimization: run single task directly without worktree
-		if (tasks.length === 1 && this.maxConcurrent <= 1) {
-			return this.runSingle(tasks[0]);
+		if (implTasks.length === 1 && this.maxConcurrent <= 1) {
+			return this.runSingle(implTasks[0]);
 		}
 		const startTime = Date.now();
 		const results: ParallelTaskResult[] = [];
+		const tasks_to_run = implTasks; // Use implementation tasks only
 
 		// Check if rate limited - try to auto-resume first
 		this.rateLimitTracker.checkAutoResume();
@@ -328,7 +410,7 @@ export class Orchestrator {
 
 		output.header(
 			"Parallel Solo Mode",
-			`${tasks.length} tasks (max ${this.maxConcurrent} concurrent) • Model: ${this.startingModel} → escalate if needed`,
+			`${tasks_to_run.length} tasks (max ${this.maxConcurrent} concurrent) • Model: ${this.startingModel} → escalate if needed`,
 		);
 
 		// Show rate limit usage if approaching threshold
@@ -364,11 +446,11 @@ export class Orchestrator {
 			branch: string;
 		}> = [];
 
-		const totalBatches = Math.ceil(tasks.length / this.maxConcurrent);
+		const totalBatches = Math.ceil(tasks_to_run.length / this.maxConcurrent);
 
-		for (let batchStart = 0; batchStart < tasks.length; batchStart += this.maxConcurrent) {
-			const batchEnd = Math.min(batchStart + this.maxConcurrent, tasks.length);
-			const batchTasks = tasks.slice(batchStart, batchEnd);
+		for (let batchStart = 0; batchStart < tasks_to_run.length; batchStart += this.maxConcurrent) {
+			const batchEnd = Math.min(batchStart + this.maxConcurrent, tasks_to_run.length);
+			const batchTasks = tasks_to_run.slice(batchStart, batchEnd);
 			const batchNum = Math.floor(batchStart / this.maxConcurrent) + 1;
 
 			output.section(`Batch ${batchNum}/${totalBatches}: Processing ${batchTasks.length} tasks`);
