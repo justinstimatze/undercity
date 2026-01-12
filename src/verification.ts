@@ -78,18 +78,30 @@ export async function verifyWork(
 	let linesChanged = 0;
 
 	// 1. Check what changed
-	// Check both uncommitted changes (working dir vs HEAD) AND committed changes (HEAD vs HEAD~1)
-	// This handles both cases: agent left changes uncommitted OR agent already committed
+	// Check: uncommitted changes, untracked files, AND committed changes since base
+	// This handles: agent left changes uncommitted, created new files, OR already committed
 	let changedFiles: string[] = [];
+	let untrackedFiles: string[] = [];
 	try {
-		// First check uncommitted changes
+		// First check uncommitted changes (modified files)
 		let diffStat = execSync("git diff --stat HEAD 2>/dev/null || git diff --stat", {
 			encoding: "utf-8",
 			cwd: workingDirectory,
 		});
 
-		// If no uncommitted changes, check if there are committed changes since base
-		if (!diffStat.trim()) {
+		// Also check for untracked files (new files) - git diff misses these!
+		const statusOutput = execSync("git status --porcelain 2>/dev/null || true", {
+			encoding: "utf-8",
+			cwd: workingDirectory,
+		});
+		untrackedFiles = statusOutput
+			.split("\n")
+			.filter((line) => line.startsWith("??"))
+			.map((line) => line.slice(3).trim())
+			.filter((f) => f.endsWith(".ts") || f.endsWith(".tsx") || f.endsWith(".js") || f.endsWith(".json"));
+
+		// If no uncommitted changes and no untracked files, check committed changes since base
+		if (!diffStat.trim() && untrackedFiles.length === 0) {
 			try {
 				// Compare HEAD to baseCommit if provided, otherwise fall back to HEAD~1
 				const compareRef = baseCommit || "HEAD~1";
@@ -108,17 +120,20 @@ export async function verifyWork(
 			filesChanged = parseInt(filesMatch[1], 10);
 		}
 
+		// Add untracked files to the count
+		filesChanged += untrackedFiles.length;
+
 		// Parse for lines changed
 		const insertions = diffStat.match(/(\d+) insertions?/);
 		const deletions = diffStat.match(/(\d+) deletions?/);
 		linesChanged = (insertions ? parseInt(insertions[1], 10) : 0) + (deletions ? parseInt(deletions[1], 10) : 0);
 
-		// Get list of changed files
+		// Get list of changed files (modified + untracked)
 		const diffNames = execSync("git diff --name-only HEAD 2>/dev/null || git diff --name-only", {
 			encoding: "utf-8",
 			cwd: workingDirectory,
 		});
-		changedFiles = diffNames.trim().split("\n").filter(Boolean);
+		changedFiles = [...diffNames.trim().split("\n").filter(Boolean), ...untrackedFiles];
 	} catch {
 		issues.push("No changes detected");
 		feedbackParts.push("ERROR: No file changes were made. The task may not have been completed.");
