@@ -171,6 +171,9 @@ export class TaskWorker {
 	/** Pending tickets from review that couldn't be resolved */
 	private pendingTickets: UnresolvedTicket[] = [];
 
+	/** Track write operations during current execution (for Stop hook) */
+	private writeCountThisExecution: number = 0;
+
 	constructor(options: SoloOptions = {}) {
 		this.maxAttempts = options.maxAttempts ?? 3;
 		this.startingModel = options.startingModel ?? "sonnet";
@@ -706,6 +709,9 @@ RULES:
 
 		// Token usage will be accumulated in this.tokenUsageThisTask
 
+		// Reset write counter for this execution
+		this.writeCountThisExecution = 0;
+
 		for await (const message of query({
 			prompt,
 			options: {
@@ -717,6 +723,29 @@ RULES:
 				cwd: this.workingDirectory,
 				// Defense-in-depth: explicitly block git push even if settings fail to load
 				disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
+				// Stop hook: prevent agent from finishing without making changes
+				hooks: {
+					Stop: [
+						{
+							hooks: [
+								async () => {
+									if (this.writeCountThisExecution === 0) {
+										sessionLogger.info(
+											{ model: this.currentModel, writes: 0 },
+											"Stop hook rejected: agent tried to finish with 0 writes",
+										);
+										return {
+											continue: false,
+											reason:
+												"You haven't made any code changes yet. Your task requires writing or editing files. Please implement the required changes before finishing.",
+										};
+									}
+									return { continue: true };
+								},
+							],
+						},
+					],
+				},
 			},
 		})) {
 			// Track token usage
@@ -725,6 +754,9 @@ RULES:
 				this.metricsTracker.recordTokenUsage(message, this.currentModel);
 				this.tokenUsageThisTask.push(usage);
 			}
+
+			// Track write operations for Stop hook
+			this.trackWriteOperations(message);
 
 			// Stream output if enabled
 			if (this.stream) {
@@ -777,6 +809,32 @@ RULES:
 
 		if (msg.type === "result" && msg.subtype === "success") {
 			dualLogger.writeLine(`${prefix} ${chalk.green("✓")} Done`);
+		}
+	}
+
+	/**
+	 * Track write operations from SDK messages for the Stop hook
+	 */
+	private trackWriteOperations(message: unknown): void {
+		const msg = message as Record<string, unknown>;
+
+		// Check assistant messages for tool uses
+		if (msg.type === "assistant") {
+			const betaMessage = msg.message as { content?: Array<{ type: string; name?: string }> } | undefined;
+			if (betaMessage?.content) {
+				for (const block of betaMessage.content) {
+					if (block.type === "tool_use" && block.name) {
+						// Count write operations
+						if (["Write", "Edit", "NotebookEdit"].includes(block.name)) {
+							this.writeCountThisExecution++;
+							sessionLogger.debug(
+								{ tool: block.name, writeCount: this.writeCountThisExecution },
+								`Write operation detected (total: ${this.writeCountThisExecution})`,
+							);
+						}
+					}
+				}
+			}
 		}
 	}
 
