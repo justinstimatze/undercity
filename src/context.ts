@@ -452,6 +452,20 @@ export async function prepareContext(
 		briefingDoc: "",
 	};
 
+	// Check if this is a "new file" task - don't search for existing files
+	// as they'll just confuse the agent
+	const isNewFileTask = task.toLowerCase().includes("(new file)") || task.toLowerCase().includes("new file:");
+	if (isNewFileTask) {
+		// Extract the target file path from the task
+		const fileMatch = task.match(/In\s+(src\/[\w\-./]+\.ts)/i);
+		if (fileMatch) {
+			briefing.constraints.push(`CREATE NEW FILE: ${fileMatch[1]}`);
+			briefing.constraints.push("This file does not exist yet - you must create it");
+		}
+		briefing.briefingDoc = buildMinimalBriefing(task);
+		return briefing;
+	}
+
 	try {
 		// 1. Identify likely target areas from task description
 		const targetAreas = identifyTargetAreas(task);
