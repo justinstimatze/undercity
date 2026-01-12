@@ -1,164 +1,6 @@
 {
   "tasks": [
     {
-      "id": "task-cleanup-test-vocabulary",
-      "objective": "[cleanup] Update test files vocabulary - replace 'raid' with 'session' in test data (helpers.ts, persistence.test.ts, dual-logger.test.ts, cli.test.ts)",
-      "status": "completed",
-      "priority": 0,
-      "createdAt": "2026-01-11T07:40:00.000Z",
-      "tags": [
-        "cleanup",
-        "tests"
-      ]
-    },
-    {
-      "id": "task-cleanup-dead-code",
-      "objective": "[cleanup] Remove dead code - enhanced-metrics.ts (no imports), knowledge-tracker.ts (unused), src/examples/ (dead demos)",
-      "status": "completed",
-      "priority": 1,
-      "createdAt": "2026-01-11T07:15:00.000Z",
-      "tags": [
-        "cleanup"
-      ]
-    },
-    {
-      "id": "task-fix-worktree-deps",
-      "objective": "[critical] Fix worktree dependency installation - run 'pnpm install' in worktrees before verification so tests can run. Currently worktrees have no node_modules and verification fails with 'vitest not found'",
-      "status": "completed",
-      "priority": 4,
-      "createdAt": "2026-01-11T08:00:00.000Z",
-      "completedAt": "2026-01-11T08:00:00.000Z",
-      "tags": [
-        "critical",
-        "worktree",
-        "verification"
-      ]
-    },
-    {
-      "id": "task-fix-watch-dashboard",
-      "objective": "[dashboard] Fix watch dashboard - burn rate graph not updating, cache hit graph not updating, tasks pane not refreshing dynamically, SDK metrics showing 0 tokens/burn",
-      "status": "completed",
-      "priority": 5,
-      "createdAt": "2026-01-11T07:45:00.000Z",
-      "completedAt": "2026-01-11T07:54:50.687Z",
-      "tags": [
-        "dashboard",
-        "metrics"
-      ]
-    },
-    {
-      "id": "task-fix-push-before-verify",
-      "objective": "[critical] Prevent agents from pushing during task execution - agents should only commit locally, orchestrator controls all pushes after verification passes. Currently agents can bypass verification by pushing directly via Bash",
-      "status": "completed",
-      "priority": 5,
-      "createdAt": "2026-01-11T08:00:00.000Z",
-      "tags": [
-        "critical",
-        "verification",
-        "security"
-      ],
-      "completedAt": "2026-01-11T21:48:36.177Z",
-      "commitSha": "01d777f"
-    },
-    {
-      "id": "task-fix-review-escalation",
-      "objective": "[review] Fix review pass logic - opus gets only 2 passes then 'escalates' to nothing, 'converged' is misleading when issues still found. Opus should get more attempts as final tier, messaging should be accurate",
-      "status": "completed",
-      "priority": 6,
-      "createdAt": "2026-01-11T07:50:00.000Z",
-      "tags": [
-        "review",
-        "escalation"
-      ],
-      "completedAt": "2026-01-11T21:48:36.178Z",
-      "commitSha": "63c2e62"
-    },
-    {
-      "id": "task-improve-streaming-output",
-      "objective": "[output] Improve terminal streaming output - JSON format should be default (for agent consumption), add --human flag for human-readable output. Current streaming is noisy and not optimized for either use case",
-      "status": "completed",
-      "priority": 7,
-      "createdAt": "2026-01-11T08:00:00.000Z",
-      "completedAt": "2026-01-11T07:54:50.687Z",
-      "tags": [
-        "output",
-        "cli"
-      ]
-    },
-    {
-      "id": "task-cleanup-local-llm",
-      "objective": "[cleanup] Remove local LLM experiment - local-llm.ts, diff-experiment-runner.ts, experiments/diff-generator.ts, and CLI quick-ollama-test command",
-      "status": "duplicate",
-      "priority": 2,
-      "createdAt": "2026-01-11T07:10:00.000Z",
-      "tags": [
-        "cleanup"
-      ],
-      "completedAt": "2026-01-11T22:55:40.005Z",
-      "duplicateOfCommit": "787194b",
-      "resolution": "Work already completed before task was added"
-    },
-    {
-      "id": "task-cleanup-orphaned-experiments",
-      "objective": "[cleanup] Remove orphaned experiments framework - src/experiments/ directory (A/B framework not wired to anything)",
-      "status": "complete",
-      "priority": 3,
-      "createdAt": "2026-01-11T07:15:00.000Z",
-      "tags": [
-        "cleanup"
-      ],
-      "completedAt": "2026-01-11T21:48:36.178Z"
-    },
-    {
-      "id": "task-docs-readme-agent-format",
-      "objective": "[docs] Rewrite README.md for agent consumption - remove prose/marketing, use tables and key-value structure, explicit command→behavior mappings",
-      "status": "complete",
-      "priority": 10,
-      "createdAt": "2026-01-11T07:05:00.000Z",
-      "tags": [
-        "docs",
-        "agent-optimization"
-      ],
-      "completedAt": "2026-01-11T23:47:58.165Z"
-    },
-    {
-      "id": "task-docs-architecture-agent-format",
-      "objective": "[docs] Rewrite ARCHITECTURE.md for agent consumption - file→function→behavior mappings, decision trees for when to use what, no redundancy",
-      "status": "completed",
-      "priority": 11,
-      "createdAt": "2026-01-11T07:05:00.000Z",
-      "tags": [
-        "docs",
-        "agent-optimization"
-      ],
-      "completedAt": "2026-01-11T21:48:36.179Z",
-      "commitSha": "6d269c6"
-    },
-    {
-      "id": "task-docs-api-reference",
-      "objective": "[docs] Create API.md - every exported function with signature, params, return type, error conditions, example usage",
-      "status": "complete",
-      "priority": 12,
-      "createdAt": "2026-01-11T07:05:00.000Z",
-      "tags": [
-        "docs",
-        "agent-optimization"
-      ],
-      "completedAt": "2026-01-11T23:47:58.166Z"
-    },
-    {
-      "id": "task-docs-decision-tree",
-      "objective": "[docs] Create DECISIONS.md - when to use solo vs grind, when to escalate, which model for which task type, routing logic explained",
-      "status": "complete",
-      "priority": 13,
-      "createdAt": "2026-01-11T07:05:00.000Z",
-      "tags": [
-        "docs",
-        "agent-optimization"
-      ],
-      "completedAt": "2026-01-11T23:47:58.166Z"
-    },
-    {
       "id": "task-feedback-metrics-reader",
       "objective": "[feedback] Create metrics reader - load metrics.jsonl, parse outcomes, compute success rates by model/complexity",
       "status": "pending",
@@ -470,36 +312,6 @@
       "createdAt": "2026-01-11T20:44:18.807Z"
     },
     {
-      "id": "task-mkab29o6-im06",
-      "objective": "[grind] Add pre-flight task validation - before starting task, check git history for duplicates and mark as duplicate instead of executing",
-      "status": "duplicate",
-      "priority": 41,
-      "createdAt": "2026-01-11T22:28:20.214Z",
-      "completedAt": "2026-01-11T22:43:44.671Z",
-      "duplicateOfCommit": "72cbda5",
-      "resolution": "Already implemented in commit 72cbda5"
-    },
-    {
-      "id": "task-mkab2a0b-wlyi",
-      "objective": "[grind] Auto-detect completed tasks after merge - scan tasks.json and mark matching tasks as complete when commits are merged",
-      "status": "duplicate",
-      "priority": 42,
-      "createdAt": "2026-01-11T22:28:20.651Z",
-      "completedAt": "2026-01-11T22:43:44.672Z",
-      "duplicateOfCommit": "72cbda5",
-      "resolution": "Already implemented in commit 72cbda5"
-    },
-    {
-      "id": "task-mkab2acp-lxmz",
-      "objective": "[grind] Improve task filtering in runParallel - skip tasks already completed, skip fuzzy matches against recent commits",
-      "status": "duplicate",
-      "priority": 43,
-      "createdAt": "2026-01-11T22:28:21.097Z",
-      "completedAt": "2026-01-11T22:43:44.672Z",
-      "duplicateOfCommit": "72cbda5",
-      "resolution": "Already implemented in commit 72cbda5"
-    },
-    {
       "id": "task-mkab2aof-ygpz",
       "objective": "[grind] Enhanced verification retry logic - opus tier should get 7 attempts instead of 2, progressive escalation with more retries per tier",
       "status": "pending",
@@ -535,48 +347,6 @@
       "createdAt": "2026-01-11T22:29:10.556Z"
     },
     {
-      "id": "task-mkabr067-c0o7",
-      "objective": "[refactor] Split commands/mixed.ts register function - complexity 131, nesting depth 6. Extract command handlers into separate functions",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-11T22:47:34.303Z"
-    },
-    {
-      "id": "task-mkabr0mo-16c9",
-      "objective": "[refactor] Split commands/task.ts register function - complexity 92, 19 nested blocks. Extract command handlers into separate functions",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-11T22:47:34.896Z"
-    },
-    {
-      "id": "task-mkabr12w-2712",
-      "objective": "[refactor] Refactor parallel-solo.ts runParallel method - complexity 54, 5 nested blocks. Break into smaller coordinating methods",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-11T22:47:35.480Z"
-    },
-    {
-      "id": "task-mkabr1hq-3vlz",
-      "objective": "[refactor] Refactor solo.ts runTask method - complexity 35. Extract validation, execution, and error handling into separate methods",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-11T22:47:36.014Z"
-    },
-    {
-      "id": "task-mkabr1wy-2lt4",
-      "objective": "[refactor] Refactor solo.ts runEscalatingReview method - complexity 28, 8 nested blocks. Simplify escalation logic",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-11T22:47:36.562Z"
-    },
-    {
-      "id": "task-mkabr2cc-esya",
-      "objective": "[refactor] Split solo.ts into smaller modules - 1239 lines (threshold 1000). Extract review logic, execution logic to separate files",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-11T22:47:37.116Z"
-    },
-    {
       "id": "task-mkabr2sc-ffur",
       "objective": "[refactor] Refactor git.ts Elevator.processNext method - complexity 18, 2 nested blocks. Simplify merge processing logic",
       "status": "pending",
@@ -591,57 +361,11 @@
       "createdAt": "2026-01-11T22:47:38.255Z"
     },
     {
-      "id": "task-mkabr3n6-rrk6",
-      "objective": "[refactor] Consolidate duplicated code in task.ts - blockTask, markTaskCanceled, markTaskObsolete, unblockTask share structure. Create common helper",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-11T22:47:38.802Z"
-    },
-    {
       "id": "task-mkabr42j-4igg",
       "objective": "[refactor] Reduce primitive obsession in task.ts - 89% primitive args. Introduce typed parameter objects where appropriate",
       "status": "pending",
       "priority": 900,
       "createdAt": "2026-01-11T22:47:39.355Z"
-    },
-    {
-      "id": "task-mkabr4hw-4fob",
-      "objective": "[refactor] Reduce primitive obsession in solo.ts - 64% primitive args. Introduce typed parameter objects for agent execution",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-11T22:47:39.908Z"
-    },
-    {
-      "id": "task-mkabr4xb-c1dm",
-      "objective": "[refactor] Simplify solo.ts runSingleReview method - complexity 19, nesting depth 4. Extract review validation and result processing",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-11T22:47:40.463Z"
-    },
-    {
-      "id": "task-mkabr5cd-qpfc",
-      "objective": "[refactor] Simplify solo.ts generateTicketsFromIssues method - complexity 12, 2 complex conditionals. Use lookup table or strategy pattern",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-11T22:47:41.005Z"
-    },
-    {
-      "id": "task-mkadr4x3-g1d4",
-      "objective": "[critical] Disable automatic Opus reviews - only escalate to Opus if sonnet review finds critical issues. Default reviewPasses to false or skip Opus tier. 95% of tokens currently wasted on unnecessary Opus reviews",
-      "status": "complete",
-      "priority": 1,
-      "createdAt": "2026-01-11T23:43:39.687Z",
-      "completedAt": "2026-01-12T00:21:06.000Z",
-      "commitSha": "14d235d"
-    },
-    {
-      "id": "task-mkadr7nx-xo41",
-      "objective": "[efficiency] Cap review escalation by task complexity - simple tasks (docs, cleanup, refactor) should get haiku/sonnet review but not escalate to Opus. Only complex tasks escalate to Opus when needed",
-      "status": "complete",
-      "priority": 2,
-      "createdAt": "2026-01-11T23:43:43.245Z",
-      "completedAt": "2026-01-12T00:33:19.000Z",
-      "commitSha": "920b711"
     },
     {
       "id": "task-mkadtxcu-cn6i",
@@ -651,54 +375,26 @@
       "createdAt": "2026-01-11T23:45:49.854Z"
     },
     {
-      "id": "task-b6rq1ih0wenw",
-      "objective": "[stabilization] Write integration tests for full grind flow - task selection, worktree, execute, verify, merge, completion",
-      "status": "pending",
-      "priority": 1,
-      "createdAt": "2026-01-12T01:12:23.613Z",
-      "tags": [
-        "stabilization"
-      ]
-    },
-    {
-      "id": "task-g1c4gzp0jpd0",
-      "objective": "[stabilization] Fix auto-detection to reliably mark tasks complete after merge - currently fails silently",
-      "status": "pending",
-      "priority": 2,
-      "createdAt": "2026-01-12T01:12:23.614Z",
-      "tags": [
-        "stabilization"
-      ]
-    },
-    {
-      "id": "task-ixwh7tnrh5jh",
-      "objective": "[stabilization] Add file allowlist to worker context - prevent agents from touching unrelated files (scope creep)",
-      "status": "pending",
-      "priority": 3,
-      "createdAt": "2026-01-12T01:12:23.614Z",
-      "tags": [
-        "stabilization"
-      ]
-    },
-    {
       "id": "task-mf48mfkx7msu",
       "objective": "[stabilization] Add real-time grind reporting - show what's happening now, don't wait for completion",
-      "status": "pending",
+      "status": "complete",
       "priority": 4,
       "createdAt": "2026-01-12T01:12:23.614Z",
       "tags": [
         "stabilization"
-      ]
+      ],
+      "completedAt": "2026-01-12T04:42:34.000Z"
     },
     {
       "id": "task-8znf83r59zvq",
       "objective": "[stabilization] Add error boundaries to grind - one task failure shouldn't crash entire grind",
-      "status": "pending",
+      "status": "complete",
       "priority": 5,
       "createdAt": "2026-01-12T01:12:23.614Z",
       "tags": [
         "stabilization"
-      ]
+      ],
+      "completedAt": "2026-01-12T04:47:00.000Z"
     },
     {
       "id": "task-k68i4doys6bq",
@@ -711,25 +407,219 @@
       ]
     },
     {
-      "id": "task-c4o64hs3e0h9",
-      "objective": "[stabilization] Consolidate orchestrators - delete solo.ts, keep only parallel-solo.ts",
-      "status": "pending",
-      "priority": 7,
-      "createdAt": "2026-01-12T01:12:23.614Z",
-      "tags": [
-        "stabilization"
-      ]
-    },
-    {
       "id": "task-c1h63skgeqjo",
       "objective": "[stabilization] Make verification retries configurable - currently hardcoded and confusing",
-      "status": "pending",
+      "status": "complete",
       "priority": 8,
       "createdAt": "2026-01-12T01:12:23.614Z",
       "tags": [
         "stabilization"
+      ],
+      "completedAt": "2026-01-12T05:35:00.000Z"
+    },
+    {
+      "id": "task-priming-work-hook",
+      "objective": "[priming] Implement work hook system - write assignment.json to worktree before spawning agent. Assignment survives crashes. Agent reads assignment on startup and enters autonomous mode immediately",
+      "status": "pending",
+      "priority": 10,
+      "createdAt": "2026-01-12T04:00:00.000Z",
+      "tags": [
+        "priming",
+        "gastown-pattern",
+        "critical"
+      ]
+    },
+    {
+      "id": "task-priming-per-task-checkpoint",
+      "objective": "[priming] Implement per-task checkpoints - write .undercity/checkpoints/{taskId}.json after each significant action. Track: lastAction, modifiedFiles, verificationStatus, attempt number. Enables granular crash recovery",
+      "status": "pending",
+      "priority": 11,
+      "createdAt": "2026-01-12T04:00:00.000Z",
+      "tags": [
+        "priming",
+        "gastown-pattern",
+        "recovery"
+      ]
+    },
+    {
+      "id": "task-priming-worker-prompt",
+      "objective": "[priming] Create worker prompt template with propulsion directive - include task assignment, verification requirements, completion protocol, and explicit DO NOT list (no questions, no waiting, no planning before acting)",
+      "status": "pending",
+      "priority": 12,
+      "createdAt": "2026-01-12T04:00:00.000Z",
+      "tags": [
+        "priming",
+        "gastown-pattern",
+        "prompts"
+      ],
+      "dependsOn": [
+        "task-priming-work-hook"
+      ]
+    },
+    {
+      "id": "task-priming-checkpoint-recovery",
+      "objective": "[priming] Wire checkpoint recovery to worker spawn - on crash recovery, inject checkpoint context into worker prompt showing previous progress, modified files, and resume point",
+      "status": "pending",
+      "priority": 13,
+      "createdAt": "2026-01-12T04:00:00.000Z",
+      "tags": [
+        "priming",
+        "gastown-pattern",
+        "recovery"
+      ],
+      "dependsOn": [
+        "task-priming-per-task-checkpoint",
+        "task-priming-worker-prompt"
+      ]
+    },
+    {
+      "id": "task-priming-identity-from-path",
+      "objective": "[priming] Add worker identity detection from worktree path - worker knows its task ID, branch, and role from directory structure. No need to pass context explicitly",
+      "status": "pending",
+      "priority": 14,
+      "createdAt": "2026-01-12T04:00:00.000Z",
+      "tags": [
+        "priming",
+        "gastown-pattern"
+      ]
+    },
+    {
+      "id": "task-priming-verification-status-tracking",
+      "objective": "[priming] Track verification status per checkpoint - record which verifications (typecheck/test/lint) passed/failed per attempt. Worker sees what already passed and focuses on failures",
+      "status": "pending",
+      "priority": 15,
+      "createdAt": "2026-01-12T04:00:00.000Z",
+      "tags": [
+        "priming",
+        "gastown-pattern",
+        "verification"
+      ],
+      "dependsOn": [
+        "task-priming-per-task-checkpoint"
+      ]
+    },
+    {
+      "id": "task-skill-claude-code-integration",
+      "objective": "[skill] Create undercity as Claude Code skill - expose grind, add, tasks commands as skill invocations. Normal Claude Code session can spawn undercity for autonomous batch work",
+      "status": "pending",
+      "priority": 20,
+      "createdAt": "2026-01-12T04:00:00.000Z",
+      "tags": [
+        "skill",
+        "claude-code",
+        "integration"
+      ]
+    },
+    {
+      "id": "task-skill-handoff-protocol",
+      "objective": "[skill] Implement handoff protocol - when Claude Code invokes undercity skill, pass current context (files read, decisions made) as handoff content. Undercity workers start with context, not cold",
+      "status": "pending",
+      "priority": 21,
+      "createdAt": "2026-01-12T04:00:00.000Z",
+      "tags": [
+        "skill",
+        "claude-code",
+        "context"
+      ],
+      "dependsOn": [
+        "task-skill-claude-code-integration"
+      ]
+    },
+    {
+      "id": "task-skill-results-return",
+      "objective": "[skill] Implement results return protocol - when undercity completes tasks, return structured summary to calling Claude Code session. Include: tasks completed, files changed, any failures",
+      "status": "pending",
+      "priority": 22,
+      "createdAt": "2026-01-12T04:00:00.000Z",
+      "tags": [
+        "skill",
+        "claude-code",
+        "integration"
+      ],
+      "dependsOn": [
+        "task-skill-claude-code-integration"
+      ]
+    },
+    {
+      "id": "task-witness-health-monitor",
+      "objective": "[witness] Add lightweight health monitoring - detect stuck workers (no checkpoint update in N minutes), log warnings before killing. Pattern from gastown witness",
+      "status": "pending",
+      "priority": 25,
+      "createdAt": "2026-01-12T04:00:00.000Z",
+      "tags": [
+        "witness",
+        "gastown-pattern",
+        "monitoring"
+      ],
+      "dependsOn": [
+        "task-priming-per-task-checkpoint"
+      ]
+    },
+    {
+      "id": "task-witness-nudge-before-kill",
+      "objective": "[witness] Implement nudge-before-kill pattern - if worker appears stuck, send context nudge before terminating. Give worker chance to recover",
+      "status": "pending",
+      "priority": 26,
+      "createdAt": "2026-01-12T04:00:00.000Z",
+      "tags": [
+        "witness",
+        "gastown-pattern",
+        "monitoring"
+      ],
+      "dependsOn": [
+        "task-witness-health-monitor"
+      ]
+    },
+    {
+      "id": "task-push-after-success",
+      "objective": "[integration] Add push-after-success option - optionally push to remote after successful merge. Default off, enable with --push flag or config",
+      "status": "pending",
+      "priority": 30,
+      "createdAt": "2026-01-12T04:00:00.000Z",
+      "tags": [
+        "integration",
+        "git"
+      ]
+    },
+    {
+      "id": "task-atomic-recovery-state",
+      "objective": "[recovery] Implement atomic recovery state - replace fragile recovery.json with directory structure: .undercity/active/{taskId}.state and .undercity/completed/{taskId}.done. On crash, scan active/ to resume. Atomic file ops prevent corruption",
+      "status": "pending",
+      "priority": 9,
+      "createdAt": "2026-01-12T04:10:00.000Z",
+      "tags": [
+        "recovery",
+        "gastown-pattern",
+        "critical"
+      ]
+    },
+    {
+      "id": "task-phase3-metrics-dashboard",
+      "objective": "[phase3] Build metrics dashboard - display token usage per model, success/failure rates by complexity, cost tracking over time. Integrate with existing live-metrics.ts",
+      "status": "pending",
+      "priority": 100,
+      "createdAt": "2026-01-12T04:10:00.000Z",
+      "tags": [
+        "phase3",
+        "metrics",
+        "polish"
+      ]
+    },
+    {
+      "id": "task-phase3-capability-ledger",
+      "objective": "[phase3] Create capability ledger - track what task types succeed at each model tier. Use historical data to improve routing decisions. Store in .undercity/capability-ledger.json",
+      "status": "pending",
+      "priority": 101,
+      "createdAt": "2026-01-12T04:10:00.000Z",
+      "tags": [
+        "phase3",
+        "learning",
+        "polish"
+      ],
+      "dependsOn": [
+        "task-feedback-metrics-reader"
       ]
     }
   ],
-  "lastUpdated": "2026-01-11T23:47:58.171Z"
+  "lastUpdated": "2026-01-12T04:42:34.000Z"
 }

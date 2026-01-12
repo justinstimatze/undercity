@@ -48,6 +48,16 @@ export interface UndercityRc {
 	// Grind options
 	parallel?: number;
 
+	// Verification retry options
+	/** Maximum attempts per task before failing (default: 3) */
+	maxAttempts?: number;
+	/** Maximum fix attempts at the same model tier before escalating (default: 3) */
+	maxRetriesPerTier?: number;
+	/** Maximum review passes per tier before escalating (default: 2) */
+	maxReviewPassesPerTier?: number;
+	/** Maximum review passes at opus tier (default: 6) */
+	maxOpusReviewPasses?: number;
+
 	// Legacy session options
 	autoApprove?: boolean;
 	maxSquad?: number;
@@ -69,6 +79,10 @@ const DEFAULT_CONFIG: Required<UndercityRc> = {
 	annealing: false,
 	supervised: false,
 	parallel: 1,
+	maxAttempts: 3,
+	maxRetriesPerTier: 3,
+	maxReviewPassesPerTier: 2,
+	maxOpusReviewPasses: 6,
 	autoApprove: false,
 	maxSquad: 5,
 	maxRetries: 3,
@@ -139,6 +153,10 @@ function validateConfig(raw: unknown, filePath: string): UndercityRc | null {
 	// Number options
 	const numberKeys: { key: keyof UndercityRc; min: number; max: number }[] = [
 		{ key: "parallel", min: 1, max: 10 },
+		{ key: "maxAttempts", min: 1, max: 20 },
+		{ key: "maxRetriesPerTier", min: 1, max: 10 },
+		{ key: "maxReviewPassesPerTier", min: 1, max: 10 },
+		{ key: "maxOpusReviewPasses", min: 1, max: 20 },
 		{ key: "maxSquad", min: 1, max: 10 },
 		{ key: "maxRetries", min: 0, max: 10 },
 	];

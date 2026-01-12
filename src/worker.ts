@@ -29,6 +29,7 @@ import { createAndCheckout } from "./git.js";
 import { recordQueryResult } from "./live-metrics.js";
 import { sessionLogger } from "./logger.js";
 import { MetricsTracker } from "./metrics.js";
+import * as output from "./output.js";
 import { type ModelTier, type ReviewResult, runEscalatingReview, type UnresolvedTicket } from "./review.js";
 import type { AttemptRecord, ErrorCategory, TokenUsage } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
@@ -153,6 +154,7 @@ export class TaskWorker {
 	private currentModel: ModelTier;
 	private attempts: number = 0;
 	private currentBriefing?: ContextBriefing;
+	private currentTaskId: string = "";
 
 	/** Metrics tracker for token usage and efficiency */
 	private metricsTracker: MetricsTracker;
@@ -210,19 +212,20 @@ export class TaskWorker {
 		this.cleanupDirtyState();
 
 		const taskId = `solo_${Date.now()}`;
+		this.currentTaskId = taskId; // Store for use in other methods
 		const sessionId = `session_${Date.now()}`;
 
-		console.log(chalk.cyan(`\n━━━ Task: ${task.substring(0, 60)}${task.length > 60 ? "..." : ""} ━━━`));
+		output.taskStart(taskId, task.substring(0, 60) + (task.length > 60 ? "..." : ""));
 
 		// Pre-flight: Prepare context briefing (FREE - no LLM tokens)
 		// Do this FIRST so we can use target files for quantitative complexity assessment
-		console.log(chalk.dim("  Analyzing codebase..."));
+		output.workerPhase(taskId, "analyzing");
 		let targetFiles: string[] = [];
 		try {
 			this.currentBriefing = await prepareContext(task);
 			targetFiles = this.currentBriefing.targetFiles;
 			const sigCount = this.currentBriefing.functionSignatures.length;
-			console.log(chalk.dim(`  Found ${targetFiles.length} target files, ${sigCount} signatures`));
+			output.debug(`Found ${targetFiles.length} target files, ${sigCount} signatures`, { taskId });
 		} catch (error) {
 			this.log("Context preparation failed", { error: String(error) });
 			// Continue without briefing - agent will explore
@@ -242,15 +245,20 @@ export class TaskWorker {
 			const metricsInfo = assessment.metrics
 				? ` (${assessment.metrics.totalLines} lines, ${assessment.metrics.functionCount} functions)`
 				: "";
-			console.log(chalk.dim(`  Complexity: ${assessment.level}${metricsInfo}`));
+			output.info(`Complexity: ${assessment.level}${metricsInfo}`, {
+				taskId,
+				complexity: assessment.level,
+				lines: assessment.metrics?.totalLines,
+				functions: assessment.metrics?.functionCount,
+			});
 			if (assessment.metrics?.crossPackage) {
-				console.log(chalk.dim(`  Cross-package: ${assessment.metrics.packages.join(", ")}`));
+				output.debug(`Cross-package: ${assessment.metrics.packages.join(", ")}`, { taskId });
 			}
 			if (assessment.metrics?.avgCodeHealth !== undefined) {
-				console.log(chalk.dim(`  Code health: ${assessment.metrics.avgCodeHealth.toFixed(1)}/10`));
+				output.debug(`Code health: ${assessment.metrics.avgCodeHealth.toFixed(1)}/10`, { taskId });
 			}
 			if (assessment.metrics?.git.hotspots.length) {
-				console.log(chalk.dim(`  Git hotspots: ${assessment.metrics.git.hotspots.length} files`));
+				output.debug(`Git hotspots: ${assessment.metrics.git.hotspots.length} files`, { taskId });
 			}
 		} else if (targetFiles.length > 0) {
 			// Had target files but none matched explicit - use first 5
@@ -258,11 +266,11 @@ export class TaskWorker {
 			const metricsInfo = assessment.metrics
 				? ` (${assessment.metrics.totalLines} lines, ${assessment.metrics.functionCount} functions)`
 				: "";
-			console.log(chalk.dim(`  Complexity: ${assessment.level}${metricsInfo}`));
+			output.info(`Complexity: ${assessment.level}${metricsInfo}`, { taskId, complexity: assessment.level });
 		} else {
 			// Fall back to keyword-based assessment
 			assessment = assessComplexityFast(task);
-			console.log(chalk.dim(`  Complexity: ${assessment.level} (keyword-based)`));
+			output.info(`Complexity: ${assessment.level} (keyword-based)`, { taskId, complexity: assessment.level });
 		}
 
 		this.currentModel = this.determineStartingModel(assessment);
@@ -273,11 +281,11 @@ export class TaskWorker {
 		this.metricsTracker.recordAgentSpawn(this.currentModel === "opus" ? "reviewer" : "builder");
 
 		this.log("Starting task", { task, model: this.currentModel, assessment: assessment.level, reviewLevel });
-		console.log(chalk.dim(`  Model: ${this.currentModel}`));
+		output.info(`Model: ${this.currentModel}`, { taskId, model: this.currentModel });
 		if (reviewLevel.review) {
 			const reviewMode = reviewLevel.annealing ? "escalating + annealing" : "escalating";
 			const reviewCap = reviewLevel.maxReviewTier !== "opus" ? ` (cap: ${reviewLevel.maxReviewTier})` : "";
-			console.log(chalk.dim(`  Reviews: ${reviewMode}${reviewCap}`));
+			output.info(`Reviews: ${reviewMode}${reviewCap}`, { taskId, reviewMode, maxTier: reviewLevel.maxReviewTier });
 		}
 
 		// Set up branch if specified
@@ -298,26 +306,28 @@ export class TaskWorker {
 			this.attempts++;
 			this.sameModelRetries++;
 			const attemptStart = Date.now();
-			console.log(
-				chalk.dim(
-					`  Attempt ${this.attempts}/${this.maxAttempts} (${this.currentModel}, retry ${this.sameModelRetries})`,
-				),
-			);
+			output.workerAttempt(taskId, this.attempts, this.maxAttempts, this.currentModel, {
+				retry: this.sameModelRetries,
+			});
 
 			try {
 				// Run the agent
+				output.workerPhase(taskId, "executing", { model: this.currentModel });
 				const _result = await this.executeAgent(task);
 
 				// Verify the work
+				output.workerPhase(taskId, "verifying");
 				const verification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory);
 
 				// Categorize errors for tracking
 				const errorCategories = categorizeErrors(verification);
 
 				if (verification.passed) {
+					output.workerVerification(taskId, true);
 					// Run review passes if enabled (auto-selected or user-specified)
 					let finalVerification = verification;
 					if (reviewLevel.review) {
+						output.workerPhase(taskId, "reviewing");
 						const reviewResult = await runEscalatingReview(task, {
 							useAnnealing: reviewLevel.annealing,
 							maxReviewTier: reviewLevel.maxReviewTier,
@@ -334,7 +344,7 @@ export class TaskWorker {
 								// Store tickets - they'll be passed through if we fail completely
 								this.pendingTickets = reviewResult.unresolvedTickets;
 							}
-							console.log(chalk.yellow(`  Review could not fully resolve issues, retrying task...`));
+							output.warning("Review could not fully resolve issues, retrying task...", { taskId });
 							this.lastFeedback = `Review found issues that couldn't be fully resolved: ${reviewResult.issuesFound.join(", ")}`;
 							continue;
 						}
@@ -342,7 +352,7 @@ export class TaskWorker {
 						if (reviewResult.issuesFound.length > 0) {
 							finalVerification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory);
 							if (!finalVerification.passed) {
-								console.log(chalk.yellow(`  Final verification failed after reviews`));
+								output.warning("Final verification failed after reviews", { taskId });
 								this.lastFeedback = finalVerification.feedback;
 								continue;
 							}
@@ -359,6 +369,7 @@ export class TaskWorker {
 
 					let commitSha: string | undefined;
 					if (this.autoCommit && finalVerification.filesChanged > 0) {
+						output.workerPhase(taskId, "committing");
 						commitSha = await this.commitWork(task);
 					}
 
@@ -393,7 +404,7 @@ export class TaskWorker {
 				this.lastFeedback = verification.feedback;
 
 				const errorSummary = errorCategories.length > 0 ? errorCategories.join(", ") : verification.issues.join(", ");
-				console.log(chalk.yellow(`  Verification failed: ${errorSummary}`));
+				output.workerVerification(taskId, false, [errorSummary]);
 
 				// Decide: retry same tier or escalate?
 				const escalationDecision = this.shouldEscalate(verification, errorCategories);
@@ -403,7 +414,7 @@ export class TaskWorker {
 					const escalated = this.escalateModel();
 					if (escalated) {
 						// Get post-mortem from the failed tier before moving on
-						console.log(chalk.dim(`  Getting post-mortem from ${previousModel}...`));
+						output.debug(`Getting post-mortem from ${previousModel}...`, { taskId });
 						this.lastPostMortem = await this.getPostMortem(task, verification.feedback, previousModel);
 
 						// Update last attempt record with escalation info
@@ -413,17 +424,18 @@ export class TaskWorker {
 
 						// Reset same-model retry counter
 						this.sameModelRetries = 0;
+						output.workerEscalation(taskId, previousModel, this.currentModel, escalationDecision.reason);
 					} else {
 						// Already at max, one more try
-						console.log(chalk.yellow("  At max model tier, final attempt..."));
+						output.warning("At max model tier, final attempt...", { taskId, model: this.currentModel });
 					}
 				} else {
 					// Retrying at same tier - just use feedback, no post-mortem
-					console.log(chalk.dim(`  Retrying at ${this.currentModel} (${escalationDecision.reason})`));
+					output.debug(`Retrying at ${this.currentModel} (${escalationDecision.reason})`, { taskId });
 				}
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : String(error);
-				console.log(chalk.red(`  Error: ${errorMessage.substring(0, 100)}`));
+				output.error(`Error: ${errorMessage.substring(0, 100)}`, { taskId });
 
 				// Record failed attempt
 				this.attemptRecords.push({
@@ -529,26 +541,21 @@ Be concise and specific. Focus on actionable insights.`;
 	async runTasks(tasks: string[]): Promise<TaskResult[]> {
 		const results: TaskResult[] = [];
 
-		console.log(chalk.bold(`\nSolo Mode: Processing ${tasks.length} task(s)`));
-		console.log(chalk.dim("─".repeat(60)));
+		output.header("Solo Mode", `Processing ${tasks.length} task(s)`);
 
 		for (let i = 0; i < tasks.length; i++) {
 			const task = tasks[i];
-			console.log(chalk.cyan(`\n[${i + 1}/${tasks.length}]`));
+			output.progress(`Task ${i + 1}/${tasks.length}`, { current: i + 1, total: tasks.length, label: "tasks" });
 
 			const result = await this.runTask(task);
 			results.push(result);
 
 			if (result.status === "complete") {
-				console.log(chalk.green(`  ✓ Complete in ${Math.round(result.durationMs / 1000)}s`));
-				if (result.commitSha) {
-					console.log(chalk.dim(`    Commit: ${result.commitSha.substring(0, 8)}`));
-				}
+				output.taskComplete(this.currentTaskId, `Complete in ${Math.round(result.durationMs / 1000)}s`, {
+					commitSha: result.commitSha?.substring(0, 8),
+				});
 			} else {
-				console.log(chalk.red(`  ✗ Failed after ${result.attempts} attempts`));
-				if (result.error) {
-					console.log(chalk.dim(`    ${result.error.substring(0, 80)}`));
-				}
+				output.taskFailed(this.currentTaskId, `Failed after ${result.attempts} attempts`, result.error);
 			}
 		}
 
@@ -556,9 +563,10 @@ Be concise and specific. Focus on actionable insights.`;
 		const completed = results.filter((r) => r.status === "complete").length;
 		const failed = results.filter((r) => r.status === "failed").length;
 
-		console.log(chalk.bold("\n━━━ Summary ━━━"));
-		console.log(`  ${chalk.green("✓")} Completed: ${completed}`);
-		console.log(`  ${chalk.red("✗")} Failed: ${failed}`);
+		output.summary("Summary", [
+			{ label: "Completed", value: completed, status: completed > 0 ? "good" : "neutral" },
+			{ label: "Failed", value: failed, status: failed > 0 ? "bad" : "neutral" },
+		]);
 
 		return results;
 	}
@@ -839,7 +847,7 @@ When done, provide a brief summary of what you changed.`;
 		if (currentIndex < tiers.length - 1) {
 			const previousModel = this.currentModel;
 			const newModel = tiers[currentIndex + 1];
-			console.log(chalk.yellow(`  Escalating: ${previousModel} → ${newModel}`));
+			// Note: output.workerEscalation is called by the caller with reason
 			this.currentModel = newModel;
 			// Record escalation in metrics tracker
 			this.metricsTracker.recordEscalation(previousModel, newModel);

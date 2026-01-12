@@ -28,6 +28,11 @@ export interface GrindOptions {
 	typecheck?: boolean;
 	review?: boolean;
 	decompose?: boolean;
+	// Verification retry options
+	maxAttempts?: string;
+	maxRetriesPerTier?: string;
+	maxReviewPasses?: string;
+	maxOpusReviewPasses?: string;
 }
 
 export interface InitOptions {
@@ -66,6 +71,14 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 	const maxCount = Number.parseInt(options.count || "0", 10);
 	const parallelism = Math.min(5, Math.max(1, Number.parseInt(options.parallel || "1", 10)));
 
+	// Parse verification retry options (use undefined to let Orchestrator use defaults)
+	const maxAttempts = options.maxAttempts ? Number.parseInt(options.maxAttempts, 10) : undefined;
+	const maxRetriesPerTier = options.maxRetriesPerTier ? Number.parseInt(options.maxRetriesPerTier, 10) : undefined;
+	const maxReviewPassesPerTier = options.maxReviewPasses ? Number.parseInt(options.maxReviewPasses, 10) : undefined;
+	const maxOpusReviewPasses = options.maxOpusReviewPasses
+		? Number.parseInt(options.maxOpusReviewPasses, 10)
+		: undefined;
+
 	const orchestrator = new Orchestrator({
 		maxConcurrent: parallelism,
 		autoCommit: options.commit !== false,
@@ -73,6 +86,10 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 		verbose: options.verbose || false,
 		startingModel: (options.model || "sonnet") as "haiku" | "sonnet" | "opus",
 		reviewPasses: options.review === true,
+		maxAttempts,
+		maxRetriesPerTier,
+		maxReviewPassesPerTier,
+		maxOpusReviewPasses,
 	});
 
 	// If a goal is passed directly, run it as a single task
@@ -324,83 +341,112 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 			const tierTasks = tasksByModel[modelTier];
 			if (tierTasks.length === 0) continue;
 
-			output.info(`Running ${tierTasks.length} task(s) with ${modelTier}...`);
+			// Error boundary around each tier - one tier failing shouldn't stop others
+			try {
+				output.info(`Running ${tierTasks.length} task(s) with ${modelTier}...`);
 
-			// Log task starts for this tier
-			for (const task of tierTasks) {
-				logTaskStarted({
-					batchId,
-					taskId: task.id,
-					objective: task.objective,
-					model: modelTier,
+				// Log task starts for this tier
+				for (const task of tierTasks) {
+					logTaskStarted({
+						batchId,
+						taskId: task.id,
+						objective: task.objective,
+						model: modelTier,
+					});
+				}
+
+				// Create orchestrator for this model tier
+				const tierOrchestrator = new Orchestrator({
+					maxConcurrent: parallelism,
+					autoCommit: options.commit !== false,
+					stream: options.stream || false,
+					verbose: options.verbose || false,
+					startingModel: modelTier,
+					reviewPasses: options.review === true,
+					maxAttempts,
+					maxRetriesPerTier,
+					maxReviewPassesPerTier,
+					maxOpusReviewPasses,
 				});
-			}
 
-			// Create orchestrator for this model tier
-			const tierOrchestrator = new Orchestrator({
-				maxConcurrent: parallelism,
-				autoCommit: options.commit !== false,
-				stream: options.stream || false,
-				verbose: options.verbose || false,
-				startingModel: modelTier,
-				reviewPasses: options.review === true,
-			});
+				const tierObjectives = tierTasks.map((t) => t.objective);
+				const tierStartTime = Date.now();
+				const result = await tierOrchestrator.runParallel(tierObjectives);
+				const tierDurationMs = Date.now() - tierStartTime;
 
-			const tierObjectives = tierTasks.map((t) => t.objective);
-			const tierStartTime = Date.now();
-			const result = await tierOrchestrator.runParallel(tierObjectives);
-			const tierDurationMs = Date.now() - tierStartTime;
+				// Update task status based on results
+				for (const taskResult of result.results) {
+					const taskId = objectiveToQuestId.get(taskResult.task);
+					if (taskId) {
+						if (taskResult.merged) {
+							markTaskComplete(taskId);
+							output.taskComplete(taskId, `Task merged (${modelTier})`);
+							completedCount++;
+							updateGrindProgress(completedCount, totalToProcess);
 
-			// Update task status based on results
-			for (const taskResult of result.results) {
-				const taskId = objectiveToQuestId.get(taskResult.task);
-				if (taskId) {
-					if (taskResult.merged) {
-						markTaskComplete(taskId);
-						output.taskComplete(taskId, `Task merged (${modelTier})`);
-						completedCount++;
-						updateGrindProgress(completedCount, totalToProcess);
+							// Log completion event
+							logTaskComplete({
+								batchId,
+								taskId,
+								objective: taskResult.task,
+								durationMs: tierDurationMs,
+								commitSha: taskResult.result?.commitSha,
+							});
 
-						// Log completion event
-						logTaskComplete({
-							batchId,
-							taskId,
-							objective: taskResult.task,
-							durationMs: tierDurationMs,
-							commitSha: taskResult.result?.commitSha,
-						});
-
-						// Check if this was a subtask and auto-complete parent if all siblings done
-						const task = getTaskById(taskId);
-						if (task?.parentId) {
-							const parentCompleted = completeParentIfAllSubtasksDone(task.parentId);
-							if (parentCompleted) {
-								output.info(`Parent task ${task.parentId} auto-completed (all subtasks done)`);
+							// Check if this was a subtask and auto-complete parent if all siblings done
+							const task = getTaskById(taskId);
+							if (task?.parentId) {
+								const parentCompleted = completeParentIfAllSubtasksDone(task.parentId);
+								if (parentCompleted) {
+									output.info(`Parent task ${task.parentId} auto-completed (all subtasks done)`);
+								}
 							}
+						} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
+							const errorMsg = taskResult.mergeError || "Task failed";
+							markTaskFailed(taskId, errorMsg);
+							output.taskFailed(taskId, `Task failed (${modelTier})`, errorMsg);
+							completedCount++;
+							updateGrindProgress(completedCount, totalToProcess);
+
+							// Log failure event
+							logTaskFailed({
+								batchId,
+								taskId,
+								objective: taskResult.task,
+								error: errorMsg,
+								durationMs: tierDurationMs,
+							});
 						}
-					} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
-						const errorMsg = taskResult.mergeError || "Task failed";
-						markTaskFailed(taskId, errorMsg);
-						output.taskFailed(taskId, `Task failed (${modelTier})`, errorMsg);
+					}
+				}
+
+				totalSuccessful += result.successful;
+				totalFailed += result.failed;
+				totalMerged += result.merged;
+				totalDurationMs += result.durationMs;
+			} catch (tierError) {
+				// Tier-level error - log and continue to next tier
+				output.error(`Model tier ${modelTier} failed: ${tierError}`);
+
+				// Mark all tasks in this tier as failed
+				for (const task of tierTasks) {
+					const taskId = objectiveToQuestId.get(task.objective);
+					if (taskId) {
+						markTaskFailed(taskId, `Tier error: ${tierError}`);
 						completedCount++;
 						updateGrindProgress(completedCount, totalToProcess);
 
-						// Log failure event
 						logTaskFailed({
 							batchId,
 							taskId,
-							objective: taskResult.task,
-							error: errorMsg,
-							durationMs: tierDurationMs,
+							objective: task.objective,
+							error: `Tier error: ${tierError}`,
+							durationMs: 0,
 						});
 					}
 				}
+				totalFailed += tierTasks.length;
 			}
-
-			totalSuccessful += result.successful;
-			totalFailed += result.failed;
-			totalMerged += result.merged;
-			totalDurationMs += result.durationMs;
 		}
 
 		clearGrindProgress();

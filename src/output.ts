@@ -27,7 +27,13 @@ export interface OutputEvent {
 		| "task_complete"
 		| "task_failed"
 		| "metrics"
-		| "debug";
+		| "debug"
+		// Worker-level events for real-time reporting
+		| "worker_phase"
+		| "worker_attempt"
+		| "worker_verification"
+		| "worker_escalation"
+		| "worker_review";
 	message: string;
 	timestamp: string;
 	data?: Record<string, unknown>;
@@ -140,6 +146,17 @@ function getHumanPrefix(type: OutputEvent["type"]): string {
 			return chalk.blue("📊");
 		case "debug":
 			return chalk.dim("·");
+		// Worker-level events
+		case "worker_phase":
+			return chalk.cyan("  │");
+		case "worker_attempt":
+			return chalk.cyan("  ├─");
+		case "worker_verification":
+			return chalk.cyan("  │ ");
+		case "worker_escalation":
+			return chalk.yellow("  ↑");
+		case "worker_review":
+			return chalk.magenta("  ◆");
 		case "status":
 		case "info":
 		default:
@@ -256,6 +273,104 @@ export function debug(message: string, data?: Record<string, unknown>): void {
 	if (globalConfig.verbose) {
 		outputEvent({ type: "debug", message, timestamp: now(), data });
 	}
+}
+
+// =============================================================================
+// Worker-level event functions for real-time reporting
+// =============================================================================
+
+/**
+ * Output worker phase change (analyzing, executing, verifying, etc.)
+ */
+export function workerPhase(
+	taskId: string,
+	phase: "analyzing" | "executing" | "verifying" | "committing" | "reviewing",
+	data?: Record<string, unknown>,
+): void {
+	const phaseMessages: Record<string, string> = {
+		analyzing: "Analyzing task complexity...",
+		executing: "Executing with agent...",
+		verifying: "Running verification...",
+		committing: "Committing changes...",
+		reviewing: "Running review passes...",
+	};
+	outputEvent({
+		type: "worker_phase",
+		message: phaseMessages[phase] || phase,
+		timestamp: now(),
+		data: { taskId, phase, ...data },
+	});
+}
+
+/**
+ * Output worker attempt information
+ */
+export function workerAttempt(
+	taskId: string,
+	attempt: number,
+	maxAttempts: number,
+	model: string,
+	data?: Record<string, unknown>,
+): void {
+	outputEvent({
+		type: "worker_attempt",
+		message: `Attempt ${attempt}/${maxAttempts} (${model})`,
+		timestamp: now(),
+		data: { taskId, attempt, maxAttempts, model, ...data },
+	});
+}
+
+/**
+ * Output worker verification result
+ */
+export function workerVerification(
+	taskId: string,
+	passed: boolean,
+	issues?: string[],
+	data?: Record<string, unknown>,
+): void {
+	const message = passed ? "Verification passed" : `Verification failed: ${issues?.join(", ") || "unknown"}`;
+	outputEvent({
+		type: "worker_verification",
+		message,
+		timestamp: now(),
+		data: { taskId, passed, issues, ...data },
+	});
+}
+
+/**
+ * Output worker escalation event
+ */
+export function workerEscalation(taskId: string, fromModel: string, toModel: string, reason?: string): void {
+	outputEvent({
+		type: "worker_escalation",
+		message: `Escalating: ${fromModel} → ${toModel}${reason ? ` (${reason})` : ""}`,
+		timestamp: now(),
+		data: { taskId, fromModel, toModel, reason },
+	});
+}
+
+/**
+ * Output worker review event
+ */
+export function workerReview(
+	taskId: string,
+	tier: string,
+	pass: number,
+	maxPasses: number,
+	result: "passed" | "fixing" | "escalating",
+): void {
+	const messages: Record<string, string> = {
+		passed: `Review ${pass}/${maxPasses} (${tier}): passed`,
+		fixing: `Review ${pass}/${maxPasses} (${tier}): fixing issues...`,
+		escalating: `Review ${pass}/${maxPasses} (${tier}): escalating`,
+	};
+	outputEvent({
+		type: "worker_review",
+		message: messages[result],
+		timestamp: now(),
+		data: { taskId, tier, pass, maxPasses, result },
+	});
 }
 
 // =============================================================================

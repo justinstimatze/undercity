@@ -31,6 +31,11 @@ export interface ParallelSoloOptions {
 	verbose?: boolean;
 	reviewPasses?: boolean; // Enable escalating review (haiku → sonnet → opus)
 	annealingAtOpus?: boolean; // Enable annealing review at opus tier
+	// Verification retry options
+	maxAttempts?: number; // Maximum attempts per task before failing (default: 3)
+	maxRetriesPerTier?: number; // Maximum fix attempts at same tier before escalating (default: 3)
+	maxReviewPassesPerTier?: number; // Maximum review passes per tier before escalating (default: 2)
+	maxOpusReviewPasses?: number; // Maximum review passes at opus tier (default: 6)
 }
 
 export interface ParallelTaskResult {
@@ -106,6 +111,11 @@ export class Orchestrator {
 	private verbose: boolean;
 	private reviewPasses: boolean;
 	private annealingAtOpus: boolean;
+	// Verification retry options
+	private maxAttempts: number;
+	private maxRetriesPerTier: number;
+	private maxReviewPassesPerTier: number;
+	private maxOpusReviewPasses: number;
 	private worktreeManager: WorktreeManager;
 	private persistence: Persistence;
 	private rateLimitTracker: RateLimitTracker;
@@ -119,6 +129,11 @@ export class Orchestrator {
 		this.verbose = options.verbose ?? false;
 		this.reviewPasses = options.reviewPasses ?? false; // Default to no automatic reviews - use --review flag to enable
 		this.annealingAtOpus = options.annealingAtOpus ?? false;
+		// Verification retry options with defaults
+		this.maxAttempts = options.maxAttempts ?? 3;
+		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
+		this.maxReviewPassesPerTier = options.maxReviewPassesPerTier ?? 2;
+		this.maxOpusReviewPasses = options.maxOpusReviewPasses ?? 6;
 		this.worktreeManager = new WorktreeManager();
 
 		// Initialize persistence and trackers
@@ -174,6 +189,10 @@ export class Orchestrator {
 				verbose: this.verbose,
 				reviewPasses: this.reviewPasses,
 				annealingAtOpus: this.annealingAtOpus,
+				maxAttempts: this.maxAttempts,
+				maxRetriesPerTier: this.maxRetriesPerTier,
+				maxReviewPassesPerTier: this.maxReviewPassesPerTier,
+				maxOpusReviewPasses: this.maxOpusReviewPasses,
 				// No workingDirectory - runs in current directory
 			});
 
@@ -283,11 +302,21 @@ export class Orchestrator {
 			);
 		}
 
-		// Get main branch for file tracking
-		const mainBranch = this.worktreeManager.getMainBranch();
+		// Get main branch for file tracking (with error boundary)
+		let mainBranch: string;
+		try {
+			mainBranch = this.worktreeManager.getMainBranch();
+		} catch (branchError) {
+			output.warning(`Could not determine main branch, defaulting to 'main': ${branchError}`);
+			mainBranch = "main";
+		}
 
-		// Clear completed file tracking entries from previous runs
-		this.fileTracker.clearCompleted();
+		// Clear completed file tracking entries from previous runs (with error boundary)
+		try {
+			this.fileTracker.clearCompleted();
+		} catch (clearError) {
+			output.debug(`File tracker cleanup failed (non-fatal): ${clearError}`);
+		}
 
 		// Process tasks in batches of maxConcurrent
 		const batchId = generateBatchId();
@@ -371,6 +400,10 @@ export class Orchestrator {
 						workingDirectory: worktreePath,
 						reviewPasses: this.reviewPasses,
 						annealingAtOpus: this.annealingAtOpus,
+						maxAttempts: this.maxAttempts,
+						maxRetriesPerTier: this.maxRetriesPerTier,
+						maxReviewPassesPerTier: this.maxReviewPassesPerTier,
+						maxOpusReviewPasses: this.maxOpusReviewPasses,
 					});
 
 					const result = await orchestrator.runTask(task);
@@ -433,28 +466,35 @@ export class Orchestrator {
 			results.push(...batchResults);
 		}
 
-		// Record token usage for rate limit tracking
-		for (const taskResult of results) {
-			if (taskResult.result?.tokenUsage) {
-				// Record each attempt's usage
-				for (const attemptUsage of taskResult.result.tokenUsage.attempts) {
-					const model = (attemptUsage.model as "haiku" | "sonnet" | "opus") || this.startingModel;
-					this.rateLimitTracker.recordTask(
-						taskResult.taskId,
-						model,
-						attemptUsage.inputTokens,
-						attemptUsage.outputTokens,
-						{
-							durationMs: taskResult.result.durationMs,
-						},
+		// Record token usage for rate limit tracking (with error boundary)
+		try {
+			for (const taskResult of results) {
+				if (taskResult.result?.tokenUsage) {
+					// Record each attempt's usage
+					for (const attemptUsage of taskResult.result.tokenUsage.attempts) {
+						const model = (attemptUsage.model as "haiku" | "sonnet" | "opus") || this.startingModel;
+						this.rateLimitTracker.recordTask(
+							taskResult.taskId,
+							model,
+							attemptUsage.inputTokens,
+							attemptUsage.outputTokens,
+							{
+								durationMs: taskResult.result.durationMs,
+							},
+						);
+					}
+				}
+
+				// Check for rate limit errors
+				if (taskResult.mergeError?.includes("429") || taskResult.result?.error?.includes("429")) {
+					this.rateLimitTracker.recordRateLimitHit(
+						this.startingModel,
+						taskResult.mergeError || taskResult.result?.error,
 					);
 				}
 			}
-
-			// Check for rate limit errors
-			if (taskResult.mergeError?.includes("429") || taskResult.result?.error?.includes("429")) {
-				this.rateLimitTracker.recordRateLimitHit(this.startingModel, taskResult.mergeError || taskResult.result?.error);
-			}
+		} catch (tokenRecordingError) {
+			output.warning(`Token recording failed (non-fatal): ${tokenRecordingError}`);
 		}
 
 		// Phase 3: Merge successful branches serially
@@ -529,19 +569,31 @@ export class Orchestrator {
 
 		output.summary("Parallel Solo Summary", summaryItems);
 
-		// Save rate limit state and file tracking state
-		this.persistence.saveRateLimitState(this.rateLimitTracker.getState());
-		this.persistence.saveFileTracking(this.fileTracker.getState());
+		// Save rate limit state and file tracking state (with error boundary)
+		try {
+			this.persistence.saveRateLimitState(this.rateLimitTracker.getState());
+			this.persistence.saveFileTracking(this.fileTracker.getState());
+		} catch (stateSaveError) {
+			output.warning(`State save failed (non-fatal): ${stateSaveError}`);
+		}
 
-		// Mark batch as complete
-		this.markBatchComplete();
+		// Mark batch as complete (with error boundary)
+		try {
+			this.markBatchComplete();
+		} catch (batchCompleteError) {
+			output.warning(`Batch completion tracking failed (non-fatal): ${batchCompleteError}`);
+		}
 
-		// Show updated rate limit usage
-		const finalUsage = this.rateLimitTracker.getUsageSummary();
-		output.metrics("Rate limit usage", {
-			fiveHourPercent: (finalUsage.percentages.fiveHour * 100).toFixed(0),
-			weeklyPercent: (finalUsage.percentages.weekly * 100).toFixed(0),
-		});
+		// Show updated rate limit usage (with error boundary)
+		try {
+			const finalUsage = this.rateLimitTracker.getUsageSummary();
+			output.metrics("Rate limit usage", {
+				fiveHourPercent: (finalUsage.percentages.fiveHour * 100).toFixed(0),
+				weeklyPercent: (finalUsage.percentages.weekly * 100).toFixed(0),
+			});
+		} catch (metricsError) {
+			output.debug(`Metrics display failed (non-fatal): ${metricsError}`);
+		}
 
 		return {
 			results,

@@ -41,6 +41,10 @@ export const mixedCommands: CommandModule = {
 			.option("--no-typecheck", "Skip typecheck verification")
 			.option("--review", "Enable review passes (disabled by default to save tokens)")
 			.option("--no-decompose", "Skip atomicity check and task decomposition")
+			.option("--max-attempts <n>", "Maximum attempts per task before failing (default: 3)")
+			.option("--max-retries-per-tier <n>", "Maximum fix attempts at same tier before escalating (default: 3)")
+			.option("--max-review-passes <n>", "Maximum review passes per tier before escalating (default: 2)")
+			.option("--max-opus-review-passes <n>", "Maximum review passes at opus tier (default: 6)")
 			.action((goal: string | undefined, options: GrindOptions) => handleGrind(goal, options));
 
 		// Limits command - quick snapshot of usage (use 'watch' for live monitoring)
