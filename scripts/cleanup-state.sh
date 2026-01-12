@@ -1,16 +1,30 @@
 #!/usr/bin/env bash
 # Cleanup script for Undercity state files
 # Run this before starting a fresh grind to clear stale state
+#
+# Usage:
+#   pnpm cleanup       - Light cleanup (session state)
+#   pnpm cleanup --deep - Deep cleanup (old dirs, caches, backups)
 
 set -euo pipefail
 
 UNDERCITY_DIR=".undercity"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+DEEP_CLEAN=false
+
+# Parse arguments
+if [[ "${1:-}" == "--deep" ]]; then
+    DEEP_CLEAN=true
+fi
 
 cd "$REPO_ROOT"
 
-echo "🧹 Undercity State Cleanup"
+if [[ "$DEEP_CLEAN" == true ]]; then
+    echo "🧹 Undercity Deep Cleanup"
+else
+    echo "🧹 Undercity State Cleanup"
+fi
 echo "=========================="
 echo
 
@@ -112,11 +126,62 @@ else
 fi
 echo
 
-# 7. Summary
+# 7. Deep cleanup (optional)
+if [[ "$DEEP_CLEAN" == true ]]; then
+    echo "7. Deep cleanup - removing old directories and caches..."
+    echo
+
+    # Remove old agent state directories
+    if [[ -d "$UNDERCITY_DIR/squad" ]]; then
+        count=$(find "$UNDERCITY_DIR/squad" -type f 2>/dev/null | wc -l || echo 0)
+        echo "  🗑️  Removing squad/ ($count files)"
+        rm -rf "$UNDERCITY_DIR/squad"
+    fi
+
+    if [[ -d "$UNDERCITY_DIR/raids" ]]; then
+        echo "  🗑️  Removing raids/"
+        rm -rf "$UNDERCITY_DIR/raids"
+    fi
+
+    if [[ -d "$UNDERCITY_DIR/logs" ]]; then
+        count=$(find "$UNDERCITY_DIR/logs" -type f 2>/dev/null | wc -l || echo 0)
+        echo "  🗑️  Removing logs/ ($count files)"
+        rm -rf "$UNDERCITY_DIR/logs"
+    fi
+
+    # Remove old cache and state files
+    for file in stash.json efficiency-outcomes.json flute-cache.json scout-cache.json pocket.json intel.txt inventory.json; do
+        if [[ -f "$UNDERCITY_DIR/$file" ]]; then
+            echo "  🗑️  Removing $file"
+            rm "$UNDERCITY_DIR/$file"
+        fi
+    done
+
+    # Remove all backup files
+    backup_count=$(find "$UNDERCITY_DIR" -maxdepth 1 -name "*.backup-*" 2>/dev/null | wc -l || echo 0)
+    if [[ $backup_count -gt 0 ]]; then
+        echo "  🗑️  Removing $backup_count backup file(s)"
+        find "$UNDERCITY_DIR" -maxdepth 1 -name "*.backup-*" -delete
+    fi
+
+    echo "  ✓ Deep cleanup complete"
+    echo
+fi
+
+# Summary
 echo "=========================="
 echo "✅ Cleanup complete!"
 echo
-echo "State files cleaned:"
+
+if [[ "$DEEP_CLEAN" == true ]]; then
+    echo "Deep cleanup performed:"
+    echo "  • Removed old directories (squad/, raids/, logs/)"
+    echo "  • Removed old caches and state files"
+    echo "  • Removed all backup files"
+    echo
+fi
+
+echo "Session state cleaned:"
 echo "  • parallel-recovery.json"
 echo "  • file-tracking.json"
 echo "  • worktree-state.json"
