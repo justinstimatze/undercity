@@ -621,7 +621,63 @@
       "dependsOn": [
         "task-feedback-metrics-reader"
       ]
+    },
+    {
+      "id": "task-mkat4x1m-92198a",
+      "objective": "Test task with priority",
+      "status": "pending",
+      "priority": 10,
+      "createdAt": "2026-01-12T06:54:16.907Z"
+    },
+    {
+      "id": "task-mkat51at-809d4f",
+      "objective": "Test task with invalid priority",
+      "status": "pending",
+      "priority": null,
+      "createdAt": "2026-01-12T06:54:22.421Z"
+    },
+    {
+      "id": "task-mkat5me0-c20dca",
+      "objective": "Test task with valid priority",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-12T06:54:49.752Z"
+    },
+    {
+      "id": "task-mkat5p91-c5cade",
+      "objective": "Test task with invalid text priority",
+      "status": "pending",
+      "priority": null,
+      "createdAt": "2026-01-12T06:54:53.461Z"
+    },
+    {
+      "id": "task-mkat6ig0-ce61df",
+      "objective": "Test task with minimum priority",
+      "status": "pending",
+      "priority": 1,
+      "createdAt": "2026-01-12T06:55:31.296Z"
+    },
+    {
+      "id": "task-mkat6mot-90b9f2",
+      "objective": "Test task with maximum priority",
+      "status": "pending",
+      "priority": 1000,
+      "createdAt": "2026-01-12T06:55:36.797Z"
+    },
+    {
+      "id": "task-mkat6r2y-1bf083",
+      "objective": "Test task without priority",
+      "status": "pending",
+      "priority": 62,
+      "createdAt": "2026-01-12T06:55:42.491Z"
+    },
+    {
+      "id": "task-mkat82y5-d19a78",
+      "objective": "Final test task with priority",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-12T06:56:44.525Z"
     }
   ],
-  "lastUpdated": "2026-01-12T06:39:24.121Z"
+  "lastUpdated": "2026-01-12T06:56:44.525Z"
 }
