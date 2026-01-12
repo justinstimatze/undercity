@@ -19,8 +19,8 @@ import { FileTracker } from "./file-tracker.js";
 import * as output from "./output.js";
 import { Persistence } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
-import { SoloOrchestrator, type TaskResult } from "./solo.js";
 import type { ParallelRecoveryState, ParallelTaskState } from "./types.js";
+import { type TaskResult, TaskWorker } from "./worker.js";
 import { WorktreeManager } from "./worktree-manager.js";
 
 export interface ParallelSoloOptions {
@@ -98,7 +98,7 @@ function getModifiedFilesInWorktree(worktreePath: string, mainBranch: string): s
 /**
  * Parallel Solo Orchestrator
  */
-export class ParallelSoloOrchestrator {
+export class Orchestrator {
 	private maxConcurrent: number;
 	private startingModel: "haiku" | "sonnet" | "opus";
 	private autoCommit: boolean;
@@ -167,7 +167,7 @@ export class ParallelSoloOrchestrator {
 
 		try {
 			// Run SoloOrchestrator directly in current directory
-			const orchestrator = new SoloOrchestrator({
+			const orchestrator = new TaskWorker({
 				startingModel: this.startingModel,
 				autoCommit: this.autoCommit,
 				stream: this.stream,
@@ -363,7 +363,7 @@ export class ParallelSoloOrchestrator {
 					output.taskStart(taskId, task.substring(0, 50));
 
 					// Create orchestrator that runs in the worktree directory
-					const orchestrator = new SoloOrchestrator({
+					const orchestrator = new TaskWorker({
 						startingModel: this.startingModel,
 						autoCommit: this.autoCommit,
 						stream: this.stream,

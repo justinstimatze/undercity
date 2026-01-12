@@ -2,7 +2,7 @@
  * Analysis and metrics commands
  */
 import chalk from "chalk";
-import { ParallelSoloOrchestrator } from "../parallel-solo.js";
+import { Orchestrator } from "../orchestrator.js";
 import type { CommandModule } from "./types.js";
 
 export const analysisCommands: CommandModule = {
@@ -370,7 +370,7 @@ async function runBenchmark(): Promise<void> {
 	console.log(chalk.cyan("🚀 Starting Undercity Benchmark"));
 	console.log(chalk.dim("Running standard set of performance tasks"));
 
-	const orchestrator = new ParallelSoloOrchestrator({
+	const orchestrator = new Orchestrator({
 		startingModel: "sonnet",
 		maxConcurrent: 2,
 		autoCommit: true,

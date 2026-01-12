@@ -187,7 +187,7 @@ export interface UnresolvedTicket {
  *
  * Runs tasks sequentially with verification and adaptive escalation.
  */
-export class SoloOrchestrator {
+export class TaskWorker {
 	private maxAttempts: number;
 	private startingModel: ModelTier;
 	private autoCommit: boolean;
@@ -1563,10 +1563,10 @@ After reviewing:
 }
 
 /**
- * Create and run a solo orchestrator
+ * Create and run a task worker
  */
 export async function runSolo(tasks: string[], options: SoloOptions = {}): Promise<TaskResult[]> {
-	const orchestrator = new SoloOrchestrator(options);
+	const orchestrator = new TaskWorker(options);
 	return orchestrator.runTasks(tasks);
 }
 

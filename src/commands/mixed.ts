@@ -18,124 +18,6 @@ const __dirname = dirname(__filename);
 
 export const mixedCommands: CommandModule = {
 	register(program) {
-		// Solo command - DEPRECATED, use grind instead
-		program
-			.command("solo <goal>")
-			.description("[DEPRECATED: use 'grind <goal>'] Run a single task with verification")
-			.option("-s, --stream", "Stream agent activity")
-			.option("-v, --verbose", "Verbose logging")
-			.option("-m, --model <tier>", "Starting model tier: haiku, sonnet, opus", "sonnet")
-			.option("--no-commit", "Don't auto-commit on success")
-			.option("--no-typecheck", "Skip typecheck verification")
-			.option("--supervised", "Use supervised mode (Opus orchestrates workers)")
-			.option("--worker <tier>", "Worker model for supervised mode: haiku, sonnet", "sonnet")
-			.option("-d, --dry-run", "Show complexity assessment without executing")
-			.option("--review", "Enable escalating review passes before commit (haiku → sonnet → opus)")
-			.option("--annealing", "Use annealing review at opus tier (multi-angle advisory)")
-			.action(
-				async (
-					goal: string,
-					cliOptions: {
-						stream?: boolean;
-						verbose?: boolean;
-						model?: string;
-						commit?: boolean;
-						typecheck?: boolean;
-						supervised?: boolean;
-						worker?: string;
-						dryRun?: boolean;
-						review?: boolean;
-						annealing?: boolean;
-					},
-				) => {
-					// Show deprecation warning
-					console.log(chalk.yellow.bold("\n⚠ DEPRECATED: 'solo' command will be removed in a future version"));
-					console.log(chalk.yellow(`  Use: undercity grind "${goal}"\n`));
-
-					// Merge CLI options with config file defaults
-					const options = mergeWithConfig(cliOptions);
-
-					// Dynamic import to avoid loading heavy modules until needed
-					const { SoloOrchestrator, SupervisedOrchestrator } = await import("../solo.js");
-
-					console.log(chalk.cyan.bold("⚡ Undercity Solo Mode"));
-					console.log(chalk.dim("  Adaptive escalation • External verification • Auto-commit"));
-					const configSource = getConfigSource();
-					if (configSource) {
-						console.log(chalk.dim(`  Config: ${configSource}`));
-					}
-					console.log();
-
-					try {
-						// Early dry-run complexity assessment
-						if (cliOptions.dryRun) {
-							const { assessComplexityFast } = await import("../complexity.js");
-							const assessment = assessComplexityFast(goal);
-							console.log(chalk.bold("Complexity Assessment (Dry Run)"));
-							console.log(chalk.dim(`  Complexity: ${assessment.level}`));
-							console.log(chalk.dim(`  Estimated Scope: ${assessment.estimatedScope}`));
-							console.log(chalk.dim(`  Recommended Model: ${assessment.model}`));
-							console.log(chalk.dim(`  Confidence: ${(assessment.confidence * 100).toFixed(1)}%`));
-							console.log(chalk.dim(`  Signals: ${assessment.signals.join(", ")}`));
-							return;
-						}
-
-						if (options.supervised) {
-							// Supervised mode: Opus orchestrates workers
-							console.log(chalk.dim(`Mode: Supervised (Opus → ${options.worker || "sonnet"} workers)`));
-							const orchestrator = new SupervisedOrchestrator({
-								autoCommit: options.commit !== false,
-								stream: options.stream,
-								verbose: options.verbose,
-								workerModel: (options.worker || "sonnet") as "haiku" | "sonnet",
-							});
-
-							const result = await orchestrator.runSupervised(goal);
-
-							if (result.status === "complete") {
-								console.log(chalk.green.bold("\n✓ Task complete"));
-								if (result.commitSha) {
-									console.log(chalk.dim(`  Commit: ${result.commitSha.substring(0, 8)}`));
-								}
-								console.log(chalk.dim(`  Duration: ${Math.round(result.durationMs / 1000)}s`));
-							} else {
-								console.log(chalk.red.bold("\n✗ Task failed"));
-								if (result.error) {
-									console.log(chalk.dim(`  Error: ${result.error}`));
-								}
-							}
-						} else {
-							// Solo mode: Adaptive escalation
-							const orchestrator = new SoloOrchestrator({
-								autoCommit: options.commit !== false,
-								runTypecheck: options.typecheck !== false,
-								stream: options.stream,
-								verbose: options.verbose,
-								startingModel: options.model as "haiku" | "sonnet" | "opus",
-							});
-
-							const result = await orchestrator.runTask(goal);
-
-							if (result.status === "complete") {
-								console.log(chalk.green.bold("\n✓ Task complete"));
-								if (result.commitSha) {
-									console.log(chalk.dim(`  Commit: ${result.commitSha.substring(0, 8)}`));
-								}
-								console.log(chalk.dim(`  Duration: ${Math.round(result.durationMs / 1000)}s`));
-							} else {
-								console.log(chalk.red.bold("\n✗ Task failed"));
-								if (result.error) {
-									console.log(chalk.dim(`  Error: ${result.error}`));
-								}
-							}
-						}
-					} catch (error) {
-						console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
-						process.exit(1);
-					}
-				},
-			);
-
 		// Grind command - autonomous task processing
 		program
 			.command("grind [goal]")
@@ -168,13 +50,13 @@ export const mixedCommands: CommandModule = {
 						decompose?: boolean;
 					},
 				) => {
-					const { ParallelSoloOrchestrator } = await import("../parallel-solo.js");
+					const { Orchestrator } = await import("../orchestrator.js");
 					const { startGrindProgress, updateGrindProgress, clearGrindProgress } = await import("../live-metrics.js");
 
 					const maxCount = Number.parseInt(options.count || "0", 10);
 					const parallelism = Math.min(5, Math.max(1, Number.parseInt(options.parallel || "1", 10)));
 
-					const orchestrator = new ParallelSoloOrchestrator({
+					const orchestrator = new Orchestrator({
 						maxConcurrent: parallelism,
 						autoCommit: options.commit !== false,
 						stream: options.stream || false,
@@ -453,7 +335,7 @@ export const mixedCommands: CommandModule = {
 							}
 
 							// Create orchestrator for this model tier
-							const tierOrchestrator = new ParallelSoloOrchestrator({
+							const tierOrchestrator = new Orchestrator({
 								maxConcurrent: parallelism,
 								autoCommit: options.commit !== false,
 								stream: options.stream || false,

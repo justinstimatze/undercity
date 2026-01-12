@@ -731,7 +731,7 @@ export interface ParallelTaskState {
 }
 
 /**
- * Recovery state for ParallelSoloOrchestrator
+ * Recovery state for Orchestrator
  * Simpler than Session recovery - just tracks batch state for resume
  */
 export interface ParallelRecoveryState {

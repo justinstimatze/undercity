@@ -3,7 +3,7 @@
  */
 import { readFileSync } from "node:fs";
 import chalk from "chalk";
-import { ParallelSoloOrchestrator } from "../parallel-solo.js";
+import { Orchestrator } from "../orchestrator.js";
 import {
 	generateTaskContext,
 	getPlanProgress,
@@ -257,7 +257,7 @@ export const taskCommands: CommandModule = {
 							step++;
 
 							// Create fresh orchestrator for each step
-							const orchestrator = new ParallelSoloOrchestrator({
+							const orchestrator = new Orchestrator({
 								startingModel: "sonnet",
 								maxConcurrent: 1,
 								autoCommit: true,
@@ -382,7 +382,7 @@ ${planContent.substring(0, 12000)}${planContent.length > 12000 ? "\n\n[Plan trun
 
 					console.log(chalk.cyan(`\n━━━ Task ${processed + 1}: ${nextGoal.objective.substring(0, 50)}... ━━━`));
 
-					const orchestrator = new ParallelSoloOrchestrator({
+					const orchestrator = new Orchestrator({
 						startingModel: "sonnet",
 						maxConcurrent: 1,
 						autoCommit: true,

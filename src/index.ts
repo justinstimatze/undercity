@@ -40,6 +40,8 @@ export {
 	resetLiveMetrics,
 	saveLiveMetrics,
 } from "./live-metrics.js";
+// Orchestration
+export { Orchestrator } from "./orchestrator.js";
 // Output system
 export {
 	configureOutput,
@@ -65,8 +67,6 @@ export {
 	taskStart,
 	warning,
 } from "./output.js";
-// Orchestration
-export { ParallelSoloOrchestrator } from "./parallel-solo.js";
 // Performance management
 export { getPerformanceManager } from "./performance-manager.js";
 // Persistence layer
@@ -82,7 +82,6 @@ export {
 	saveDaemonState,
 	UndercityServer,
 } from "./server.js";
-export { SoloOrchestrator } from "./solo.js";
 // Squad management
 export {
 	createAgent,
@@ -108,3 +107,4 @@ export type {
 	StepStatus,
 	UndercityConfig,
 } from "./types.js";
+export { TaskWorker } from "./worker.js";
