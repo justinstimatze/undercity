@@ -10,8 +10,9 @@ Agent-optimized reference. Mappings over prose.
 | `commands/task.ts` | `taskCommands.register()` | Task board: `tasks`, `add`, `load`, `import-plan`, `plan`, `work`, `task-analyze`, `task-status` |
 | `commands/mixed.ts` | `mixedCommands.register()` | Execution: `solo`, `grind`, `limits`, `init`, `setup`, `oracle`, `config`, `watch`, `serve`, `daemon`, `status` |
 | `commands/analysis.ts` | `analysisCommands.register()` | Metrics: `metrics`, `complexity-metrics`, `enhanced-metrics`, `escalation-patterns`, `benchmark`, `semantic-check` |
-| `parallel-solo.ts` | `ParallelSoloOrchestrator.runParallel()` | **Main orchestrator**: parallel execution, worktrees, recovery, merge queue |
-| `solo.ts` | `SoloOrchestrator.runTask()`, `SupervisedOrchestrator` | Single-task executor (deprecated, use ParallelSoloOrchestrator) |
+| `orchestrator.ts` | `Orchestrator.run()` | **Main orchestrator**: parallel execution, worktrees, recovery, merge queue |
+| `worker.ts` | `TaskWorker.run()` | Single-task executor, runs in worktree |
+| `supervised.ts` | `SupervisedOrchestrator` | Opus orchestrates workers |
 | `task.ts` | `addGoal()`, `getAllItems()`, `markComplete()`, `markFailed()`, `markInProgress()` | Task board CRUD |
 | `worktree-manager.ts` | `WorktreeManager.createWorktree()`, `.cleanup()` | Git worktree isolation per task |
 | `git.ts` | `MergeQueue.add()`, `MergeQueue.processAll()`, `rebase()` | Merge queue: serial rebase→test→merge |
@@ -37,8 +38,8 @@ Agent-optimized reference. Mappings over prose.
 | I need to... | File | Function | Notes |
 |--------------|------|----------|-------|
 | Add a task | `task.ts` | `addGoal(objective)` | Returns `Task` |
-| Run tasks autonomously | `parallel-solo.ts` | `ParallelSoloOrchestrator.runParallel(tasks)` | Main entry point |
-| Run single task | `parallel-solo.ts` | `runParallel([goal])` with `maxConcurrent=1` | Prefer over deprecated `solo.ts` |
+| Run tasks autonomously | `orchestrator.ts` | `Orchestrator.run(tasks)` | Main entry point |
+| Run single task | `orchestrator.ts` | `run([goal])` with `maxConcurrent=1` | Same orchestrator, single task |
 | Assess task complexity | `complexity.ts` | `assessComplexityFast(task)` | Fast, no API. Returns `ComplexityAssessment` |
 | Get quantitative metrics | `complexity.ts` | `assessComplexityQuantitative(task, files)` | Uses file metrics |
 | Get context for agent | `context.ts` | `prepareContext(task)` | FREE, no LLM tokens |
@@ -59,10 +60,10 @@ Agent-optimized reference. Mappings over prose.
 ### Which Orchestrator?
 
 ```
-Always use ParallelSoloOrchestrator
-├── Multiple tasks → runParallel(tasks)
-├── Single task → runParallel([goal]) with maxConcurrent=1
-└── DEPRECATED: SoloOrchestrator, SupervisedOrchestrator
+Always use Orchestrator
+├── Multiple tasks → run(tasks)
+├── Single task → run([goal]) with maxConcurrent=1
+└── TaskWorker is spawned per-task by Orchestrator
 ```
 
 ### Which Model Tier?
@@ -281,11 +282,11 @@ task complete → MergeQueue.add(branch)
 cli.ts
 └── commands/*.ts
     ├── task.ts → task.ts, plan-parser.ts
-    ├── mixed.ts → parallel-solo.ts, persistence.ts, rate-limit.ts
+    ├── mixed.ts → orchestrator.ts, persistence.ts, rate-limit.ts
     └── analysis.ts → metrics-collector.ts, semantic-analyzer/
 
-parallel-solo.ts
-├── solo.ts (task execution)
+orchestrator.ts
+├── worker.ts (task execution)
 ├── worktree-manager.ts (isolation)
 ├── file-tracker.ts (conflicts)
 ├── rate-limit.ts (429 handling)

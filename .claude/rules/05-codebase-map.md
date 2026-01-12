@@ -8,8 +8,9 @@
 | **commands/task.ts** | Task board commands (tasks, add, work, plan, import-plan) | taskCommands |
 | **commands/mixed.ts** | Main commands (solo, grind, limits, watch, serve, daemon) | mixedCommands |
 | **commands/analysis.ts** | Metrics/analysis commands | analysisCommands |
-| **solo.ts** | Single-task orchestrator, adaptive escalation | SoloOrchestrator, SupervisedOrchestrator |
-| **parallel-solo.ts** | Main production orchestrator, parallel execution | ParallelSoloOrchestrator |
+| **worker.ts** | Single-task executor, runs in worktree | TaskWorker |
+| **orchestrator.ts** | Main production orchestrator, parallel execution | Orchestrator |
+| **supervised.ts** | Opus orchestrates workers | SupervisedOrchestrator |
 | **task.ts** | Task board CRUD (add, get, mark status) | addGoal, getAllItems, markComplete, etc. |
 | **worktree-manager.ts** | Git worktree isolation per task | WorktreeManager |
 | **git.ts** | Git operations, MergeQueue (serial merge pipeline) | MergeQueue, getCurrentBranch, rebase, merge |
@@ -32,8 +33,8 @@
 
 **I need to:**
 - Add/query/update tasks → `task.ts`
-- Run a single task → `solo.ts` (deprecated) or `parallel-solo.ts` (preferred)
-- Run tasks in parallel → `parallel-solo.ts`
+- Run a single task → `worker.ts` (TaskWorker, runs in worktree)
+- Run tasks in parallel → `orchestrator.ts` (Orchestrator)
 - Isolate tasks in git worktrees → `worktree-manager.ts`
 - Merge branches serially → `git.ts` (MergeQueue class)
 - Handle rate limits → `rate-limit.ts`
@@ -50,23 +51,23 @@
 
 | Class | File | Use | Parallel | Infrastructure |
 |-------|------|-----|----------|----------------|
-| ParallelSoloOrchestrator | parallel-solo.ts | **Main production** (grind) | Yes (1-5) | Worktree, MergeQueue, RateLimit, FileTracker, Recovery |
-| SoloOrchestrator | solo.ts | Single task, deprecated | No | LiveMetrics only |
-| SupervisedOrchestrator | solo.ts | Opus orchestrates workers | No | LiveMetrics only |
+| Orchestrator | orchestrator.ts | **Main production** (grind) | Yes (1-5) | Worktree, MergeQueue, RateLimit, FileTracker, Recovery |
+| TaskWorker | worker.ts | Single task executor | No | Runs in worktree |
+| SupervisedOrchestrator | supervised.ts | Opus orchestrates workers | No | LiveMetrics only |
 
-**Decision:** Use ParallelSoloOrchestrator for everything (even single tasks with maxConcurrent=1).
+**Decision:** Use Orchestrator for everything (even single tasks with maxConcurrent=1).
 
 ## grind Flow
 
 ```
-ParallelSoloOrchestrator.runParallel():
+Orchestrator.run():
 1. Check recovery (hasActiveRecovery) → resume if needed
 2. Fetch tasks (task.ts:getAllItems) → filter: pending|in_progress, !isDecomposed
 3. Decompose (task-decomposer:checkAndDecompose) → atomic subtasks + model tier
 4. Group by model → execute haiku → sonnet → opus (cheapest first)
 5. Per task:
    - Spawn worktree (WorktreeManager.createWorktree)
-   - Run SoloOrchestrator (AI does work)
+   - Run TaskWorker (AI does work)
    - Check conflicts (FileTracker.checkConflicts)
    - Queue merge (MergeQueue.add)
    - Process MergeQueue (serial rebase → test → merge → push)
@@ -135,11 +136,11 @@ ParallelSoloOrchestrator.runParallel():
 **Add task:** CLI → task.ts:addGoal() → `.undercity/tasks.json`
 
 **Run task:**
-- `grind "goal"` → ParallelSoloOrchestrator.runParallel(["goal"])
-- `grind` → task.ts:getAllItems() → ParallelSoloOrchestrator.runParallel()
+- `grind "goal"` → Orchestrator.run(["goal"])
+- `grind` → task.ts:getAllItems() → Orchestrator.run()
 
 **Merge:**
-- SoloOrchestrator success → MergeQueue.add()
+- TaskWorker success → MergeQueue.add()
 - MergeQueue.processAll() → rebase → test → merge → push
 - Serial execution (one at a time)
 
