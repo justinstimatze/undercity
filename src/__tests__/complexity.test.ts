@@ -5,13 +5,14 @@
  * to appropriate model tiers.
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	assessComplexityFast,
 	canHandleWithLocalTools,
 	getTeamComposition,
-	scoreFromMetrics,
 	type QuantitativeMetrics,
+	scoreFromMetrics,
+	shouldEscalateToFullChain,
 } from "../complexity.js";
 
 describe("complexity", () => {
@@ -365,6 +366,153 @@ describe("complexity", () => {
 			const buggyScore = scoreFromMetrics(buggy);
 
 			expect(buggyScore.score).toBeGreaterThan(stableScore.score);
+		});
+	});
+
+	describe("shouldEscalateToFullChain", () => {
+		const createAssessment = (overrides = {}) => ({
+			level: "simple",
+			confidence: 0.8,
+			model: "sonnet",
+			useFullChain: false,
+			needsReview: false,
+			estimatedScope: "single-file",
+			signals: [],
+			score: 2,
+			team: getTeamComposition("simple"),
+			...overrides,
+		});
+
+		it("should escalate when there are type errors", () => {
+			const assessment = createAssessment();
+			const result = shouldEscalateToFullChain(assessment, {
+				filesChanged: 1,
+				linesChanged: 10,
+				hasTests: true,
+				hasTypeErrors: true,
+				hasBuildErrors: false,
+			});
+			expect(result).toBe(true);
+		});
+
+		it("should escalate when there are build errors", () => {
+			const assessment = createAssessment();
+			const result = shouldEscalateToFullChain(assessment, {
+				filesChanged: 1,
+				linesChanged: 10,
+				hasTests: true,
+				hasTypeErrors: false,
+				hasBuildErrors: true,
+			});
+			expect(result).toBe(true);
+		});
+
+		it("should escalate when single-file scope is exceeded (>3 files)", () => {
+			const assessment = createAssessment({ estimatedScope: "single-file" });
+			const result = shouldEscalateToFullChain(assessment, {
+				filesChanged: 5,
+				linesChanged: 100,
+				hasTests: true,
+				hasTypeErrors: false,
+				hasBuildErrors: false,
+			});
+			expect(result).toBe(true);
+		});
+
+		it("should not escalate when single-file scope matches", () => {
+			const assessment = createAssessment({ estimatedScope: "single-file" });
+			const result = shouldEscalateToFullChain(assessment, {
+				filesChanged: 2,
+				linesChanged: 50,
+				hasTests: true,
+				hasTypeErrors: false,
+				hasBuildErrors: false,
+			});
+			expect(result).toBe(false);
+		});
+
+		it("should escalate when few-files scope is exceeded (>10 files)", () => {
+			const assessment = createAssessment({ estimatedScope: "few-files" });
+			const result = shouldEscalateToFullChain(assessment, {
+				filesChanged: 15,
+				linesChanged: 300,
+				hasTests: true,
+				hasTypeErrors: false,
+				hasBuildErrors: false,
+			});
+			expect(result).toBe(true);
+		});
+
+		it("should escalate for large changes (>200 lines) without tests", () => {
+			const assessment = createAssessment();
+			const result = shouldEscalateToFullChain(assessment, {
+				filesChanged: 2,
+				linesChanged: 250,
+				hasTests: false,
+				hasTypeErrors: false,
+				hasBuildErrors: false,
+			});
+			expect(result).toBe(true);
+		});
+
+		it("should not escalate for large changes with tests", () => {
+			const assessment = createAssessment();
+			const result = shouldEscalateToFullChain(assessment, {
+				filesChanged: 2,
+				linesChanged: 250,
+				hasTests: true,
+				hasTypeErrors: false,
+				hasBuildErrors: false,
+			});
+			expect(result).toBe(false);
+		});
+
+		it("should always escalate complex level tasks", () => {
+			const assessment = createAssessment({ level: "complex" });
+			const result = shouldEscalateToFullChain(assessment, {
+				filesChanged: 1,
+				linesChanged: 10,
+				hasTests: true,
+				hasTypeErrors: false,
+				hasBuildErrors: false,
+			});
+			expect(result).toBe(true);
+		});
+
+		it("should always escalate critical level tasks", () => {
+			const assessment = createAssessment({ level: "critical" });
+			const result = shouldEscalateToFullChain(assessment, {
+				filesChanged: 1,
+				linesChanged: 10,
+				hasTests: true,
+				hasTypeErrors: false,
+				hasBuildErrors: false,
+			});
+			expect(result).toBe(true);
+		});
+
+		it("should not escalate trivial tasks with clean results", () => {
+			const assessment = createAssessment({ level: "trivial" });
+			const result = shouldEscalateToFullChain(assessment, {
+				filesChanged: 1,
+				linesChanged: 5,
+				hasTests: false,
+				hasTypeErrors: false,
+				hasBuildErrors: false,
+			});
+			expect(result).toBe(false);
+		});
+
+		it("should not escalate standard tasks with clean results within scope", () => {
+			const assessment = createAssessment({ level: "standard", estimatedScope: "few-files" });
+			const result = shouldEscalateToFullChain(assessment, {
+				filesChanged: 3,
+				linesChanged: 100,
+				hasTests: true,
+				hasTypeErrors: false,
+				hasBuildErrors: false,
+			});
+			expect(result).toBe(false);
 		});
 	});
 });

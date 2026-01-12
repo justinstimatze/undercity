@@ -447,3 +447,263 @@ describe("parseFileOperation", () => {
 		expect(result).toBeNull();
 	});
 });
+
+describe("FileTracker task-level tracking", () => {
+	let tracker: FileTracker;
+
+	beforeEach(() => {
+		tracker = new FileTracker();
+	});
+
+	describe("startTaskTracking", () => {
+		it("creates tracking entry using taskId", () => {
+			tracker.startTaskTracking("task-123", "session-1");
+
+			const entry = tracker.getEntry("task-123");
+			expect(entry).toBeDefined();
+			expect(entry?.agentId).toBe("task-123");
+			expect(entry?.stepId).toBe("task-123");
+			expect(entry?.sessionId).toBe("session-1");
+		});
+	});
+
+	describe("stopTaskTracking", () => {
+		it("marks task entry as ended", () => {
+			tracker.startTaskTracking("task-123", "session-1");
+			tracker.stopTaskTracking("task-123");
+
+			const entry = tracker.getEntry("task-123");
+			expect(entry?.endedAt).toBeInstanceOf(Date);
+		});
+	});
+
+	describe("detectCrossTaskConflicts", () => {
+		it("detects conflicts between different tasks modifying same file", () => {
+			// Set up two different tasks (sessions)
+			tracker.startTracking("agent-1", "step-1", "task-1");
+			tracker.startTracking("agent-2", "step-2", "task-2");
+
+			tracker.recordFileAccess("agent-1", "shared.ts", "write");
+			tracker.recordFileAccess("agent-2", "shared.ts", "edit");
+
+			const conflicts = tracker.detectCrossTaskConflicts();
+
+			expect(conflicts.length).toBe(1);
+			expect(conflicts[0].conflictingFiles).toContain("shared.ts");
+			expect(conflicts[0].taskIds).toContain("task-1");
+			expect(conflicts[0].taskIds).toContain("task-2");
+			expect(conflicts[0].severity).toBe("error");
+		});
+
+		it("does not report conflicts for same task", () => {
+			tracker.startTracking("agent-1", "step-1", "task-1");
+			tracker.startTracking("agent-2", "step-2", "task-1"); // Same task
+
+			tracker.recordFileAccess("agent-1", "file.ts", "write");
+			tracker.recordFileAccess("agent-2", "file.ts", "edit");
+
+			const conflicts = tracker.detectCrossTaskConflicts();
+
+			// Same task, no cross-task conflict
+			expect(conflicts.length).toBe(0);
+		});
+
+		it("excludes completed entries from conflict detection", () => {
+			tracker.startTracking("agent-1", "step-1", "task-1");
+			tracker.startTracking("agent-2", "step-2", "task-2");
+
+			tracker.recordFileAccess("agent-1", "file.ts", "write");
+			tracker.recordFileAccess("agent-2", "file.ts", "write");
+
+			tracker.stopTracking("agent-1");
+
+			const conflicts = tracker.detectCrossTaskConflicts();
+
+			// agent-1 is completed, so no conflict
+			expect(conflicts.length).toBe(0);
+		});
+
+		it("ignores read-only operations", () => {
+			tracker.startTracking("agent-1", "step-1", "task-1");
+			tracker.startTracking("agent-2", "step-2", "task-2");
+
+			tracker.recordFileAccess("agent-1", "file.ts", "read");
+			tracker.recordFileAccess("agent-2", "file.ts", "read");
+
+			const conflicts = tracker.detectCrossTaskConflicts();
+
+			expect(conflicts.length).toBe(0);
+		});
+	});
+
+	describe("wouldTaskConflict", () => {
+		it("returns true if estimated files would conflict", () => {
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.recordFileAccess("agent-1", "existing.ts", "write");
+
+			const wouldConflict = tracker.wouldTaskConflict("task-new", ["existing.ts"]);
+
+			expect(wouldConflict).toBe(true);
+		});
+
+		it("returns false if no conflict", () => {
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.recordFileAccess("agent-1", "other.ts", "write");
+
+			const wouldConflict = tracker.wouldTaskConflict("task-new", ["new-file.ts"]);
+
+			expect(wouldConflict).toBe(false);
+		});
+
+		it("excludes the task being checked", () => {
+			tracker.startTracking("task-1", "step-1", "session-1");
+			tracker.recordFileAccess("task-1", "file.ts", "write");
+
+			const wouldConflict = tracker.wouldTaskConflict("task-1", ["file.ts"]);
+
+			expect(wouldConflict).toBe(false);
+		});
+
+		it("excludes completed entries", () => {
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.recordFileAccess("agent-1", "file.ts", "write");
+			tracker.stopTracking("agent-1");
+
+			const wouldConflict = tracker.wouldTaskConflict("task-new", ["file.ts"]);
+
+			expect(wouldConflict).toBe(false);
+		});
+
+		it("normalizes file paths for comparison", () => {
+			const customCwd = "/home/user/project";
+			tracker = new FileTracker(undefined, customCwd);
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.recordFileAccess("agent-1", "src/file.ts", "write");
+
+			const wouldConflict = tracker.wouldTaskConflict("task-new", ["/home/user/project/src/file.ts"]);
+
+			expect(wouldConflict).toBe(true);
+		});
+	});
+
+	describe("getActiveTaskFiles", () => {
+		it("returns map of files to tasks", () => {
+			tracker.startTracking("agent-1", "step-1", "task-1");
+			tracker.startTracking("agent-2", "step-2", "task-2");
+
+			tracker.recordFileAccess("agent-1", "file1.ts", "write");
+			tracker.recordFileAccess("agent-2", "file2.ts", "edit");
+
+			const activeFiles = tracker.getActiveTaskFiles();
+
+			expect(activeFiles.get("file1.ts")).toEqual(["task-1"]);
+			expect(activeFiles.get("file2.ts")).toEqual(["task-2"]);
+		});
+
+		it("excludes completed entries", () => {
+			tracker.startTracking("agent-1", "step-1", "task-1");
+			tracker.recordFileAccess("agent-1", "file.ts", "write");
+			tracker.stopTracking("agent-1");
+
+			const activeFiles = tracker.getActiveTaskFiles();
+
+			expect(activeFiles.size).toBe(0);
+		});
+
+		it("ignores read operations", () => {
+			tracker.startTracking("agent-1", "step-1", "task-1");
+			tracker.recordFileAccess("agent-1", "file.ts", "read");
+
+			const activeFiles = tracker.getActiveTaskFiles();
+
+			expect(activeFiles.size).toBe(0);
+		});
+
+		it("tracks multiple tasks touching same file", () => {
+			tracker.startTracking("agent-1", "step-1", "task-1");
+			tracker.startTracking("agent-2", "step-2", "task-2");
+
+			tracker.recordFileAccess("agent-1", "shared.ts", "write");
+			tracker.recordFileAccess("agent-2", "shared.ts", "edit");
+
+			const activeFiles = tracker.getActiveTaskFiles();
+
+			expect(activeFiles.get("shared.ts")).toHaveLength(2);
+			expect(activeFiles.get("shared.ts")).toContain("task-1");
+			expect(activeFiles.get("shared.ts")).toContain("task-2");
+		});
+	});
+
+	describe("clearInactiveTasks", () => {
+		it("removes completed entries not in active list", () => {
+			tracker.startTracking("agent-1", "step-1", "task-1");
+			tracker.startTracking("agent-2", "step-2", "task-2");
+			tracker.startTracking("agent-3", "step-3", "task-3");
+			tracker.stopTracking("agent-1");
+			tracker.stopTracking("agent-2");
+
+			tracker.clearInactiveTasks(["task-1"]);
+
+			// task-1 is active, should be kept even though agent-1 is completed
+			expect(tracker.getEntry("agent-1")).toBeDefined();
+			// task-2 is not active and completed, should be removed
+			expect(tracker.getEntry("agent-2")).toBeUndefined();
+			// task-3 is still running, should be kept
+			expect(tracker.getEntry("agent-3")).toBeDefined();
+		});
+
+		it("keeps all entries when all tasks are active", () => {
+			tracker.startTracking("agent-1", "step-1", "task-1");
+			tracker.startTracking("agent-2", "step-2", "task-2");
+			tracker.stopTracking("agent-1");
+			tracker.stopTracking("agent-2");
+
+			tracker.clearInactiveTasks(["task-1", "task-2"]);
+
+			expect(tracker.getEntry("agent-1")).toBeDefined();
+			expect(tracker.getEntry("agent-2")).toBeDefined();
+		});
+	});
+
+	describe("normalizePathForAgent with worktree", () => {
+		it("normalizes paths relative to agent worktree", () => {
+			const mainRepo = "/home/user/project";
+			const worktree = "/home/user/project-worktrees/task-1";
+			tracker = new FileTracker(undefined, mainRepo);
+
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			// Agent is in worktree, recording relative path
+			tracker.recordFileAccess("agent-1", "src/file.ts", "write", undefined, worktree);
+
+			const entry = tracker.getEntry("agent-1");
+			// Path should be normalized relative to main repo
+			expect(entry?.files[0].path).toBe("../project-worktrees/task-1/src/file.ts");
+		});
+
+		it("handles absolute paths from worktree correctly", () => {
+			const mainRepo = "/home/user/project";
+			const worktree = "/home/user/project-worktrees/task-1";
+			tracker = new FileTracker(undefined, mainRepo);
+
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			// Agent provides absolute path
+			tracker.recordFileAccess("agent-1", "/home/user/project/src/file.ts", "write", undefined, worktree);
+
+			const entry = tracker.getEntry("agent-1");
+			expect(entry?.files[0].path).toBe("src/file.ts");
+		});
+
+		it("records to both agent and task entries when taskId provided", () => {
+			tracker.startTracking("agent-1", "step-1", "session-1");
+			tracker.startTaskTracking("task-1", "session-1");
+
+			tracker.recordFileAccess("agent-1", "file.ts", "write", "task-1");
+
+			const agentEntry = tracker.getEntry("agent-1");
+			const taskEntry = tracker.getEntry("task-1");
+
+			expect(agentEntry?.files).toHaveLength(1);
+			expect(taskEntry?.files).toHaveLength(1);
+		});
+	});
+});
