@@ -8,18 +8,20 @@ Agent-optimized reference. Mappings over prose.
 |------|-------------|--------------|
 | `cli.ts` | `program` | CLI entry, routes to command modules |
 | `commands/task.ts` | `taskCommands.register()` | Task board: `tasks`, `add`, `load`, `import-plan`, `plan`, `work`, `task-analyze`, `task-status` |
-| `commands/mixed.ts` | `mixedCommands.register()` | Execution: `solo`, `grind`, `limits`, `init`, `setup`, `oracle`, `config`, `watch`, `serve`, `daemon`, `status` |
+| `commands/mixed.ts` | `mixedCommands.register()` | Execution: `grind`, `limits`, `init`, `setup`, `oracle`, `config`, `watch`, `serve`, `daemon`, `status` |
 | `commands/analysis.ts` | `analysisCommands.register()` | Metrics: `metrics`, `complexity-metrics`, `enhanced-metrics`, `escalation-patterns`, `benchmark`, `semantic-check` |
 | `orchestrator.ts` | `Orchestrator.run()` | **Main orchestrator**: parallel execution, worktrees, recovery, merge queue |
 | `worker.ts` | `TaskWorker.run()` | Single-task executor, runs in worktree |
 | `supervised.ts` | `SupervisedOrchestrator` | Opus orchestrates workers |
 | `task.ts` | `addGoal()`, `getAllItems()`, `markComplete()`, `markFailed()`, `markInProgress()` | Task board CRUD |
 | `worktree-manager.ts` | `WorktreeManager.createWorktree()`, `.cleanup()` | Git worktree isolation per task |
-| `git.ts` | `MergeQueue.add()`, `MergeQueue.processAll()`, `rebase()` | Merge queue: serial rebase→test→merge |
+| `merge-queue.ts` | `MergeQueue.add()`, `MergeQueue.processAll()` | Merge queue: serial rebase→test→merge |
+| `git.ts` | `rebase()`, `merge()`, `getCurrentBranch()`, `execGit()` | Core git operations |
 | `rate-limit.ts` | `RateLimitTracker.isPaused()`, `.handleRateLimitError()` | 429 handling, exponential backoff |
 | `file-tracker.ts` | `FileTracker.checkConflicts()` | Pre-merge conflict detection |
 | `complexity.ts` | `assessComplexityFast()`, `assessComplexityQuantitative()`, `getTeamComposition()` | Task complexity → model routing |
 | `context.ts` | `prepareContext()`, `summarizeContextForAgent()` | Pre-flight context extraction (FREE, no LLM) |
+| `ts-analysis.ts` | `extractFunctionSignaturesWithTypes()`, `extractTypeDefinitionsFromFile()` | Deep TypeScript AST analysis (ts-morph) |
 | `task-decomposer.ts` | `checkAndDecompose()` | Multi-step → atomic subtasks + model recommendation |
 | `task-analyzer.ts` | `TaskAnalyzer.analyzeTask()` | Package detection, file estimation, risk scoring |
 | `plan-parser.ts` | `parsePlanFile()`, `planToTasks()` | Markdown plan → discrete tasks |
@@ -47,7 +49,7 @@ Agent-optimized reference. Mappings over prose.
 | Analyze task risk | `task-analyzer.ts` | `TaskAnalyzer.analyzeTask(task)` | Package boundaries, risk score |
 | Parse plan file | `plan-parser.ts` | `parsePlanFile(content)` | Returns `ParsedPlan` |
 | Create worktree | `worktree-manager.ts` | `WorktreeManager.createWorktree()` | Returns path |
-| Queue merge | `git.ts` | `MergeQueue.add(branch)` | Serial processing |
+| Queue merge | `merge-queue.ts` | `MergeQueue.add(branch)` | Serial processing |
 | Check conflicts | `file-tracker.ts` | `FileTracker.checkConflicts(files)` | Pre-merge detection |
 | Handle rate limit | `rate-limit.ts` | `RateLimitTracker.handleRateLimitError(error)` | Auto-pause + backoff |
 | Persist state | `persistence.ts` | `Persistence.saveState(key, data)` | JSON file I/O |
@@ -111,9 +113,8 @@ level → { workerModel, validatorCount, needsPlanning }
 | File | Purpose | Format |
 |------|---------|--------|
 | `.undercity/tasks.json` | Task board | `Task[]` |
-| `.undercity/worktrees.json` | Active worktrees | `{taskId: {path, branch}}` |
-| `.undercity/merge-queue.json` | Merge queue | `MergeQueueItem[]` |
-| `.undercity/rate-limit.json` | Rate limit state | `{pause, tasks[]}` |
+| `.undercity/worktree-state.json` | Active worktrees | `WorktreeState` |
+| `.undercity/rate-limit-state.json` | Rate limit state | `RateLimitState` |
 | `.undercity/parallel-recovery.json` | Crash recovery | `ParallelRecoveryState` |
 | `.undercity/live-metrics.json` | Token/cost | `{byModel, cost, queries}` |
 | `.undercity/grind-events.jsonl` | Event log | JSONL, append-only |
@@ -283,7 +284,7 @@ cli.ts
 └── commands/*.ts
     ├── task.ts → task.ts, plan-parser.ts
     ├── mixed.ts → orchestrator.ts, persistence.ts, rate-limit.ts
-    └── analysis.ts → metrics-collector.ts, semantic-analyzer/
+    └── analysis.ts → live-metrics.ts, semantic-analyzer/
 
 orchestrator.ts
 ├── worker.ts (task execution)

@@ -30,7 +30,8 @@
 | **types.ts** | Core type definitions | SessionStatus, AgentType, Task, MergeQueueItem |
 | **output.ts** | Structured output (human/agent modes) | info, success, error, header, metrics |
 | **oracle.ts** | Oblique strategy cards | UndercityOracle |
-| **context.ts** | Codebase context extraction (AST, git grep) | prepareContext, summarizeContextForAgent |
+| **context.ts** | Codebase context extraction (git grep, briefing) | prepareContext, summarizeContextForAgent |
+| **ts-analysis.ts** | Deep TypeScript AST analysis (ts-morph) | extractFunctionSignaturesWithTypes, getTypeDefinition |
 | **verification.ts** | Build/test/lint verification loop | runVerification |
 | **review.ts** | Escalating review with annealing | ReviewManager |
 | **annealing-review.ts** | Simulated annealing for review temp | AnnealingReviewSchedule |
@@ -44,8 +45,8 @@
 | **task-board-analyzer.ts** | Board-level insights, parallelization | TaskBoardAnalyzer |
 | **task-scheduler.ts** | Matchmaking for compatible task sets | TaskScheduler |
 | **task-planner.ts** | [plan] prefix → subtask expansion | TaskPlanner |
-| **capability-ledger.ts** | Track model success by keyword patterns | CapabilityLedger (not yet integrated) |
-| **experiment.ts** | A/B testing framework for grind | ExperimentManager (not yet integrated) |
+| **capability-ledger.ts** | Track model success by keyword patterns | updateLedger, getRecommendedModel, getLedgerStats |
+| **experiment.ts** | A/B testing framework for grind | ExperimentManager, getExperimentManager |
 | **index.ts** | Public API exports | - |
 
 ## Task → File Mapping

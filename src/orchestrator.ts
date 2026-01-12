@@ -18,6 +18,8 @@ import { execFileSync, execSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { isAbsolute, normalize } from "node:path";
+import { updateLedger } from "./capability-ledger.js";
+import { type ExperimentManager, getExperimentManager } from "./experiment.js";
 import { FileTracker } from "./file-tracker.js";
 import * as output from "./output.js";
 import { Persistence } from "./persistence.js";
@@ -159,6 +161,7 @@ export class Orchestrator {
 	private persistence: Persistence;
 	private rateLimitTracker: RateLimitTracker;
 	private fileTracker: FileTracker;
+	private experimentManager: ExperimentManager;
 
 	constructor(options: ParallelSoloOptions = {}) {
 		this.maxConcurrent = options.maxConcurrent ?? 3;
@@ -183,6 +186,9 @@ export class Orchestrator {
 		// Initialize file tracker for conflict detection
 		const savedFileTrackingState = this.persistence.getFileTracking();
 		this.fileTracker = new FileTracker(savedFileTrackingState);
+
+		// Initialize experiment manager for A/B testing
+		this.experimentManager = getExperimentManager();
 	}
 
 	/**
@@ -796,14 +802,20 @@ export class Orchestrator {
 				try {
 					output.taskStart(taskId, task.substring(0, 50));
 
+					// Check for active experiment and get variant settings
+					const variant = this.experimentManager.selectVariant();
+					const experimentModel = variant?.model as "haiku" | "sonnet" | "opus" | undefined;
+					const experimentReview = variant?.reviewEnabled;
+
 					// Create TaskWorker that runs in the worktree directory
+					// Experiment variant overrides default settings if present
 					const worker = new TaskWorker({
-						startingModel: this.startingModel,
+						startingModel: experimentModel ?? this.startingModel,
 						autoCommit: this.autoCommit,
 						stream: this.stream,
 						verbose: this.verbose,
 						workingDirectory: worktreePath,
-						reviewPasses: this.reviewPasses,
+						reviewPasses: experimentReview ?? this.reviewPasses,
 						annealingAtOpus: this.annealingAtOpus,
 						maxAttempts: this.maxAttempts,
 						maxRetriesPerTier: this.maxRetriesPerTier,
@@ -842,6 +854,35 @@ export class Orchestrator {
 					// Update recovery state
 					const taskStatus = result.status === "complete" ? "complete" : "failed";
 					this.updateTaskStatus(taskId, taskStatus, { modifiedFiles });
+
+					// Update capability ledger with task outcome
+					try {
+						const escalated = result.model !== this.startingModel;
+						updateLedger({
+							objective: task,
+							model: result.model,
+							success: result.status === "complete",
+							escalated,
+						});
+					} catch {
+						// Silent failure - ledger is optional
+					}
+
+					// Record experiment result if variant was assigned
+					if (variant) {
+						try {
+							this.experimentManager.recordResult({
+								taskId,
+								variantId: variant.id,
+								success: result.status === "complete",
+								durationMs: result.durationMs,
+								tokensUsed: result.tokenUsage?.total ?? 0,
+								attempts: result.attempts,
+							});
+						} catch {
+							// Silent failure - experiments are optional
+						}
+					}
 
 					return {
 						task,

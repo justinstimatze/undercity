@@ -12,6 +12,16 @@
  * @see https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04
  */
 
+// Capability ledger (model performance tracking)
+export {
+	type CapabilityLedger,
+	getLedgerStats,
+	getRecommendedModel,
+	loadLedger,
+	type ModelRecommendation,
+	type PatternStats,
+	updateLedger,
+} from "./capability-ledger.js";
 // Experiment framework
 export { ExperimentManager, getExperimentManager } from "./experiment.js";
 // Git operations

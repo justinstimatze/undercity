@@ -11,20 +11,22 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	type ContextBriefing,
 	estimateComplexityFromContext,
-	extractFunctionSignaturesWithTypes,
 	extractImplementationContext,
 	extractRelevantSections,
 	extractReviewContext,
-	extractTypeDefinitionsFromFile,
-	findFilesImporting,
 	formatSections,
 	getContextLimit,
-	getTypeDefinition,
 	parseMarkdownSections,
 	prepareContext,
 	smartTruncate,
 	summarizeContextForAgent,
 } from "../context.js";
+import {
+	extractFunctionSignaturesWithTypes,
+	extractTypeDefinitionsFromFile,
+	findFilesImporting,
+	getTypeDefinition,
+} from "../ts-analysis.js";
 
 describe("parseMarkdownSections", () => {
 	it("parses simple markdown with headings", () => {
