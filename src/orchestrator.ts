@@ -377,10 +377,8 @@ export class Orchestrator {
 			};
 		}
 
-		// Optimization: run single task directly without worktree
-		if (implTasks.length === 1 && this.maxConcurrent <= 1) {
-			return this.runSingle(implTasks[0]);
-		}
+		// Always use worktrees for isolation (even single tasks)
+		// This prevents agents from modifying the main repo directly
 		const startTime = Date.now();
 		const results: ParallelTaskResult[] = [];
 		const tasks_to_run = implTasks; // Use implementation tasks only

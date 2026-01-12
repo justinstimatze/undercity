@@ -28,6 +28,7 @@ export interface GrindOptions {
 	typecheck?: boolean;
 	review?: boolean;
 	decompose?: boolean;
+	taskId?: string;
 	// Verification retry options
 	maxAttempts?: string;
 	maxRetriesPerTier?: string;
@@ -63,8 +64,11 @@ export interface StatusOptions {
 
 /**
  * Handle the grind command
+ *
+ * All tasks run in isolated git worktrees for safety.
+ * Use `undercity add "task"` to queue tasks, then `grind` to process them.
  */
-export async function handleGrind(goal: string | undefined, options: GrindOptions): Promise<void> {
+export async function handleGrind(options: GrindOptions): Promise<void> {
 	const { Orchestrator } = await import("../orchestrator.js");
 	const { startGrindProgress, updateGrindProgress, clearGrindProgress } = await import("../live-metrics.js");
 
@@ -92,29 +96,7 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 		maxOpusReviewPasses,
 	});
 
-	// If a goal is passed directly, run it as a single task
-	if (goal) {
-		output.header("Undercity Grind", "Running task directly");
-
-		try {
-			startGrindProgress(1, "fixed");
-			const result = await orchestrator.runParallel([goal]);
-			updateGrindProgress(result.successful);
-			output.summary("Complete", [
-				{ label: "Successful", value: result.successful, status: result.successful > 0 ? "good" : "neutral" },
-				{ label: "Failed", value: result.failed, status: result.failed > 0 ? "bad" : "neutral" },
-				{ label: "Duration", value: `${Math.round(result.durationMs / 1000)}s` },
-			]);
-			clearGrindProgress();
-		} catch (error) {
-			clearGrindProgress();
-			output.error(`Task failed: ${error}`);
-			process.exit(1);
-		}
-		return;
-	}
-
-	// No goal provided - process from task board
+	// Process from task board (all tasks run in worktrees)
 	output.header("Undercity Grind Mode", "Autonomous operation • Rate limit handling • Infinite processing");
 
 	// Track how many tasks we've processed (for -n flag)
@@ -188,9 +170,27 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 			.filter((q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed)
 			.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0)); // Higher priority first
 
-		// Account for tasks already processed during recovery
-		const remainingCount = maxCount > 0 ? maxCount - tasksProcessed : 0;
-		let tasksToProcess = maxCount > 0 ? pendingTasks.slice(0, remainingCount) : pendingTasks;
+		// If task-id specified, filter to just that task
+		let tasksToProcess: typeof pendingTasks;
+		if (options.taskId) {
+			const targetTask = pendingTasks.find((t) => t.id === options.taskId);
+			if (!targetTask) {
+				// Check if task exists but isn't pending
+				const allMatch = allTasks.find((t) => t.id === options.taskId);
+				if (allMatch) {
+					output.error(`Task ${options.taskId} exists but is not pending (status: ${allMatch.status})`);
+				} else {
+					output.error(`Task not found: ${options.taskId}`);
+				}
+				return;
+			}
+			tasksToProcess = [targetTask];
+			output.info(`Running specific task: ${targetTask.objective.substring(0, 60)}...`);
+		} else {
+			// Account for tasks already processed during recovery
+			const remainingCount = maxCount > 0 ? maxCount - tasksProcessed : 0;
+			tasksToProcess = maxCount > 0 ? pendingTasks.slice(0, remainingCount) : pendingTasks;
+		}
 
 		// Skip if no tasks to process (either none pending or -n limit reached)
 		if (tasksToProcess.length === 0) {

@@ -28,10 +28,11 @@ export const mixedCommands: CommandModule = {
 	register(program) {
 		// Grind command - autonomous task processing
 		program
-			.command("grind [goal]")
-			.description("Run tasks: pass a goal directly, or process from task board")
+			.command("grind")
+			.description("Process tasks from the task board (use 'add' to queue tasks first)")
 			.option("-n, --count <n>", "Process only N tasks then stop", "0")
 			.option("-p, --parallel <n>", "Maximum concurrent tasks (1-5)", "1")
+			.option("-t, --task-id <id>", "Run a specific task by ID")
 			.option("-s, --stream", "Stream agent activity")
 			.option("-v, --verbose", "Verbose logging")
 			.option("--supervised", "Use supervised mode")
@@ -45,7 +46,7 @@ export const mixedCommands: CommandModule = {
 			.option("--max-retries-per-tier <n>", "Maximum fix attempts at same tier before escalating (default: 3)")
 			.option("--max-review-passes <n>", "Maximum review passes per tier before escalating (default: 2)")
 			.option("--max-opus-review-passes <n>", "Maximum review passes at opus tier (default: 6)")
-			.action((goal: string | undefined, options: GrindOptions) => handleGrind(goal, options));
+			.action((options: GrindOptions) => handleGrind(options));
 
 		// Limits command - quick snapshot of usage (use 'watch' for live monitoring)
 		program
