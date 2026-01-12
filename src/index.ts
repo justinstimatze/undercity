@@ -69,8 +69,6 @@ export {
 	taskStart,
 	warning,
 } from "./output.js";
-// Performance management
-export { getPerformanceManager } from "./performance-manager.js";
 // Persistence layer
 export { Persistence } from "./persistence.js";
 // HTTP Server

@@ -123,37 +123,6 @@
       ]
     },
     {
-      "id": "task-grind-improvements",
-      "objective": "[grind] Improve grind command - better task selection, skip already-complete, priority ordering",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-10T08:50:00.000Z",
-      "tags": [
-        "grind"
-      ]
-    },
-    {
-      "id": "task-conflict-detection",
-      "objective": "[integration] Conflict detection - if two workers touch same files, flag before merge attempt",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-10T09:53:15.928Z",
-      "tags": [
-        "parallel"
-      ]
-    },
-    {
-      "id": "task-verify-retry-logic",
-      "objective": "[grind] Improve verification retry logic - allow multiple fix attempts at same tier before escalating",
-      "status": "pending",
-      "priority": 900,
-      "createdAt": "2026-01-10T10:47:55.888Z",
-      "tags": [
-        "grind",
-        "verification"
-      ]
-    },
-    {
       "id": "task-dspy-evaluation",
       "objective": "[learning] Evaluate DSPy for prompt optimization - assess if prompt quality is the bottleneck vs routing/model selection",
       "status": "pending",
@@ -342,21 +311,21 @@
     {
       "id": "task-mkab3cik-8i42",
       "objective": "[cli] Add --priority flag to 'undercity add' command for explicit task prioritization",
-      "status": "pending",
+      "status": "complete",
       "priority": 3,
       "createdAt": "2026-01-11T22:29:10.556Z",
       "completedAt": "2026-01-12T06:39:24.120Z"
     },
     {
       "id": "task-mkabr2sc-ffur",
-      "objective": "[refactor] Refactor git.ts Elevator.processNext method - complexity 18, 2 nested blocks. Simplify merge processing logic",
+      "objective": "[refactor] Refactor git.ts MergeQueue.processNext method - complexity 18, 2 nested blocks. Simplify merge processing logic",
       "status": "pending",
       "priority": 900,
       "createdAt": "2026-01-11T22:47:37.692Z"
     },
     {
       "id": "task-mkabr37z-vjy8",
-      "objective": "[refactor] Refactor git.ts Elevator.processWorktreeBranch method - complexity 17. Extract rebase and merge strategies",
+      "objective": "[refactor] Refactor git.ts MergeQueue.processWorktreeBranch method - complexity 17. Extract rebase and merge strategies",
       "status": "pending",
       "priority": 900,
       "createdAt": "2026-01-11T22:47:38.255Z"
@@ -400,7 +369,7 @@
     {
       "id": "task-k68i4doys6bq",
       "objective": "[stabilization] Test grind on 10 real tasks, measure success rate, document failures",
-      "status": "pending",
+      "status": "complete",
       "priority": 6,
       "createdAt": "2026-01-12T01:12:23.614Z",
       "tags": [
@@ -623,62 +592,6 @@
       ]
     },
     {
-      "id": "task-mkat4x1m-92198a",
-      "objective": "Test task with priority",
-      "status": "pending",
-      "priority": 10,
-      "createdAt": "2026-01-12T06:54:16.907Z"
-    },
-    {
-      "id": "task-mkat51at-809d4f",
-      "objective": "Test task with invalid priority",
-      "status": "pending",
-      "priority": null,
-      "createdAt": "2026-01-12T06:54:22.421Z"
-    },
-    {
-      "id": "task-mkat5me0-c20dca",
-      "objective": "Test task with valid priority",
-      "status": "pending",
-      "priority": 500,
-      "createdAt": "2026-01-12T06:54:49.752Z"
-    },
-    {
-      "id": "task-mkat5p91-c5cade",
-      "objective": "Test task with invalid text priority",
-      "status": "pending",
-      "priority": null,
-      "createdAt": "2026-01-12T06:54:53.461Z"
-    },
-    {
-      "id": "task-mkat6ig0-ce61df",
-      "objective": "Test task with minimum priority",
-      "status": "pending",
-      "priority": 1,
-      "createdAt": "2026-01-12T06:55:31.296Z"
-    },
-    {
-      "id": "task-mkat6mot-90b9f2",
-      "objective": "Test task with maximum priority",
-      "status": "pending",
-      "priority": 1000,
-      "createdAt": "2026-01-12T06:55:36.797Z"
-    },
-    {
-      "id": "task-mkat6r2y-1bf083",
-      "objective": "Test task without priority",
-      "status": "pending",
-      "priority": 62,
-      "createdAt": "2026-01-12T06:55:42.491Z"
-    },
-    {
-      "id": "task-mkat82y5-d19a78",
-      "objective": "Final test task with priority",
-      "status": "pending",
-      "priority": 500,
-      "createdAt": "2026-01-12T06:56:44.525Z"
-    },
-    {
       "id": "task-mkatqd9t-bf40fc",
       "objective": "In src/commands/mixed.ts, add --dry-run option to grind command definition",
       "status": "pending",
@@ -726,14 +639,7 @@
       "status": "pending",
       "priority": 900,
       "createdAt": "2026-01-12T07:10:57.716Z"
-    },
-    {
-      "id": "task-mkb00j7k-14d0f0",
-      "objective": "Test task with maximum priority",
-      "status": "pending",
-      "priority": 0,
-      "createdAt": "2026-01-12T10:06:49.664Z"
     }
   ],
-  "lastUpdated": "2026-01-12T10:06:49.664Z"
+  "lastUpdated": "2026-01-12T18:05:39.658Z"
 }
