@@ -429,12 +429,15 @@ export function getTeamComposition(
 	modelCeiling?: "haiku" | "sonnet" | "opus",
 ): TeamComposition {
 	// Helper to apply model ceiling
-	const capModel = (model: "haiku" | "sonnet" | "opus"): "haiku" | "sonnet" | "opus" => {
-		if (!modelCeiling) return model;
+	const capModel = (
+		model: "haiku" | "sonnet" | "opus",
+		ceiling?: "haiku" | "sonnet" | "opus",
+	): "haiku" | "sonnet" | "opus" => {
+		if (!ceiling) return model;
 		const order = ["haiku", "sonnet", "opus"];
-		const ceilingIdx = order.indexOf(modelCeiling);
+		const ceilingIdx = order.indexOf(ceiling);
 		const modelIdx = order.indexOf(model);
-		return modelIdx > ceilingIdx ? modelCeiling : model;
+		return modelIdx > ceilingIdx ? ceiling : model;
 	};
 
 	const compositions: Record<ComplexityLevel, Partial<TeamComposition>> = {
@@ -481,10 +484,10 @@ export function getTeamComposition(
 	const composition = compositions[level];
 	return {
 		...composition,
-		workerModel: capModel(composition.workerModel as "haiku" | "sonnet" | "opus"),
-		validatorModel: capModel(composition.validatorModel as "haiku" | "sonnet" | "opus"),
+		workerModel: capModel(composition.workerModel as "haiku" | "sonnet" | "opus", modelCeiling),
+		validatorModel: capModel(composition.validatorModel as "haiku" | "sonnet" | "opus", modelCeiling),
 		plannerModel: composition.plannerModel
-			? capModel(composition.plannerModel as "haiku" | "sonnet" | "opus")
+			? capModel(composition.plannerModel as "haiku" | "sonnet" | "opus", modelCeiling)
 			: undefined,
 	} as TeamComposition;
 }
@@ -503,12 +506,15 @@ function getLevelConfig(
 	description: string;
 } {
 	// Helper to apply model ceiling, preventing unnecessary escalation
-	const capModel = (model: "haiku" | "sonnet" | "opus"): "haiku" | "sonnet" | "opus" => {
-		if (!modelCeiling) return model;
+	const capModel = (
+		model: "haiku" | "sonnet" | "opus",
+		ceiling?: "haiku" | "sonnet" | "opus",
+	): "haiku" | "sonnet" | "opus" => {
+		if (!ceiling) return model;
 		const order = ["haiku", "sonnet", "opus"];
-		const ceilingIdx = order.indexOf(modelCeiling);
+		const ceilingIdx = order.indexOf(ceiling);
 		const modelIdx = order.indexOf(model);
-		return modelIdx > ceilingIdx ? modelCeiling : model;
+		return modelIdx > ceilingIdx ? ceiling : model;
 	};
 
 	const levelConfig: Record<
@@ -561,11 +567,11 @@ function getLevelConfig(
 	};
 
 	const config = levelConfig[level];
-	const ceiling = config.defaultModelCeiling || modelCeiling;
+	const _ceiling = config.defaultModelCeiling || modelCeiling;
 
 	return {
 		...config,
-		model: capModel(config.model),
+		model: capModel(config.model, _ceiling),
 	};
 }
 
