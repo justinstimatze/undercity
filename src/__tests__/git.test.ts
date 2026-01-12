@@ -15,7 +15,17 @@ vi.mock("node:child_process", () => ({
 
 // Import after mocking
 import { execFileSync, execSync } from "node:child_process";
-import { DEFAULT_RETRY_CONFIG, Elevator, GitError, getCurrentBranch } from "../git.js";
+import {
+	DEFAULT_RETRY_CONFIG,
+	Elevator,
+	GitError,
+	generateBranchName,
+	getCurrentBranch,
+	getDefaultBranch,
+	hashFingerprint,
+	hashGoal,
+	resolveRepositoryPath,
+} from "../git.js";
 
 describe("Git Module", () => {
 	beforeEach(() => {
@@ -313,6 +323,285 @@ describe("Elevator Retry Functionality", () => {
 			expect(calculateDelay(2)).toBe(4000); // 1000 * 2^2 = 4000
 			expect(calculateDelay(3)).toBe(8000); // 1000 * 2^3 = 8000
 			expect(calculateDelay(5)).toBe(30000); // capped at maxDelayMs
+		});
+	});
+});
+
+describe("GitError", () => {
+	it("creates error with message and command", () => {
+		const error = new GitError("Branch not found", "git checkout branch");
+		expect(error.message).toBe("Branch not found");
+		expect(error.command).toBe("git checkout branch");
+		expect(error.exitCode).toBeUndefined();
+		expect(error.name).toBe("GitError");
+	});
+
+	it("creates error with exit code", () => {
+		const error = new GitError("Command failed", "git push", 128);
+		expect(error.exitCode).toBe(128);
+	});
+
+	it("is instance of Error", () => {
+		const error = new GitError("test", "git test");
+		expect(error instanceof Error).toBe(true);
+		expect(error instanceof GitError).toBe(true);
+	});
+});
+
+describe("getDefaultBranch", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns branch from remote HEAD when available", () => {
+		vi.mocked(execFileSync).mockReturnValue("refs/remotes/origin/main\n");
+		expect(getDefaultBranch()).toBe("main");
+	});
+
+	it("returns 'main' when remote HEAD fails but main exists", () => {
+		vi.mocked(execFileSync)
+			.mockImplementationOnce(() => {
+				throw new Error("No remote");
+			})
+			.mockReturnValueOnce("main\n");
+		expect(getDefaultBranch()).toBe("main");
+	});
+
+	it("returns 'master' when remote HEAD fails and main does not exist", () => {
+		vi.mocked(execFileSync)
+			.mockImplementationOnce(() => {
+				throw new Error("No remote");
+			})
+			.mockImplementationOnce(() => {
+				throw new Error("No main branch");
+			});
+		expect(getDefaultBranch()).toBe("master");
+	});
+
+	it("accepts optional path parameter", () => {
+		vi.mocked(execFileSync).mockReturnValue("refs/remotes/origin/develop\n");
+		const result = getDefaultBranch("/some/path");
+		expect(result).toBe("develop");
+		expect(execFileSync).toHaveBeenCalledWith(
+			"git",
+			["symbolic-ref", "refs/remotes/origin/HEAD"],
+			expect.objectContaining({ cwd: "/some/path" }),
+		);
+	});
+});
+
+describe("resolveRepositoryPath", () => {
+	it("returns absolute path unchanged", () => {
+		const result = resolveRepositoryPath("/base", "/absolute/path");
+		expect(result).toBe("/absolute/path");
+	});
+
+	it("resolves relative path against base", () => {
+		const result = resolveRepositoryPath("/base/dir", "relative/path");
+		expect(result).toBe("/base/dir/relative/path");
+	});
+
+	it("handles . as relative path", () => {
+		const result = resolveRepositoryPath("/base/dir", ".");
+		expect(result).toBe("/base/dir");
+	});
+
+	it("handles .. in relative path", () => {
+		const result = resolveRepositoryPath("/base/dir/sub", "../sibling");
+		expect(result).toBe("/base/dir/sibling");
+	});
+});
+
+describe("generateBranchName", () => {
+	it("generates branch name with session and step IDs", () => {
+		const result = generateBranchName("session-123", "step-456");
+		// Format: undercity/{sessionId}/{stepId}-{timestamp_base36}
+		expect(result).toMatch(/^undercity\/session-123\/step-456-[a-z0-9]+$/);
+	});
+
+	it("generates unique timestamp suffix", () => {
+		const result1 = generateBranchName("s1", "step1");
+		// Wait a tiny bit to ensure different timestamp
+		const result2 = generateBranchName("s2", "step1");
+		// Different session IDs means different branch names
+		expect(result1).not.toBe(result2);
+		expect(result1).toContain("undercity/s1/step1-");
+		expect(result2).toContain("undercity/s2/step1-");
+	});
+
+	it("handles long session IDs", () => {
+		const longSessionId = "a".repeat(100);
+		const result = generateBranchName(longSessionId, "step");
+		// Should include the full session ID
+		expect(result).toContain(longSessionId);
+		expect(result).toMatch(/^undercity\//);
+	});
+});
+
+describe("hashGoal", () => {
+	it("returns consistent hash for same goal", () => {
+		const hash1 = hashGoal("fix the bug");
+		const hash2 = hashGoal("fix the bug");
+		expect(hash1).toBe(hash2);
+	});
+
+	it("returns different hash for different goals", () => {
+		const hash1 = hashGoal("fix the bug");
+		const hash2 = hashGoal("add a feature");
+		expect(hash1).not.toBe(hash2);
+	});
+
+	it("returns SHA256 hex hash (64 characters)", () => {
+		const hash = hashGoal("any goal");
+		expect(hash).toMatch(/^[a-f0-9]{64}$/);
+	});
+
+	it("handles empty string", () => {
+		const hash = hashGoal("");
+		expect(hash).toMatch(/^[a-f0-9]{64}$/);
+	});
+
+	it("handles special characters", () => {
+		const hash = hashGoal("fix bug with 'quotes' and \"double\" & special <chars>");
+		expect(hash).toMatch(/^[a-f0-9]{64}$/);
+	});
+
+	it("normalizes whitespace before hashing", () => {
+		const hash1 = hashGoal("fix  the   bug");
+		const hash2 = hashGoal("fix the bug");
+		expect(hash1).toBe(hash2);
+	});
+
+	it("trims whitespace before hashing", () => {
+		const hash1 = hashGoal("  fix the bug  ");
+		const hash2 = hashGoal("fix the bug");
+		expect(hash1).toBe(hash2);
+	});
+});
+
+describe("hashFingerprint", () => {
+	it("returns consistent hash for same fingerprint", () => {
+		const fingerprint = {
+			commitHash: "abc123def456",
+			workingTreeStatus: "clean",
+			branch: "main",
+			timestamp: new Date("2024-01-01"),
+		};
+		const hash1 = hashFingerprint(fingerprint);
+		const hash2 = hashFingerprint(fingerprint);
+		expect(hash1).toBe(hash2);
+	});
+
+	it("returns different hash for different commit hashes", () => {
+		const fingerprint1 = {
+			commitHash: "abc123",
+			workingTreeStatus: "clean",
+			branch: "main",
+			timestamp: new Date("2024-01-01"),
+		};
+		const fingerprint2 = {
+			commitHash: "def456",
+			workingTreeStatus: "clean",
+			branch: "main",
+			timestamp: new Date("2024-01-01"),
+		};
+		expect(hashFingerprint(fingerprint1)).not.toBe(hashFingerprint(fingerprint2));
+	});
+
+	it("returns different hash for different working tree status", () => {
+		const fingerprint1 = {
+			commitHash: "abc123",
+			workingTreeStatus: "clean",
+			branch: "main",
+			timestamp: new Date("2024-01-01"),
+		};
+		const fingerprint2 = {
+			commitHash: "abc123",
+			workingTreeStatus: "dirty",
+			branch: "main",
+			timestamp: new Date("2024-01-01"),
+		};
+		expect(hashFingerprint(fingerprint1)).not.toBe(hashFingerprint(fingerprint2));
+	});
+
+	it("returns SHA256 hex hash (64 characters)", () => {
+		const fingerprint = {
+			commitHash: "abc",
+			workingTreeStatus: "",
+			branch: "main",
+			timestamp: new Date(),
+		};
+		expect(hashFingerprint(fingerprint)).toMatch(/^[a-f0-9]{64}$/);
+	});
+});
+
+describe("Elevator additional tests", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(execFileSync).mockReturnValue("main\n");
+	});
+
+	describe("getQueue", () => {
+		it("returns empty array for new queue", () => {
+			const queue = new Elevator();
+			expect(queue.getQueue()).toEqual([]);
+		});
+
+		it("returns all items in queue", () => {
+			const queue = new Elevator();
+			queue.add("branch1", "t1", "a1");
+			queue.add("branch2", "t2", "a2");
+			expect(queue.getQueue()).toHaveLength(2);
+		});
+
+		it("returns items with correct properties", () => {
+			const queue = new Elevator();
+			queue.add("feature/test", "step-123", "agent-1");
+
+			const items = queue.getQueue();
+			expect(items).toHaveLength(1);
+			expect(items[0].branch).toBe("feature/test");
+			expect(items[0].stepId).toBe("step-123");
+			expect(items[0].agentId).toBe("agent-1");
+			expect(items[0].status).toBe("pending");
+		});
+	});
+
+	describe("add", () => {
+		it("sets queuedAt timestamp", () => {
+			const queue = new Elevator();
+			const before = Date.now();
+			const item = queue.add("branch1", "t1", "a1");
+			const after = Date.now();
+
+			expect(item.queuedAt.getTime()).toBeGreaterThanOrEqual(before);
+			expect(item.queuedAt.getTime()).toBeLessThanOrEqual(after);
+		});
+
+		it("initializes status to pending", () => {
+			const queue = new Elevator();
+			const item = queue.add("branch1", "t1", "a1");
+			expect(item.status).toBe("pending");
+		});
+	});
+
+	describe("queue status filtering", () => {
+		it("can filter items by status", () => {
+			const queue = new Elevator();
+			const item1 = queue.add("branch1", "t1", "a1");
+			const item2 = queue.add("branch2", "t2", "a2");
+			const item3 = queue.add("branch3", "t3", "a3");
+
+			item1.status = "pending";
+			item2.status = "conflict";
+			item3.status = "merged";
+
+			const allItems = queue.getQueue();
+			const pendingItems = allItems.filter((i) => i.status === "pending");
+			const conflictItems = allItems.filter((i) => i.status === "conflict");
+
+			expect(pendingItems).toHaveLength(1);
+			expect(conflictItems).toHaveLength(1);
 		});
 	});
 });
