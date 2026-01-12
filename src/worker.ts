@@ -815,22 +815,80 @@ RULES:
 	/**
 	 * Track write operations from SDK messages for the Stop hook
 	 */
+	/** Pending write tools awaiting result (maps tool_use_id to tool name) */
+	private pendingWriteTools: Map<string, { name: string; filePath?: string }> = new Map();
+
 	private trackWriteOperations(message: unknown): void {
 		const msg = message as Record<string, unknown>;
 
-		// Check assistant messages for tool uses
+		// Check assistant messages for tool use REQUESTS
 		if (msg.type === "assistant") {
-			const betaMessage = msg.message as { content?: Array<{ type: string; name?: string }> } | undefined;
+			const betaMessage = msg.message as
+				| {
+						content?: Array<{
+							type: string;
+							name?: string;
+							id?: string;
+							input?: { file_path?: string };
+						}>;
+				  }
+				| undefined;
 			if (betaMessage?.content) {
 				for (const block of betaMessage.content) {
-					if (block.type === "tool_use" && block.name) {
-						// Count write operations
+					if (block.type === "tool_use" && block.name && block.id) {
 						if (["Write", "Edit", "NotebookEdit"].includes(block.name)) {
-							this.writeCountThisExecution++;
-							sessionLogger.debug(
-								{ tool: block.name, writeCount: this.writeCountThisExecution },
-								`Write operation detected (total: ${this.writeCountThisExecution})`,
-							);
+							const filePath = block.input?.file_path;
+							this.pendingWriteTools.set(block.id, { name: block.name, filePath });
+							sessionLogger.debug({ tool: block.name, filePath, toolId: block.id }, "Write tool requested");
+						}
+					}
+				}
+			}
+		}
+
+		// Check for tool RESULTS (success or failure)
+		if (msg.type === "user") {
+			const userMessage = msg.message as
+				| {
+						content?: Array<{
+							type: string;
+							tool_use_id?: string;
+							content?: string;
+							is_error?: boolean;
+						}>;
+				  }
+				| undefined;
+			if (userMessage?.content) {
+				for (const block of userMessage.content) {
+					if (block.type === "tool_result" && block.tool_use_id) {
+						const pendingTool = this.pendingWriteTools.get(block.tool_use_id);
+						if (pendingTool) {
+							this.pendingWriteTools.delete(block.tool_use_id);
+							const isError = block.is_error === true;
+							const contentHasError = block.content?.toLowerCase().includes("error") ?? false;
+							const succeeded = !isError && !contentHasError;
+
+							if (succeeded) {
+								this.writeCountThisExecution++;
+								sessionLogger.debug(
+									{
+										tool: pendingTool.name,
+										filePath: pendingTool.filePath,
+										writeCount: this.writeCountThisExecution,
+									},
+									`Write succeeded (total: ${this.writeCountThisExecution})`,
+								);
+							} else {
+								sessionLogger.debug(
+									{
+										tool: pendingTool.name,
+										filePath: pendingTool.filePath,
+										isError,
+										contentPreview: block.content?.slice(0, 100),
+									},
+									"Write tool FAILED - not counting",
+								);
+							}
 						}
 					}
 				}
