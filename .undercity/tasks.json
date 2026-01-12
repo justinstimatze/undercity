@@ -162,7 +162,7 @@
       "id": "task-feedback-metrics-reader",
       "objective": "[feedback] Create metrics reader - load metrics.jsonl, parse outcomes, compute success rates by model/complexity",
       "status": "pending",
-      "priority": 20,
+      "priority": 900,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": [
         "feedback-loop",
@@ -173,7 +173,7 @@
       "id": "task-feedback-routing-adjustment",
       "objective": "[feedback] Wire metrics to routing - adjust complexity thresholds based on historical success rates per model tier",
       "status": "pending",
-      "priority": 21,
+      "priority": 900,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": [
         "feedback-loop",
@@ -187,7 +187,7 @@
       "id": "task-feedback-introspect-command",
       "objective": "[feedback] Add 'undercity introspect' command - analyze own metrics, identify improvement opportunities, generate tasks",
       "status": "pending",
-      "priority": 22,
+      "priority": 900,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": [
         "feedback-loop",
@@ -201,7 +201,7 @@
       "id": "task-feedback-ab-integration",
       "objective": "[feedback] Wire experiment framework to grind - randomly assign tasks to variants, track which routing/prompts work better",
       "status": "pending",
-      "priority": 23,
+      "priority": 900,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": [
         "feedback-loop",
@@ -212,7 +212,7 @@
       "id": "task-feedback-pattern-learning",
       "objective": "[feedback] Learn task patterns - cluster similar tasks by objective keywords, track which patterns succeed at which tiers",
       "status": "pending",
-      "priority": 24,
+      "priority": 900,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": [
         "feedback-loop",
@@ -226,7 +226,7 @@
       "id": "task-context-ast-indexer",
       "objective": "[context] Build AST indexer - parse TypeScript files, extract function/class/type definitions, store in queryable format for fast lookup",
       "status": "pending",
-      "priority": 30,
+      "priority": 900,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": [
         "context",
@@ -237,7 +237,7 @@
       "id": "task-context-dependency-graph",
       "objective": "[context] Build dependency graph - map imports/exports between files, identify which files are affected by changes to a given file",
       "status": "pending",
-      "priority": 31,
+      "priority": 900,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": [
         "context",
@@ -248,7 +248,7 @@
       "id": "task-context-file-summaries",
       "objective": "[context] Pre-compute file summaries - for each file, generate a 1-2 line description of purpose/exports, cache for fast context loading",
       "status": "pending",
-      "priority": 32,
+      "priority": 900,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": [
         "context",
@@ -259,7 +259,7 @@
       "id": "task-context-smart-context",
       "objective": "[context] Smart context selection - given a task, automatically identify which files/functions are relevant using AST + dependency graph",
       "status": "pending",
-      "priority": 33,
+      "priority": 900,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": [
         "context",
@@ -274,7 +274,7 @@
       "id": "task-metrics-success-rate",
       "objective": "[metrics] Track success rate per complexity level - which tasks need escalation most?",
       "status": "pending",
-      "priority": 40,
+      "priority": 900,
       "createdAt": "2026-01-10T08:50:00.000Z",
       "tags": [
         "metrics"
@@ -284,7 +284,7 @@
       "id": "task-grind-improvements",
       "objective": "[grind] Improve grind command - better task selection, skip already-complete, priority ordering",
       "status": "pending",
-      "priority": 41,
+      "priority": 900,
       "createdAt": "2026-01-10T08:50:00.000Z",
       "tags": [
         "grind"
@@ -294,7 +294,7 @@
       "id": "task-conflict-detection",
       "objective": "[integration] Conflict detection - if two workers touch same files, flag before merge attempt",
       "status": "pending",
-      "priority": 42,
+      "priority": 900,
       "createdAt": "2026-01-10T09:53:15.928Z",
       "tags": [
         "parallel"
@@ -304,7 +304,7 @@
       "id": "task-verify-retry-logic",
       "objective": "[grind] Improve verification retry logic - allow multiple fix attempts at same tier before escalating",
       "status": "pending",
-      "priority": 43,
+      "priority": 900,
       "createdAt": "2026-01-10T10:47:55.888Z",
       "tags": [
         "grind",
@@ -315,7 +315,7 @@
       "id": "task-dspy-evaluation",
       "objective": "[learning] Evaluate DSPy for prompt optimization - assess if prompt quality is the bottleneck vs routing/model selection",
       "status": "pending",
-      "priority": 50,
+      "priority": 900,
       "createdAt": "2026-01-10T09:51:35.101Z",
       "tags": [
         "learning",
@@ -326,7 +326,7 @@
       "id": "task-continuous-sync",
       "objective": "[continuous] Sync task board with grind - mark tasks complete when merged, update status during execution",
       "status": "pending",
-      "priority": 60,
+      "priority": 900,
       "createdAt": "2026-01-11T02:15:00.000Z",
       "tags": [
         "continuous"
@@ -336,7 +336,7 @@
       "id": "task-spell-nonblocking",
       "objective": "[verify] Make spell check non-blocking - spell failures should warn but not fail verification",
       "status": "pending",
-      "priority": 61,
+      "priority": 900,
       "createdAt": "2026-01-11T02:15:00.000Z",
       "tags": [
         "verification"
@@ -346,7 +346,7 @@
       "id": "task-onboard-init",
       "objective": "[onboard] Create 'undercity init' command - interactive/auto-detecting setup for new projects, creates .undercity/ structure",
       "status": "pending",
-      "priority": 70,
+      "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
         "onboarding",
@@ -357,7 +357,7 @@
       "id": "task-onboard-detect-tooling",
       "objective": "[onboard] Auto-detect project tooling - scan package.json/configs for package manager, test runner, linter, build system",
       "status": "pending",
-      "priority": 71,
+      "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
         "onboarding",
@@ -368,7 +368,7 @@
       "id": "task-onboard-verify-abstraction",
       "objective": "[onboard] Abstract verification loop - replace hardcoded 'pnpm check && pnpm build && pnpm test' with configurable project-specific commands",
       "status": "pending",
-      "priority": 72,
+      "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
         "onboarding",
@@ -382,7 +382,7 @@
       "id": "task-onboard-scout-rules",
       "objective": "[onboard] Scout-generated rules - use scout agent to analyze codebase and generate .claude/rules/ with architecture, patterns, conventions",
       "status": "pending",
-      "priority": 73,
+      "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
         "onboarding",
@@ -393,7 +393,7 @@
       "id": "task-onboard-project-profile",
       "objective": "[onboard] Create project profile system - .undercity/profile.json storing learned patterns, failure modes, optimal thresholds per project",
       "status": "pending",
-      "priority": 74,
+      "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
         "onboarding",
@@ -404,7 +404,7 @@
       "id": "task-onboard-self-tune",
       "objective": "[onboard] Self-tuning after tasks - analyze verification failures, adjust complexity routing, update project profile automatically",
       "status": "pending",
-      "priority": 75,
+      "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
         "onboarding",
@@ -419,7 +419,7 @@
       "id": "task-portable-package",
       "objective": "[portable] Make undercity installable as npm package - 'npx undercity init' or 'pnpm add -D undercity' workflow",
       "status": "pending",
-      "priority": 80,
+      "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
         "portability",
@@ -430,7 +430,7 @@
       "id": "task-agent-optimize-oracle",
       "objective": "[agent-opt] Rewrite oracle cards for agent utility - replace poetic lore with concrete examples, action patterns, or decision heuristics that actually help agents",
       "status": "pending",
-      "priority": 14,
+      "priority": 900,
       "createdAt": "2026-01-11T07:35:00.000Z",
       "tags": [
         "agent-optimization",
@@ -441,7 +441,7 @@
       "id": "task-agent-optimize-prompts",
       "objective": "[agent-opt] Audit all agent prompts (squad definitions) - optimize for task completion, remove fluff, add concrete behavioral guidelines",
       "status": "pending",
-      "priority": 15,
+      "priority": 900,
       "createdAt": "2026-01-11T07:35:00.000Z",
       "tags": [
         "agent-optimization",
@@ -452,21 +452,21 @@
       "id": "task-mka7ceac-m3kf",
       "objective": "[periodic] Run semantic-check and fix high-priority density issues",
       "status": "pending",
-      "priority": 38,
+      "priority": 900,
       "createdAt": "2026-01-11T20:44:14.292Z"
     },
     {
       "id": "task-mka7cfkg-avsy",
       "objective": "[optimization] Review .claude/rules files for semantic density improvements",
       "status": "pending",
-      "priority": 39,
+      "priority": 900,
       "createdAt": "2026-01-11T20:44:15.952Z"
     },
     {
       "id": "task-mka7chrr-udp0",
       "objective": "[optimization] Convert low-density prose to tables/lists in documentation",
       "status": "pending",
-      "priority": 40,
+      "priority": 900,
       "createdAt": "2026-01-11T20:44:18.807Z"
     },
     {
@@ -503,28 +503,28 @@
       "id": "task-mkab2aof-ygpz",
       "objective": "[grind] Enhanced verification retry logic - opus tier should get 7 attempts instead of 2, progressive escalation with more retries per tier",
       "status": "pending",
-      "priority": 44,
+      "priority": 900,
       "createdAt": "2026-01-11T22:28:21.519Z"
     },
     {
       "id": "task-mkab2b12-h2rm",
       "objective": "[grind] Task conflict detection - before starting task, check if similar task (>70% similarity) is already running",
       "status": "pending",
-      "priority": 45,
+      "priority": 900,
       "createdAt": "2026-01-11T22:28:21.974Z"
     },
     {
       "id": "task-mkab2bct-bb5k",
       "objective": "[grind] Improve agent prompts - add instruction to check git log before implementing, return TASK_ALREADY_COMPLETE if work exists",
       "status": "pending",
-      "priority": 46,
+      "priority": 900,
       "createdAt": "2026-01-11T22:28:22.397Z"
     },
     {
       "id": "task-mkab2bog-89d5",
       "objective": "[docs] Add reconciliation to grind workflow docs - explain when to run reconcile, how confidence scoring works",
       "status": "pending",
-      "priority": 47,
+      "priority": 900,
       "createdAt": "2026-01-11T22:28:22.816Z"
     },
     {
@@ -538,91 +538,91 @@
       "id": "task-mkabr067-c0o7",
       "objective": "[refactor] Split commands/mixed.ts register function - complexity 131, nesting depth 6. Extract command handlers into separate functions",
       "status": "pending",
-      "priority": 49,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:34.303Z"
     },
     {
       "id": "task-mkabr0mo-16c9",
       "objective": "[refactor] Split commands/task.ts register function - complexity 92, 19 nested blocks. Extract command handlers into separate functions",
       "status": "pending",
-      "priority": 50,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:34.896Z"
     },
     {
       "id": "task-mkabr12w-2712",
       "objective": "[refactor] Refactor parallel-solo.ts runParallel method - complexity 54, 5 nested blocks. Break into smaller coordinating methods",
       "status": "pending",
-      "priority": 51,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:35.480Z"
     },
     {
       "id": "task-mkabr1hq-3vlz",
       "objective": "[refactor] Refactor solo.ts runTask method - complexity 35. Extract validation, execution, and error handling into separate methods",
       "status": "pending",
-      "priority": 52,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:36.014Z"
     },
     {
       "id": "task-mkabr1wy-2lt4",
       "objective": "[refactor] Refactor solo.ts runEscalatingReview method - complexity 28, 8 nested blocks. Simplify escalation logic",
       "status": "pending",
-      "priority": 53,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:36.562Z"
     },
     {
       "id": "task-mkabr2cc-esya",
       "objective": "[refactor] Split solo.ts into smaller modules - 1239 lines (threshold 1000). Extract review logic, execution logic to separate files",
       "status": "pending",
-      "priority": 54,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:37.116Z"
     },
     {
       "id": "task-mkabr2sc-ffur",
       "objective": "[refactor] Refactor git.ts Elevator.processNext method - complexity 18, 2 nested blocks. Simplify merge processing logic",
       "status": "pending",
-      "priority": 55,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:37.692Z"
     },
     {
       "id": "task-mkabr37z-vjy8",
       "objective": "[refactor] Refactor git.ts Elevator.processWorktreeBranch method - complexity 17. Extract rebase and merge strategies",
       "status": "pending",
-      "priority": 56,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:38.255Z"
     },
     {
       "id": "task-mkabr3n6-rrk6",
       "objective": "[refactor] Consolidate duplicated code in task.ts - blockTask, markTaskCanceled, markTaskObsolete, unblockTask share structure. Create common helper",
       "status": "pending",
-      "priority": 57,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:38.802Z"
     },
     {
       "id": "task-mkabr42j-4igg",
       "objective": "[refactor] Reduce primitive obsession in task.ts - 89% primitive args. Introduce typed parameter objects where appropriate",
       "status": "pending",
-      "priority": 58,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:39.355Z"
     },
     {
       "id": "task-mkabr4hw-4fob",
       "objective": "[refactor] Reduce primitive obsession in solo.ts - 64% primitive args. Introduce typed parameter objects for agent execution",
       "status": "pending",
-      "priority": 59,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:39.908Z"
     },
     {
       "id": "task-mkabr4xb-c1dm",
       "objective": "[refactor] Simplify solo.ts runSingleReview method - complexity 19, nesting depth 4. Extract review validation and result processing",
       "status": "pending",
-      "priority": 60,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:40.463Z"
     },
     {
       "id": "task-mkabr5cd-qpfc",
       "objective": "[refactor] Simplify solo.ts generateTicketsFromIssues method - complexity 12, 2 complex conditionals. Use lookup table or strategy pattern",
       "status": "pending",
-      "priority": 61,
+      "priority": 900,
       "createdAt": "2026-01-11T22:47:41.005Z"
     },
     {
@@ -647,8 +647,88 @@
       "id": "task-mkadtxcu-cn6i",
       "objective": "[cli] Add 'undercity update' command - update task objective, priority, tags, or status. Usage: undercity update <task-id> --objective '...' --priority N --tags tag1,tag2",
       "status": "pending",
-      "priority": 64,
+      "priority": 900,
       "createdAt": "2026-01-11T23:45:49.854Z"
+    },
+    {
+      "id": "task-b6rq1ih0wenw",
+      "objective": "[stabilization] Write integration tests for full grind flow - task selection, worktree, execute, verify, merge, completion",
+      "status": "pending",
+      "priority": 1,
+      "createdAt": "2026-01-12T01:12:23.613Z",
+      "tags": [
+        "stabilization"
+      ]
+    },
+    {
+      "id": "task-g1c4gzp0jpd0",
+      "objective": "[stabilization] Fix auto-detection to reliably mark tasks complete after merge - currently fails silently",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-12T01:12:23.614Z",
+      "tags": [
+        "stabilization"
+      ]
+    },
+    {
+      "id": "task-ixwh7tnrh5jh",
+      "objective": "[stabilization] Add file allowlist to worker context - prevent agents from touching unrelated files (scope creep)",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-12T01:12:23.614Z",
+      "tags": [
+        "stabilization"
+      ]
+    },
+    {
+      "id": "task-mf48mfkx7msu",
+      "objective": "[stabilization] Add real-time grind reporting - show what's happening now, don't wait for completion",
+      "status": "pending",
+      "priority": 4,
+      "createdAt": "2026-01-12T01:12:23.614Z",
+      "tags": [
+        "stabilization"
+      ]
+    },
+    {
+      "id": "task-8znf83r59zvq",
+      "objective": "[stabilization] Add error boundaries to grind - one task failure shouldn't crash entire grind",
+      "status": "pending",
+      "priority": 5,
+      "createdAt": "2026-01-12T01:12:23.614Z",
+      "tags": [
+        "stabilization"
+      ]
+    },
+    {
+      "id": "task-k68i4doys6bq",
+      "objective": "[stabilization] Test grind on 10 real tasks, measure success rate, document failures",
+      "status": "pending",
+      "priority": 6,
+      "createdAt": "2026-01-12T01:12:23.614Z",
+      "tags": [
+        "stabilization"
+      ]
+    },
+    {
+      "id": "task-c4o64hs3e0h9",
+      "objective": "[stabilization] Consolidate orchestrators - delete solo.ts, keep only parallel-solo.ts",
+      "status": "pending",
+      "priority": 7,
+      "createdAt": "2026-01-12T01:12:23.614Z",
+      "tags": [
+        "stabilization"
+      ]
+    },
+    {
+      "id": "task-c1h63skgeqjo",
+      "objective": "[stabilization] Make verification retries configurable - currently hardcoded and confusing",
+      "status": "pending",
+      "priority": 8,
+      "createdAt": "2026-01-12T01:12:23.614Z",
+      "tags": [
+        "stabilization"
+      ]
     }
   ],
   "lastUpdated": "2026-01-11T23:47:58.171Z"

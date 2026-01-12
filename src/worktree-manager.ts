@@ -269,6 +269,14 @@ export class WorktreeManager {
 		const baseBranch = this.mainBranch;
 
 		try {
+			// Enable worktreeConfig extension if not already enabled
+			// This allows worktree-specific config without affecting main repo
+			try {
+				execGit(["config", "extensions.worktreeConfig", "true"]);
+			} catch {
+				// Ignore if already enabled
+			}
+
 			// Create the worktree with a new branch from local main HEAD
 			gitLogger.debug({ baseBranch }, "Creating worktree from local main HEAD");
 			execGit(["worktree", "add", "-b", branchName, worktreePath, baseBranch]);
