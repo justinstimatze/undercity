@@ -4,6 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	compat,
 	configureOutput,
 	createProgressTracker,
 	debug,
@@ -24,6 +25,11 @@ import {
 	taskFailed,
 	taskStart,
 	warning,
+	workerAttempt,
+	workerEscalation,
+	workerPhase,
+	workerReview,
+	workerVerification,
 } from "../output.js";
 
 describe("output", () => {
@@ -243,6 +249,160 @@ describe("output", () => {
 			const output = JSON.parse(lastCall);
 			expect(output.type).toBe("success");
 			expect(output.message).toContain("All done");
+		});
+
+		it("should output default message on complete without message", () => {
+			const tracker = createProgressTracker(1, "items");
+			tracker.increment();
+			tracker.complete();
+
+			const lastCall = consoleSpy.mock.calls[consoleSpy.mock.calls.length - 1][0];
+			const output = JSON.parse(lastCall);
+			expect(output.type).toBe("success");
+			expect(output.message).toContain("items complete");
+		});
+	});
+
+	describe("worker-level events (agent mode)", () => {
+		beforeEach(() => {
+			configureOutput({ mode: "agent" });
+		});
+
+		it("should output worker phase event", () => {
+			workerPhase("task-123", "analyzing");
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.type).toBe("worker_phase");
+			expect(output.data?.taskId).toBe("task-123");
+			expect(output.data?.phase).toBe("analyzing");
+		});
+
+		it("should output worker attempt event", () => {
+			workerAttempt("task-123", 1, 3, "sonnet");
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.type).toBe("worker_attempt");
+			expect(output.message).toContain("Attempt 1/3");
+			expect(output.data?.model).toBe("sonnet");
+		});
+
+		it("should output worker verification passed", () => {
+			workerVerification("task-123", true);
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.type).toBe("worker_verification");
+			expect(output.message).toBe("Verification passed");
+			expect(output.data?.passed).toBe(true);
+		});
+
+		it("should output worker verification failed with issues", () => {
+			workerVerification("task-123", false, ["lint error", "type error"]);
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.type).toBe("worker_verification");
+			expect(output.message).toContain("lint error");
+			expect(output.data?.passed).toBe(false);
+		});
+
+		it("should output worker escalation event", () => {
+			workerEscalation("task-123", "haiku", "sonnet", "complexity");
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.type).toBe("worker_escalation");
+			expect(output.message).toContain("haiku → sonnet");
+			expect(output.message).toContain("complexity");
+		});
+
+		it("should output worker escalation without reason", () => {
+			workerEscalation("task-123", "sonnet", "opus");
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.message).toBe("Escalating: sonnet → opus");
+		});
+
+		it("should output worker review passed", () => {
+			workerReview("task-123", "fast", 1, 2, "passed");
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.type).toBe("worker_review");
+			expect(output.message).toContain("Review 1/2");
+			expect(output.data?.result).toBe("passed");
+		});
+
+		it("should output worker review fixing", () => {
+			workerReview("task-123", "slow", 2, 3, "fixing");
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.message).toContain("fixing issues");
+		});
+
+		it("should output worker review escalating", () => {
+			workerReview("task-123", "opus", 3, 3, "escalating");
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.message).toContain("escalating");
+		});
+	});
+
+	describe("human mode formatting", () => {
+		beforeEach(() => {
+			configureOutput({ mode: "human" });
+		});
+
+		it("should output header with title and subtitle", () => {
+			header("Title", "Subtitle");
+			// Human mode outputs multiple lines
+			expect(consoleSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
+			const calls = consoleSpy.mock.calls.map((c) => c[0]).join("\n");
+			expect(calls).toContain("Title");
+		});
+
+		it("should output header with just title", () => {
+			header("Just Title");
+			const calls = consoleSpy.mock.calls.map((c) => c[0]).join("\n");
+			expect(calls).toContain("Just Title");
+		});
+
+		it("should output section divider", () => {
+			section("Section Title");
+			const output = consoleSpy.mock.calls[0][0];
+			expect(output).toContain("Section Title");
+		});
+
+		it("should output summary with colored status", () => {
+			summary("Results", [
+				{ label: "Good", value: 10, status: "good" },
+				{ label: "Bad", value: 2, status: "bad" },
+				{ label: "Neutral", value: 5, status: "neutral" },
+			]);
+			const calls = consoleSpy.mock.calls.map((c) => c[0]).join("\n");
+			expect(calls).toContain("Results");
+			expect(calls).toContain("Good:");
+		});
+
+		it("should output key-value pair", () => {
+			keyValue("key", "value");
+			const output = consoleSpy.mock.calls[0][0];
+			expect(output).toContain("key:");
+			expect(output).toContain("value");
+		});
+
+		it("should output list items", () => {
+			list(["item1", "item2"]);
+			expect(consoleSpy.mock.calls).toHaveLength(2);
+		});
+
+		it("should output list items with custom prefix", () => {
+			list(["first"], "-");
+			const output = consoleSpy.mock.calls[0][0];
+			expect(output).toContain("-");
+			expect(output).toContain("first");
+		});
+	});
+
+	describe("compat layer", () => {
+		it("should pass through in human mode", () => {
+			configureOutput({ mode: "human" });
+			compat.log("test message");
+			expect(consoleSpy.mock.calls[0][0]).toBe("test message");
+		});
+
+		it("should strip ANSI codes in agent mode", () => {
+			configureOutput({ mode: "agent" });
+			compat.log("\x1b[32mcolored\x1b[0m");
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.message).toBe("colored");
 		});
 	});
 });
