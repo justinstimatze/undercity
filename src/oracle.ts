@@ -1,6 +1,12 @@
 import chalk from "chalk";
 
 /**
+ * Provides random motivational quotes for Undercity workers
+ * to inspire creativity, break problem-solving blocks,
+ * and offer fresh perspectives during task execution.
+ */
+
+/**
  * Undercity Oracle - A deck of oblique strategy cards for novel insights
  *
  * Philosophy: "It only has to make sense for me" (365 buttons)
