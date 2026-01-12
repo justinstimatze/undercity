@@ -87,6 +87,8 @@ export interface TaskResult {
 	};
 	/** Tickets for issues that couldn't be resolved - queue as child tasks */
 	unresolvedTickets?: UnresolvedTicket[];
+	/** Result from meta-task (triage, prune, etc.) - orchestrator processes these */
+	metaTaskResult?: import("./types.js").MetaTaskResult;
 }
 
 /**

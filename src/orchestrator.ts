@@ -22,9 +22,9 @@ import { FileTracker } from "./file-tracker.js";
 import * as output from "./output.js";
 import { Persistence } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
-import { addTask } from "./task.js";
+import { addTask, loadTaskBoard, removeTasks, saveTaskBoard } from "./task.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
-import type { ParallelRecoveryState, ParallelTaskState } from "./types.js";
+import type { MetaTaskRecommendation, MetaTaskResult, ParallelRecoveryState, ParallelTaskState } from "./types.js";
 import { type TaskResult, TaskWorker } from "./worker.js";
 import { WorktreeManager } from "./worktree-manager.js";
 
@@ -232,6 +232,184 @@ export class Orchestrator {
 			mergeFailed: 0,
 			durationMs: Date.now() - startTime,
 		};
+	}
+
+	/**
+	 * Process recommendations from a meta-task result
+	 * This is the single point where task board mutations happen
+	 */
+	private processMetaTaskResult(metaResult: MetaTaskResult, taskId: string): void {
+		const { metaTaskType, recommendations, summary } = metaResult;
+
+		output.info(`Processing ${metaTaskType} recommendations`, {
+			count: recommendations.length,
+			summary,
+		});
+
+		// Track actions taken
+		let removed = 0;
+		let added = 0;
+		let updated = 0;
+
+		// Group recommendations by confidence for logging
+		const highConfidence = recommendations.filter((r) => r.confidence >= 0.8);
+		const lowConfidence = recommendations.filter((r) => r.confidence < 0.8);
+
+		if (lowConfidence.length > 0) {
+			output.warning(`Skipping ${lowConfidence.length} low-confidence recommendations (< 0.8)`);
+		}
+
+		// Only process high-confidence recommendations
+		for (const rec of highConfidence) {
+			try {
+				this.applyRecommendation(rec);
+				switch (rec.action) {
+					case "remove":
+						removed++;
+						break;
+					case "add":
+						added++;
+						break;
+					default:
+						updated++;
+				}
+			} catch (err) {
+				output.warning(`Failed to apply recommendation: ${rec.action} on ${rec.taskId}`, {
+					error: String(err),
+				});
+			}
+		}
+
+		// Log summary
+		if (removed + added + updated > 0) {
+			output.success(`Meta-task ${taskId} applied`, {
+				removed,
+				added,
+				updated,
+			});
+		}
+
+		// Log metrics if available
+		if (metaResult.metrics) {
+			output.info(`Task board health: ${metaResult.metrics.healthScore}%`, {
+				issuesFound: metaResult.metrics.issuesFound,
+				tasksAnalyzed: metaResult.metrics.tasksAnalyzed,
+			});
+		}
+	}
+
+	/**
+	 * Apply a single recommendation to the task board
+	 */
+	private applyRecommendation(rec: MetaTaskRecommendation): void {
+		switch (rec.action) {
+			case "remove": {
+				if (rec.taskId) {
+					const removed = removeTasks([rec.taskId]);
+					if (removed > 0 && this.verbose) {
+						output.debug(`Removed task ${rec.taskId}: ${rec.reason}`);
+					}
+				}
+				break;
+			}
+
+			case "add": {
+				if (rec.newTask) {
+					const task = addTask(rec.newTask.objective, rec.newTask.priority);
+					if (this.verbose) {
+						output.debug(`Added task ${task.id}: ${rec.newTask.objective.substring(0, 50)}...`);
+					}
+				}
+				break;
+			}
+
+			case "complete":
+			case "fix_status": {
+				if (rec.taskId) {
+					const board = loadTaskBoard();
+					const task = board.tasks.find((t) => t.id === rec.taskId);
+					if (task) {
+						task.status = "complete";
+						task.completedAt = new Date();
+						task.resolution = rec.reason;
+						saveTaskBoard(board);
+						if (this.verbose) {
+							output.debug(`Marked ${rec.taskId} complete: ${rec.reason}`);
+						}
+					}
+				}
+				break;
+			}
+
+			case "prioritize": {
+				if (rec.taskId && rec.updates?.priority !== undefined) {
+					const board = loadTaskBoard();
+					const task = board.tasks.find((t) => t.id === rec.taskId);
+					if (task) {
+						task.priority = rec.updates.priority;
+						saveTaskBoard(board);
+						if (this.verbose) {
+							output.debug(`Updated priority for ${rec.taskId} to ${rec.updates.priority}`);
+						}
+					}
+				}
+				break;
+			}
+
+			case "update": {
+				if (rec.taskId && rec.updates) {
+					const board = loadTaskBoard();
+					const task = board.tasks.find((t) => t.id === rec.taskId);
+					if (task) {
+						if (rec.updates.objective) task.objective = rec.updates.objective;
+						if (rec.updates.priority !== undefined) task.priority = rec.updates.priority;
+						if (rec.updates.tags) task.tags = rec.updates.tags;
+						saveTaskBoard(board);
+						if (this.verbose) {
+							output.debug(`Updated task ${rec.taskId}`);
+						}
+					}
+				}
+				break;
+			}
+
+			case "block": {
+				if (rec.taskId) {
+					const board = loadTaskBoard();
+					const task = board.tasks.find((t) => t.id === rec.taskId);
+					if (task) {
+						task.status = "blocked";
+						task.resolution = rec.reason;
+						saveTaskBoard(board);
+					}
+				}
+				break;
+			}
+
+			case "unblock": {
+				if (rec.taskId) {
+					const board = loadTaskBoard();
+					const task = board.tasks.find((t) => t.id === rec.taskId);
+					if (task && task.status === "blocked") {
+						task.status = "pending";
+						task.resolution = undefined;
+						saveTaskBoard(board);
+					}
+				}
+				break;
+			}
+
+			// merge and decompose are more complex - log for manual review
+			case "merge":
+			case "decompose": {
+				output.info(`Recommendation requires manual review: ${rec.action}`, {
+					taskId: rec.taskId,
+					relatedTaskIds: rec.relatedTaskIds,
+					reason: rec.reason,
+				});
+				break;
+			}
+		}
 	}
 
 	/**
@@ -538,6 +716,11 @@ export class Orchestrator {
 
 					if (result.status === "complete") {
 						output.taskComplete(taskId, "Task completed", { modifiedFiles: modifiedFiles.length });
+
+						// Process meta-task recommendations if present
+						if (result.metaTaskResult) {
+							this.processMetaTaskResult(result.metaTaskResult, taskId);
+						}
 					} else {
 						output.taskFailed(taskId, "Task failed", result.error);
 					}

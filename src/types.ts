@@ -944,3 +944,94 @@ export interface ExperimentStorage {
 	/** Last updated timestamp */
 	lastUpdated: Date;
 }
+
+// ============================================================================
+// Meta-Task Types
+// ============================================================================
+// Meta-tasks are tasks that operate on the task board itself (triage, prune,
+// plan decomposition, etc.). They return recommendations instead of making
+// direct mutations. The orchestrator processes these recommendations.
+
+/**
+ * Types of meta-tasks that can operate on the task board
+ */
+export type MetaTaskType = "triage" | "prune" | "plan" | "prioritize" | "generate";
+
+/**
+ * Actions that can be recommended by meta-tasks
+ */
+export type MetaTaskAction =
+	| "remove" // Delete a task
+	| "complete" // Mark task as complete
+	| "fix_status" // Fix inconsistent status
+	| "merge" // Merge duplicate tasks
+	| "add" // Add new task(s)
+	| "update" // Update task fields
+	| "prioritize" // Change task priority
+	| "decompose" // Decompose into subtasks
+	| "block" // Mark task as blocked
+	| "unblock"; // Unblock a task
+
+/**
+ * Individual recommendation from a meta-task
+ */
+export interface MetaTaskRecommendation {
+	/** The action to take */
+	action: MetaTaskAction;
+	/** Target task ID (for actions on existing tasks) */
+	taskId?: string;
+	/** Related task IDs (for merge, dependencies) */
+	relatedTaskIds?: string[];
+	/** Reason for this recommendation */
+	reason: string;
+	/** Confidence score (0-1) */
+	confidence: number;
+	/** New task data (for add action) */
+	newTask?: {
+		objective: string;
+		priority?: number;
+		tags?: string[];
+		dependsOn?: string[];
+	};
+	/** Updated fields (for update action) */
+	updates?: {
+		objective?: string;
+		priority?: number;
+		tags?: string[];
+		status?: string;
+	};
+}
+
+/**
+ * Result returned by a meta-task
+ */
+export interface MetaTaskResult {
+	/** Type of meta-task that produced this result */
+	metaTaskType: MetaTaskType;
+	/** Recommendations for task board changes */
+	recommendations: MetaTaskRecommendation[];
+	/** Summary of analysis performed */
+	summary: string;
+	/** Health metrics (for triage) */
+	metrics?: {
+		healthScore?: number;
+		issuesFound?: number;
+		tasksAnalyzed?: number;
+	};
+}
+
+/**
+ * Check if a task objective indicates a meta-task
+ * Meta-tasks are prefixed with [meta:type]
+ */
+export function isMetaTask(objective: string): boolean {
+	return /^\[meta:(triage|prune|plan|prioritize|generate)\]/i.test(objective);
+}
+
+/**
+ * Extract meta-task type from objective
+ */
+export function getMetaTaskType(objective: string): MetaTaskType | null {
+	const match = objective.match(/^\[meta:(triage|prune|plan|prioritize|generate)\]/i);
+	return match ? (match[1].toLowerCase() as MetaTaskType) : null;
+}
