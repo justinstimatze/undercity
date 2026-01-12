@@ -873,6 +873,22 @@ When done, provide a brief summary of ONLY the files you changed.`;
 	 */
 	private async commitWork(task: string): Promise<string> {
 		try {
+			// Check if there are any uncommitted changes (agent may have already committed)
+			const statusOutput = execFileSync("git", ["status", "--porcelain"], {
+				encoding: "utf-8",
+				cwd: this.workingDirectory,
+			}).trim();
+
+			// If working directory is clean, agent already committed - return current HEAD
+			if (!statusOutput) {
+				const sha = execFileSync("git", ["rev-parse", "HEAD"], {
+					encoding: "utf-8",
+					cwd: this.workingDirectory,
+				}).trim();
+				this.log("Agent already committed, using existing commit", { sha });
+				return sha;
+			}
+
 			// Stage all tracked changes (not untracked files to avoid committing temp files)
 			// CRITICAL: Must use workingDirectory, not process.cwd() - otherwise commits in wrong repo
 			execFileSync("git", ["add", "-u"], { cwd: this.workingDirectory });
