@@ -52,6 +52,8 @@ export interface TeamComposition {
 	validatorModel: "haiku" | "sonnet" | "opus";
 	/** Whether validators must be independent (didn't write code) */
 	independentValidators: boolean;
+	/** Optional ceiling to prevent unnecessary model escalation */
+	modelCeiling?: "haiku" | "sonnet" | "opus";
 }
 
 /**
@@ -435,69 +437,195 @@ export function getTeamComposition(
 		return modelIdx > ceilingIdx ? modelCeiling : model;
 	};
 
-	const compositions: Record<ComplexityLevel, TeamComposition> = {
+	const compositions: Record<ComplexityLevel, Partial<TeamComposition>> = {
 		trivial: {
 			needsPlanning: false,
-			workerModel: capModel("haiku"),
+			workerModel: "haiku",
 			validatorCount: 0,
 			validatorModel: "haiku",
 			independentValidators: false,
 		},
 		simple: {
 			needsPlanning: false,
-			workerModel: capModel("sonnet"),
+			workerModel: "sonnet",
 			validatorCount: 1,
-			validatorModel: capModel("haiku"),
+			validatorModel: "haiku",
 			independentValidators: true,
 		},
 		standard: {
 			needsPlanning: true,
-			plannerModel: capModel("sonnet"),
-			workerModel: capModel("sonnet"),
+			plannerModel: "sonnet",
+			workerModel: "sonnet",
 			validatorCount: 2,
-			validatorModel: capModel("sonnet"),
+			validatorModel: "sonnet",
 			independentValidators: true,
 		},
 		complex: {
 			needsPlanning: true,
-			plannerModel: capModel("opus"),
-			workerModel: capModel("sonnet"),
+			plannerModel: "opus",
+			workerModel: "sonnet",
 			validatorCount: 3,
-			validatorModel: capModel("sonnet"),
+			validatorModel: "sonnet",
 			independentValidators: true,
 		},
 		critical: {
 			needsPlanning: true,
-			plannerModel: capModel("opus"),
-			workerModel: capModel("sonnet"),
+			plannerModel: "opus",
+			workerModel: "sonnet",
 			validatorCount: 5,
-			validatorModel: capModel("sonnet"),
+			validatorModel: "sonnet",
 			independentValidators: true,
 		},
 	};
 
-	return compositions[level];
+	const composition = compositions[level];
+	return {
+		...composition,
+		workerModel: capModel(composition.workerModel as "haiku" | "sonnet" | "opus"),
+		validatorModel: capModel(composition.validatorModel as "haiku" | "sonnet" | "opus"),
+		plannerModel: composition.plannerModel
+			? capModel(composition.plannerModel as "haiku" | "sonnet" | "opus")
+			: undefined,
+	} as TeamComposition;
+}
+
+/**
+ * Shared complexity level configuration with explicit review and model escalation rules
+ * Ensures simple tasks (docs, cleanup, refactors) do not escalate to Opus
+ */
+function getLevelConfig(
+	level: ComplexityLevel,
+	modelCeiling?: "haiku" | "sonnet" | "opus",
+): {
+	model: "haiku" | "sonnet" | "opus";
+	useFullChain: boolean;
+	needsReview: boolean;
+	description: string;
+} {
+	// Helper to apply model ceiling, preventing unnecessary escalation
+	const capModel = (model: "haiku" | "sonnet" | "opus"): "haiku" | "sonnet" | "opus" => {
+		if (!modelCeiling) return model;
+		const order = ["haiku", "sonnet", "opus"];
+		const ceilingIdx = order.indexOf(modelCeiling);
+		const modelIdx = order.indexOf(model);
+		return modelIdx > ceilingIdx ? modelCeiling : model;
+	};
+
+	const levelConfig: Record<
+		ComplexityLevel,
+		{
+			model: "haiku" | "sonnet" | "opus";
+			useFullChain: boolean;
+			needsReview: boolean;
+			description: string;
+			defaultModelCeiling?: "haiku" | "sonnet" | "opus";
+		}
+	> = {
+		// Trivial tasks: typos, comments, version bumps - use haiku, no review
+		trivial: {
+			model: "haiku",
+			useFullChain: false,
+			needsReview: false,
+			description: "Minimal changes, no review needed",
+			defaultModelCeiling: "haiku",
+		},
+		// Simple tasks: small changes, single function/file tweaks - cap at sonnet
+		simple: {
+			model: "sonnet",
+			useFullChain: false,
+			needsReview: false,
+			description: "Minor changes within single file or function",
+			defaultModelCeiling: "sonnet",
+		},
+		// Standard tasks: typical features, bug fixes - use sonnet, review recommended
+		standard: {
+			model: "sonnet",
+			useFullChain: false,
+			needsReview: true,
+			description: "Typical features requiring basic review",
+		},
+		// Complex tasks: multi-file changes, refactors - escalate to opus
+		complex: {
+			model: "opus",
+			useFullChain: true,
+			needsReview: true,
+			description: "Significant architectural or multi-file changes",
+		},
+		// Critical tasks: security, auth, production - full opus escalation
+		critical: {
+			model: "opus",
+			useFullChain: true,
+			needsReview: true,
+			description: "High-stakes changes requiring comprehensive review",
+		},
+	};
+
+	const config = levelConfig[level];
+	const ceiling = config.defaultModelCeiling || modelCeiling;
+
+	return {
+		...config,
+		model: capModel(config.model),
+	};
 }
 
 /**
  * Keywords and patterns that indicate complexity
  */
+// Complexity signals with refined categorization
+// Explicitly distinguishes simple, non-escalating tasks from those requiring deeper review
 const COMPLEXITY_SIGNALS = {
+	// Absolutely minimal changes - guaranteed haiku, no review
 	trivial: {
 		keywords: ["typo", "comment", "rename", "fix typo", "update comment", "version bump"],
-		patterns: [/^fix\s+typo/i, /^update\s+comment/i, /^bump\s+version/i],
+		patterns: [/^fix\s+typo/i, /^update\s+comment/i, /^bump\s+version/i, /^correct\s+(spelling|grammar)/i],
 		weight: 0,
 	},
+	// Simple, self-contained changes that don't require escalation
 	simple: {
-		keywords: ["add log", "simple fix", "small change", "minor", "tweak", "adjust", "update import", "add import"],
-		patterns: [/^add\s+(a\s+)?log/i, /^simple\s+/i, /^small\s+/i],
+		keywords: [
+			"add log",
+			"simple fix",
+			"small change",
+			"minor",
+			"tweak",
+			"adjust",
+			"update import",
+			"add import",
+			"clean up",
+			"organize",
+			"improve readability",
+			"simplify code",
+			"remove unused",
+		],
+		patterns: [
+			/^add\s+(a\s+)?log/i,
+			/^simple\s+/i,
+			/^small\s+/i,
+			/^clean\s+up/i,
+			/^remove\s+unused/i,
+			/^improve\s+readability/i,
+		],
 		weight: 1,
 	},
+	// Typical feature work or bugfixes that need basic review
 	standard: {
-		keywords: ["add feature", "implement", "create", "build", "update", "modify", "fix bug", "add test"],
-		patterns: [/^add\s+/i, /^implement\s+/i, /^create\s+/i, /^fix\s+/i],
+		keywords: [
+			"add feature",
+			"implement",
+			"create",
+			"build",
+			"update",
+			"modify",
+			"fix bug",
+			"add test",
+			"enhance",
+			"improve",
+		],
+		patterns: [/^add\s+/i, /^implement\s+/i, /^create\s+/i, /^fix\s+/i, /^enhance\s+/i],
 		weight: 2,
 	},
+	// Significant changes that warrant opus escalation
 	complex: {
 		keywords: [
 			"refactor",
@@ -510,10 +638,21 @@ const COMPLEXITY_SIGNALS = {
 			"architecture",
 			"api change",
 			"breaking change",
+			"performance optimization",
+			"major restructure",
 		],
-		patterns: [/refactor/i, /migrate/i, /redesign/i, /integration/i, /across\s+(multiple|all)/i],
+		patterns: [
+			/refactor/i,
+			/migrate/i,
+			/redesign/i,
+			/integration/i,
+			/across\s+(multiple|all)/i,
+			/performance\s+optimization/i,
+			/major\s+restructure/i,
+		],
 		weight: 3,
 	},
+	// Highest risk tasks requiring full review and escalation
 	critical: {
 		keywords: [
 			"security",
@@ -524,8 +663,11 @@ const COMPLEXITY_SIGNALS = {
 			"production",
 			"critical",
 			"breaking",
+			"compliance",
+			"data integrity",
+			"high-risk",
 		],
-		patterns: [/security/i, /auth/i, /payment/i, /migration/i, /production/i],
+		patterns: [/security/i, /auth/i, /payment/i, /migration/i, /production/i, /data\s+integrity/i, /high\s*-?\s*risk/i],
 		weight: 4,
 	},
 };
@@ -646,23 +788,7 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 		level = "critical";
 	}
 
-	// Map level to configuration
-	const levelConfig: Record<
-		ComplexityLevel,
-		{
-			model: "haiku" | "sonnet" | "opus";
-			useFullChain: boolean;
-			needsReview: boolean;
-		}
-	> = {
-		trivial: { model: "haiku", useFullChain: false, needsReview: false },
-		simple: { model: "sonnet", useFullChain: false, needsReview: false },
-		standard: { model: "sonnet", useFullChain: false, needsReview: true },
-		complex: { model: "opus", useFullChain: true, needsReview: true },
-		critical: { model: "opus", useFullChain: true, needsReview: true },
-	};
-
-	const config = levelConfig[level];
+	const config = getLevelConfig(level);
 
 	return {
 		level,
@@ -730,23 +856,8 @@ Complexity guide:
 			const level = parsed.level as ComplexityLevel;
 			const scope = parsed.scope as ComplexityAssessment["estimatedScope"];
 
-			// Build assessment from LLM response
-			const levelConfig: Record<
-				ComplexityLevel,
-				{
-					model: "haiku" | "sonnet" | "opus";
-					useFullChain: boolean;
-					needsReview: boolean;
-				}
-			> = {
-				trivial: { model: "haiku", useFullChain: false, needsReview: false },
-				simple: { model: "sonnet", useFullChain: false, needsReview: false },
-				standard: { model: "sonnet", useFullChain: false, needsReview: true },
-				complex: { model: "opus", useFullChain: true, needsReview: true },
-				critical: { model: "opus", useFullChain: true, needsReview: true },
-			};
-
-			const config = levelConfig[level] || levelConfig.standard;
+			// Use shared level configuration
+			const config = getLevelConfig(level);
 
 			return {
 				level,
@@ -829,23 +940,8 @@ export function assessComplexityQuantitative(
 		estimatedScope = "single-file";
 	}
 
-	// Map level to configuration
-	const levelConfig: Record<
-		ComplexityLevel,
-		{
-			model: "haiku" | "sonnet" | "opus";
-			useFullChain: boolean;
-			needsReview: boolean;
-		}
-	> = {
-		trivial: { model: "haiku", useFullChain: false, needsReview: false },
-		simple: { model: "sonnet", useFullChain: false, needsReview: false },
-		standard: { model: "sonnet", useFullChain: false, needsReview: true },
-		complex: { model: "opus", useFullChain: true, needsReview: true },
-		critical: { model: "opus", useFullChain: true, needsReview: true },
-	};
-
-	const config = levelConfig[level];
+	// Use shared level configuration
+	const config = getLevelConfig(level);
 
 	// Confidence is higher when we have good metrics
 	const confidence = metrics.fileCount > 0 ? Math.min(0.95, 0.7 + metricsSignals.length * 0.05) : 0.5; // Low confidence if no files found
