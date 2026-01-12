@@ -472,6 +472,8 @@ After reviewing:
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
 				settingSources: ["project"],
+				// CRITICAL: Use workingDirectory so review edits the correct location (worktree)
+				cwd: workingDirectory,
 				// Defense-in-depth: explicitly block git push even if settings fail to load
 				disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
 			},

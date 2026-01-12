@@ -695,24 +695,14 @@ Use this analysis to avoid repeating the same mistakes.`;
 			this.lastPostMortem = undefined;
 		}
 
-		const prompt = `${contextSection}TASK EXECUTION
-
-MANDATORY BEHAVIOR:
-1. READ target files BEFORE editing - understand existing code first
-2. Make MINIMAL changes - only what the task requires
-3. Run verification commands (typecheck) before finishing
-4. Do NOT ask questions - make reasonable decisions and proceed
-
-FORBIDDEN:
-- Modifying files outside task scope
-- Refactoring or improving unrelated code
-- Adding features/comments beyond task requirements
-- Fixing unrelated issues
-
-TASK:
+		const prompt = `${contextSection}TASK:
 ${task}${retryContext}${postMortemContext}
 
-Execute the task. Make precise changes. Verify. Done.`;
+RULES:
+1. Read target files before editing
+2. Minimal changes only - nothing beyond task scope
+3. Run typecheck before finishing
+4. No questions - decide and proceed`;
 
 		// Token usage will be accumulated in this.tokenUsageThisTask
 
@@ -723,6 +713,8 @@ Execute the task. Make precise changes. Verify. Done.`;
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
 				settingSources: ["project"],
+				// CRITICAL: Use workingDirectory so agent edits files in the correct location (worktree)
+				cwd: this.workingDirectory,
 				// Defense-in-depth: explicitly block git push even if settings fail to load
 				disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
 			},
