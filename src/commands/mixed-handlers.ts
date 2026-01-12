@@ -186,7 +186,7 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 		// Also filter out decomposed tasks (their subtasks will be picked up instead)
 		const pendingTasks = allTasks
 			.filter((q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed)
-			.sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+			.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0)); // Higher priority first
 
 		// Account for tasks already processed during recovery
 		const remainingCount = maxCount > 0 ? maxCount - tasksProcessed : 0;
@@ -248,7 +248,7 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 				const refreshedTasks = getAllItems();
 				const newPendingTasks = refreshedTasks
 					.filter((q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed)
-					.sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+					.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0)); // Higher priority first
 				const newRemainingCount = maxCount > 0 ? maxCount - tasksProcessed : newPendingTasks.length;
 				const newTasks = maxCount > 0 ? newPendingTasks.slice(0, newRemainingCount) : newPendingTasks;
 

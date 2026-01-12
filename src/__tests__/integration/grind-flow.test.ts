@@ -121,15 +121,16 @@ describe.sequential("Grind Flow Integration", () => {
 			writeFileSync(tasksJsonPath, JSON.stringify({ tasks }, null, 2));
 
 			// Load and sort tasks (simulating what grind does)
+			// Higher priority number = more important = comes first
 			const loaded = JSON.parse(readFileSync(tasksJsonPath, "utf-8")).tasks;
 			const sorted = loaded
 				.filter((t: Task) => t.status === "pending")
-				.sort((a: Task, b: Task) => (a.priority ?? 999) - (b.priority ?? 999));
+				.sort((a: Task, b: Task) => (b.priority ?? 0) - (a.priority ?? 0));
 
 			expect(sorted).toHaveLength(3);
-			expect(sorted[0].id).toBe("task-2"); // priority 1
+			expect(sorted[0].id).toBe("task-1"); // priority 100 (highest)
 			expect(sorted[1].id).toBe("task-3"); // priority 50
-			expect(sorted[2].id).toBe("task-1"); // priority 100
+			expect(sorted[2].id).toBe("task-2"); // priority 1 (lowest)
 		});
 
 		it("should filter out non-pending tasks", () => {
