@@ -149,7 +149,7 @@ export const mixedCommands: CommandModule = {
 			.option("--worker <tier>", "Worker model for supervised mode", "sonnet")
 			.option("--no-commit", "Don't auto-commit on success")
 			.option("--no-typecheck", "Skip typecheck verification")
-			.option("--no-review", "Skip review passes")
+			.option("--review", "Enable review passes (disabled by default to save tokens)")
 			.option("--no-decompose", "Skip atomicity check and task decomposition")
 			.action(
 				async (
@@ -180,7 +180,7 @@ export const mixedCommands: CommandModule = {
 						stream: options.stream || false,
 						verbose: options.verbose || false,
 						startingModel: (options.model || "sonnet") as "haiku" | "sonnet" | "opus",
-						reviewPasses: options.review !== false,
+						reviewPasses: options.review === true, // Disabled by default - use --review flag to enable
 					});
 
 					// If a goal is passed directly, run it as a single task
@@ -459,7 +459,7 @@ export const mixedCommands: CommandModule = {
 								stream: options.stream || false,
 								verbose: options.verbose || false,
 								startingModel: modelTier,
-								reviewPasses: options.review !== false,
+								reviewPasses: options.review === true, // Disabled by default - use --review flag to enable
 							});
 
 							const tierObjectives = tierTasks.map((t) => t.objective);

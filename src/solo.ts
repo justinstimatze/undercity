@@ -329,7 +329,8 @@ export class SoloOrchestrator {
 		console.log(chalk.dim(`  Model: ${this.currentModel}`));
 		if (reviewLevel.review) {
 			const reviewMode = reviewLevel.annealing ? "escalating + annealing" : "escalating";
-			console.log(chalk.dim(`  Reviews: ${reviewMode}`));
+			const reviewCap = reviewLevel.maxReviewTier !== "opus" ? ` (cap: ${reviewLevel.maxReviewTier})` : "";
+			console.log(chalk.dim(`  Reviews: ${reviewMode}${reviewCap}`));
 		}
 
 		// Set up branch if specified
@@ -370,7 +371,7 @@ export class SoloOrchestrator {
 					// Run review passes if enabled (auto-selected or user-specified)
 					let finalVerification = verification;
 					if (reviewLevel.review) {
-						const reviewResult = await this.runEscalatingReview(task, reviewLevel.annealing);
+						const reviewResult = await this.runEscalatingReview(task, reviewLevel.annealing, reviewLevel.maxReviewTier);
 						if (!reviewResult.converged) {
 							// Review couldn't resolve all issues - store tickets for later
 							if (reviewResult.unresolvedTickets && reviewResult.unresolvedTickets.length > 0) {
@@ -635,29 +636,42 @@ Be concise and specific. Focus on actionable insights.`;
 	/**
 	 * Determine review level based on complexity assessment
 	 *
-	 * Always does at least escalating review - even trivial changes can have bugs.
-	 * Annealing (multi-angle advisory review) is added for complex/critical tasks.
+	 * Review escalation is capped by task complexity to save opus tokens:
+	 * - trivial/simple/standard: haiku → sonnet only (no opus review)
+	 * - complex/critical: haiku → sonnet → opus (full escalation + annealing)
+	 *
+	 * Rationale: 95% of tasks are trivial/simple/standard and don't benefit from
+	 * opus review. The token cost isn't justified when sonnet can catch most issues.
 	 */
-	private determineReviewLevel(assessment: ComplexityAssessment): { review: boolean; annealing: boolean } {
-		// If user explicitly set review options, respect them
-		if (this.reviewPasses || this.annealingAtOpus) {
-			return { review: this.reviewPasses, annealing: this.annealingAtOpus };
+	private determineReviewLevel(assessment: ComplexityAssessment): {
+		review: boolean;
+		annealing: boolean;
+		maxReviewTier: ModelTier;
+	} {
+		// If user explicitly set annealing, respect it (full escalation)
+		if (this.annealingAtOpus) {
+			return { review: true, annealing: true, maxReviewTier: "opus" };
 		}
 
-		// Always review - even trivial changes can have bugs
-		// Only question is whether to add annealing for complex/critical tasks
+		// If user explicitly disabled reviews, respect that
+		if (!this.reviewPasses) {
+			return { review: false, annealing: false, maxReviewTier: "sonnet" };
+		}
+
+		// Reviews are enabled - determine escalation cap based on complexity
 		switch (assessment.level) {
 			case "trivial":
 			case "simple":
 			case "standard":
-				// Escalating review only
-				return { review: true, annealing: false };
+				// Simple tasks get capped review: haiku → sonnet only (no opus)
+				return { review: true, annealing: false, maxReviewTier: "sonnet" };
 			case "complex":
 			case "critical":
-				// Complex/critical tasks get full annealing review
-				return { review: true, annealing: true };
+				// Complex/critical tasks get full escalation + annealing
+				return { review: true, annealing: true, maxReviewTier: "opus" };
 			default:
-				return { review: true, annealing: false };
+				// Default to capped review
+				return { review: true, annealing: false, maxReviewTier: "sonnet" };
 		}
 	}
 
@@ -1008,12 +1022,18 @@ When done, provide a brief summary of what you changed.`;
 	/**
 	 * Run escalating review passes: haiku → sonnet → opus
 	 * Each tier reviews until it converges (finds nothing), then escalates.
+	 *
+	 * Review escalation is capped by maxReviewTier to save tokens on simple tasks.
+	 * For trivial/simple/standard tasks, we cap at sonnet - opus review is overkill.
+	 *
 	 * @param task - The task being reviewed
 	 * @param useAnnealing - Whether to use annealing review at opus tier
+	 * @param maxReviewTier - Maximum tier to escalate to (default: opus)
 	 */
 	private async runEscalatingReview(
 		task: string,
 		useAnnealing: boolean = this.annealingAtOpus,
+		maxReviewTier: ModelTier = "opus",
 	): Promise<{
 		converged: boolean;
 		issuesFound: string[];
@@ -1023,12 +1043,17 @@ When done, provide a brief summary of what you changed.`;
 		/** Tickets for issues that couldn't be fixed - queue these as child tasks */
 		unresolvedTickets?: UnresolvedTicket[];
 	}> {
-		const tiers: ModelTier[] = ["haiku", "sonnet", "opus"];
+		// Filter tiers based on maxReviewTier cap
+		const allTiers: ModelTier[] = ["haiku", "sonnet", "opus"];
+		const maxTierIndex = allTiers.indexOf(maxReviewTier);
+		const tiers = allTiers.slice(0, maxTierIndex + 1);
+
 		const allIssuesFound: string[] = [];
 		let totalPasses = 0;
 		const annealingInsights: string[] = [];
 
-		console.log(chalk.cyan("\n  ━━━ Review Passes ━━━"));
+		const cappedNote = maxReviewTier !== "opus" ? ` (capped at ${maxReviewTier})` : "";
+		console.log(chalk.cyan(`\n  ━━━ Review Passes${cappedNote} ━━━`));
 
 		for (const tier of tiers) {
 			// At opus tier, optionally use annealing review (advisory mode)
@@ -1070,8 +1095,9 @@ When done, provide a brief summary of what you changed.`;
 			}
 
 			// Standard tier review loop
-			// Opus (final tier) gets more passes since there's nowhere to escalate
-			const maxPasses = tier === "opus" ? this.maxOpusReviewPasses : this.maxReviewPassesPerTier;
+			// Final tier gets more passes since there's nowhere to escalate
+			const isFinalTier = tier === tiers[tiers.length - 1];
+			const maxPasses = isFinalTier ? this.maxOpusReviewPasses : this.maxReviewPassesPerTier;
 			let tierPasses = 0;
 			let tierFoundIssues = false;
 
@@ -1122,13 +1148,14 @@ When done, provide a brief summary of what you changed.`;
 			// Check if we exhausted all passes without getting a clean review
 			const reachedMaxPasses = tierPasses >= maxPasses;
 			const lastPassHadIssues = tierFoundIssues && tierPasses >= maxPasses;
+			const isLastTier = tier === tiers[tiers.length - 1];
 
 			if (lastPassHadIssues) {
-				if (tier === "opus") {
-					// Opus is final tier - no escalation path
-					// Generate tickets for unresolved issues so they can be queued as child tasks
+				if (isLastTier) {
+					// At final tier (could be opus, sonnet, or haiku depending on cap)
+					// No further escalation possible - generate tickets for unresolved issues
 					console.log(
-						chalk.yellow(`  [opus] Exhausted ${maxPasses} passes - generating tickets for unresolved issues`),
+						chalk.yellow(`  [${tier}] Exhausted ${maxPasses} passes - generating tickets for unresolved issues`),
 					);
 					const tickets = this.generateTicketsFromIssues(task, allIssuesFound);
 					if (tickets.length > 0) {
@@ -1141,7 +1168,7 @@ When done, provide a brief summary of what you changed.`;
 						converged: false,
 						issuesFound: allIssuesFound,
 						reviewPasses: totalPasses,
-						finalTier: "opus",
+						finalTier: tier,
 						annealingInsights: annealingInsights.length > 0 ? annealingInsights : undefined,
 						unresolvedTickets: tickets.length > 0 ? tickets : undefined,
 					};
@@ -1155,12 +1182,14 @@ When done, provide a brief summary of what you changed.`;
 			}
 		}
 
+		// All tiers converged - use the highest tier we actually used
+		const highestTierUsed = tiers[tiers.length - 1];
 		console.log(chalk.green(`  Review complete: all tiers converged (${totalPasses} passes)`));
 		return {
 			converged: true,
 			issuesFound: allIssuesFound,
 			reviewPasses: totalPasses,
-			finalTier: "opus",
+			finalTier: highestTierUsed,
 			annealingInsights: annealingInsights.length > 0 ? annealingInsights : undefined,
 		};
 	}

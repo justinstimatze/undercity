@@ -117,7 +117,7 @@ export class ParallelSoloOrchestrator {
 		this.autoCommit = options.autoCommit ?? true;
 		this.stream = options.stream ?? false;
 		this.verbose = options.verbose ?? false;
-		this.reviewPasses = options.reviewPasses ?? true; // Default to review enabled
+		this.reviewPasses = options.reviewPasses ?? false; // Default to no automatic reviews - use --review flag to enable
 		this.annealingAtOpus = options.annealingAtOpus ?? false;
 		this.worktreeManager = new WorktreeManager();
 
