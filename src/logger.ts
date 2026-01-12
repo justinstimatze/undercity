@@ -1,3 +1,4 @@
+// Pino logger configuration for structured logging
 /**
  * Logger Module
  *
