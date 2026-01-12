@@ -73,12 +73,27 @@ export async function verifyWork(
 	let linesChanged = 0;
 
 	// 1. Check what changed
+	// Check both uncommitted changes (working dir vs HEAD) AND committed changes (HEAD vs HEAD~1)
+	// This handles both cases: agent left changes uncommitted OR agent already committed
 	let changedFiles: string[] = [];
 	try {
-		const diffStat = execSync("git diff --stat HEAD 2>/dev/null || git diff --stat", {
+		// First check uncommitted changes
+		let diffStat = execSync("git diff --stat HEAD 2>/dev/null || git diff --stat", {
 			encoding: "utf-8",
 			cwd: workingDirectory,
 		});
+
+		// If no uncommitted changes, check if there are committed changes (HEAD vs parent)
+		if (!diffStat.trim()) {
+			try {
+				diffStat = execSync("git diff --stat HEAD~1 HEAD 2>/dev/null || true", {
+					encoding: "utf-8",
+					cwd: workingDirectory,
+				});
+			} catch {
+				// Ignore errors (e.g., no parent commit)
+			}
+		}
 
 		// Parse diff stat for file count
 		const filesMatch = diffStat.match(/(\d+) files? changed/);
