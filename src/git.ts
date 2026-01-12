@@ -1132,6 +1132,85 @@ export class Elevator {
 	}
 
 	/**
+	 * Attempt to rebase an item onto the main branch
+	 */
+	private async tryRebase(item: ElevatorItem, cwd: string): Promise<{ success: boolean; error?: string }> {
+		item.status = "rebasing";
+		gitLogger.debug({ branch: item.branch, onto: this.mainBranch }, "Rebasing");
+		const rebaseSuccess = rebase(this.mainBranch);
+
+		if (!rebaseSuccess) {
+			return { success: false, error: "Rebase failed - manual resolution required" };
+		}
+
+		// Run tests after successful rebase
+		item.status = "testing";
+		gitLogger.debug({ branch: item.branch }, "Running tests");
+		const testResult = await runTests(cwd);
+
+		if (!testResult.success) {
+			return { success: false, error: testResult.output };
+		}
+
+		return { success: true };
+	}
+
+	/**
+	 * Attempt to merge an item into the main branch
+	 */
+	private async tryMerge(
+		item: ElevatorItem,
+	): Promise<{ success: boolean; error?: string; conflictFiles?: string[]; strategyUsed?: MergeStrategy }> {
+		checkoutBranch(this.mainBranch);
+		item.status = "merging";
+		gitLogger.debug(
+			{ branch: item.branch, into: this.mainBranch },
+			"Merging with optimal strategy (clean → ours → report)",
+		);
+
+		const mergeResult = mergeWithFallback(item.branch, `Merge ${item.branch} via undercity`);
+
+		if (!mergeResult.success) {
+			return {
+				success: false,
+				error: mergeResult.error || "Merge failed - manual resolution required",
+				conflictFiles: mergeResult.conflictFiles,
+			};
+		}
+
+		// Record which strategy succeeded
+		if (mergeResult.strategyUsed !== "default") {
+			gitLogger.info(
+				{ branch: item.branch, strategy: mergeResult.strategyUsed },
+				"Merge succeeded with fallback strategy",
+			);
+		}
+
+		return { success: true, strategyUsed: mergeResult.strategyUsed };
+	}
+
+	/**
+	 * Handle failure by setting appropriate status and error information
+	 */
+	private handleMergeFailure(item: ElevatorItem, error: string, conflictFiles?: string[]): ElevatorItem {
+		item.status = "conflict";
+		item.error = error;
+		item.conflictFiles = conflictFiles;
+		item.completedAt = new Date();
+
+		if (conflictFiles) {
+			gitLogger.warn(
+				{ branch: item.branch, conflictFiles },
+				"Branch preserved for manual recovery - truly unresolvable conflicts",
+			);
+		} else {
+			gitLogger.warn({ branch: item.branch, error: item.error }, "Branch preserved for manual recovery");
+		}
+
+		return item;
+	}
+
+	/**
 	 * Process the next item in the queue
 	 */
 	async processNext(): Promise<ElevatorItem | null> {
@@ -1175,7 +1254,6 @@ export class Elevator {
 		this.processing = true;
 		const originalBranch = getCurrentBranch();
 		const cwd = process.cwd(); // Capture current working directory
-		let _branchPreserved = false;
 
 		try {
 			// Check if this branch is owned by a worktree
@@ -1193,65 +1271,22 @@ export class Elevator {
 			gitLogger.debug({ branch: item.branch }, "Checking out branch");
 			checkoutBranch(item.branch);
 
-			// Step 2: Rebase onto main
-			item.status = "rebasing";
-			gitLogger.debug({ branch: item.branch, onto: this.mainBranch }, "Rebasing");
-			const rebaseSuccess = rebase(this.mainBranch);
-
-			if (!rebaseSuccess) {
-				item.status = "conflict";
-				item.error = "Rebase failed - manual resolution required";
-				item.completedAt = new Date();
-				_branchPreserved = true; // Preserve branch for manual recovery
-				return item;
+			// Step 2: Rebase and test
+			const rebaseResult = await this.tryRebase(item, cwd);
+			if (!rebaseResult.success) {
+				return this.handleMergeFailure(item, rebaseResult.error!);
 			}
 
-			// Step 3: Run tests (in the main repository where we checked out)
-			item.status = "testing";
-			gitLogger.debug({ branch: item.branch }, "Running tests");
-			const testResult = await runTests(cwd);
-
-			if (!testResult.success) {
-				item.status = "test_failed";
-				item.error = testResult.output;
-				item.completedAt = new Date();
-				_branchPreserved = true; // Preserve branch for manual recovery
-				return item;
-			}
-
-			// Step 4: Merge into main with optimal strategy (clean → ours → report)
-			checkoutBranch(this.mainBranch);
-			item.status = "merging";
-			gitLogger.debug(
-				{ branch: item.branch, into: this.mainBranch },
-				"Merging with optimal strategy (clean → ours → report)",
-			);
-
-			const mergeResult = mergeWithFallback(item.branch, `Merge ${item.branch} via undercity`);
-
+			// Step 3: Merge into main
+			const mergeResult = await this.tryMerge(item);
 			if (!mergeResult.success) {
-				item.status = "conflict";
-				item.error = mergeResult.error || "Merge failed - manual resolution required";
-				item.conflictFiles = mergeResult.conflictFiles;
-				item.completedAt = new Date();
-				_branchPreserved = true; // Preserve branch for manual recovery
-				gitLogger.warn(
-					{ branch: item.branch, conflictFiles: mergeResult.conflictFiles },
-					"Branch preserved for manual recovery - truly unresolvable conflicts",
-				);
-				return item;
+				return this.handleMergeFailure(item, mergeResult.error!, mergeResult.conflictFiles);
 			}
 
-			// Record which strategy succeeded
+			// Record successful merge strategy
 			item.strategyUsed = mergeResult.strategyUsed;
-			if (mergeResult.strategyUsed !== "default") {
-				gitLogger.info(
-					{ branch: item.branch, strategy: mergeResult.strategyUsed },
-					"Merge succeeded with fallback strategy",
-				);
-			}
 
-			// Step 5: Delete the branch (only on success)
+			// Step 4: Delete the branch (only on success)
 			deleteBranch(item.branch);
 			item.status = "complete";
 			item.completedAt = new Date();
@@ -1265,12 +1300,7 @@ export class Elevator {
 			gitLogger.info({ branch: item.branch, stepId: item.stepId }, "Merge complete");
 			return item;
 		} catch (error) {
-			item.status = "conflict";
-			item.error = error instanceof Error ? error.message : String(error);
-			item.completedAt = new Date();
-			_branchPreserved = true; // Preserve branch for manual recovery
-			gitLogger.warn({ branch: item.branch, error: item.error }, "Branch preserved for manual recovery");
-			return item;
+			return this.handleMergeFailure(item, error instanceof Error ? error.message : String(error));
 		} finally {
 			// Return to original branch
 			try {
