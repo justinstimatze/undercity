@@ -23,9 +23,12 @@ import {
 	getNextGoal,
 	getReadyTasksForBatch,
 	getTaskBoardAnalytics,
+	loadTaskBoard,
 	markComplete,
 	markFailed,
 	markInProgress,
+	removeTasks,
+	saveTaskBoard,
 } from "../task.js";
 import { TaskBoardAnalyzer } from "../task-board-analyzer.js";
 
@@ -635,5 +638,325 @@ export async function handleReconcile(options: ReconcileOptions): Promise<void> 
 	} catch (error) {
 		console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
 		process.exit(1);
+	}
+}
+
+export interface TriageOptions {
+	json?: boolean;
+}
+
+export interface PruneOptions {
+	dryRun?: boolean;
+	force?: boolean;
+}
+
+interface TriageIssue {
+	type: "test_cruft" | "duplicate" | "stale" | "status_bug" | "overly_granular" | "vague";
+	taskId: string;
+	objective: string;
+	reason: string;
+	action: "remove" | "merge" | "fix" | "review";
+	relatedTaskIds?: string[];
+}
+
+interface TriageReport {
+	totalTasks: number;
+	pendingTasks: number;
+	issues: TriageIssue[];
+	healthScore: number;
+	recommendations: string[];
+}
+
+/**
+ * Analyze task board for issues
+ */
+function analyzeTaskBoard(): TriageReport {
+	// Import synchronously from task module (already imported at top)
+	const items = getAllItems();
+	const issues: TriageIssue[] = [];
+
+	// Test task patterns
+	const testPatterns = [
+		/^test task/i,
+		/^testing /i,
+		/^final test/i,
+		/test with (priority|invalid|valid|minimum|maximum)/i,
+	];
+
+	// Vague task patterns
+	const vaguePatterns = [/^improve /i, /^fix /i, /^update /i, /^better /i];
+
+	for (const task of items) {
+		// Check for test cruft
+		for (const pattern of testPatterns) {
+			if (pattern.test(task.objective)) {
+				issues.push({
+					type: "test_cruft",
+					taskId: task.id,
+					objective: task.objective,
+					reason: "Matches test task pattern",
+					action: "remove",
+				});
+				break;
+			}
+		}
+
+		// Check for status bugs (pending with completedAt)
+		if (task.status === "pending" && task.completedAt) {
+			issues.push({
+				type: "status_bug",
+				taskId: task.id,
+				objective: task.objective,
+				reason: "Status is pending but has completedAt timestamp",
+				action: "fix",
+			});
+		}
+
+		// Check for vague tasks without tags or context
+		for (const pattern of vaguePatterns) {
+			if (pattern.test(task.objective) && task.objective.length < 50 && !task.tags?.length) {
+				issues.push({
+					type: "vague",
+					taskId: task.id,
+					objective: task.objective,
+					reason: "Vague objective without specific context",
+					action: "review",
+				});
+				break;
+			}
+		}
+	}
+
+	// Check for duplicates (similar objectives)
+	const pendingTasks = items.filter((t: { status: string }) => t.status === "pending");
+	for (let i = 0; i < pendingTasks.length; i++) {
+		for (let j = i + 1; j < pendingTasks.length; j++) {
+			const similarity = calculateSimilarity(pendingTasks[i].objective, pendingTasks[j].objective);
+			if (similarity > 0.7) {
+				// Only add if not already flagged
+				const alreadyFlagged = issues.some(
+					(issue) =>
+						issue.type === "duplicate" &&
+						(issue.taskId === pendingTasks[j].id || issue.relatedTaskIds?.includes(pendingTasks[j].id)),
+				);
+				if (!alreadyFlagged) {
+					issues.push({
+						type: "duplicate",
+						taskId: pendingTasks[j].id,
+						objective: pendingTasks[j].objective,
+						reason: `${Math.round(similarity * 100)}% similar to: ${pendingTasks[i].objective.substring(0, 50)}...`,
+						action: "merge",
+						relatedTaskIds: [pendingTasks[i].id],
+					});
+				}
+			}
+		}
+	}
+
+	// Check for overly granular decomposed tasks (same prefix, too many tasks)
+	const prefixGroups = new Map<string, typeof items>();
+	for (const task of pendingTasks) {
+		const prefix = task.objective.substring(0, 30);
+		if (!prefixGroups.has(prefix)) {
+			prefixGroups.set(prefix, []);
+		}
+		prefixGroups.get(prefix)!.push(task);
+	}
+	for (const [_prefix, tasks] of prefixGroups) {
+		if (tasks.length >= 5) {
+			issues.push({
+				type: "overly_granular",
+				taskId: tasks[0].id,
+				objective: `${tasks[0].objective.substring(0, 30)}... (${tasks.length} tasks)`,
+				reason: `${tasks.length} tasks share similar prefix - may be over-decomposed`,
+				action: "review",
+				relatedTaskIds: tasks.slice(1).map((t: { id: string }) => t.id),
+			});
+		}
+	}
+
+	// Calculate health score
+	const issueWeight: Record<string, number> = {
+		test_cruft: 3,
+		duplicate: 2,
+		status_bug: 2,
+		overly_granular: 1,
+		vague: 1,
+		stale: 1,
+	};
+	const totalWeight = issues.reduce((sum, issue) => sum + (issueWeight[issue.type] || 1), 0);
+	const maxWeight = items.length * 3;
+	const healthScore = Math.max(0, Math.round(100 - (totalWeight / maxWeight) * 100));
+
+	// Generate recommendations
+	const recommendations: string[] = [];
+	const testCruft = issues.filter((i) => i.type === "test_cruft").length;
+	const duplicates = issues.filter((i) => i.type === "duplicate").length;
+	const statusBugs = issues.filter((i) => i.type === "status_bug").length;
+
+	if (testCruft > 0) {
+		recommendations.push(`Remove ${testCruft} test task(s) with: undercity prune`);
+	}
+	if (duplicates > 0) {
+		recommendations.push(`Review ${duplicates} potential duplicate(s) - consider merging`);
+	}
+	if (statusBugs > 0) {
+		recommendations.push(`Fix ${statusBugs} task(s) with incorrect status`);
+	}
+	if (pendingTasks.length > 50) {
+		recommendations.push(`Consider prioritizing - ${pendingTasks.length} pending tasks is a lot`);
+	}
+
+	return {
+		totalTasks: items.length,
+		pendingTasks: pendingTasks.length,
+		issues,
+		healthScore,
+		recommendations,
+	};
+}
+
+/**
+ * Calculate similarity between two strings (Jaccard on words)
+ */
+function calculateSimilarity(a: string, b: string): number {
+	const wordsA = new Set(a.toLowerCase().split(/\s+/));
+	const wordsB = new Set(b.toLowerCase().split(/\s+/));
+	const intersection = new Set([...wordsA].filter((x) => wordsB.has(x)));
+	const union = new Set([...wordsA, ...wordsB]);
+	return intersection.size / union.size;
+}
+
+/**
+ * Handle the triage command - analyze task list health
+ */
+export function handleTriage(options: TriageOptions): void {
+	const report = analyzeTaskBoard();
+
+	if (options.json) {
+		console.log(JSON.stringify(report, null, 2));
+		return;
+	}
+
+	console.log(chalk.bold("Task Board Triage"));
+	console.log();
+
+	// Health score with color
+	const healthColor = report.healthScore >= 80 ? chalk.green : report.healthScore >= 50 ? chalk.yellow : chalk.red;
+	console.log(`Health Score: ${healthColor(report.healthScore + "%")}`);
+	console.log(`Total Tasks: ${report.totalTasks} (${report.pendingTasks} pending)`);
+	console.log();
+
+	if (report.issues.length === 0) {
+		console.log(chalk.green("No issues found. Task board is healthy!"));
+		return;
+	}
+
+	console.log(chalk.bold(`Issues Found: ${report.issues.length}`));
+	console.log();
+
+	// Group by type
+	const byType = new Map<string, TriageIssue[]>();
+	for (const issue of report.issues) {
+		if (!byType.has(issue.type)) {
+			byType.set(issue.type, []);
+		}
+		byType.get(issue.type)!.push(issue);
+	}
+
+	const typeLabels: Record<string, string> = {
+		test_cruft: "Test Cruft",
+		duplicate: "Duplicates",
+		status_bug: "Status Bugs",
+		overly_granular: "Overly Granular",
+		vague: "Vague Tasks",
+		stale: "Stale Tasks",
+	};
+
+	for (const [type, issues] of byType) {
+		console.log(chalk.bold(typeLabels[type] || type) + ` (${issues.length})`);
+		for (const issue of issues.slice(0, 5)) {
+			console.log(chalk.gray(`  ${issue.taskId}`));
+			console.log(`    ${issue.objective.substring(0, 60)}...`);
+			console.log(chalk.dim(`    ${issue.reason}`));
+		}
+		if (issues.length > 5) {
+			console.log(chalk.gray(`  ... and ${issues.length - 5} more`));
+		}
+		console.log();
+	}
+
+	if (report.recommendations.length > 0) {
+		console.log(chalk.bold("Recommendations:"));
+		for (const rec of report.recommendations) {
+			console.log(`  - ${rec}`);
+		}
+	}
+}
+
+/**
+ * Handle the prune command - remove stale/test/duplicate tasks
+ */
+export function handlePrune(options: PruneOptions): void {
+	const report = analyzeTaskBoard();
+
+	// Collect tasks to remove (only auto-removable types)
+	const toRemove = report.issues
+		.filter((issue) => issue.action === "remove" || issue.type === "test_cruft")
+		.map((issue) => issue.taskId);
+
+	// Collect tasks to fix
+	const toFix = report.issues.filter((issue) => issue.type === "status_bug");
+
+	if (toRemove.length === 0 && toFix.length === 0) {
+		console.log(chalk.green("Nothing to prune. Task board is clean!"));
+		return;
+	}
+
+	console.log(chalk.bold("Prune Preview"));
+	console.log();
+
+	if (toRemove.length > 0) {
+		console.log(chalk.red(`Will remove ${toRemove.length} task(s):`));
+		for (const id of toRemove.slice(0, 10)) {
+			const issue = report.issues.find((i) => i.taskId === id);
+			console.log(chalk.gray(`  - ${id}: ${issue?.objective.substring(0, 50)}...`));
+		}
+		if (toRemove.length > 10) {
+			console.log(chalk.gray(`  ... and ${toRemove.length - 10} more`));
+		}
+		console.log();
+	}
+
+	if (toFix.length > 0) {
+		console.log(chalk.yellow(`Will fix ${toFix.length} task(s) with status bugs`));
+		console.log();
+	}
+
+	if (options.dryRun) {
+		console.log(chalk.dim("(Dry run - no changes made. Run without --dry-run to apply)"));
+		return;
+	}
+
+	// Apply changes
+	if (toRemove.length > 0) {
+		const removed = removeTasks(toRemove);
+		console.log(chalk.green(`Removed ${removed} task(s)`));
+	}
+
+	if (toFix.length > 0) {
+		const board = loadTaskBoard();
+		let fixed = 0;
+		for (const issue of toFix) {
+			const task = board.tasks.find((t: { id: string }) => t.id === issue.taskId);
+			if (task && task.status === "pending" && task.completedAt) {
+				task.status = "complete";
+				fixed++;
+			}
+		}
+		if (fixed > 0) {
+			saveTaskBoard(board);
+			console.log(chalk.green(`Fixed ${fixed} task status(es)`));
+		}
 	}
 }

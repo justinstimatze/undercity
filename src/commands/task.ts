@@ -9,15 +9,19 @@ import {
 	handleImportPlan,
 	handleLoad,
 	handlePlan,
+	handlePrune,
 	handleReconcile,
 	handleTaskAnalyze,
 	handleTaskStatus,
 	handleTasks,
+	handleTriage,
 	handleWork,
 	type ImportPlanOptions,
 	type PlanOptions,
+	type PruneOptions,
 	type ReconcileOptions,
 	type TaskAnalyzeOptions,
+	type TriageOptions,
 	type WorkOptions,
 } from "./task-handlers.js";
 import type { CommandModule } from "./types.js";
@@ -90,5 +94,20 @@ export const taskCommands: CommandModule = {
 			.option("--dry-run", "Show what would be marked without making changes")
 			.option("--lookback <number>", "Number of commits to search (default: 100)", "100")
 			.action((options: ReconcileOptions) => handleReconcile(options));
+
+		// Triage command - analyze task board health
+		program
+			.command("triage")
+			.description("Analyze task board health (find duplicates, test cruft, status bugs)")
+			.option("--json", "Output as JSON for automation")
+			.action((options: TriageOptions) => handleTriage(options));
+
+		// Prune command - remove stale/test/duplicate tasks
+		program
+			.command("prune")
+			.description("Remove test cruft and fix status bugs (use triage to preview)")
+			.option("--dry-run", "Show what would be removed without making changes")
+			.option("--force", "Remove without confirmation")
+			.action((options: PruneOptions) => handlePrune(options));
 	},
 };

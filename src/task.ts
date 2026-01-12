@@ -503,6 +503,39 @@ export function clearCompletedTasks(path: string = DEFAULT_TASK_BOARD_PATH): num
 }
 
 /**
+ * Remove a task by ID (permanent deletion)
+ */
+export function removeTask(id: string, path: string = DEFAULT_TASK_BOARD_PATH): boolean {
+	return withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const before = board.tasks.length;
+		board.tasks = board.tasks.filter((t) => t.id !== id);
+		if (board.tasks.length < before) {
+			saveTaskBoard(board, path);
+			return true;
+		}
+		return false;
+	});
+}
+
+/**
+ * Remove multiple tasks by ID (permanent deletion)
+ */
+export function removeTasks(ids: string[], path: string = DEFAULT_TASK_BOARD_PATH): number {
+	return withLock(getLockPath(path), () => {
+		const board = loadTaskBoard(path);
+		const before = board.tasks.length;
+		const idSet = new Set(ids);
+		board.tasks = board.tasks.filter((t) => !idSet.has(t.id));
+		const removed = before - board.tasks.length;
+		if (removed > 0) {
+			saveTaskBoard(board, path);
+		}
+		return removed;
+	});
+}
+
+/**
  * Get all tasks
  */
 export function getAllTasks(): Task[] {
