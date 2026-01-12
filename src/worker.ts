@@ -28,9 +28,11 @@ import { dualLogger } from "./dual-logger.js";
 import { createAndCheckout } from "./git.js";
 import { recordQueryResult } from "./live-metrics.js";
 import { sessionLogger } from "./logger.js";
+import { getMetaTaskPrompt, parseMetaTaskResult } from "./meta-tasks.js";
 import { MetricsTracker } from "./metrics.js";
 import * as output from "./output.js";
-import { type ModelTier, type ReviewResult, runEscalatingReview, type UnresolvedTicket } from "./review.js";
+import { type ModelTier, runEscalatingReview, type UnresolvedTicket } from "./review.js";
+import { extractMetaTaskType, isMetaTask } from "./task-schema.js";
 import type { AttemptRecord, ErrorCategory, TokenUsage } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
 
@@ -176,6 +178,9 @@ export class TaskWorker {
 	/** Track write operations during current execution (for Stop hook) */
 	private writeCountThisExecution: number = 0;
 
+	/** Track if current task is a meta-task (doesn't require file changes) */
+	private isCurrentTaskMeta: boolean = false;
+
 	constructor(options: SoloOptions = {}) {
 		this.maxAttempts = options.maxAttempts ?? 3;
 		this.startingModel = options.startingModel ?? "sonnet";
@@ -232,7 +237,15 @@ export class TaskWorker {
 		this.currentTaskId = taskId; // Store for use in other methods
 		const sessionId = `session_${Date.now()}`;
 
-		output.taskStart(taskId, task.substring(0, 60) + (task.length > 60 ? "..." : ""));
+		// Check if this is a meta-task (operates on task board, not code)
+		this.isCurrentTaskMeta = isMetaTask(task);
+		const metaType = this.isCurrentTaskMeta ? extractMetaTaskType(task) : null;
+
+		if (this.isCurrentTaskMeta) {
+			output.taskStart(taskId, `[meta:${metaType}] ${task.substring(task.indexOf("]") + 1, 60).trim()}...`);
+		} else {
+			output.taskStart(taskId, task.substring(0, 60) + (task.length > 60 ? "..." : ""));
+		}
 
 		// Pre-flight: Prepare context briefing (FREE - no LLM tokens)
 		// Do this FIRST so we can use target files for quantitative complexity assessment
@@ -327,9 +340,48 @@ export class TaskWorker {
 			try {
 				// Run the agent
 				output.workerPhase(taskId, "executing", { model: this.currentModel });
-				const _result = await this.executeAgent(task);
+				const agentOutput = await this.executeAgent(task);
 
-				// Verify the work
+				// Meta-tasks: parse recommendations, skip code verification
+				if (this.isCurrentTaskMeta && metaType) {
+					output.workerPhase(taskId, "parsing");
+					const metaResult = parseMetaTaskResult(agentOutput, metaType);
+
+					if (metaResult) {
+						output.workerVerification(taskId, true);
+						output.info(`Meta-task produced ${metaResult.recommendations.length} recommendations`, { taskId });
+
+						this.attemptRecords.push({
+							model: this.currentModel,
+							durationMs: Date.now() - attemptStart,
+							success: true,
+						});
+
+						this.metricsTracker.recordAttempts(this.attemptRecords);
+						this.metricsTracker.completeTask(true);
+
+						return {
+							task,
+							status: "complete",
+							model: this.currentModel,
+							attempts: this.attempts,
+							durationMs: Date.now() - startTime,
+							tokenUsage: {
+								attempts: this.tokenUsageThisTask,
+								total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
+							},
+							metaTaskResult: metaResult,
+						};
+					}
+
+					// Failed to parse - retry
+					output.warning("Failed to parse meta-task result, retrying...", { taskId });
+					this.lastFeedback =
+						"Your response could not be parsed as valid recommendations. Please return a JSON object with a 'recommendations' array.";
+					continue;
+				}
+
+				// Standard implementation tasks: verify code changes
 				output.workerPhase(taskId, "verifying");
 				const verification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory, baseCommit);
 
@@ -666,41 +718,68 @@ Be concise and specific. Focus on actionable insights.`;
 	private async executeAgent(task: string): Promise<string> {
 		let result = "";
 
-		// Build prompt with pre-flight briefing and verification feedback
-		let contextSection = "";
-		if (this.currentBriefing?.briefingDoc) {
-			contextSection = `
+		// Meta-tasks use specialized prompts and don't require file changes
+		const metaType = this.isCurrentTaskMeta ? extractMetaTaskType(task) : null;
+
+		let prompt: string;
+		if (this.isCurrentTaskMeta && metaType) {
+			// Meta-task: use the meta-task template
+			const metaPrompt = getMetaTaskPrompt(metaType);
+			const objectiveWithoutPrefix = task.replace(/^\[(?:meta:\w+|plan)\]\s*/i, "");
+
+			let retryContext = "";
+			if (this.attempts > 1 && this.lastFeedback) {
+				retryContext = `
+
+PREVIOUS ATTEMPT FAILED:
+${this.lastFeedback}
+
+Please fix these issues and return valid JSON.`;
+			}
+
+			prompt = `${metaPrompt}
+
+OBJECTIVE: ${objectiveWithoutPrefix}${retryContext}
+
+Working directory: ${this.workingDirectory}
+Read the task board from .undercity/tasks.json to analyze.
+Return your analysis as JSON in the format specified above.`;
+		} else {
+			// Standard implementation task: build prompt with context
+			let contextSection = "";
+			if (this.currentBriefing?.briefingDoc) {
+				contextSection = `
 ${this.currentBriefing.briefingDoc}
 
 ---
 
 `;
-		}
+			}
 
-		let retryContext = "";
-		if (this.attempts > 1 && this.lastFeedback) {
-			retryContext = `
+			let retryContext = "";
+			if (this.attempts > 1 && this.lastFeedback) {
+				retryContext = `
 
 PREVIOUS ATTEMPT FAILED. Here's what the verification tools found:
 ${this.lastFeedback}
 
 Please fix these specific issues.`;
-		}
+			}
 
-		// Add post-mortem context if escalating from a different tier
-		let postMortemContext = "";
-		if (this.lastPostMortem) {
-			postMortemContext = `
+			// Add post-mortem context if escalating from a different tier
+			let postMortemContext = "";
+			if (this.lastPostMortem) {
+				postMortemContext = `
 
 POST-MORTEM FROM PREVIOUS TIER:
 ${this.lastPostMortem}
 
 Use this analysis to avoid repeating the same mistakes.`;
-			// Clear after use - only applies to first attempt at new tier
-			this.lastPostMortem = undefined;
-		}
+				// Clear after use - only applies to first attempt at new tier
+				this.lastPostMortem = undefined;
+			}
 
-		const prompt = `${contextSection}TASK:
+			prompt = `${contextSection}TASK:
 ${task}${retryContext}${postMortemContext}
 
 RULES:
@@ -708,11 +787,36 @@ RULES:
 2. Minimal changes only - nothing beyond task scope
 3. Run typecheck before finishing
 4. No questions - decide and proceed`;
+		}
 
 		// Token usage will be accumulated in this.tokenUsageThisTask
 
 		// Reset write counter for this execution
 		this.writeCountThisExecution = 0;
+
+		// Build hooks - meta-tasks don't need the "must write files" check
+		const stopHooks = this.isCurrentTaskMeta
+			? [] // Meta-tasks return recommendations, not file changes
+			: [
+					{
+						hooks: [
+							async () => {
+								if (this.writeCountThisExecution === 0) {
+									sessionLogger.info(
+										{ model: this.currentModel, writes: 0 },
+										"Stop hook rejected: agent tried to finish with 0 writes",
+									);
+									return {
+										continue: false,
+										reason:
+											"You haven't made any code changes yet. Your task requires writing or editing files. Please implement the required changes before finishing.",
+									};
+								}
+								return { continue: true };
+							},
+						],
+					},
+				];
 
 		for await (const message of query({
 			prompt,
@@ -725,29 +829,13 @@ RULES:
 				cwd: this.workingDirectory,
 				// Defense-in-depth: explicitly block git push even if settings fail to load
 				disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
-				// Stop hook: prevent agent from finishing without making changes
-				hooks: {
-					Stop: [
-						{
-							hooks: [
-								async () => {
-									if (this.writeCountThisExecution === 0) {
-										sessionLogger.info(
-											{ model: this.currentModel, writes: 0 },
-											"Stop hook rejected: agent tried to finish with 0 writes",
-										);
-										return {
-											continue: false,
-											reason:
-												"You haven't made any code changes yet. Your task requires writing or editing files. Please implement the required changes before finishing.",
-										};
-									}
-									return { continue: true };
-								},
-							],
-						},
-					],
-				},
+				// Stop hook: prevent agent from finishing without making changes (disabled for meta-tasks)
+				hooks:
+					stopHooks.length > 0
+						? {
+								Stop: stopHooks,
+							}
+						: undefined,
 			},
 		})) {
 			// Track token usage

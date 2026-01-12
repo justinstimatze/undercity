@@ -236,9 +236,12 @@ export class Orchestrator {
 
 	/**
 	 * Process recommendations from a meta-task result
-	 * This is the single point where task board mutations happen
+	 * This is the single point where task board mutations happen.
+	 *
+	 * The orchestrator validates each recommendation against the actual task board
+	 * state rather than trusting the agent's self-reported confidence.
 	 */
-	private processMetaTaskResult(metaResult: MetaTaskResult, taskId: string): void {
+	private processMetaTaskResult(metaResult: MetaTaskResult, metaTaskId: string): void {
 		const { metaTaskType, recommendations, summary } = metaResult;
 
 		output.info(`Processing ${metaTaskType} recommendations`, {
@@ -246,56 +249,163 @@ export class Orchestrator {
 			summary,
 		});
 
-		// Track actions taken
-		let removed = 0;
-		let added = 0;
-		let updated = 0;
+		// Load current task board for validation
+		const board = loadTaskBoard();
+		const taskIds = new Set(board.tasks.map((t) => t.id));
 
-		// Group recommendations by confidence for logging
-		const highConfidence = recommendations.filter((r) => r.confidence >= 0.8);
-		const lowConfidence = recommendations.filter((r) => r.confidence < 0.8);
+		// Track actions
+		let applied = 0;
+		let rejected = 0;
+		const rejectionReasons: string[] = [];
 
-		if (lowConfidence.length > 0) {
-			output.warning(`Skipping ${lowConfidence.length} low-confidence recommendations (< 0.8)`);
-		}
+		// Sanity limits
+		const MAX_REMOVES_PERCENT = 0.5; // Don't remove more than 50% of tasks
+		const MAX_ADDS = 20; // Don't add more than 20 tasks at once
+		let removeCount = 0;
+		let addCount = 0;
 
-		// Only process high-confidence recommendations
-		for (const rec of highConfidence) {
+		for (const rec of recommendations) {
+			const validation = this.validateRecommendation(rec, board, taskIds, metaTaskId);
+
+			if (!validation.valid) {
+				rejected++;
+				rejectionReasons.push(`${rec.action}(${rec.taskId || "new"}): ${validation.reason}`);
+				continue;
+			}
+
+			// Check sanity limits
+			if (rec.action === "remove") {
+				removeCount++;
+				if (removeCount > board.tasks.length * MAX_REMOVES_PERCENT) {
+					rejected++;
+					rejectionReasons.push(`remove(${rec.taskId}): exceeds ${MAX_REMOVES_PERCENT * 100}% removal limit`);
+					continue;
+				}
+			}
+
+			if (rec.action === "add") {
+				addCount++;
+				if (addCount > MAX_ADDS) {
+					rejected++;
+					rejectionReasons.push(`add: exceeds ${MAX_ADDS} task limit`);
+					continue;
+				}
+			}
+
 			try {
 				this.applyRecommendation(rec);
-				switch (rec.action) {
-					case "remove":
-						removed++;
-						break;
-					case "add":
-						added++;
-						break;
-					default:
-						updated++;
-				}
+				applied++;
 			} catch (err) {
-				output.warning(`Failed to apply recommendation: ${rec.action} on ${rec.taskId}`, {
-					error: String(err),
-				});
+				rejected++;
+				rejectionReasons.push(`${rec.action}(${rec.taskId || "new"}): ${String(err)}`);
 			}
 		}
 
-		// Log summary
-		if (removed + added + updated > 0) {
-			output.success(`Meta-task ${taskId} applied`, {
-				removed,
-				added,
-				updated,
+		// Log results
+		if (applied > 0) {
+			output.success(`Meta-task applied ${applied} recommendations`, { applied, rejected });
+		}
+
+		if (rejected > 0) {
+			output.warning(`Rejected ${rejected} recommendations`, {
+				reasons: rejectionReasons.slice(0, 5), // Show first 5
 			});
 		}
 
 		// Log metrics if available
 		if (metaResult.metrics) {
-			output.info(`Task board health: ${metaResult.metrics.healthScore}%`, {
+			output.info(`Task board analysis`, {
+				healthScore: metaResult.metrics.healthScore,
 				issuesFound: metaResult.metrics.issuesFound,
 				tasksAnalyzed: metaResult.metrics.tasksAnalyzed,
 			});
 		}
+	}
+
+	/**
+	 * Validate a recommendation against the actual task board state.
+	 * Returns whether the recommendation should be applied.
+	 */
+	private validateRecommendation(
+		rec: MetaTaskRecommendation,
+		board: { tasks: Array<{ id: string; status: string; objective: string }> },
+		taskIds: Set<string>,
+		metaTaskId: string,
+	): { valid: boolean; reason?: string } {
+		// Self-protection: don't let meta-task modify itself
+		if (rec.taskId === metaTaskId) {
+			return { valid: false, reason: "cannot modify self" };
+		}
+
+		// Actions that require existing task
+		const requiresExistingTask = ["remove", "complete", "fix_status", "prioritize", "update", "block", "unblock"];
+
+		if (requiresExistingTask.includes(rec.action)) {
+			if (!rec.taskId) {
+				return { valid: false, reason: "missing taskId" };
+			}
+
+			if (!taskIds.has(rec.taskId)) {
+				return { valid: false, reason: "task does not exist" };
+			}
+
+			const task = board.tasks.find((t) => t.id === rec.taskId);
+			if (!task) {
+				return { valid: false, reason: "task not found" };
+			}
+
+			// State transition validation
+			switch (rec.action) {
+				case "complete":
+				case "fix_status":
+					if (task.status === "complete") {
+						return { valid: false, reason: "task already complete" };
+					}
+					break;
+
+				case "unblock":
+					if (task.status !== "blocked") {
+						return { valid: false, reason: "task is not blocked" };
+					}
+					break;
+
+				case "block":
+					if (task.status === "blocked") {
+						return { valid: false, reason: "task already blocked" };
+					}
+					if (task.status === "complete") {
+						return { valid: false, reason: "cannot block completed task" };
+					}
+					break;
+			}
+		}
+
+		// Validate "add" action
+		if (rec.action === "add") {
+			if (!rec.newTask?.objective) {
+				return { valid: false, reason: "missing objective for new task" };
+			}
+
+			// Check for obvious duplicates (exact match)
+			const isDuplicate = board.tasks.some((t) => t.objective.toLowerCase() === rec.newTask!.objective.toLowerCase());
+			if (isDuplicate) {
+				return { valid: false, reason: "duplicate objective" };
+			}
+		}
+
+		// Validate "merge" action
+		if (rec.action === "merge") {
+			if (!rec.relatedTaskIds || rec.relatedTaskIds.length === 0) {
+				return { valid: false, reason: "merge requires relatedTaskIds" };
+			}
+			for (const relatedId of rec.relatedTaskIds) {
+				if (!taskIds.has(relatedId)) {
+					return { valid: false, reason: `related task ${relatedId} does not exist` };
+				}
+			}
+		}
+
+		return { valid: true };
 	}
 
 	/**
