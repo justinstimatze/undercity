@@ -733,6 +733,12 @@ Guidelines:
 - Run typecheck before finishing to verify your changes
 - If you encounter issues you cannot resolve, explain what's blocking you
 
+CRITICAL - SCOPE RESTRICTIONS:
+- ONLY modify files directly related to this task
+- Do NOT refactor, clean up, or "improve" unrelated code
+- Do NOT add features beyond what's explicitly requested
+- Stay focused - scope creep wastes tokens and breaks unrelated functionality
+
 CRITICAL - GIT RULES:
 - You may commit locally (git add, git commit)
 - NEVER run "git push" - the orchestrator handles all pushes after verification

@@ -518,7 +518,12 @@ export async function prepareContext(
 		];
 		briefing.constraints.push(...constraints);
 
-		// 9. Build the briefing document
+		// 9. Add file scope restriction to prevent scope creep
+		if (briefing.targetFiles.length > 0) {
+			briefing.constraints.push(`SCOPE: Only modify files related to this task. Avoid touching unrelated code.`);
+		}
+
+		// 10. Build the briefing document
 		briefing.briefingDoc = buildBriefingDoc(briefing);
 	} catch (error) {
 		sessionLogger.warn(
