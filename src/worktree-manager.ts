@@ -291,10 +291,10 @@ export class WorktreeManager {
 			}
 
 			// Block direct pushes from worktree - orchestrator controls all pushes after verification
-			// Setting push URL to a blocked path ensures any git push attempt fails with a clear error
+			// Use --worktree flag to set config only for this worktree (not shared with main repo)
 			gitLogger.info({ sessionId }, "Blocking direct pushes from worktree");
 			try {
-				execSync('git remote set-url --push origin "PUSH_BLOCKED_USE_ORCHESTRATOR"', {
+				execSync('git config --worktree remote.origin.pushurl "PUSH_BLOCKED_USE_ORCHESTRATOR"', {
 					cwd: worktreePath,
 					encoding: "utf-8",
 					stdio: ["pipe", "pipe", "pipe"],
@@ -337,7 +337,7 @@ export class WorktreeManager {
 		gitLogger.info({ sessionId, worktreePath, branchName, force }, "Removing session worktree");
 
 		try {
-			// Remove the worktree
+			// Remove the worktree (worktree-specific config is automatically cleaned up)
 			const removeArgs = ["worktree", "remove"];
 			if (force) {
 				removeArgs.push("--force");
