@@ -4,6 +4,7 @@
  */
 
 import {
+	type AddOptions,
 	handleAdd,
 	handleImportPlan,
 	handleLoad,
@@ -33,7 +34,8 @@ export const taskCommands: CommandModule = {
 		program
 			.command("add <goal>")
 			.description("Add a goal to the backlog")
-			.action((goal: string) => handleAdd(goal));
+			.option("-p, --priority <number>", "Task priority (lower = higher priority)")
+			.action((goal: string, options: AddOptions) => handleAdd(goal, options));
 
 		// Load command - load goals from a file (one per line)
 		program

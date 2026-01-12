@@ -30,6 +30,10 @@ import {
 import { TaskBoardAnalyzer } from "../task-board-analyzer.js";
 
 // Type definitions for command options
+export interface AddOptions {
+	priority?: string;
+}
+
 export interface ImportPlanOptions {
 	dryRun?: boolean;
 	byPriority?: boolean;
@@ -101,10 +105,14 @@ export function handleTasks(): void {
 /**
  * Handle the add command - add a task
  */
-export function handleAdd(goal: string): void {
-	const item = addGoal(goal);
+export function handleAdd(goal: string, options: AddOptions = {}): void {
+	const priority = options.priority ? Number.parseInt(options.priority, 10) : undefined;
+	const item = addGoal(goal, priority);
 	console.log(chalk.green(`Added: ${goal}`));
 	console.log(chalk.gray(`  ID: ${item.id}`));
+	if (priority !== undefined) {
+		console.log(chalk.gray(`  Priority: ${priority}`));
+	}
 }
 
 /**
