@@ -306,6 +306,17 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 		// Start grind event logging
 		const { startGrindSession, endGrindSession, logTaskQueued, logTaskStarted, logTaskComplete, logTaskFailed } =
 			await import("../grind-events.js");
+		const { getExperimentManager } = await import("../experiment.js");
+		const experimentManager = getExperimentManager();
+		const activeExperiment = experimentManager.getActiveExperiment();
+
+		// Track variant assignments for experiment
+		const taskVariantMap = new Map<string, string>();
+
+		if (activeExperiment) {
+			output.info(`Experiment active: "${activeExperiment.name}" (${activeExperiment.variants.length} variants)`);
+		}
+
 		const batchId = `grind-${Date.now().toString(36)}`;
 		startGrindSession({
 			batchId,
@@ -327,6 +338,36 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 				objective: task.objective,
 				recommendedModel: task.recommendedModel || "sonnet",
 			});
+		}
+
+		// If experiment is active, reassign models based on variant selection
+		if (activeExperiment) {
+			// Clear default model groupings
+			tasksByModel.haiku = [];
+			tasksByModel.sonnet = [];
+			tasksByModel.opus = [];
+
+			// Reassign each task based on experiment variant
+			for (const task of tasksWithModels) {
+				const variant = experimentManager.selectVariant();
+				if (variant) {
+					taskVariantMap.set(task.id, variant.id);
+					// Override model based on variant
+					task.recommendedModel = variant.model;
+					tasksByModel[variant.model].push(task);
+					output.debug(`Task ${task.id} assigned to variant "${variant.name}" (${variant.model})`);
+				} else {
+					// No variant selected, use original recommendation
+					tasksByModel[task.recommendedModel || "sonnet"].push(task);
+				}
+			}
+
+			// Log updated model distribution
+			const experimentModelCounts = Object.entries(tasksByModel)
+				.filter(([, tasks]) => tasks.length > 0)
+				.map(([model, tasks]) => `${model}: ${tasks.length}`)
+				.join(", ");
+			output.info(`Experiment model distribution: ${experimentModelCounts}`);
 		}
 
 		// Run tasks grouped by model tier (haiku first = cheapest, then sonnet, then opus)
@@ -355,6 +396,15 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 					});
 				}
 
+				// Check if experiment wants review enabled for this tier
+				const experimentReviewEnabled =
+					activeExperiment &&
+					tierTasks.some((t) => {
+						const variantId = taskVariantMap.get(t.id);
+						const variant = activeExperiment.variants.find((v) => v.id === variantId);
+						return variant?.reviewEnabled;
+					});
+
 				// Create orchestrator for this model tier
 				const tierOrchestrator = new Orchestrator({
 					maxConcurrent: parallelism,
@@ -362,7 +412,7 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 					stream: options.stream || false,
 					verbose: options.verbose || false,
 					startingModel: modelTier,
-					reviewPasses: options.review === true,
+					reviewPasses: options.review === true || experimentReviewEnabled === true,
 					maxAttempts,
 					maxRetriesPerTier,
 					maxReviewPassesPerTier,
@@ -393,6 +443,19 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 								commitSha: taskResult.result?.commitSha,
 							});
 
+							// Record experiment result if variant was assigned
+							const variantId = taskVariantMap.get(taskId);
+							if (variantId && activeExperiment) {
+								experimentManager.recordResult({
+									taskId,
+									variantId,
+									success: true,
+									durationMs: taskResult.result?.durationMs ?? tierDurationMs,
+									tokensUsed: taskResult.result?.tokenUsage?.total ?? 0,
+									attempts: taskResult.result?.attempts ?? 1,
+								});
+							}
+
 							// Check if this was a subtask and auto-complete parent if all siblings done
 							const task = getTaskById(taskId);
 							if (task?.parentId) {
@@ -416,6 +479,20 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 								error: errorMsg,
 								durationMs: tierDurationMs,
 							});
+
+							// Record experiment result if variant was assigned
+							const variantId = taskVariantMap.get(taskId);
+							if (variantId && activeExperiment) {
+								experimentManager.recordResult({
+									taskId,
+									variantId,
+									success: false,
+									durationMs: taskResult.result?.durationMs ?? tierDurationMs,
+									tokensUsed: taskResult.result?.tokenUsage?.total ?? 0,
+									attempts: taskResult.result?.attempts ?? 1,
+									errorCategories: [errorMsg.substring(0, 50)],
+								});
+							}
 						}
 					}
 				}
@@ -443,6 +520,20 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 							error: `Tier error: ${tierError}`,
 							durationMs: 0,
 						});
+
+						// Record experiment result if variant was assigned
+						const variantId = taskVariantMap.get(taskId);
+						if (variantId && activeExperiment) {
+							experimentManager.recordResult({
+								taskId,
+								variantId,
+								success: false,
+								durationMs: 0,
+								tokensUsed: 0,
+								attempts: 1,
+								errorCategories: [`Tier error: ${String(tierError).substring(0, 50)}`],
+							});
+						}
 					}
 				}
 				totalFailed += tierTasks.length;
@@ -468,6 +559,23 @@ export async function handleGrind(goal: string | undefined, options: GrindOption
 			{ label: "Model distribution", value: modelCounts },
 			{ label: "Duration", value: `${Math.round(totalDurationMs / 60000)} minutes` },
 		]);
+
+		// Show experiment metrics if active
+		if (activeExperiment && taskVariantMap.size > 0) {
+			const variantMetrics = experimentManager.getVariantMetrics();
+			output.info(`Experiment "${activeExperiment.name}" results:`);
+			for (const metrics of variantMetrics) {
+				const variant = activeExperiment.variants.find((v) => v.id === metrics.variantId);
+				if (variant && metrics.totalTasks > 0) {
+					output.metrics(`  ${variant.name}`, {
+						tasks: metrics.totalTasks,
+						successRate: `${(metrics.successRate * 100).toFixed(0)}%`,
+						avgDuration: `${Math.round(metrics.avgDurationMs / 1000)}s`,
+						avgTokens: Math.round(metrics.avgTokensPerTask),
+					});
+				}
+			}
+		}
 	} catch (error) {
 		clearGrindProgress();
 		output.error(`Grind error: ${error instanceof Error ? error.message : error}`);

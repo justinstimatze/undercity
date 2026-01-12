@@ -850,3 +850,97 @@ export interface PromptKnowledge {
 	/** Number of times this approach has been successful */
 	successCount: number;
 }
+
+// ============== Experiment Framework Types ==============
+
+/**
+ * An experiment variant configuration
+ */
+export interface ExperimentVariant {
+	/** Unique variant identifier */
+	id: string;
+	/** Human-readable name */
+	name: string;
+	/** Model to use for this variant */
+	model: "haiku" | "sonnet" | "opus";
+	/** Additional prompt context/instructions */
+	promptModifier?: string;
+	/** Whether review passes are enabled */
+	reviewEnabled?: boolean;
+	/** Weight for random assignment (higher = more likely) */
+	weight: number;
+}
+
+/**
+ * Result of a single task execution in an experiment
+ */
+export interface ExperimentTaskResult {
+	/** Task ID */
+	taskId: string;
+	/** Variant used for this task */
+	variantId: string;
+	/** Whether task succeeded */
+	success: boolean;
+	/** Execution time in milliseconds */
+	durationMs: number;
+	/** Total tokens used */
+	tokensUsed: number;
+	/** Number of attempts before success/failure */
+	attempts: number;
+	/** Error categories if failed */
+	errorCategories?: string[];
+	/** Timestamp */
+	timestamp: Date;
+}
+
+/**
+ * An experiment definition
+ */
+export interface Experiment {
+	/** Unique experiment identifier */
+	id: string;
+	/** Human-readable name */
+	name: string;
+	/** Description of what we're testing */
+	description: string;
+	/** Variants being tested */
+	variants: ExperimentVariant[];
+	/** Whether experiment is active */
+	isActive: boolean;
+	/** Created timestamp */
+	createdAt: Date;
+	/** Results collected */
+	results: ExperimentTaskResult[];
+}
+
+/**
+ * Aggregated metrics for a variant
+ */
+export interface VariantMetrics {
+	/** Variant ID */
+	variantId: string;
+	/** Total tasks assigned */
+	totalTasks: number;
+	/** Successful tasks */
+	successCount: number;
+	/** Success rate (0-1) */
+	successRate: number;
+	/** Average duration in ms */
+	avgDurationMs: number;
+	/** Average tokens per task */
+	avgTokensPerTask: number;
+	/** Average attempts per task */
+	avgAttempts: number;
+}
+
+/**
+ * Experiment storage structure
+ */
+export interface ExperimentStorage {
+	/** All experiments */
+	experiments: Experiment[];
+	/** Currently active experiment ID */
+	activeExperimentId?: string;
+	/** Last updated timestamp */
+	lastUpdated: Date;
+}

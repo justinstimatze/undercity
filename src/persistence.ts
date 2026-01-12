@@ -853,4 +853,20 @@ export class Persistence {
 
 		persistenceLogger.info({ stateDir }, "Initialized Undercity state directory");
 	}
+
+	// ============== Experiment Storage ==============
+
+	/**
+	 * Get experiment storage
+	 */
+	getExperimentStorage<T>(defaultValue: T): T {
+		return this.readJson<T>("experiment-storage.json", defaultValue);
+	}
+
+	/**
+	 * Save experiment storage
+	 */
+	saveExperimentStorage<T>(data: T): void {
+		this.writeJson("experiment-storage.json", data);
+	}
 }

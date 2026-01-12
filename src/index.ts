@@ -108,3 +108,12 @@ export type {
 	UndercityConfig,
 } from "./types.js";
 export { TaskWorker } from "./worker.js";
+// Experiment framework
+export { ExperimentManager, getExperimentManager } from "./experiment.js";
+export type {
+	Experiment,
+	ExperimentStorage,
+	ExperimentTaskResult,
+	ExperimentVariant,
+	VariantMetrics,
+} from "./types.js";
