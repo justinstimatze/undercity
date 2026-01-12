@@ -596,8 +596,8 @@ function extractSearchTerms(task: string): string[] {
 		.filter((w) => !w.match(/^\d+$/));
 
 	// Also extract camelCase/PascalCase identifiers
-	// Use simpler patterns to avoid ReDoS - match word boundaries explicitly
-	const identifiers = task.match(/\b[A-Z][a-z]+[A-Za-z]*\b|\b[a-z]+[A-Z][A-Za-z]*\b/g) || [];
+	// Use atomic matching via split to avoid ReDoS
+	const identifiers = task.split(/\s+/).filter((word) => /^[A-Z][a-z]+[A-Z]/.test(word) || /^[a-z]+[A-Z]/.test(word));
 
 	// Extract file paths or file names mentioned (e.g., "solo.ts", "src/solo.ts")
 	// Limit path depth and use word boundaries to prevent backtracking

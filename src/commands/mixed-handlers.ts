@@ -598,7 +598,7 @@ export function handleSetup(): void {
 	const apiKey = process.env.ANTHROPIC_API_KEY;
 	if (apiKey) {
 		console.log(chalk.green("✓ ANTHROPIC_API_KEY is set"));
-		console.log(chalk.dim(`  Key: ${"*".repeat(8)}...${apiKey.slice(-4)}`));
+		console.log(chalk.dim(`  Length: ${apiKey.length} characters`));
 	} else {
 		console.log(chalk.red("✗ ANTHROPIC_API_KEY not found"));
 		console.log("Set it with: export ANTHROPIC_API_KEY=your_api_key");
