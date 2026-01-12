@@ -1040,3 +1040,44 @@ export async function handleStatus(options: StatusOptions): Promise<void> {
 		`  Queued: ${status.tasksQueued} | Started: ${status.tasksStarted} | Complete: ${status.tasksComplete} | Failed: ${status.tasksFailed}`,
 	);
 }
+
+/**
+ * Index command options
+ */
+export interface IndexOptions {
+	full?: boolean;
+	stats?: boolean;
+}
+
+/**
+ * Handle the index command - build/update AST index
+ */
+export async function handleIndex(options: IndexOptions): Promise<void> {
+	const { getASTIndex } = await import("../ast-index.js");
+
+	const index = getASTIndex();
+	await index.load();
+
+	if (options.stats) {
+		const stats = index.getStats();
+		console.log(chalk.bold("AST Index Statistics"));
+		console.log(`  Files indexed: ${stats.fileCount}`);
+		console.log(`  Symbols tracked: ${stats.symbolCount}`);
+		console.log(`  Last updated: ${stats.lastUpdated}`);
+		return;
+	}
+
+	const startTime = Date.now();
+
+	if (options.full) {
+		console.log(chalk.blue("Rebuilding full AST index..."));
+		await index.rebuildFull();
+	} else {
+		console.log(chalk.blue("Updating AST index incrementally..."));
+		const updated = await index.updateIncremental();
+		console.log(chalk.green(`Updated ${updated} files`));
+	}
+
+	const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+	console.log(chalk.dim(`Completed in ${elapsed}s`));
+}

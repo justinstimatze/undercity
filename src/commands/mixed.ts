@@ -10,6 +10,7 @@ import {
 	handleDaemon,
 	handleDspyReadiness,
 	handleGrind,
+	handleIndex,
 	handleInit,
 	handleLimits,
 	handleOracle,
@@ -17,6 +18,7 @@ import {
 	handleSetup,
 	handleStatus,
 	handleWatch,
+	type IndexOptions,
 	type InitOptions,
 	type OracleOptions,
 	type ServeOptions,
@@ -121,5 +123,13 @@ export const mixedCommands: CommandModule = {
 			.option("--human", "Output human-readable format instead of JSON")
 			.option("--events", "Show raw events instead of summary")
 			.action((options: StatusOptions) => handleStatus(options));
+
+		// Index command - build/update AST index for smart context
+		program
+			.command("index")
+			.description("Build or update AST index for smart context selection")
+			.option("-f, --full", "Full rebuild (instead of incremental update)")
+			.option("-s, --stats", "Show index statistics only")
+			.action((options: IndexOptions) => handleIndex(options));
 	},
 };
