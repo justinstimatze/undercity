@@ -299,9 +299,6 @@ export class TaskWorker {
 			}
 		}
 
-		// Prepare token usage tracking
-		const tokenUsageThisAttempt: TokenUsage[] = [];
-
 		while (this.attempts < this.maxAttempts) {
 			this.attempts++;
 			this.sameModelRetries++;
@@ -388,8 +385,8 @@ export class TaskWorker {
 						commitSha,
 						durationMs: Date.now() - startTime,
 						tokenUsage: {
-							attempts: tokenUsageThisAttempt,
-							total: tokenUsageThisAttempt.reduce((sum, usage) => sum + usage.totalTokens, 0),
+							attempts: this.tokenUsageThisTask,
+							total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
 						},
 					};
 				}
@@ -465,8 +462,8 @@ export class TaskWorker {
 			error: "Max attempts reached without passing verification",
 			durationMs: Date.now() - startTime,
 			tokenUsage: {
-				attempts: tokenUsageThisAttempt,
-				total: tokenUsageThisAttempt.reduce((sum, usage) => sum + usage.totalTokens, 0),
+				attempts: this.tokenUsageThisTask,
+				total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
 			},
 			// Include tickets for issues that couldn't be resolved - caller can queue these
 			unresolvedTickets: this.pendingTickets.length > 0 ? this.pendingTickets : undefined,
@@ -480,9 +477,10 @@ export class TaskWorker {
 	private cleanupDirtyState(): void {
 		try {
 			// Reset any staged and unstaged changes
-			execSync("git checkout -- . 2>/dev/null || true", { encoding: "utf-8", cwd: process.cwd() });
+			// CRITICAL: Must use workingDirectory, not process.cwd() - otherwise cleans wrong repo in worktree mode
+			execSync("git checkout -- . 2>/dev/null || true", { encoding: "utf-8", cwd: this.workingDirectory });
 			// Remove any untracked files created during the attempt
-			execSync("git clean -fd 2>/dev/null || true", { encoding: "utf-8", cwd: process.cwd() });
+			execSync("git clean -fd 2>/dev/null || true", { encoding: "utf-8", cwd: this.workingDirectory });
 			this.log("Cleaned up dirty state after failed task");
 		} catch (error) {
 			this.log("Failed to cleanup dirty state", { error: String(error) });
@@ -862,8 +860,26 @@ When done, provide a brief summary of what you changed.`;
 	 */
 	private async commitWork(task: string): Promise<string> {
 		try {
-			// Stage all changes
-			execSync("git add -A", { cwd: process.cwd() });
+			// Stage all tracked changes (not untracked files to avoid committing temp files)
+			// CRITICAL: Must use workingDirectory, not process.cwd() - otherwise commits in wrong repo
+			execSync("git add -u", { cwd: this.workingDirectory });
+
+			// Also stage any new files that were created (but not in .gitignore)
+			// Use git status to find untracked files and add them selectively
+			try {
+				const untrackedOutput = execSync("git ls-files --others --exclude-standard", {
+					encoding: "utf-8",
+					cwd: this.workingDirectory,
+				}).trim();
+				if (untrackedOutput) {
+					const untrackedFiles = untrackedOutput.split("\n").filter((f) => f.length > 0);
+					for (const file of untrackedFiles) {
+						execSync(`git add "${file}"`, { cwd: this.workingDirectory });
+					}
+				}
+			} catch {
+				// Ignore errors from untracked file handling
+			}
 
 			// Create commit message
 			const shortTask = task.substring(0, 50) + (task.length > 50 ? "..." : "");
@@ -871,11 +887,11 @@ When done, provide a brief summary of what you changed.`;
 
 			// Commit (skip hooks - we already did verification)
 			execSync(`git commit --no-verify -m "${commitMessage.replace(/"/g, '\\"')}"`, {
-				cwd: process.cwd(),
+				cwd: this.workingDirectory,
 			});
 
 			// Get commit SHA
-			const sha = execSync("git rev-parse HEAD", { encoding: "utf-8", cwd: process.cwd() }).trim();
+			const sha = execSync("git rev-parse HEAD", { encoding: "utf-8", cwd: this.workingDirectory }).trim();
 
 			this.log("Committed work", { sha, task: shortTask });
 			return sha;
