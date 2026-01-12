@@ -99,6 +99,71 @@ export function resolveRepositoryPath(basePath: string, relativePath: string): s
 }
 
 /**
+ * Auto-detect completed tasks based on commit message matching
+ * Marks tasks as complete if their keywords appear in the commit message
+ *
+ * @returns Number of tasks marked complete, or -1 if auto-detection failed
+ */
+async function autoDetectCompletedTasks(): Promise<number> {
+	try {
+		const { execSync } = await import("node:child_process");
+		const commitSha = execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
+		const commitMessage = execSync("git log -1 --format=%s", { encoding: "utf-8" }).trim();
+
+		const { getAllItems, markTaskComplete } = await import("./task.js");
+		const pendingTasks = getAllItems().filter((t) => t.status === "pending" || t.status === "in_progress");
+
+		if (pendingTasks.length === 0) {
+			gitLogger.debug("No pending tasks to auto-detect");
+			return 0;
+		}
+
+		let markedCount = 0;
+		for (const task of pendingTasks) {
+			// Extract keywords from task objective (words longer than 3 chars)
+			const keywords = task.objective
+				.toLowerCase()
+				.replace(/[[\]]/g, "")
+				.split(/\s+/)
+				.filter((word) => word.length > 3);
+
+			if (keywords.length === 0) {
+				continue;
+			}
+
+			// Check if commit message matches task
+			const messageLower = commitMessage.toLowerCase();
+			const matches = keywords.filter((k) => messageLower.includes(k)).length;
+			const threshold = Math.max(2, Math.ceil(keywords.length * 0.5));
+
+			if (matches >= threshold) {
+				gitLogger.info(
+					{ taskId: task.id, commitSha, matches, threshold, keywords: keywords.length },
+					"Auto-marking task complete based on commit message match",
+				);
+				markTaskComplete(task.id);
+				markedCount++;
+			}
+		}
+
+		if (markedCount === 0) {
+			gitLogger.debug(
+				{ commitMessage, pendingTaskCount: pendingTasks.length },
+				"Auto-detection ran but no tasks matched commit message",
+			);
+		}
+
+		return markedCount;
+	} catch (error) {
+		gitLogger.warn(
+			{ error: error instanceof Error ? error.message : String(error) },
+			"Auto-detection failed - tasks must be marked complete manually",
+		);
+		return -1;
+	}
+}
+
+/**
  * Check if a directory is part of a git repository
  * @param path Directory path to check
  * @returns true if path is part of a git repository, false otherwise
@@ -985,34 +1050,7 @@ export class Elevator {
 				item.completedAt = new Date();
 
 				// Auto-detect and mark related tasks as complete
-				try {
-					const { execSync } = await import("node:child_process");
-					const commitSha = execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
-					const commitMessage = execSync("git log -1 --format=%s", { encoding: "utf-8" }).trim();
-
-					const { getAllItems, markTaskComplete } = await import("./task.js");
-					const pendingTasks = getAllItems().filter((t) => t.status === "pending" || t.status === "in_progress");
-
-					for (const task of pendingTasks) {
-						// Extract keywords from task objective
-						const keywords = task.objective
-							.toLowerCase()
-							.replace(/[[\]]/g, "")
-							.split(/\s+/)
-							.filter((word) => word.length > 3);
-
-						// Check if commit message matches task
-						const messageLower = commitMessage.toLowerCase();
-						const matches = keywords.filter((k) => messageLower.includes(k)).length;
-
-						if (matches >= Math.max(2, keywords.length * 0.5)) {
-							gitLogger.info({ taskId: task.id, commitSha }, "Auto-marking task as complete based on commit");
-							markTaskComplete(task.id);
-						}
-					}
-				} catch (error) {
-					gitLogger.debug({ error: String(error) }, "Failed to auto-detect completed tasks (non-fatal)");
-				}
+				await autoDetectCompletedTasks();
 
 				// Remove from queue
 				this.queue = this.queue.filter((i) => i !== item);
@@ -1219,34 +1257,7 @@ export class Elevator {
 			item.completedAt = new Date();
 
 			// Auto-detect and mark related tasks as complete
-			try {
-				const { execSync } = await import("node:child_process");
-				const commitSha = execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
-				const commitMessage = execSync("git log -1 --format=%s", { encoding: "utf-8" }).trim();
-
-				const { getAllItems, markTaskComplete } = await import("./task.js");
-				const pendingTasks = getAllItems().filter((t) => t.status === "pending" || t.status === "in_progress");
-
-				for (const task of pendingTasks) {
-					// Extract keywords from task objective
-					const keywords = task.objective
-						.toLowerCase()
-						.replace(/[[\]]/g, "")
-						.split(/\s+/)
-						.filter((word) => word.length > 3);
-
-					// Check if commit message matches task
-					const messageLower = commitMessage.toLowerCase();
-					const matches = keywords.filter((k) => messageLower.includes(k)).length;
-
-					if (matches >= Math.max(2, keywords.length * 0.5)) {
-						gitLogger.info({ taskId: task.id, commitSha }, "Auto-marking task as complete based on commit");
-						markTaskComplete(task.id);
-					}
-				}
-			} catch (error) {
-				gitLogger.debug({ error: String(error) }, "Failed to auto-detect completed tasks (non-fatal)");
-			}
+			await autoDetectCompletedTasks();
 
 			// Remove from queue
 			this.queue = this.queue.filter((i) => i !== item);
