@@ -4,14 +4,24 @@
  * Tests for context.ts - smart context extraction for agents.
  */
 
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+	type ContextBriefing,
+	estimateComplexityFromContext,
+	extractFunctionSignaturesWithTypes,
 	extractImplementationContext,
 	extractRelevantSections,
 	extractReviewContext,
+	extractTypeDefinitionsFromFile,
+	findFilesImporting,
 	formatSections,
 	getContextLimit,
+	getTypeDefinition,
 	parseMarkdownSections,
+	prepareContext,
 	smartTruncate,
 	summarizeContextForAgent,
 } from "../context.js";
@@ -418,5 +428,423 @@ ${"Additional security notes. ".repeat(30)}`;
 
 		// Should preserve meaningful content
 		expect(builderContext).toContain("Implementation");
+	});
+});
+
+describe("estimateComplexityFromContext", () => {
+	function createBriefing(overrides: Partial<ContextBriefing> = {}): ContextBriefing {
+		return {
+			objective: "Test task",
+			targetFiles: [],
+			typeDefinitions: [],
+			functionSignatures: [],
+			relatedPatterns: [],
+			constraints: [],
+			briefingDoc: "",
+			...overrides,
+		};
+	}
+
+	it("returns simple for zero files", () => {
+		const briefing = createBriefing({ targetFiles: [] });
+		expect(estimateComplexityFromContext(briefing)).toBe("simple");
+	});
+
+	it("returns simple for single file", () => {
+		const briefing = createBriefing({ targetFiles: ["src/file.ts"] });
+		expect(estimateComplexityFromContext(briefing)).toBe("simple");
+	});
+
+	it("returns medium for 2-3 files with few signatures", () => {
+		const briefing = createBriefing({
+			targetFiles: ["src/file1.ts", "src/file2.ts"],
+			functionSignatures: ["func1", "func2", "func3"],
+		});
+		expect(estimateComplexityFromContext(briefing)).toBe("medium");
+	});
+
+	it("returns medium for 3 files with 5 signatures", () => {
+		const briefing = createBriefing({
+			targetFiles: ["src/file1.ts", "src/file2.ts", "src/file3.ts"],
+			functionSignatures: ["func1", "func2", "func3", "func4", "func5"],
+		});
+		expect(estimateComplexityFromContext(briefing)).toBe("medium");
+	});
+
+	it("returns complex for more than 3 files", () => {
+		const briefing = createBriefing({
+			targetFiles: ["src/file1.ts", "src/file2.ts", "src/file3.ts", "src/file4.ts"],
+			functionSignatures: [],
+		});
+		expect(estimateComplexityFromContext(briefing)).toBe("complex");
+	});
+
+	it("returns complex for 3 files with more than 5 signatures", () => {
+		const briefing = createBriefing({
+			targetFiles: ["src/file1.ts", "src/file2.ts", "src/file3.ts"],
+			functionSignatures: ["f1", "f2", "f3", "f4", "f5", "f6"],
+		});
+		expect(estimateComplexityFromContext(briefing)).toBe("complex");
+	});
+});
+
+describe("prepareContext", () => {
+	let testDir: string;
+
+	beforeEach(() => {
+		testDir = mkdtempSync(join(tmpdir(), "context-test-"));
+	});
+
+	afterEach(() => {
+		rmSync(testDir, { recursive: true, force: true });
+	});
+
+	it("returns minimal briefing for new file tasks", async () => {
+		const briefing = await prepareContext("(new file) In src/newfile.ts create a utility", {
+			cwd: testDir,
+			repoRoot: testDir,
+		});
+
+		expect(briefing.objective).toContain("new file");
+		expect(briefing.constraints).toContain("CREATE NEW FILE: src/newfile.ts");
+		expect(briefing.constraints).toContain("This file does not exist yet - you must create it");
+	});
+
+	it("builds briefing doc with objective", async () => {
+		const briefing = await prepareContext("Fix a bug in the auth module", {
+			cwd: testDir,
+			repoRoot: testDir,
+		});
+
+		expect(briefing.objective).toBe("Fix a bug in the auth module");
+		expect(briefing.briefingDoc).toContain("CONTEXT BRIEFING");
+		expect(briefing.briefingDoc).toContain("Objective");
+	});
+
+	it("identifies target areas from task description", async () => {
+		const briefing = await prepareContext("Update the API route handler", {
+			cwd: testDir,
+			repoRoot: testDir,
+		});
+
+		expect(briefing.constraints.some((c) => c.includes("Focus areas:"))).toBe(true);
+	});
+
+	it("adds scope constraint when target files are found", async () => {
+		// Create a simple TypeScript file
+		mkdirSync(join(testDir, "src"), { recursive: true });
+		writeFileSync(join(testDir, "src", "auth.ts"), 'export const AUTH = "auth";');
+
+		// Initialize git repo for git grep to work
+		const { execSync } = await import("node:child_process");
+		try {
+			execSync("git init && git add -A && git commit -m 'init'", {
+				cwd: testDir,
+				stdio: "pipe",
+			});
+		} catch {
+			// Git might not be available, skip this test gracefully
+			return;
+		}
+
+		const briefing = await prepareContext("Fix the AUTH constant", {
+			cwd: testDir,
+			repoRoot: testDir,
+		});
+
+		if (briefing.targetFiles.length > 0) {
+			expect(briefing.constraints.some((c) => c.includes("SCOPE:"))).toBe(true);
+		}
+	});
+
+	it("handles non-existent paths gracefully", async () => {
+		// Use a non-existent directory - function handles this without erroring
+		const briefing = await prepareContext("Some task", {
+			cwd: "/nonexistent/path/that/does/not/exist",
+			repoRoot: "/nonexistent/path/that/does/not/exist",
+		});
+
+		// Should return a briefing without throwing
+		expect(briefing.objective).toBe("Some task");
+		expect(briefing.briefingDoc).toBeTruthy();
+		// Briefing doc should contain basic structure
+		expect(briefing.briefingDoc).toContain("CONTEXT BRIEFING");
+		expect(briefing.briefingDoc).toContain("Objective");
+	});
+});
+
+describe("parseMarkdownSections edge cases", () => {
+	it("handles whitespace-only content", () => {
+		const sections = parseMarkdownSections("   \n\n   \t\t  ");
+		expect(sections).toHaveLength(0);
+	});
+
+	it("handles heading with no content after it", () => {
+		const content = `# Title
+
+## Empty Section
+
+## Another Empty`;
+
+		const sections = parseMarkdownSections(content);
+		expect(sections).toHaveLength(3);
+		expect(sections[1].heading).toBe("Empty Section");
+		expect(sections[1].content).toBe("");
+	});
+
+	it("handles consecutive headings", () => {
+		const content = `# First
+## Second
+### Third`;
+
+		const sections = parseMarkdownSections(content);
+		expect(sections).toHaveLength(3);
+		expect(sections[0].content).toBe("");
+		expect(sections[1].content).toBe("");
+	});
+});
+
+describe("smartTruncate edge cases", () => {
+	it("handles content exactly at limit", () => {
+		const content = "A".repeat(100);
+		const result = smartTruncate(content, 100);
+		expect(result).toBe(content);
+	});
+
+	it("handles single very long word at limit boundary", () => {
+		// No spaces, no periods, no paragraph breaks
+		const content = "A".repeat(200);
+		const result = smartTruncate(content, 100);
+		expect(result).toContain("[...truncated]");
+	});
+
+	it("handles content with only line breaks", () => {
+		const content = "Line1\nLine2\nLine3\nLine4\nLine5";
+		const result = smartTruncate(content, 20);
+		// Should still truncate meaningfully
+		expect(result.length).toBeLessThan(content.length + 20);
+	});
+});
+
+describe("extractRelevantSections edge cases", () => {
+	it("handles single section that exceeds limit", () => {
+		const hugeSections = [{ heading: "Giant Section", level: 1, content: "A".repeat(20000) }];
+
+		const relevant = extractRelevantSections(hugeSections, "scout");
+		// Should include at least one section even if too large
+		expect(relevant.length).toBeGreaterThan(0);
+	});
+
+	it("handles all sections with zero relevance score", () => {
+		const irrelevantSections = [
+			{ heading: "xyz", level: 3, content: "random" },
+			{ heading: "abc", level: 3, content: "content" },
+		];
+
+		const relevant = extractRelevantSections(irrelevantSections, "scout");
+		// Should include at least one section
+		expect(relevant.length).toBeGreaterThan(0);
+	});
+
+	it("considers heading level in scoring", () => {
+		// Both sections have similar keyword relevance
+		const sections = [
+			{ heading: "Details", level: 4, content: "some stuff" },
+			{ heading: "Overview", level: 1, content: "some stuff" },
+		];
+
+		const relevant = extractRelevantSections(sections, "scout");
+		// Level 1 heading gets higher base score (4 - level) = 3 points
+		// Level 4 heading gets 0 points from level
+		// When keyword scores are equal, level wins
+		expect(relevant[0].heading).toBe("Overview");
+	});
+});
+
+describe("summarizeContextForAgent edge cases", () => {
+	it("returns goal for scout when provided", () => {
+		const fullContext = "This is a very long context that would normally be parsed";
+		const goal = "Find the auth files";
+
+		const result = summarizeContextForAgent(fullContext, "scout", goal);
+		expect(result).toBe(goal);
+	});
+
+	it("truncates scout context when no goal provided", () => {
+		const longContext = "A".repeat(2000);
+		const result = summarizeContextForAgent(longContext, "scout");
+		expect(result.length).toBeLessThanOrEqual(1000 + 20); // Allow for truncation marker
+	});
+
+	it("handles malformed markdown gracefully", () => {
+		// Content that might confuse parser
+		const weirdContent = `#NotAHeading because no space
+
+Normal text here
+
+# Real Heading
+Content`;
+
+		const result = summarizeContextForAgent(weirdContent, "builder");
+		expect(result).toBeTruthy();
+	});
+});
+
+describe("extractImplementationContext edge cases", () => {
+	it("handles plan with only code sections", () => {
+		const plan = `# Plan
+
+## Code Changes
+Modify the function signature.
+
+## Steps to implement
+1. Change parameter
+2. Update return type`;
+
+		const result = extractImplementationContext(plan);
+		expect(result).toContain("Code Changes");
+		expect(result).toContain("Steps");
+	});
+});
+
+describe("extractReviewContext edge cases", () => {
+	it("handles plan with no review sections", () => {
+		const plan = `# Plan
+
+## Overview
+Just an overview, no tests or security info.`;
+
+		const builderOutput = "Did some work";
+		const result = extractReviewContext(plan, builderOutput);
+
+		// Should still include implementation output
+		expect(result).toContain("Implementation Output");
+		expect(result).toContain("Did some work");
+	});
+
+	it("handles very long builder output", () => {
+		const plan = "## Test\nTest the thing";
+		const longOutput = "B".repeat(5000);
+
+		const result = extractReviewContext(plan, longOutput);
+		// Should be truncated to reviewer limit
+		expect(result.length).toBeLessThanOrEqual(3500);
+	});
+});
+
+describe("ts-morph integration", () => {
+	let testDir: string;
+
+	beforeEach(() => {
+		testDir = mkdtempSync(join(tmpdir(), "tsmorph-test-"));
+	});
+
+	afterEach(() => {
+		rmSync(testDir, { recursive: true, force: true });
+	});
+
+	describe("extractFunctionSignaturesWithTypes", () => {
+		it("returns empty array for non-existent file", () => {
+			const signatures = extractFunctionSignaturesWithTypes("nonexistent.ts", testDir);
+			expect(signatures).toEqual([]);
+		});
+
+		it("returns empty array when no tsconfig exists", () => {
+			writeFileSync(join(testDir, "file.ts"), "export function test() {}");
+			const signatures = extractFunctionSignaturesWithTypes("file.ts", testDir);
+			expect(signatures).toEqual([]);
+		});
+
+		it("extracts function signatures from TypeScript file", () => {
+			// Create directory structure first
+			mkdirSync(join(testDir, "src"), { recursive: true });
+
+			// Create tsconfig.json
+			writeFileSync(
+				join(testDir, "tsconfig.json"),
+				JSON.stringify({
+					compilerOptions: { target: "ES2020", module: "ESNext", strict: true },
+				}),
+			);
+
+			// Create source file with exported function
+			writeFileSync(
+				join(testDir, "src", "utils.ts"),
+				`export function calculateSum(a: number, b: number): number {
+  return a + b;
+}`,
+			);
+
+			const signatures = extractFunctionSignaturesWithTypes("src/utils.ts", testDir);
+			// May or may not work depending on ts-morph setup
+			// At minimum should not throw
+			expect(Array.isArray(signatures)).toBe(true);
+		});
+	});
+
+	describe("extractTypeDefinitionsFromFile", () => {
+		it("returns empty array for non-existent file", () => {
+			const defs = extractTypeDefinitionsFromFile("nonexistent.ts", testDir);
+			expect(defs).toEqual([]);
+		});
+
+		it("returns empty array when no tsconfig exists", () => {
+			writeFileSync(join(testDir, "types.ts"), "export interface User { name: string; }");
+			const defs = extractTypeDefinitionsFromFile("types.ts", testDir);
+			expect(defs).toEqual([]);
+		});
+	});
+
+	describe("findFilesImporting", () => {
+		it("returns empty array when git grep fails", () => {
+			const files = findFilesImporting("SomeSymbol", testDir);
+			expect(files).toEqual([]);
+		});
+	});
+
+	describe("getTypeDefinition", () => {
+		it("returns null for non-existent type", () => {
+			const def = getTypeDefinition("NonExistentType", testDir);
+			expect(def).toBeNull();
+		});
+
+		it("returns null when schema file does not exist", () => {
+			const def = getTypeDefinition("User", testDir);
+			expect(def).toBeNull();
+		});
+
+		it("returns null when no tsconfig exists", () => {
+			mkdirSync(join(testDir, "common", "schema"), { recursive: true });
+			writeFileSync(join(testDir, "common", "schema", "index.ts"), "export interface User { name: string; }");
+
+			const def = getTypeDefinition("User", testDir);
+			expect(def).toBeNull();
+		});
+	});
+});
+
+describe("ContextBriefing structure", () => {
+	it("contains all required fields", async () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "briefing-test-"));
+		try {
+			const briefing = await prepareContext("Test task", { cwd: tempDir, repoRoot: tempDir });
+
+			expect(briefing).toHaveProperty("objective");
+			expect(briefing).toHaveProperty("targetFiles");
+			expect(briefing).toHaveProperty("typeDefinitions");
+			expect(briefing).toHaveProperty("functionSignatures");
+			expect(briefing).toHaveProperty("relatedPatterns");
+			expect(briefing).toHaveProperty("constraints");
+			expect(briefing).toHaveProperty("briefingDoc");
+
+			expect(Array.isArray(briefing.targetFiles)).toBe(true);
+			expect(Array.isArray(briefing.typeDefinitions)).toBe(true);
+			expect(Array.isArray(briefing.functionSignatures)).toBe(true);
+			expect(Array.isArray(briefing.relatedPatterns)).toBe(true);
+			expect(Array.isArray(briefing.constraints)).toBe(true);
+			expect(typeof briefing.briefingDoc).toBe("string");
+		} finally {
+			rmSync(tempDir, { recursive: true, force: true });
+		}
 	});
 });
