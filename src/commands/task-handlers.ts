@@ -106,7 +106,21 @@ export function handleTasks(): void {
  * Handle the add command - add a task
  */
 export function handleAdd(goal: string, options: AddOptions = {}): void {
-	const priority = options.priority ? Number.parseInt(options.priority, 10) : undefined;
+	let priority: number | undefined;
+
+	if (options.priority) {
+		const parsedPriority = Number.parseInt(options.priority, 10);
+		if (Number.isNaN(parsedPriority)) {
+			console.error(chalk.red(`Error: Priority must be a number (1-1000), got: ${options.priority}`));
+			process.exit(1);
+		}
+		if (parsedPriority < 1 || parsedPriority > 1000) {
+			console.error(chalk.red(`Error: Priority must be between 1 and 1000, got: ${parsedPriority}`));
+			process.exit(1);
+		}
+		priority = parsedPriority;
+	}
+
 	const item = addGoal(goal, priority);
 	console.log(chalk.green(`Added: ${goal}`));
 	console.log(chalk.gray(`  ID: ${item.id}`));
