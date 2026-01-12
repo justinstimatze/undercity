@@ -1,159 +1,130 @@
 /**
- * Metrics Reader Module
- *
- * Reads and analyzes grind event logs for metrics and analytics.
- * Provides functionality to extract success/failure counts by model and complexity.
+ * Metrics Reader for parsing metrics.jsonl and computing success rates
  */
+import { EnhancedMetricsQuery } from "./enhanced-metrics.js";
+import type { TaskMetrics } from "./types.js";
+import type { ComplexityLevel } from "./complexity.js";
 
-import { existsSync, readFileSync } from "node:fs";
-import type { GrindEvent } from "./grind-events.js";
-
-/**
- * Grind metrics aggregated from event log
- */
-export interface GrindMetrics {
-	/** Total successful task completions */
-	successCount: number;
-	/** Total failed task completions */
-	failCount: number;
-	/** Metrics broken down by model */
-	byModel: {
-		haiku: { success: number; fail: number };
-		sonnet: { success: number; fail: number };
-		opus: { success: number; fail: number };
-	};
-	/** Metrics broken down by complexity level (simplified grouping) */
-	byComplexity: {
-		simple: { success: number; fail: number };
-		medium: { success: number; fail: number };
-		complex: { success: number; fail: number };
-	};
+export interface MetricsSummary {
+  totalTasks: number;
+  successRate: number;
+  avgTokens: number;
+  modelDistribution: Record<string, number>;
+  avgTimeTakenMs: number;
+  escalationRate: number;
 }
 
-/**
- * Simplified complexity bucket type for metrics grouping
- */
-type SimplifiedComplexity = "simple" | "medium" | "complex";
+export async function readMetrics(options?: {
+  days?: number;
+  complexityFilter?: ComplexityLevel[];
+}): Promise<MetricsSummary> {
+  const { days = 30, complexityFilter } = options || {};
 
-/**
- * Mapping of complexity levels to simplified buckets
- * - simple: trivial, simple tasks
- * - medium: standard tasks
- * - complex: complex, critical tasks
- */
-const COMPLEXITY_MAPPING: Record<string, SimplifiedComplexity> = {
-	trivial: "simple",
-	simple: "simple",
-	standard: "medium",
-	medium: "medium",
-	complex: "complex",
-	critical: "complex",
-};
+  // Load all metrics
+  const { taskMetrics } = await EnhancedMetricsQuery.loadAllMetrics();
 
-/**
- * Load and analyze grind metrics from event log
- *
- * @param path - Path to grind events JSONL file
- * @returns Aggregated metrics by model and complexity
- */
-export function loadGrindMetrics(path = ".undercity/grind-events.jsonl"): GrindMetrics {
-	const metrics: GrindMetrics = {
-		successCount: 0,
-		failCount: 0,
-		byModel: {
-			haiku: { success: 0, fail: 0 },
-			sonnet: { success: 0, fail: 0 },
-			opus: { success: 0, fail: 0 },
-		},
-		byComplexity: {
-			simple: { success: 0, fail: 0 },
-			medium: { success: 0, fail: 0 },
-			complex: { success: 0, fail: 0 },
-		},
-	};
+  // Filter by date and complexity if specified
+  const filteredMetrics = taskMetrics.filter((metric) => {
+    const withinDateRange = metric.startedAt &&
+      new Date(metric.startedAt) >= new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const matchesComplexity = !complexityFilter || (
+      metric.complexityLevel &&
+      complexityFilter.includes(metric.complexityLevel)
+    );
+    return withinDateRange && matchesComplexity;
+  });
 
-	// Return empty metrics if file doesn't exist
-	if (!existsSync(path)) {
-		return metrics;
-	}
+  // Compute key metrics
+  const totalTasks = filteredMetrics.length;
+  const successfulTasks = filteredMetrics.filter((m) => m.success).length;
+  const successRate = totalTasks > 0 ? successfulTasks / totalTasks : 0;
 
-	try {
-		const content = readFileSync(path, "utf-8");
-		const lines = content.trim().split("\n").filter(Boolean);
+  // Average tokens
+  const totalTokens = filteredMetrics.reduce((sum, m) => sum + m.totalTokens, 0);
+  const avgTokens = totalTasks > 0 ? totalTokens / totalTasks : 0;
 
-		for (const line of lines) {
-			try {
-				const event = JSON.parse(line) as GrindEvent;
+  // Model distribution
+  const modelDistribution = filteredMetrics.reduce((dist, m) => {
+    const model = m.finalModel || "unknown";
+    dist[model] = (dist[model] || 0) + 1;
+    return dist;
+  }, {} as Record<string, number>);
 
-				// Only process task completion events
-				if (event.type !== "task_complete" && event.type !== "task_failed") {
-					continue;
-				}
+  // Timing
+  const totalTime = filteredMetrics.reduce((sum, m) => sum + m.durationMs, 0);
+  const avgTimeTakenMs = totalTasks > 0 ? totalTime / totalTasks : 0;
 
-				const isSuccess = event.type === "task_complete";
-				const data = event.data || {};
+  // Escalation rate
+  const escalatedTasks = filteredMetrics.filter((m) => m.wasEscalated).length;
+  const escalationRate = totalTasks > 0 ? escalatedTasks / totalTasks : 0;
 
-				// Extract model from event data - try multiple possible field names
-				const model =
-					(data.model as string) ||
-					(data.finalModel as string) ||
-					(data.startingModel as string) ||
-					(data.recommendedModel as string) ||
-					"sonnet"; // Default to sonnet if not specified
+  return {
+    totalTasks,
+    successRate,
+    avgTokens,
+    modelDistribution,
+    avgTimeTakenMs,
+    escalationRate,
+  };
+}
 
-				const normalizedModel = model.toLowerCase();
+export async function computeDetailedSuccessRates() {
+  const { taskMetrics } = await EnhancedMetricsQuery.loadAllMetrics();
 
-				// Extract complexity from event data - try multiple possible field names
-				const complexity =
-					(data.complexity as string) ||
-					(data.complexityLevel as string) ||
-					(data.recommendedModel === "haiku" ? "simple" : "standard"); // Fallback based on model
+  const complexityLevels: ComplexityLevel[] = ["trivial", "simple", "standard", "complex", "critical"];
 
-				const normalizedComplexity = complexity?.toLowerCase() || "standard";
+  const successRateByComplexity = complexityLevels.reduce((acc, complexity) => {
+    acc[complexity] = {
+      rate: 0,
+      totalTasks: 0,
+      escalatedCount: 0,
+      escalationSuccessRate: 0,
+      avgTokensPerTask: 0,
+    };
+    return acc;
+  }, {} as Record<ComplexityLevel, {
+    rate: number;
+    totalTasks: number;
+    escalatedCount: number;
+    escalationSuccessRate: number;
+    avgTokensPerTask: number;
+  }>);
 
-				// Update counters
-				if (isSuccess) {
-					metrics.successCount++;
-				} else {
-					metrics.failCount++;
-				}
+  // Compute success rates by complexity
+  for (const metric of taskMetrics) {
+    const complexity = metric.complexityLevel || "trivial";
 
-				// Update model-specific counters
-				if (normalizedModel === "haiku") {
-					if (isSuccess) {
-						metrics.byModel.haiku.success++;
-					} else {
-						metrics.byModel.haiku.fail++;
-					}
-				} else if (normalizedModel === "sonnet") {
-					if (isSuccess) {
-						metrics.byModel.sonnet.success++;
-					} else {
-						metrics.byModel.sonnet.fail++;
-					}
-				} else if (normalizedModel === "opus") {
-					if (isSuccess) {
-						metrics.byModel.opus.success++;
-					} else {
-						metrics.byModel.opus.fail++;
-					}
-				}
+    if (!complexityLevels.includes(complexity)) {
+      continue;
+    }
 
-				// Update complexity-specific counters
-				const mappedComplexity = COMPLEXITY_MAPPING[normalizedComplexity] || "medium";
-				if (isSuccess) {
-					metrics.byComplexity[mappedComplexity].success++;
-				} else {
-					metrics.byComplexity[mappedComplexity].fail++;
-				}
-			} catch {
-				// Skip malformed lines - continue is unnecessary at end of loop
-			}
-		}
-	} catch {
-		// Return empty metrics if file can't be read
-		return metrics;
-	}
+    const complexityGroup = successRateByComplexity[complexity as ComplexityLevel];
+    complexityGroup.totalTasks++;
+    complexityGroup.avgTokensPerTask += metric.totalTokens;
 
-	return metrics;
+    // Check task success
+    if (metric.success) {
+      complexityGroup.rate += 1;
+    }
+
+    // Compute escalation details
+    if (metric.wasEscalated) {
+      complexityGroup.escalatedCount++;
+    }
+  }
+
+  // Finalize calculations
+  for (const complexity of Object.keys(successRateByComplexity) as ComplexityLevel[]) {
+    const group = successRateByComplexity[complexity];
+
+    // Compute success rate
+    group.rate = group.totalTasks > 0 ? (group.rate / group.totalTasks) * 100 : 0;
+
+    // Compute average tokens
+    group.avgTokensPerTask = group.totalTasks > 0
+      ? group.avgTokensPerTask / group.totalTasks
+      : 0;
+  }
+
+  return successRateByComplexity;
 }
