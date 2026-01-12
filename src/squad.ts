@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 /**
  * Squad Module
  *
@@ -325,7 +327,7 @@ Don't fix code yourself - report issues for fabricators to fix.`,
  */
 export function generateAgentId(type: AgentType): string {
 	const timestamp = Date.now().toString(36);
-	const random = Math.random().toString(36).substring(2, 6);
+	const random = randomBytes(3).toString("hex");
 	return `${type}-${timestamp}-${random}`;
 }
 

@@ -14,7 +14,10 @@
  * 6. User pushes local main to origin when ready
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { isAbsolute, normalize } from "node:path";
 import { FileTracker } from "./file-tracker.js";
 import * as output from "./output.js";
 import { Persistence } from "./persistence.js";
@@ -62,36 +65,70 @@ export interface ParallelBatchResult {
  * Generate a short unique ID for a task
  */
 function generateTaskId(): string {
-	return `task-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+	return `task-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
 }
 
 /**
  * Generate a unique batch ID
  */
 function generateBatchId(): string {
-	return `batch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+	return `batch-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
 }
 
 /**
- * Run a command in a specific directory
+ * Validate a directory path before executing commands in it
+ */
+function validateCwd(cwd: string): void {
+	const normalized = normalize(cwd);
+	if (!isAbsolute(normalized)) {
+		throw new Error(`Invalid cwd: must be absolute path, got ${cwd}`);
+	}
+	if (!existsSync(normalized)) {
+		throw new Error(`Invalid cwd: path does not exist: ${cwd}`);
+	}
+}
+
+/**
+ * Execute a git command in a specific directory (safe from shell injection)
+ */
+function execGitInDir(args: string[], cwd: string): string {
+	validateCwd(cwd);
+	return execFileSync("git", args, { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+}
+
+/**
+ * Run a shell command in a specific directory (use only for trusted commands)
  */
 function execInDir(command: string, cwd: string): string {
+	validateCwd(cwd);
 	return execSync(command, { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+}
+
+/**
+ * Validate a git ref name (branch, tag, etc.) to prevent injection
+ */
+function validateGitRef(ref: string): void {
+	// Git ref names cannot contain: space, ~, ^, :, ?, *, [, \, control chars
+	// Also reject shell metacharacters for extra safety
+	if (!/^[\w./-]+$/.test(ref)) {
+		throw new Error(`Invalid git ref: ${ref}`);
+	}
 }
 
 /**
  * Get the list of modified files in a worktree compared to main branch
  */
 function getModifiedFilesInWorktree(worktreePath: string, mainBranch: string): string[] {
+	validateGitRef(mainBranch);
 	try {
 		// Get files that differ from main branch
-		const output = execInDir(`git diff --name-only origin/${mainBranch}...HEAD`, worktreePath);
+		const output = execGitInDir(["diff", "--name-only", `origin/${mainBranch}...HEAD`], worktreePath);
 		if (!output) return [];
 		return output.split("\n").filter((f) => f.trim().length > 0);
 	} catch {
 		// If git diff fails, try to get uncommitted changes
 		try {
-			const output = execInDir("git diff --name-only HEAD", worktreePath);
+			const output = execGitInDir(["diff", "--name-only", "HEAD"], worktreePath);
 			if (!output) return [];
 			return output.split("\n").filter((f) => f.trim().length > 0);
 		} catch {
@@ -665,19 +702,20 @@ export class Orchestrator {
 
 		// Fetch latest local main into the worktree
 		// This ensures we rebase onto the current state of main, including unpushed commits
+		validateGitRef(mainBranch);
 		try {
-			execInDir(`git fetch ${mainRepo} ${mainBranch}`, worktreePath);
+			execGitInDir(["fetch", mainRepo, mainBranch], worktreePath);
 		} catch (fetchError) {
 			throw new Error(`Git fetch from main repo failed for ${taskId}: ${fetchError}`);
 		}
 
 		// Rebase onto local main (via FETCH_HEAD from the fetch above)
 		try {
-			execInDir(`git rebase FETCH_HEAD`, worktreePath);
+			execGitInDir(["rebase", "FETCH_HEAD"], worktreePath);
 		} catch (error) {
 			// Abort rebase if it fails
 			try {
-				execInDir(`git rebase --abort`, worktreePath);
+				execGitInDir(["rebase", "--abort"], worktreePath);
 			} catch {
 				// Ignore abort errors
 			}
@@ -697,15 +735,15 @@ export class Orchestrator {
 		// Since worktree already rebased onto local main, this should fast-forward
 		try {
 			// Get the current commit SHA before detaching
-			const commitSha = execInDir(`git rev-parse HEAD`, worktreePath).trim();
+			const commitSha = execGitInDir(["rev-parse", "HEAD"], worktreePath).trim();
 
 			// Detach HEAD in worktree to release the branch lock
 			// This prevents "refusing to fetch into branch checked out" error
-			execInDir(`git checkout --detach`, worktreePath);
+			execGitInDir(["checkout", "--detach"], worktreePath);
 
 			// Checkout main and fast-forward merge the worktree branch
-			execInDir(`git checkout ${mainBranch}`, mainRepo);
-			execInDir(`git merge --ff-only ${commitSha}`, mainRepo);
+			execGitInDir(["checkout", mainBranch], mainRepo);
+			execGitInDir(["merge", "--ff-only", commitSha], mainRepo);
 
 			output.debug(`Merged ${taskId} into local main (${commitSha.slice(0, 7)})`);
 		} catch (mergeError) {

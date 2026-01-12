@@ -11,9 +11,8 @@ import { ALL_AGENT_TYPES, createMockTask } from "./helpers.js";
 
 describe("generateAgentId", () => {
 	beforeEach(() => {
-		// Mock Date.now and Math.random for deterministic testing
+		// Mock Date.now for deterministic timestamp testing
 		vi.spyOn(Date, "now").mockReturnValue(1704067200000); // 2024-01-01T00:00:00.000Z
-		vi.spyOn(Math, "random").mockReturnValue(0.123456789);
 	});
 
 	afterEach(() => {
@@ -24,8 +23,8 @@ describe("generateAgentId", () => {
 		const id = generateAgentId("scout");
 
 		// timestamp: 1704067200000.toString(36) = "lqu5m2o0"
-		// random: 0.123456789.toString(36).substring(2, 6) = "4fzz"
-		expect(id).toBe("scout-lqu5m2o0-4fzz");
+		// random: 6 hex characters from crypto.randomBytes(3)
+		expect(id).toMatch(/^scout-lqu5m2o0-[0-9a-f]{6}$/);
 	});
 
 	it.each(ALL_AGENT_TYPES)("uses correct prefix for agent type: %s", (type: AgentType) => {

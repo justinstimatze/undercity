@@ -19,7 +19,7 @@
  * - Can run unattended for hours
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
 import { assessComplexityFast, assessComplexityQuantitative, type ComplexityAssessment } from "./complexity.js";
@@ -862,19 +862,19 @@ When done, provide a brief summary of what you changed.`;
 		try {
 			// Stage all tracked changes (not untracked files to avoid committing temp files)
 			// CRITICAL: Must use workingDirectory, not process.cwd() - otherwise commits in wrong repo
-			execSync("git add -u", { cwd: this.workingDirectory });
+			execFileSync("git", ["add", "-u"], { cwd: this.workingDirectory });
 
 			// Also stage any new files that were created (but not in .gitignore)
 			// Use git status to find untracked files and add them selectively
 			try {
-				const untrackedOutput = execSync("git ls-files --others --exclude-standard", {
+				const untrackedOutput = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], {
 					encoding: "utf-8",
 					cwd: this.workingDirectory,
 				}).trim();
 				if (untrackedOutput) {
 					const untrackedFiles = untrackedOutput.split("\n").filter((f) => f.length > 0);
 					for (const file of untrackedFiles) {
-						execSync(`git add "${file}"`, { cwd: this.workingDirectory });
+						execFileSync("git", ["add", file], { cwd: this.workingDirectory });
 					}
 				}
 			} catch {
@@ -886,12 +886,12 @@ When done, provide a brief summary of what you changed.`;
 			const commitMessage = shortTask;
 
 			// Commit (skip hooks - we already did verification)
-			execSync(`git commit --no-verify -m "${commitMessage.replace(/"/g, '\\"')}"`, {
+			execFileSync("git", ["commit", "--no-verify", "-m", commitMessage], {
 				cwd: this.workingDirectory,
 			});
 
 			// Get commit SHA
-			const sha = execSync("git rev-parse HEAD", { encoding: "utf-8", cwd: this.workingDirectory }).trim();
+			const sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf-8", cwd: this.workingDirectory }).trim();
 
 			this.log("Committed work", { sha, task: shortTask });
 			return sha;

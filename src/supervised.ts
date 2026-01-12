@@ -12,7 +12,7 @@
  * 5. Opus commits when satisfied
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
 import { dualLogger } from "./dual-logger.js";
@@ -460,10 +460,10 @@ Fix any issues to complete the original goal. Run typecheck to verify.`;
 	 * Commit work (skip hooks - we already did verification)
 	 */
 	private async commitWork(goal: string): Promise<string> {
-		execSync("git add -A");
+		execFileSync("git", ["add", "-A"]);
 		const shortGoal = goal.substring(0, 50) + (goal.length > 50 ? "..." : "");
-		execSync(`git commit --no-verify -m "${shortGoal.replace(/"/g, '\\"')}"`);
-		return execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
+		execFileSync("git", ["commit", "--no-verify", "-m", shortGoal]);
+		return execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf-8" }).trim();
 	}
 }
 

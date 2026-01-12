@@ -5,6 +5,7 @@
  * Tasks are processed sequentially in full-auto mode.
  */
 
+import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 
 const LOCK_TIMEOUT_MS = 30000; // 30 seconds - lock considered stale after this
@@ -173,7 +174,7 @@ function getLockPath(taskBoardPath: string): string {
  */
 function generateTaskId(): string {
 	const timestamp = Date.now().toString(36);
-	const random = Math.random().toString(36).substring(2, 6);
+	const random = randomBytes(3).toString("hex");
 	return `task-${timestamp}-${random}`;
 }
 

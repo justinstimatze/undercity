@@ -9,11 +9,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Mock child_process module
 vi.mock("node:child_process", () => ({
 	execSync: vi.fn(),
+	execFileSync: vi.fn(),
 	spawn: vi.fn(),
 }));
 
 // Import after mocking
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { DEFAULT_RETRY_CONFIG, Elevator, GitError, getCurrentBranch } from "../git.js";
 
 describe("Git Module", () => {
@@ -23,20 +24,21 @@ describe("Git Module", () => {
 
 	describe("getCurrentBranch", () => {
 		it("returns the current branch name", () => {
-			vi.mocked(execSync).mockReturnValue("main\n");
+			vi.mocked(execFileSync).mockReturnValue("main\n");
 			expect(getCurrentBranch()).toBe("main");
 		});
 
 		it("returns feature branch names correctly", () => {
-			vi.mocked(execSync).mockReturnValue("feature/add-git-tests\n");
+			vi.mocked(execFileSync).mockReturnValue("feature/add-git-tests\n");
 			expect(getCurrentBranch()).toBe("feature/add-git-tests");
 		});
 
 		it("calls git with correct arguments", () => {
-			vi.mocked(execSync).mockReturnValue("main\n");
+			vi.mocked(execFileSync).mockReturnValue("main\n");
 			getCurrentBranch();
-			expect(execSync).toHaveBeenCalledWith(
-				"git rev-parse --abbrev-ref HEAD",
+			expect(execFileSync).toHaveBeenCalledWith(
+				"git",
+				["rev-parse", "--abbrev-ref", "HEAD"],
 				expect.objectContaining({ encoding: "utf-8" }),
 			);
 		});
@@ -48,7 +50,7 @@ describe("Git Module", () => {
 			};
 			error.status = 128;
 			error.stderr = Buffer.from("fatal: not a git repository");
-			vi.mocked(execSync).mockImplementation(() => {
+			vi.mocked(execFileSync).mockImplementation(() => {
 				throw error;
 			});
 			expect(() => getCurrentBranch()).toThrow(GitError);
@@ -59,8 +61,8 @@ describe("Git Module", () => {
 describe("Elevator Retry Functionality", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		// Mock getDefaultBranch to return 'main'
-		vi.mocked(execSync).mockReturnValue("main\n");
+		// Mock getDefaultBranch to return 'main' (uses execFileSync now)
+		vi.mocked(execFileSync).mockReturnValue("main\n");
 	});
 
 	describe("DEFAULT_RETRY_CONFIG", () => {

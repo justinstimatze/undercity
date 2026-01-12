@@ -11,7 +11,7 @@
  * one branch at a time: rebase → test → merge.
  */
 
-import { execSync, spawn } from "node:child_process";
+import { execFileSync, execSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { gitLogger } from "./logger.js";
 import type { CodebaseFingerprint, ElevatorConflict, ElevatorItem, ElevatorRetryConfig } from "./types.js";
@@ -46,7 +46,7 @@ export class GitError extends Error {
 function execGit(args: string[], cwd?: string): string {
 	const command = `git ${args.join(" ")}`;
 	try {
-		const result = execSync(command, {
+		const result = execFileSync("git", args, {
 			cwd: cwd || process.cwd(),
 			encoding: "utf-8",
 			stdio: ["pipe", "pipe", "pipe"],

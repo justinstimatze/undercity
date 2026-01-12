@@ -11,7 +11,7 @@
  * - State tracking for active worktrees
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { gitLogger } from "./logger.js";
@@ -37,7 +37,7 @@ export class WorktreeError extends Error {
 function execGit(args: string[], cwd?: string): string {
 	const command = `git ${args.join(" ")}`;
 	try {
-		const result = execSync(command, {
+		const result = execFileSync("git", args, {
 			cwd: cwd || process.cwd(),
 			encoding: "utf-8",
 			stdio: ["pipe", "pipe", "pipe"],

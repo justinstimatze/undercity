@@ -374,7 +374,7 @@ export function getContextLimit(agentType: AgentType): number {
 // - File analysis: Identify relevant files
 // ============================================================================
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { type FunctionDeclaration, type MethodDeclaration, Project, type SourceFile, SyntaxKind } from "ts-morph";
@@ -596,10 +596,12 @@ function extractSearchTerms(task: string): string[] {
 		.filter((w) => !w.match(/^\d+$/));
 
 	// Also extract camelCase/PascalCase identifiers
-	const identifiers = task.match(/[A-Z][a-z]+(?:[A-Z][a-z]+)*|[a-z]+(?:[A-Z][a-z]+)+/g) || [];
+	// Use simpler patterns to avoid ReDoS - match word boundaries explicitly
+	const identifiers = task.match(/\b[A-Z][a-z]+[A-Za-z]*\b|\b[a-z]+[A-Z][A-Za-z]*\b/g) || [];
 
 	// Extract file paths or file names mentioned (e.g., "solo.ts", "src/solo.ts")
-	const filePatterns = task.match(/[\w/-]+\.(ts|tsx|js|jsx)/g) || [];
+	// Limit path depth and use word boundaries to prevent backtracking
+	const filePatterns = task.match(/\b[\w]+(?:\/[\w]+){0,5}\.(?:ts|tsx|js|jsx)\b/g) || [];
 
 	return [...new Set([...words, ...identifiers, ...filePatterns])];
 }
@@ -635,10 +637,11 @@ function findFilesByName(pattern: string, cwd: string): string[] {
  */
 function findFilesWithTerm(term: string, cwd: string): string[] {
 	try {
-		const result = execSync(`git grep -l "${term.replace(/"/g, '\\"')}" -- "*.ts" "*.tsx" 2>/dev/null || true`, {
+		const result = execFileSync("git", ["grep", "-l", term, "--", "*.ts", "*.tsx"], {
 			encoding: "utf-8",
 			cwd,
 			timeout: 5000,
+			stdio: ["pipe", "pipe", "pipe"],
 		});
 
 		return result

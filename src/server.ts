@@ -249,7 +249,9 @@ export class UndercityServer {
 			}
 		} catch (err) {
 			serverLogger.error({ err, url, method }, "Request error");
-			return this.sendJson(res, 500, { error: String(err) });
+			// Don't expose stack traces or internal error details to clients
+			const message = err instanceof Error ? err.message : "Internal server error";
+			return this.sendJson(res, 500, { error: message });
 		}
 	}
 
