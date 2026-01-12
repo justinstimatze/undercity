@@ -12,6 +12,8 @@
  * @see https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04
  */
 
+// Experiment framework
+export { ExperimentManager, getExperimentManager } from "./experiment.js";
 // Git operations
 export {
 	branchExists,
@@ -19,12 +21,12 @@ export {
 	createAndCheckout,
 	createBranch,
 	deleteBranch,
-	Elevator,
 	GitError,
 	generateBranchName,
 	getCurrentBranch,
 	getDefaultBranch,
 	isWorkingTreeClean,
+	MergeQueue,
 	merge,
 	pushToOrigin,
 	rebase,
@@ -97,23 +99,19 @@ export type {
 	AgentDefinition,
 	AgentStatus,
 	AgentType,
-	ElevatorItem,
+	Experiment,
+	ExperimentStorage,
+	ExperimentTaskResult,
+	ExperimentVariant,
 	Inventory,
 	Loadout,
+	MergeQueueItem,
 	MergeStatus,
 	SafePocket,
 	SessionStatus,
 	Step,
 	StepStatus,
 	UndercityConfig,
-} from "./types.js";
-export { TaskWorker } from "./worker.js";
-// Experiment framework
-export { ExperimentManager, getExperimentManager } from "./experiment.js";
-export type {
-	Experiment,
-	ExperimentStorage,
-	ExperimentTaskResult,
-	ExperimentVariant,
 	VariantMetrics,
 } from "./types.js";
+export { TaskWorker } from "./worker.js";

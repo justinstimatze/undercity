@@ -1,5 +1,5 @@
 /**
- * Elevator (MergeQueue) Integration Tests
+ * MergeQueue Integration Tests
  *
  * Tests real git merge operations in isolated temp directories.
  * Verifies serial merge processing, conflict detection, and retry behavior.
@@ -17,9 +17,9 @@ import {
 	branchExists,
 	checkoutBranch,
 	createBranch,
-	Elevator,
 	getCurrentBranch,
 	isWorkingTreeClean,
+	MergeQueue,
 	merge,
 	rebase,
 } from "../../git.js";
@@ -29,7 +29,7 @@ const isCoverage = process.env.npm_lifecycle_event?.includes("coverage");
 const describeGit = isCoverage ? describe.skip : describe.sequential;
 
 // Use describe.sequential to prevent parallel execution issues with git operations
-describeGit("Elevator Integration Tests", () => {
+describeGit("MergeQueue Integration Tests", () => {
 	let testDir: string;
 	let originalCwd: string;
 	let defaultBranch: string;
@@ -179,100 +179,100 @@ describeGit("Elevator Integration Tests", () => {
 		});
 	});
 
-	describe("Elevator Constructor", () => {
-		it("should create elevator with default settings", () => {
-			const elevator = new Elevator(defaultBranch);
-			expect(elevator.getMergeStrategy()).toBe("theirs");
-			expect(elevator.getQueue()).toEqual([]);
+	describe("MergeQueue Constructor", () => {
+		it("should create MergeQueue with default settings", () => {
+			const mergeQueue = new MergeQueue(defaultBranch);
+			expect(mergeQueue.getMergeStrategy()).toBe("theirs");
+			expect(mergeQueue.getQueue()).toEqual([]);
 		});
 
 		it("should allow custom merge strategy", () => {
-			const elevator = new Elevator(defaultBranch, "ours");
-			expect(elevator.getMergeStrategy()).toBe("ours");
+			const mergeQueue = new MergeQueue(defaultBranch, "ours");
+			expect(mergeQueue.getMergeStrategy()).toBe("ours");
 		});
 
 		it("should allow custom retry config", () => {
-			const elevator = new Elevator(defaultBranch, "theirs", {
+			const mergeQueue = new MergeQueue(defaultBranch, "theirs", {
 				enabled: false,
 				maxRetries: 5,
 			});
-			const config = elevator.getRetryConfig();
+			const config = mergeQueue.getRetryConfig();
 			expect(config.enabled).toBe(false);
 			expect(config.maxRetries).toBe(5);
 		});
 	});
 
-	describe("Elevator Queue Management", () => {
+	describe("MergeQueue Queue Management", () => {
 		it("add should add item to queue", () => {
-			const elevator = new Elevator(defaultBranch);
-			const item = elevator.add("test-branch", "step-1", "agent-1");
+			const mergeQueue = new MergeQueue(defaultBranch);
+			const item = mergeQueue.add("test-branch", "step-1", "agent-1");
 
 			expect(item.branch).toBe("test-branch");
 			expect(item.stepId).toBe("step-1");
 			expect(item.agentId).toBe("agent-1");
 			expect(item.status).toBe("pending");
-			expect(elevator.getQueue()).toHaveLength(1);
+			expect(mergeQueue.getQueue()).toHaveLength(1);
 		});
 
 		it("add should track modified files", () => {
-			const elevator = new Elevator(defaultBranch);
+			const mergeQueue = new MergeQueue(defaultBranch);
 			const modifiedFiles = ["src/file1.ts", "src/file2.ts"];
-			const item = elevator.add("test-branch", "step-1", "agent-1", modifiedFiles);
+			const item = mergeQueue.add("test-branch", "step-1", "agent-1", modifiedFiles);
 
 			expect(item.modifiedFiles).toEqual(modifiedFiles);
 		});
 
 		it("getQueue should return copy of queue", () => {
-			const elevator = new Elevator(defaultBranch);
-			elevator.add("branch-1", "step-1", "agent-1");
+			const mergeQueue = new MergeQueue(defaultBranch);
+			mergeQueue.add("branch-1", "step-1", "agent-1");
 
-			const queue = elevator.getQueue();
+			const queue = mergeQueue.getQueue();
 			queue.push({} as never); // Mutate returned array
 
 			// Original queue should be unchanged
-			expect(elevator.getQueue()).toHaveLength(1);
+			expect(mergeQueue.getQueue()).toHaveLength(1);
 		});
 	});
 
 	describe("Conflict Detection", () => {
 		it("detectQueueConflicts should detect overlapping files", () => {
-			const elevator = new Elevator(defaultBranch);
-			elevator.add("branch-1", "step-1", "agent-1", ["shared.ts", "file1.ts"]);
-			elevator.add("branch-2", "step-2", "agent-2", ["shared.ts", "file2.ts"]);
+			const mergeQueue = new MergeQueue(defaultBranch);
+			mergeQueue.add("branch-1", "step-1", "agent-1", ["shared.ts", "file1.ts"]);
+			mergeQueue.add("branch-2", "step-2", "agent-2", ["shared.ts", "file2.ts"]);
 
-			const conflicts = elevator.detectQueueConflicts();
+			const conflicts = mergeQueue.detectQueueConflicts();
 
 			expect(conflicts).toHaveLength(1);
 			expect(conflicts[0].overlappingFiles).toContain("shared.ts");
 		});
 
 		it("detectQueueConflicts should return empty for no conflicts", () => {
-			const elevator = new Elevator(defaultBranch);
-			elevator.add("branch-1", "step-1", "agent-1", ["file1.ts"]);
-			elevator.add("branch-2", "step-2", "agent-2", ["file2.ts"]);
+			const mergeQueue = new MergeQueue(defaultBranch);
+			mergeQueue.add("branch-1", "step-1", "agent-1", ["file1.ts"]);
+			mergeQueue.add("branch-2", "step-2", "agent-2", ["file2.ts"]);
 
-			const conflicts = elevator.detectQueueConflicts();
+			const conflicts = mergeQueue.detectQueueConflicts();
 
 			expect(conflicts).toHaveLength(0);
 		});
 
 		it("checkConflictsBeforeAdd should detect potential conflicts", () => {
-			const elevator = new Elevator(defaultBranch);
-			elevator.add("branch-1", "step-1", "agent-1", ["shared.ts", "file1.ts"]);
+			const mergeQueue = new MergeQueue(defaultBranch);
+			mergeQueue.add("branch-1", "step-1", "agent-1", ["shared.ts", "file1.ts"]);
 
-			const conflicts = elevator.checkConflictsBeforeAdd(["shared.ts", "new-file.ts"]);
+			const conflicts = mergeQueue.checkConflictsBeforeAdd(["shared.ts", "new-file.ts"]);
 
 			expect(conflicts).toHaveLength(1);
 			expect(conflicts[0].conflictsWith).toBe("branch-1");
 		});
 
 		it("getConflictsForBranch should return conflicts for specific branch", () => {
-			const elevator = new Elevator(defaultBranch);
-			elevator.add("branch-1", "step-1", "agent-1", ["shared.ts"]);
-			elevator.add("branch-2", "step-2", "agent-2", ["shared.ts"]);
-			elevator.add("branch-3", "step-3", "agent-3", ["other.ts"]);
+			const mergeQueue = new MergeQueue(defaultBranch);
+			mergeQueue.add("branch-1", "step-1", "agent-1", ["shared.ts"]);
+			mergeQueue.add("branch-2", "step-2", "agent-2", ["shared.ts"]);
+			mergeQueue.add("branch-3", "step-3", "agent-3", ["other.ts"]);
 
-			const conflicts = elevator.getConflictsForBranch("branch-1");
+			const conflicts = mergeQueue.getConflictsForBranch("branch-1");
 
 			expect(conflicts).toHaveLength(1);
 			expect(conflicts[0].conflictsWith).toBe("branch-2");
@@ -281,11 +281,11 @@ describeGit("Elevator Integration Tests", () => {
 
 	describe("Queue Summary", () => {
 		it("getQueueSummary should return correct counts", () => {
-			const elevator = new Elevator(defaultBranch);
-			elevator.add("branch-1", "step-1", "agent-1");
-			elevator.add("branch-2", "step-2", "agent-2");
+			const mergeQueue = new MergeQueue(defaultBranch);
+			mergeQueue.add("branch-1", "step-1", "agent-1");
+			mergeQueue.add("branch-2", "step-2", "agent-2");
 
-			const summary = elevator.getQueueSummary();
+			const summary = mergeQueue.getQueueSummary();
 
 			expect(summary.total).toBe(2);
 			expect(summary.pending).toBe(2);
@@ -295,49 +295,49 @@ describeGit("Elevator Integration Tests", () => {
 
 	describe("Merge Strategy Management", () => {
 		it("setMergeStrategy should update strategy", () => {
-			const elevator = new Elevator(defaultBranch, "theirs");
-			elevator.setMergeStrategy("ours");
+			const mergeQueue = new MergeQueue(defaultBranch, "theirs");
+			mergeQueue.setMergeStrategy("ours");
 
-			expect(elevator.getMergeStrategy()).toBe("ours");
+			expect(mergeQueue.getMergeStrategy()).toBe("ours");
 		});
 	});
 
 	describe("Retry Configuration", () => {
 		it("setRetryConfig should update config", () => {
-			const elevator = new Elevator(defaultBranch);
-			elevator.setRetryConfig({ maxRetries: 10 });
+			const mergeQueue = new MergeQueue(defaultBranch);
+			mergeQueue.setRetryConfig({ maxRetries: 10 });
 
-			const config = elevator.getRetryConfig();
+			const config = mergeQueue.getRetryConfig();
 			expect(config.maxRetries).toBe(10);
 		});
 	});
 
 	describe("Failed Items Management", () => {
 		it("getFailed should return failed items", () => {
-			const elevator = new Elevator(defaultBranch);
-			const item = elevator.add("branch-1", "step-1", "agent-1");
+			const mergeQueue = new MergeQueue(defaultBranch);
+			const item = mergeQueue.add("branch-1", "step-1", "agent-1");
 			// Manually set status for testing
 			(item as Record<string, unknown>).status = "conflict";
 
-			expect(elevator.getFailed()).toHaveLength(1);
+			expect(mergeQueue.getFailed()).toHaveLength(1);
 		});
 
 		it("clearFailed should remove failed items", () => {
-			const elevator = new Elevator(defaultBranch);
-			const item1 = elevator.add("branch-1", "step-1", "agent-1");
-			elevator.add("branch-2", "step-2", "agent-2");
+			const mergeQueue = new MergeQueue(defaultBranch);
+			const item1 = mergeQueue.add("branch-1", "step-1", "agent-1");
+			mergeQueue.add("branch-2", "step-2", "agent-2");
 			(item1 as Record<string, unknown>).status = "conflict";
 
-			elevator.clearFailed();
+			mergeQueue.clearFailed();
 
-			expect(elevator.getQueue()).toHaveLength(1);
+			expect(mergeQueue.getQueue()).toHaveLength(1);
 		});
 	});
 
-	describe("Elevator processNext", () => {
+	describe("MergeQueue processNext", () => {
 		it("should return null when queue is empty", async () => {
-			const elevator = new Elevator(defaultBranch);
-			const result = await elevator.processNext();
+			const mergeQueue = new MergeQueue(defaultBranch);
+			const result = await mergeQueue.processNext();
 
 			expect(result).toBeNull();
 		});
@@ -355,20 +355,20 @@ describeGit("Elevator Integration Tests", () => {
 			// Return to main
 			checkoutBranch(defaultBranch);
 
-			// Create elevator and add branch
-			const elevator = new Elevator(defaultBranch, "theirs", {
+			// Create MergeQueue and add branch
+			const mergeQueue = new MergeQueue(defaultBranch, "theirs", {
 				enabled: false, // Disable retries for simpler testing
 			});
-			const item = elevator.add(branchName, "step-1", "agent-1");
+			const item = mergeQueue.add(branchName, "step-1", "agent-1");
 
 			// Verify item was added correctly
 			expect(item.branch).toBe(branchName);
 			expect(item.status).toBe("pending");
-			expect(elevator.getQueue()).toHaveLength(1);
+			expect(mergeQueue.getQueue()).toHaveLength(1);
 
 			// processNext will attempt merge - in test env without proper setup
 			// it may fail due to test command, but the queue mechanics work
-			const result = await elevator.processNext();
+			const result = await mergeQueue.processNext();
 			expect(result).not.toBeNull();
 			// Status depends on whether rebase/test succeeds
 			expect(["complete", "conflict", "test_failed"]).toContain(result?.status);

@@ -14,7 +14,7 @@ Agent-optimized reference. Mappings over prose.
 | `solo.ts` | `SoloOrchestrator.runTask()`, `SupervisedOrchestrator` | Single-task executor (deprecated, use ParallelSoloOrchestrator) |
 | `task.ts` | `addGoal()`, `getAllItems()`, `markComplete()`, `markFailed()`, `markInProgress()` | Task board CRUD |
 | `worktree-manager.ts` | `WorktreeManager.createWorktree()`, `.cleanup()` | Git worktree isolation per task |
-| `git.ts` | `Elevator.queueMerge()`, `Elevator.processMergeQueue()`, `rebase()` | Merge queue: serial rebase→test→merge |
+| `git.ts` | `MergeQueue.add()`, `MergeQueue.processAll()`, `rebase()` | Merge queue: serial rebase→test→merge |
 | `rate-limit.ts` | `RateLimitTracker.isPaused()`, `.handleRateLimitError()` | 429 handling, exponential backoff |
 | `file-tracker.ts` | `FileTracker.checkConflicts()` | Pre-merge conflict detection |
 | `complexity.ts` | `assessComplexityFast()`, `assessComplexityQuantitative()`, `getTeamComposition()` | Task complexity → model routing |
@@ -46,7 +46,7 @@ Agent-optimized reference. Mappings over prose.
 | Analyze task risk | `task-analyzer.ts` | `TaskAnalyzer.analyzeTask(task)` | Package boundaries, risk score |
 | Parse plan file | `plan-parser.ts` | `parsePlanFile(content)` | Returns `ParsedPlan` |
 | Create worktree | `worktree-manager.ts` | `WorktreeManager.createWorktree()` | Returns path |
-| Queue merge | `git.ts` | `Elevator.queueMerge(branch)` | Serial processing |
+| Queue merge | `git.ts` | `MergeQueue.add(branch)` | Serial processing |
 | Check conflicts | `file-tracker.ts` | `FileTracker.checkConflicts(files)` | Pre-merge detection |
 | Handle rate limit | `rate-limit.ts` | `RateLimitTracker.handleRateLimitError(error)` | Auto-pause + backoff |
 | Persist state | `persistence.ts` | `Persistence.saveState(key, data)` | JSON file I/O |
@@ -111,7 +111,7 @@ level → { workerModel, validatorCount, needsPlanning }
 |------|---------|--------|
 | `.undercity/tasks.json` | Task board | `Task[]` |
 | `.undercity/worktrees.json` | Active worktrees | `{taskId: {path, branch}}` |
-| `.undercity/elevator.json` | Merge queue | `ElevatorItem[]` |
+| `.undercity/merge-queue.json` | Merge queue | `MergeQueueItem[]` |
 | `.undercity/rate-limit.json` | Rate limit state | `{pause, tasks[]}` |
 | `.undercity/parallel-recovery.json` | Crash recovery | `ParallelRecoveryState` |
 | `.undercity/live-metrics.json` | Token/cost | `{byModel, cost, queries}` |
@@ -124,7 +124,7 @@ level → { workerModel, validatorCount, needsPlanning }
 | `ComplexityLevel` | `trivial`, `simple`, `standard`, `complex`, `critical` | Model routing |
 | `ModelChoice` | `haiku`, `sonnet`, `opus` | API calls |
 | `SessionStatus` | `planning`, `executing`, `merging`, `complete`, `failed` | Session state |
-| `MergeStatus` | `pending`, `rebasing`, `testing`, `merging`, `complete`, `conflict` | Elevator |
+| `MergeStatus` | `pending`, `rebasing`, `testing`, `merging`, `complete`, `conflict` | MergeQueue |
 | `AgentType` | `scout`, `planner`, `builder`, `reviewer` | Agent roles |
 
 ### Task Interface
@@ -187,11 +187,11 @@ pending → in_progress → complete|failed
 └── markComplete(id) | markFailed(id, error)
 ```
 
-### Merge Queue (Elevator)
+### MergeQueue
 
 ```
-task complete → queueMerge(branch)
-└── processMergeQueue() [SERIAL]
+task complete → MergeQueue.add(branch)
+└── MergeQueue.processAll() [SERIAL]
     ├── rebase onto main
     ├── run verification
     ├── fast-forward merge

@@ -19,7 +19,7 @@ Comprehensive guide for when to use solo vs grind, escalation strategies, model 
 | Command | Use Case | Execution Mode | Infrastructure | Status |
 |---------|----------|----------------|---------------|---------|
 | `solo <goal>` | **DEPRECATED** - single task with adaptive escalation | Sequential | Basic (LiveMetrics only) | Use `grind` instead |
-| `grind [goal]` | **RECOMMENDED** - autonomous task processing | Parallel | Full (Worktree, Elevator, RateLimit, FileTracker, Recovery) | Main production command |
+| `grind [goal]` | **RECOMMENDED** - autonomous task processing | Parallel | Full (Worktree, MergeQueue, RateLimit, FileTracker, Recovery) | Main production command |
 | `grind <goal>` | Single task execution (direct goal) | Parallel (concurrency=1) | Full infrastructure | Quick single-task execution |
 | `grind` | Process task board | Parallel | Full infrastructure | Batch processing mode |
 
@@ -595,7 +595,7 @@ Escalate on failures (haiku → sonnet → opus)
     ↓
 Review if enabled (--review flag)
     ↓
-Merge via Elevator (serial queue)
+Merge via MergeQueue (serial queue)
     ↓
 Manual push when ready
 ```

@@ -113,7 +113,7 @@ export interface Loadout {
 }
 
 /**
- * Git merge status for elevator
+ * Git merge status for MergeQueue
  */
 export type MergeStatus =
 	| "pending" // Waiting in queue
@@ -125,7 +125,7 @@ export type MergeStatus =
 	| "conflict" // Needs manual resolution
 	| "test_failed"; // Tests failed
 
-export interface ElevatorItem {
+export interface MergeQueueItem {
 	branch: string;
 	stepId: string;
 	agentId: string;
@@ -157,7 +157,7 @@ export interface ElevatorItem {
  * Pre-merge conflict detection result
  * Flags when two queued branches modify the same files
  */
-export interface ElevatorConflict {
+export interface MergeQueueConflict {
 	/** Branch that would conflict */
 	branch: string;
 	/** Other branch it conflicts with */
@@ -169,9 +169,9 @@ export interface ElevatorConflict {
 }
 
 /**
- * Configuration options for elevator retry behavior
+ * Configuration options for MergeQueue retry behavior
  */
-export interface ElevatorRetryConfig {
+export interface MergeQueueRetryConfig {
 	/** Enable retry functionality (default: true) */
 	enabled: boolean;
 	/** Maximum number of retry attempts (default: 3) */

@@ -12,7 +12,7 @@
 | **parallel-solo.ts** | Main production orchestrator, parallel execution | ParallelSoloOrchestrator |
 | **task.ts** | Task board CRUD (add, get, mark status) | addGoal, getAllItems, markComplete, etc. |
 | **worktree-manager.ts** | Git worktree isolation per task | WorktreeManager |
-| **git.ts** | Git operations, MergeQueue (serial merge pipeline) | Elevator, getCurrentBranch, rebase, merge |
+| **git.ts** | Git operations, MergeQueue (serial merge pipeline) | MergeQueue, getCurrentBranch, rebase, merge |
 | **rate-limit.ts** | 429 handling, exponential backoff | RateLimitTracker |
 | **file-tracker.ts** | Pre-merge file conflict detection | FileTracker |
 | **live-metrics.ts** | Token usage, cost tracking | saveLiveMetrics, loadLiveMetrics |
@@ -24,7 +24,7 @@
 | **dashboard.ts** | TUI (blessed-based) | launchDashboard |
 | **server.ts** | HTTP daemon for external control | UndercityServer, queryDaemon |
 | **config.ts** | Config loading (.undercityrc hierarchy) | loadConfig, mergeWithConfig |
-| **types.ts** | Core type definitions | SessionStatus, AgentType, Task, ElevatorItem |
+| **types.ts** | Core type definitions | SessionStatus, AgentType, Task, MergeQueueItem |
 | **output.ts** | Structured output (human/agent modes) | info, success, error, header, metrics |
 | **oracle.ts** | Oblique strategy cards | UndercityOracle |
 
@@ -35,7 +35,7 @@
 - Run a single task → `solo.ts` (deprecated) or `parallel-solo.ts` (preferred)
 - Run tasks in parallel → `parallel-solo.ts`
 - Isolate tasks in git worktrees → `worktree-manager.ts`
-- Merge branches serially → `git.ts` (Elevator/MergeQueue class)
+- Merge branches serially → `git.ts` (MergeQueue class)
 - Handle rate limits → `rate-limit.ts`
 - Check file conflicts → `file-tracker.ts`
 - Track token usage → `live-metrics.ts`
@@ -50,7 +50,7 @@
 
 | Class | File | Use | Parallel | Infrastructure |
 |-------|------|-----|----------|----------------|
-| ParallelSoloOrchestrator | parallel-solo.ts | **Main production** (grind) | Yes (1-5) | Worktree, Elevator, RateLimit, FileTracker, Recovery |
+| ParallelSoloOrchestrator | parallel-solo.ts | **Main production** (grind) | Yes (1-5) | Worktree, MergeQueue, RateLimit, FileTracker, Recovery |
 | SoloOrchestrator | solo.ts | Single task, deprecated | No | LiveMetrics only |
 | SupervisedOrchestrator | solo.ts | Opus orchestrates workers | No | LiveMetrics only |
 
@@ -68,8 +68,8 @@ ParallelSoloOrchestrator.runParallel():
    - Spawn worktree (WorktreeManager.createWorktree)
    - Run SoloOrchestrator (AI does work)
    - Check conflicts (FileTracker.checkConflicts)
-   - Queue merge (Elevator.queueMerge)
-   - Process Elevator (serial rebase → test → merge → push)
+   - Queue merge (MergeQueue.add)
+   - Process MergeQueue (serial rebase → test → merge → push)
 6. Update status (task.ts:markTaskComplete|markTaskFailed)
 7. Auto-complete parent if all subtasks done
 ```
@@ -80,7 +80,7 @@ ParallelSoloOrchestrator.runParallel():
 |------|---------|--------|
 | `.undercity/tasks.json` | Task board | `Task[]` |
 | `.undercity/worktrees.json` | Active worktrees | `{taskId: {path, branch}}` |
-| `.undercity/elevator.json` | Merge queue state | `ElevatorItem[]` |
+| `.undercity/merge-queue.json` | Merge queue state | `MergeQueueItem[]` |
 | `.undercity/rate-limit.json` | Rate limit state | `{pausedUntil?, history[]}` |
 | `.undercity/recovery.json` | Interrupted batch state | `{batchId, tasks[], checkpoint}` |
 | `.undercity/metrics.json` | Token usage, cost | `{tokens, cost, byModel}` |
@@ -119,11 +119,11 @@ ParallelSoloOrchestrator.runParallel():
 - Cleanup: automatic on success (WorktreeManager.cleanup)
 - Leaks: check `git worktree list`, remove manually
 
-**Elevator (merge queue):**
+**MergeQueue:**
 - SERIAL (no parallel merges)
 - Retry: 3 attempts, exponential backoff
 - Strategies: default → theirs → ours
-- State persists: `.undercity/elevator.json`
+- State persists: `.undercity/merge-queue.json`
 
 **Commands:**
 - `solo` is deprecated, use `grind` instead
@@ -139,8 +139,8 @@ ParallelSoloOrchestrator.runParallel():
 - `grind` → task.ts:getAllItems() → ParallelSoloOrchestrator.runParallel()
 
 **Merge:**
-- SoloOrchestrator success → Elevator.queueMerge()
-- Elevator.processMergeQueue() → rebase → test → merge → push
+- SoloOrchestrator success → MergeQueue.add()
+- MergeQueue.processAll() → rebase → test → merge → push
 - Serial execution (one at a time)
 
 **Monitor:**

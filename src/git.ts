@@ -14,12 +14,12 @@
 import { execFileSync, execSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { gitLogger } from "./logger.js";
-import type { CodebaseFingerprint, ElevatorConflict, ElevatorItem, ElevatorRetryConfig } from "./types.js";
+import type { CodebaseFingerprint, MergeQueueConflict, MergeQueueItem, MergeQueueRetryConfig } from "./types.js";
 
 /**
  * Default retry configuration
  */
-export const DEFAULT_RETRY_CONFIG: ElevatorRetryConfig = {
+export const DEFAULT_RETRY_CONFIG: MergeQueueRetryConfig = {
 	enabled: true,
 	maxRetries: 3,
 	baseDelayMs: 1000,
@@ -635,7 +635,7 @@ export function isCacheableState(): boolean {
 }
 
 /**
- * Serial Elevator
+ * Serial MergeQueue
  *
  * Processes merge items one at a time to avoid conflicts:
  * 1. Checkout the branch
@@ -654,34 +654,34 @@ export function isCacheableState(): boolean {
  * - Uses exponential backoff to prevent system overload
  * - Conflicts may resolve after other branches are merged
  */
-export class Elevator {
-	private queue: ElevatorItem[] = [];
+export class MergeQueue {
+	private queue: MergeQueueItem[] = [];
 	private processing = false;
 	private mainBranch: string;
 	private mergeStrategy: MergeStrategy;
-	private retryConfig: ElevatorRetryConfig;
+	private retryConfig: MergeQueueRetryConfig;
 
 	/**
-	 * Create a new elevator
+	 * Create a new MergeQueue
 	 * @param mainBranch - The target branch for merges (defaults to main/master)
 	 * @param mergeStrategy - Strategy for auto-resolving conflicts (defaults to "theirs" for automatic resolution)
 	 * @param retryConfig - Configuration for retry behavior
 	 */
-	constructor(mainBranch?: string, mergeStrategy?: MergeStrategy, retryConfig?: Partial<ElevatorRetryConfig>) {
+	constructor(mainBranch?: string, mergeStrategy?: MergeStrategy, retryConfig?: Partial<MergeQueueRetryConfig>) {
 		this.mainBranch = mainBranch || getDefaultBranch();
 		this.mergeStrategy = mergeStrategy ?? "theirs";
 		this.retryConfig = { ...DEFAULT_RETRY_CONFIG, ...retryConfig };
 	}
 
 	/**
-	 * Add a branch to the elevator
+	 * Add a branch to the merge queue
 	 * @param branch - Branch name to queue for merge
 	 * @param stepId - Step ID associated with this branch
 	 * @param agentId - Agent ID that worked on this branch
 	 * @param modifiedFiles - Optional list of files modified by this branch for conflict detection
 	 */
-	add(branch: string, stepId: string, agentId: string, modifiedFiles?: string[]): ElevatorItem {
-		const item: ElevatorItem = {
+	add(branch: string, stepId: string, agentId: string, modifiedFiles?: string[]): MergeQueueItem {
+		const item: MergeQueueItem = {
 			branch,
 			stepId,
 			agentId,
@@ -693,12 +693,15 @@ export class Elevator {
 			modifiedFiles,
 		};
 		this.queue.push(item);
-		gitLogger.debug({ branch, stepId, agentId, modifiedFilesCount: modifiedFiles?.length ?? 0 }, "Added to elevator");
+		gitLogger.debug(
+			{ branch, stepId, agentId, modifiedFilesCount: modifiedFiles?.length ?? 0 },
+			"Added to merge queue",
+		);
 		return item;
 	}
 
 	/**
-	 * Detect file conflicts between branches in the elevator queue.
+	 * Detect file conflicts between branches in the merge queue.
 	 *
 	 * This checks if any two pending branches modify the same files,
 	 * which would likely cause merge conflicts. Call this before processing
@@ -706,8 +709,8 @@ export class Elevator {
 	 *
 	 * @returns Array of detected conflicts between queued branches
 	 */
-	detectQueueConflicts(): ElevatorConflict[] {
-		const conflicts: ElevatorConflict[] = [];
+	detectQueueConflicts(): MergeQueueConflict[] {
+		const conflicts: MergeQueueConflict[] = [];
 		const pendingItems = this.queue.filter((item) => item.status === "pending" && item.modifiedFiles?.length);
 
 		// Compare each pair of pending items
@@ -756,8 +759,8 @@ export class Elevator {
 	 * @param excludeBranch - Optional branch to exclude from conflict check
 	 * @returns Array of conflicts that would occur if this branch is added
 	 */
-	checkConflictsBeforeAdd(modifiedFiles: string[], excludeBranch?: string): ElevatorConflict[] {
-		const conflicts: ElevatorConflict[] = [];
+	checkConflictsBeforeAdd(modifiedFiles: string[], excludeBranch?: string): MergeQueueConflict[] {
+		const conflicts: MergeQueueConflict[] = [];
 		const newFiles = new Set(modifiedFiles);
 
 		for (const item of this.queue) {
@@ -793,7 +796,7 @@ export class Elevator {
 	 * @param branch - Branch to check for conflicts
 	 * @returns Array of conflicts involving this branch
 	 */
-	getConflictsForBranch(branch: string): ElevatorConflict[] {
+	getConflictsForBranch(branch: string): MergeQueueConflict[] {
 		const allConflicts = this.detectQueueConflicts();
 		return allConflicts.filter((c) => c.branch === branch || c.conflictsWith === branch);
 	}
@@ -801,7 +804,7 @@ export class Elevator {
 	/**
 	 * Get the current queue
 	 */
-	getQueue(): ElevatorItem[] {
+	getQueue(): MergeQueueItem[] {
 		return [...this.queue];
 	}
 
@@ -824,14 +827,14 @@ export class Elevator {
 	/**
 	 * Get the current retry configuration
 	 */
-	getRetryConfig(): ElevatorRetryConfig {
+	getRetryConfig(): MergeQueueRetryConfig {
 		return { ...this.retryConfig };
 	}
 
 	/**
 	 * Update retry configuration
 	 */
-	setRetryConfig(config: Partial<ElevatorRetryConfig>): void {
+	setRetryConfig(config: Partial<MergeQueueRetryConfig>): void {
 		this.retryConfig = { ...this.retryConfig, ...config };
 		gitLogger.debug({ config: this.retryConfig }, "Retry config updated");
 	}
@@ -927,10 +930,10 @@ export class Elevator {
 
 	/**
 	 * Process a worktree branch safely without checkout conflicts
-	 * @param item - The elevator item to process
+	 * @param item - The merge queue item to process
 	 * @returns the processed item
 	 */
-	private async processWorktreeBranch(item: ElevatorItem, cwd: string): Promise<ElevatorItem> {
+	private async processWorktreeBranch(item: MergeQueueItem, cwd: string): Promise<MergeQueueItem> {
 		const worktreePath = this.getWorktreePath(item.branch);
 		if (!worktreePath) {
 			item.status = "conflict";
@@ -1076,10 +1079,10 @@ export class Elevator {
 
 	/**
 	 * Check if an item is eligible for retry
-	 * @param item - The elevator item to check
+	 * @param item - The merge queue item to check
 	 * @returns true if the item can be retried
 	 */
-	private canRetry(item: ElevatorItem): boolean {
+	private canRetry(item: MergeQueueItem): boolean {
 		if (!this.retryConfig.enabled) {
 			return false;
 		}
@@ -1103,7 +1106,7 @@ export class Elevator {
 	 * Mark an item for retry with updated retry tracking
 	 * @param item - The item to prepare for retry
 	 */
-	private prepareForRetry(item: ElevatorItem): void {
+	private prepareForRetry(item: MergeQueueItem): void {
 		const retryCount = (item.retryCount ?? 0) + 1;
 		const delay = this.calculateRetryDelay(retryCount);
 
@@ -1134,7 +1137,7 @@ export class Elevator {
 	/**
 	 * Attempt to rebase an item onto the main branch
 	 */
-	private async tryRebase(item: ElevatorItem, cwd: string): Promise<{ success: boolean; error?: string }> {
+	private async tryRebase(item: MergeQueueItem, cwd: string): Promise<{ success: boolean; error?: string }> {
 		item.status = "rebasing";
 		gitLogger.debug({ branch: item.branch, onto: this.mainBranch }, "Rebasing");
 		const rebaseSuccess = rebase(this.mainBranch);
@@ -1159,7 +1162,7 @@ export class Elevator {
 	 * Attempt to merge an item into the main branch
 	 */
 	private async tryMerge(
-		item: ElevatorItem,
+		item: MergeQueueItem,
 	): Promise<{ success: boolean; error?: string; conflictFiles?: string[]; strategyUsed?: MergeStrategy }> {
 		checkoutBranch(this.mainBranch);
 		item.status = "merging";
@@ -1192,7 +1195,7 @@ export class Elevator {
 	/**
 	 * Handle failure by setting appropriate status and error information
 	 */
-	private handleMergeFailure(item: ElevatorItem, error: string, conflictFiles?: string[]): ElevatorItem {
+	private handleMergeFailure(item: MergeQueueItem, error: string, conflictFiles?: string[]): MergeQueueItem {
 		item.status = "conflict";
 		item.error = error;
 		item.conflictFiles = conflictFiles;
@@ -1213,7 +1216,7 @@ export class Elevator {
 	/**
 	 * Process the next item in the queue
 	 */
-	async processNext(): Promise<ElevatorItem | null> {
+	async processNext(): Promise<MergeQueueItem | null> {
 		if (this.processing) {
 			return null;
 		}
@@ -1321,8 +1324,8 @@ export class Elevator {
 	 *
 	 * @returns Array of processed items with their final statuses
 	 */
-	async processAll(): Promise<ElevatorItem[]> {
-		const results: ElevatorItem[] = [];
+	async processAll(): Promise<MergeQueueItem[]> {
+		const results: MergeQueueItem[] = [];
 		let hadSuccess = false;
 
 		let item = await this.processNext();
@@ -1374,8 +1377,8 @@ export class Elevator {
 	 *
 	 * @returns Array of retry attempt results
 	 */
-	async retryFailed(): Promise<ElevatorItem[]> {
-		const results: ElevatorItem[] = [];
+	async retryFailed(): Promise<MergeQueueItem[]> {
+		const results: MergeQueueItem[] = [];
 		const failedItems = this.getFailed().filter((item) => this.canRetry(item));
 
 		if (failedItems.length === 0) {
@@ -1431,21 +1434,21 @@ export class Elevator {
 	/**
 	 * Get items that failed (conflict or test failure)
 	 */
-	getFailed(): ElevatorItem[] {
+	getFailed(): MergeQueueItem[] {
 		return this.queue.filter((i) => i.status === "conflict" || i.status === "test_failed");
 	}
 
 	/**
 	 * Get items that are eligible for retry
 	 */
-	getRetryable(): ElevatorItem[] {
+	getRetryable(): MergeQueueItem[] {
 		return this.getFailed().filter((item) => this.canRetry(item));
 	}
 
 	/**
 	 * Get items that have exhausted all retries
 	 */
-	getExhausted(): ElevatorItem[] {
+	getExhausted(): MergeQueueItem[] {
 		return this.getFailed().filter((item) => !this.canRetry(item));
 	}
 
