@@ -328,11 +328,9 @@ export class UndercityServer {
 		this.sendJson(res, 201, { success: true, task: { id: task.id, objective: task.objective } });
 	}
 
-	private handleMetrics(res: ServerResponse): void {
-		// Use the MetricsCollector for task metrics
-		const { getMetricsCollector } = require("./metrics-collector.js");
-		const collector = getMetricsCollector();
-		const summary = collector.getMetricsSummary();
+	private async handleMetrics(res: ServerResponse): Promise<void> {
+		const { getMetricsSummary } = await import("./metrics.js");
+		const summary = await getMetricsSummary();
 
 		// Get task board summary for additional context
 		const taskSummary = getBacklogSummary();

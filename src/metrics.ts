@@ -628,3 +628,179 @@ export async function generateEfficiencyAnalytics(): Promise<EfficiencyAnalytics
 	const taskMetrics = await loadTaskMetrics();
 	return MetricsTracker.calculateAnalytics(taskMetrics);
 }
+
+/**
+ * Summary of metrics for quick overview
+ */
+export interface MetricsSummary {
+	totalTasks: number;
+	successRate: number;
+	avgTokens: number;
+	modelDistribution: Record<string, number>;
+	avgTimeTakenMs: number;
+	escalationRate: number;
+}
+
+/**
+ * Get a summary of task metrics
+ * Replaces MetricsCollector.getMetricsSummary()
+ */
+export async function getMetricsSummary(): Promise<MetricsSummary> {
+	const metrics = await loadTaskMetrics();
+
+	if (metrics.length === 0) {
+		return {
+			totalTasks: 0,
+			successRate: 0,
+			avgTokens: 0,
+			modelDistribution: {},
+			avgTimeTakenMs: 0,
+			escalationRate: 0,
+		};
+	}
+
+	const totalTasks = metrics.length;
+	const successfulTasks = metrics.filter((m) => m.success).length;
+	const successRate = successfulTasks / totalTasks;
+
+	const totalTokens = metrics.reduce((sum, m) => sum + (m.totalTokens || 0), 0);
+	const avgTokens = totalTokens / totalTasks;
+
+	const modelDistribution = metrics.reduce(
+		(dist, m) => {
+			const model = m.finalModel || "unknown";
+			dist[model] = (dist[model] || 0) + 1;
+			return dist;
+		},
+		{} as Record<string, number>,
+	);
+
+	const totalTime = metrics.reduce((sum, m) => sum + (m.durationMs || 0), 0);
+	const avgTimeTakenMs = totalTime / totalTasks;
+
+	const escalatedTasks = metrics.filter((m) => m.wasEscalated).length;
+	const escalationRate = escalatedTasks / totalTasks;
+
+	return {
+		totalTasks,
+		successRate,
+		avgTokens,
+		modelDistribution,
+		avgTimeTakenMs,
+		escalationRate,
+	};
+}
+
+/**
+ * Get escalation analysis from metrics
+ * Replaces EnhancedMetricsQuery.getEscalationAnalysis()
+ */
+export async function getEscalationAnalysis(): Promise<{
+	totalEscalations: number;
+	escalationsByModel: Record<string, number>;
+	escalationSuccessRate: number;
+	averageTokensSaved: number;
+	commonEscalationReasons: Array<{ reason: string; count: number }>;
+}> {
+	const metrics = await loadTaskMetrics();
+
+	const escalatedMetrics = metrics.filter((m) => m.wasEscalated);
+	const escalationReasons: Record<string, number> = {};
+	const escalationsByModel: Record<string, number> = {};
+	let successfulEscalations = 0;
+
+	for (const metric of escalatedMetrics) {
+		// Track escalation path
+		if (metric.startingModel && metric.finalModel && metric.startingModel !== metric.finalModel) {
+			const key = `${metric.startingModel} → ${metric.finalModel}`;
+			escalationsByModel[key] = (escalationsByModel[key] || 0) + 1;
+		}
+
+		// Track reasons from attempts (using errorCategories if available)
+		if (metric.attempts) {
+			for (const attempt of metric.attempts) {
+				if (!attempt.success && attempt.errorCategories) {
+					for (const category of attempt.errorCategories) {
+						escalationReasons[category] = (escalationReasons[category] || 0) + 1;
+					}
+				}
+			}
+		}
+
+		if (metric.success) {
+			successfulEscalations++;
+		}
+	}
+
+	const commonReasons = Object.entries(escalationReasons)
+		.map(([reason, count]) => ({ reason, count }))
+		.sort((a, b) => b.count - a.count)
+		.slice(0, 10);
+
+	return {
+		totalEscalations: escalatedMetrics.length,
+		escalationsByModel,
+		escalationSuccessRate: escalatedMetrics.length > 0 ? successfulEscalations / escalatedMetrics.length : 0,
+		averageTokensSaved: 0, // Not tracked in current schema
+		commonEscalationReasons: commonReasons,
+	};
+}
+
+/**
+ * Get token usage trends over time
+ * Replaces EnhancedMetricsQuery.getTokenUsageTrends()
+ */
+export async function getTokenUsageTrends(days = 30): Promise<{
+	totalTokens: number;
+	tokensByModel: Record<"haiku" | "sonnet" | "opus", number>;
+	tokensByPhase: Record<string, number>;
+	averageEfficiencyRatio: number;
+	dailyUsage: Array<{ date: string; tokens: number; tasks: number }>;
+}> {
+	const metrics = await loadTaskMetrics();
+
+	const cutoffDate = new Date();
+	cutoffDate.setDate(cutoffDate.getDate() - days);
+
+	const recentMetrics = metrics.filter((m) => m.startedAt && new Date(m.startedAt) >= cutoffDate);
+
+	const tokensByModel: Record<"haiku" | "sonnet" | "opus", number> = {
+		haiku: 0,
+		sonnet: 0,
+		opus: 0,
+	};
+
+	let totalTokens = 0;
+	const dailyMap: Record<string, { tokens: number; tasks: number }> = {};
+
+	for (const metric of recentMetrics) {
+		totalTokens += metric.totalTokens || 0;
+
+		// Assign tokens to final model
+		if (metric.finalModel && tokensByModel[metric.finalModel] !== undefined) {
+			tokensByModel[metric.finalModel] += metric.totalTokens || 0;
+		}
+
+		// Track daily usage
+		if (metric.startedAt) {
+			const date = new Date(metric.startedAt).toISOString().split("T")[0];
+			if (!dailyMap[date]) {
+				dailyMap[date] = { tokens: 0, tasks: 0 };
+			}
+			dailyMap[date].tokens += metric.totalTokens || 0;
+			dailyMap[date].tasks += 1;
+		}
+	}
+
+	const dailyUsage = Object.entries(dailyMap)
+		.map(([date, data]) => ({ date, ...data }))
+		.sort((a, b) => a.date.localeCompare(b.date));
+
+	return {
+		totalTokens,
+		tokensByModel,
+		tokensByPhase: {}, // Not tracked in current schema
+		averageEfficiencyRatio: 1, // Not tracked in current schema
+		dailyUsage,
+	};
+}

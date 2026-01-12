@@ -12,9 +12,8 @@ export const analysisCommands: CommandModule = {
 			.command("metrics")
 			.description("Show performance metrics and analytics")
 			.action(async () => {
-				const { getMetricsCollector } = await import("../metrics-collector.js");
-				const metricsCollector = getMetricsCollector();
-				const metrics = metricsCollector.getMetricsSummary();
+				const { getMetricsSummary } = await import("../metrics.js");
+				const metrics = await getMetricsSummary();
 
 				console.log(chalk.bold("Performance Metrics"));
 				console.log(`Total Tasks: ${metrics.totalTasks}`);
@@ -160,11 +159,11 @@ export const analysisCommands: CommandModule = {
 			.option("--days <days>", "Days of history to analyze", "30")
 			.option("--json", "Output as JSON")
 			.action(async (options) => {
-				const { EnhancedMetricsQuery } = await import("../enhanced-metrics.js");
+				const { getTokenUsageTrends, getEscalationAnalysis } = await import("../metrics.js");
 
 				const days = parseInt(options.days, 10);
-				const tokenTrends = await EnhancedMetricsQuery.getTokenUsageTrends(days);
-				const escalationAnalysis = await EnhancedMetricsQuery.getEscalationAnalysis();
+				const tokenTrends = await getTokenUsageTrends(days);
+				const escalationAnalysis = await getEscalationAnalysis();
 
 				if (options.json) {
 					console.log(JSON.stringify({ tokenTrends, escalationAnalysis }, null, 2));
@@ -240,8 +239,8 @@ export const analysisCommands: CommandModule = {
 			.command("escalation-patterns")
 			.description("Analyze model escalation patterns and effectiveness")
 			.action(async () => {
-				const { EnhancedMetricsQuery } = await import("../enhanced-metrics.js");
-				const analysis = await EnhancedMetricsQuery.getEscalationAnalysis();
+				const { getEscalationAnalysis } = await import("../metrics.js");
+				const analysis = await getEscalationAnalysis();
 
 				console.log(chalk.bold("🔄 Model Escalation Patterns Analysis\n"));
 
@@ -356,9 +355,6 @@ export const analysisCommands: CommandModule = {
 };
 
 async function runBenchmark(): Promise<void> {
-	const { getMetricsCollector } = await import("../metrics-collector.js");
-	const metricsCollector = getMetricsCollector();
-
 	const benchmarkTasks = [
 		"Type generation: Create complex TypeScript type definitions",
 		"Zod schema: Define a multi-layer validation schema",
@@ -414,15 +410,10 @@ async function runBenchmark(): Promise<void> {
 		console.log(chalk.green("\n✅ Benchmark Completed"));
 		console.log(chalk.dim(`Total Duration: ${(totalDuration / 1000).toFixed(2)} seconds`));
 
-		const metrics = metricsCollector.getMetricsSummary(new Date(startTime), new Date(endTime));
 		console.log(chalk.bold("\nBenchmark Summary:"));
 		console.log(`Total Tasks: ${benchmarkTasks.length}`);
 		console.log(`Success: ${successCount}, Failed: ${failCount}`);
 		console.log(`Success Rate: ${((successCount / benchmarkTasks.length) * 100).toFixed(2)}%`);
-		if (metrics.totalTasks > 0) {
-			console.log(`Average Tokens Used: ${metrics.avgTokens.toFixed(2)}`);
-			console.log(`Average Task Duration: ${(metrics.avgTimeTakenMs / 1000).toFixed(2)} seconds`);
-		}
 	} catch (error) {
 		console.error(chalk.red("Benchmark failed:"), error);
 		process.exit(1);
