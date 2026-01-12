@@ -695,34 +695,51 @@ const SCOPE_SIGNALS = {
  */
 export function assessComplexityFast(task: string): ComplexityAssessment {
 	if (!task) {
-		return {
-			level: "simple",
+		const assessment = {
+			level: "simple" as ComplexityLevel,
 			confidence: 0.5,
 			model: "haiku",
 			useFullChain: false,
 			needsReview: false,
-			estimatedScope: "single-file",
+			estimatedScope: "single-file" as ComplexityAssessment["estimatedScope"],
 			score: 1,
 			signals: ["no task description provided"],
 			team: getTeamComposition("simple"),
-		};
+		} as ComplexityAssessment;
+
+		sessionLogger.info({
+			task: "Empty task description",
+			assessmentType: "empty_task",
+			recommendedModel: assessment.model,
+		}, "No task description provided - using default model");
+
+		return assessment;
 	}
 
 	// Check if local tools can handle it (FREE - no LLM needed)
 	const localTool = canHandleWithLocalTools(task);
 	if (localTool) {
-		return {
-			level: "trivial",
+		const assessment = {
+			level: "trivial" as ComplexityLevel,
 			confidence: 1.0,
 			model: "haiku", // Not used, but required field
 			useFullChain: false,
 			needsReview: false,
-			estimatedScope: "single-file",
+			estimatedScope: "single-file" as ComplexityAssessment["estimatedScope"],
 			score: 0,
 			signals: [`local-tool:${localTool.command}`],
 			team: getTeamComposition("trivial"),
 			localTool,
-		};
+		} as ComplexityAssessment;
+
+		sessionLogger.info({
+			task: task.slice(0, 50),
+			assessmentType: "local_tool",
+			recommendedModel: assessment.model,
+			localToolCommand: localTool.command,
+		}, "Local tool detected - using minimal model");
+
+		return assessment;
 	}
 
 	const taskLower = task.toLowerCase();
@@ -796,7 +813,7 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 
 	const config = getLevelConfig(level);
 
-	return {
+	const assessment = {
 		level,
 		confidence: signals.length > 0 ? Math.min(0.9, 0.5 + signals.length * 0.1) : 0.3,
 		model: config.model,
@@ -807,6 +824,17 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 		score,
 		team: getTeamComposition(level),
 	};
+
+	sessionLogger.info({
+		task: task.slice(0, 50),
+		assessmentType: "keyword_assessment",
+		level,
+		recommendedModel: assessment.model,
+		score,
+		scope: estimatedScope,
+	}, "Complexity determined by keyword heuristics");
+
+	return assessment;
 }
 
 /**
@@ -865,7 +893,7 @@ Complexity guide:
 			// Use shared level configuration
 			const config = getLevelConfig(level);
 
-			return {
+			const assessment = {
 				level,
 				confidence: 0.85,
 				model: config.model,
@@ -876,6 +904,17 @@ Complexity guide:
 				score: fastAssessment.score,
 				team: getTeamComposition(level),
 			};
+
+			sessionLogger.info({
+				task: task.slice(0, 50),
+				assessmentType: "llm_assessment",
+				level,
+				recommendedModel: assessment.model,
+				llmReasoning: parsed.reasoning,
+				scope,
+			}, "Complexity determined by LLM analysis");
+
+			return assessment;
 		}
 	} catch (error) {
 		sessionLogger.warn({ error: String(error) }, "Deep complexity assessment failed, using fast assessment");
@@ -952,7 +991,7 @@ export function assessComplexityQuantitative(
 	// Confidence is higher when we have good metrics
 	const confidence = metrics.fileCount > 0 ? Math.min(0.95, 0.7 + metricsSignals.length * 0.05) : 0.5; // Low confidence if no files found
 
-	return {
+	const assessment = {
 		level,
 		confidence,
 		model: config.model,
@@ -964,6 +1003,20 @@ export function assessComplexityQuantitative(
 		metrics,
 		team: getTeamComposition(level),
 	};
+
+	sessionLogger.info({
+		task: task.slice(0, 50),
+		assessmentType: "quantitative_assessment",
+		level,
+		recommendedModel: assessment.model,
+		fileCount: metrics.fileCount,
+		linesOfCode: metrics.totalLines,
+		functionCount: metrics.functionCount,
+		scope: estimatedScope,
+		score: combinedScore,
+	}, "Complexity determined by quantitative analysis");
+
+	return assessment;
 }
 
 /**
@@ -990,10 +1043,13 @@ export async function assessComplexityFull(
 		if (targetFiles.length > 0) {
 			// Use quantitative assessment
 			const assessment = assessComplexityQuantitative(task, targetFiles, repoRoot);
-			sessionLogger.debug(
-				{ task: task.slice(0, 50), files: targetFiles.length, score: assessment.score },
-				"Quantitative complexity assessment",
-			);
+			sessionLogger.info({
+				task: task.slice(0, 50),
+				assessmentType: "context_preparation",
+				targetFiles: targetFiles.length,
+				recommendedModel: assessment.model,
+				score: assessment.score,
+			}, "Complexity assessed using context preparation");
 			return assessment;
 		}
 	} catch (error) {
