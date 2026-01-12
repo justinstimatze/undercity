@@ -1,13 +1,13 @@
 /**
- * Parallel Solo Orchestrator
+ * Orchestrator
  *
- * Runs multiple SoloOrchestrator instances concurrently in isolated git worktrees.
+ * Runs multiple TaskWorkers concurrently in isolated git worktrees.
  * Each task gets its own worktree branched from local main, runs independently,
- * then merges back into local main via serial queue.
+ * then merges back into local main via serial MergeQueue.
  *
  * Flow:
  * 1. Create worktrees from local main HEAD (includes unpushed commits)
- * 2. Run SoloOrchestrators in parallel (one per worktree)
+ * 2. Run TaskWorkers in parallel (one per worktree)
  * 3. Collect results
  * 4. Merge successful branches serially (rebase onto local main → verify → fast-forward merge)
  * 5. Cleanup worktrees
@@ -140,7 +140,7 @@ function getModifiedFilesInWorktree(worktreePath: string, mainBranch: string): s
 }
 
 /**
- * Parallel Solo Orchestrator
+ * Main production orchestrator for parallel task execution.
  */
 export class Orchestrator {
 	private maxConcurrent: number;
@@ -526,7 +526,7 @@ export class Orchestrator {
 	 * Run a single task directly without worktree overhead
 	 *
 	 * This is an optimization for when only one task needs to run.
-	 * It runs SoloOrchestrator directly in the current directory.
+	 * It runs TaskWorker directly in the current directory.
 	 */
 	async runSingle(task: string): Promise<ParallelBatchResult> {
 		// Check for [plan] prefix - route to planner instead of worker
@@ -562,8 +562,8 @@ export class Orchestrator {
 		const taskId = generateTaskId();
 
 		try {
-			// Run SoloOrchestrator directly in current directory
-			const orchestrator = new TaskWorker({
+			// Run TaskWorker directly in current directory
+			const worker = new TaskWorker({
 				startingModel: this.startingModel,
 				autoCommit: this.autoCommit,
 				stream: this.stream,
@@ -577,7 +577,7 @@ export class Orchestrator {
 				// No workingDirectory - runs in current directory
 			});
 
-			const result = await orchestrator.runTask(task);
+			const result = await worker.runTask(task);
 
 			// Record token usage
 			if (result.tokenUsage) {
@@ -695,7 +695,7 @@ export class Orchestrator {
 		}
 
 		output.header(
-			"Parallel Solo Mode",
+			"Parallel Mode",
 			`${tasks_to_run.length} tasks (max ${this.maxConcurrent} concurrent) • Model: ${this.startingModel} → escalate if needed`,
 		);
 
@@ -796,8 +796,8 @@ export class Orchestrator {
 				try {
 					output.taskStart(taskId, task.substring(0, 50));
 
-					// Create orchestrator that runs in the worktree directory
-					const orchestrator = new TaskWorker({
+					// Create TaskWorker that runs in the worktree directory
+					const worker = new TaskWorker({
 						startingModel: this.startingModel,
 						autoCommit: this.autoCommit,
 						stream: this.stream,
@@ -811,7 +811,7 @@ export class Orchestrator {
 						maxOpusReviewPasses: this.maxOpusReviewPasses,
 					});
 
-					const result = await orchestrator.runTask(task);
+					const result = await worker.runTask(task);
 
 					// Get modified files from git diff
 					const modifiedFiles = getModifiedFilesInWorktree(worktreePath, mainBranch);
@@ -977,7 +977,7 @@ export class Orchestrator {
 			summaryItems.push({ label: "Merge failed", value: mergeFailed, status: "bad" });
 		}
 
-		output.summary("Parallel Solo Summary", summaryItems);
+		output.summary("Parallel Execution Summary", summaryItems);
 
 		// Save rate limit state and file tracking state (with error boundary)
 		try {

@@ -19,10 +19,10 @@ import {
 	createBranch,
 	getCurrentBranch,
 	isWorkingTreeClean,
-	MergeQueue,
 	merge,
 	rebase,
 } from "../../git.js";
+import { MergeQueue } from "../../merge-queue.js";
 
 // Skip git operation tests in coverage mode - they change process.cwd() which affects other tests
 const isCoverage = process.env.npm_lifecycle_event?.includes("coverage");

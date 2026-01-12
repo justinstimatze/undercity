@@ -2,7 +2,17 @@
  * Task Scheduler Module
  *
  * Core matchmaking engine for finding compatible task sets that can run in parallel.
- * Analyzes dependencies, conflicts, and resource requirements to optimize parallel execution.
+ * Uses TaskAnalyzer results to check for file conflicts, package overlaps, and dependencies.
+ *
+ * Key functions:
+ * - buildDependencyGraph(): Creates task dependency graph
+ * - findBestParallelSet(): Returns optimal set of non-conflicting tasks
+ * - checkTaskCompatibility(): Determines if two tasks can run in parallel
+ *
+ * Related modules:
+ * - task-analyzer.ts: Provides per-task analysis (packages, files, complexity)
+ * - task-board-analyzer.ts: Uses scheduler for high-level board recommendations
+ * - task-planner.ts: Different concern - [plan] prefix task expansion
  */
 
 import type { FileTracker } from "./file-tracker.js";

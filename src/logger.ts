@@ -1,8 +1,11 @@
-// Pino logger configuration for structured logging
 /**
  * Logger Module
  *
- * Structured logging using pino.
+ * Pino-based structured logging for the main process.
+ * Provides child loggers for different modules (session, squad, git, persistence, cache, server).
+ *
+ * For worker-specific logging that writes to files for external monitoring,
+ * see dual-logger.ts which wraps this logger with file output.
  */
 
 import pino from "pino";

@@ -16,16 +16,15 @@ vi.mock("node:child_process", () => ({
 // Import after mocking
 import { execFileSync, execSync } from "node:child_process";
 import {
-	DEFAULT_RETRY_CONFIG,
 	GitError,
 	generateBranchName,
 	getCurrentBranch,
 	getDefaultBranch,
 	hashFingerprint,
 	hashGoal,
-	MergeQueue,
 	resolveRepositoryPath,
 } from "../git.js";
+import { DEFAULT_RETRY_CONFIG, MergeQueue } from "../merge-queue.js";
 
 describe("Git Module", () => {
 	beforeEach(() => {

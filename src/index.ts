@@ -26,7 +26,6 @@ export {
 	getCurrentBranch,
 	getDefaultBranch,
 	isWorkingTreeClean,
-	MergeQueue,
 	merge,
 	pushToOrigin,
 	rebase,
@@ -42,6 +41,8 @@ export {
 	resetLiveMetrics,
 	saveLiveMetrics,
 } from "./live-metrics.js";
+// Merge queue (extracted from git.ts)
+export { MergeQueue } from "./merge-queue.js";
 // Orchestration
 export { Orchestrator } from "./orchestrator.js";
 // Output system

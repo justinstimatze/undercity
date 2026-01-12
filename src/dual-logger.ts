@@ -1,13 +1,17 @@
 /**
  * Dual Logger Module
  *
- * Provides dual logging functionality that writes streaming output to both
- * terminal AND log files. Allows monitoring from other processes.
+ * File + console logging for TaskWorkers running in isolated worktrees.
+ * Allows external processes (dashboard, daemon) to monitor worker progress
+ * by reading the log files.
+ *
+ * Relationship to logger.ts:
+ * - logger.ts: Main process logging (console only, structured via pino)
+ * - dual-logger.ts: Worker logging (file + console, for external monitoring)
  *
  * Features:
- * - Writes all streaming output to both console and log file
- * - Log rotation per session (archived logs are named by session ID)
- * - Thread-safe log file operations
+ * - Writes streaming output to both console and log file
+ * - Log rotation per session (archived logs named by session ID)
  * - Maintains current.log as the active log file
  */
 

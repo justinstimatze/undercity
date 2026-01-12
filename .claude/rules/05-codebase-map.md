@@ -6,17 +6,19 @@
 |------|---------|-------------|
 | **cli.ts** | CLI entry, routes to command modules | - |
 | **commands/task.ts** | Task board commands (tasks, add, work, plan, import-plan) | taskCommands |
-| **commands/mixed.ts** | Main commands (solo, grind, limits, watch, serve, daemon) | mixedCommands |
+| **commands/mixed.ts** | Main commands (grind, limits, watch, serve, daemon, status) | mixedCommands |
 | **commands/analysis.ts** | Metrics/analysis commands | analysisCommands |
-| **worker.ts** | Single-task executor, runs in worktree | TaskWorker |
 | **orchestrator.ts** | Main production orchestrator, parallel execution | Orchestrator |
+| **worker.ts** | Single-task executor, runs in worktree | TaskWorker |
 | **supervised.ts** | Opus orchestrates workers | SupervisedOrchestrator |
 | **task.ts** | Task board CRUD (add, get, mark status) | addGoal, getAllItems, markComplete, etc. |
 | **worktree-manager.ts** | Git worktree isolation per task | WorktreeManager |
-| **git.ts** | Git operations, MergeQueue (serial merge pipeline) | MergeQueue, getCurrentBranch, rebase, merge |
+| **git.ts** | Git operations, branch management, fingerprinting | getCurrentBranch, rebase, merge, execGit |
+| **merge-queue.ts** | Serial merge pipeline (extracted from git.ts) | MergeQueue |
 | **rate-limit.ts** | 429 handling, exponential backoff | RateLimitTracker |
 | **file-tracker.ts** | Pre-merge file conflict detection | FileTracker |
-| **live-metrics.ts** | Token usage, cost tracking | saveLiveMetrics, loadLiveMetrics |
+| **metrics.ts** | Task metrics tracking, JSONL storage | MetricsTracker, getMetricsSummary |
+| **live-metrics.ts** | Running totals for dashboard display | saveLiveMetrics, loadLiveMetrics |
 | **grind-events.ts** | Structured event logging (not metrics) | startGrindSession, logTaskComplete, etc. |
 | **task-decomposer.ts** | Break multi-step tasks into atomic subtasks | checkAndDecompose |
 | **plan-parser.ts** | Parse markdown plans into tasks | parsePlanFile, planToTasks |
@@ -28,6 +30,23 @@
 | **types.ts** | Core type definitions | SessionStatus, AgentType, Task, MergeQueueItem |
 | **output.ts** | Structured output (human/agent modes) | info, success, error, header, metrics |
 | **oracle.ts** | Oblique strategy cards | UndercityOracle |
+| **context.ts** | Codebase context extraction (AST, git grep) | prepareContext, summarizeContextForAgent |
+| **verification.ts** | Build/test/lint verification loop | runVerification |
+| **review.ts** | Escalating review with annealing | ReviewManager |
+| **annealing-review.ts** | Simulated annealing for review temp | AnnealingReviewSchedule |
+| **cache.ts** | Context caching for repeated queries | ContextCache |
+| **logger.ts** | Pino-based structured logging | sessionLogger, agentLogger, gitLogger |
+| **dual-logger.ts** | File + console logging for workers | DualLogger |
+| **squad.ts** | Agent creation and management | createAgent, AgentSquad |
+| **meta-tasks.ts** | Meta-task handling ([triage], [plan], etc.) | handleMetaTask |
+| **task-schema.ts** | Task prefix conventions and parsing | parseTaskPrefix, TaskPrefix |
+| **task-analyzer.ts** | Task → packages, files, risk scoring | TaskAnalyzer |
+| **task-board-analyzer.ts** | Board-level insights, parallelization | TaskBoardAnalyzer |
+| **task-scheduler.ts** | Matchmaking for compatible task sets | TaskScheduler |
+| **task-planner.ts** | [plan] prefix → subtask expansion | TaskPlanner |
+| **capability-ledger.ts** | Track model success by keyword patterns | CapabilityLedger (not yet integrated) |
+| **experiment.ts** | A/B testing framework for grind | ExperimentManager (not yet integrated) |
+| **index.ts** | Public API exports | - |
 
 ## Task → File Mapping
 
@@ -36,16 +55,23 @@
 - Run a single task → `worker.ts` (TaskWorker, runs in worktree)
 - Run tasks in parallel → `orchestrator.ts` (Orchestrator)
 - Isolate tasks in git worktrees → `worktree-manager.ts`
-- Merge branches serially → `git.ts` (MergeQueue class)
+- Merge branches serially → `merge-queue.ts` (MergeQueue class)
 - Handle rate limits → `rate-limit.ts`
 - Check file conflicts → `file-tracker.ts`
-- Track token usage → `live-metrics.ts`
+- Track task metrics → `metrics.ts` (MetricsTracker)
+- Track live token usage → `live-metrics.ts`
 - Parse markdown plans → `plan-parser.ts`
 - Check task complexity → `complexity.ts` or `task-decomposer.ts`
+- Analyze task board → `task-board-analyzer.ts`
+- Schedule compatible tasks → `task-scheduler.ts`
+- Generate codebase context → `context.ts`
+- Run verification (build/test/lint) → `verification.ts`
+- Handle meta-tasks ([triage], [plan]) → `meta-tasks.ts`
 - Persist state → `persistence.ts`
 - Build TUI → `dashboard.ts`
 - Expose HTTP API → `server.ts`
 - Output to user → `output.ts`
+- Log structured events → `logger.ts` or `dual-logger.ts` (workers)
 
 ## Orchestrators
 
@@ -80,12 +106,16 @@ Orchestrator.run():
 | File | Purpose | Schema |
 |------|---------|--------|
 | `.undercity/tasks.json` | Task board | `Task[]` |
-| `.undercity/worktrees.json` | Active worktrees | `{taskId: {path, branch}}` |
-| `.undercity/merge-queue.json` | Merge queue state | `MergeQueueItem[]` |
-| `.undercity/rate-limit.json` | Rate limit state | `{pausedUntil?, history[]}` |
-| `.undercity/recovery.json` | Interrupted batch state | `{batchId, tasks[], checkpoint}` |
-| `.undercity/metrics.json` | Token usage, cost | `{tokens, cost, byModel}` |
+| `.undercity/worktree-state.json` | Active worktrees | `WorktreeState` |
+| `.undercity/file-tracking.json` | Modified files per branch | `FileTrackingState` |
+| `.undercity/rate-limit-state.json` | Rate limit state | `RateLimitState` |
+| `.undercity/parallel-recovery.json` | Interrupted batch state | `ParallelRecoveryState` |
+| `.undercity/task-metrics.json` | Task execution metrics | `TaskMetrics[]` |
+| `.undercity/live-metrics.json` | Running totals for dashboard | `LiveMetrics` |
 | `.undercity/grind-events.jsonl` | Event log (append-only) | `{type, timestamp, data}` per line |
+| `.undercity/pocket.json` | Active session state | `SafePocket` |
+| `.undercity/inventory.json` | Active agents | `Inventory` |
+| `.undercity/experiment-storage.json` | A/B test state | `ExperimentStorage` |
 
 ## Gotchas
 
@@ -99,9 +129,9 @@ Orchestrator.run():
 - Conflicts → task fails, manual resolution needed
 
 **Recovery:**
-- Only ParallelSoloOrchestrator has recovery
+- Orchestrator has crash recovery
 - Auto-resumes on next `undercity grind`
-- State: `.undercity/recovery.json`
+- State: `.undercity/parallel-recovery.json`
 
 **Task decomposition:**
 - Enabled by default, disable with `--no-decompose`
@@ -124,10 +154,9 @@ Orchestrator.run():
 - SERIAL (no parallel merges)
 - Retry: 3 attempts, exponential backoff
 - Strategies: default → theirs → ours
-- State persists: `.undercity/merge-queue.json`
+- In-memory only (no persistence)
 
 **Commands:**
-- `solo` is deprecated, use `grind` instead
 - `grind` without args → process task board
 - `grind "goal"` → run single task directly
 

@@ -1,8 +1,18 @@
 /**
  * Task Analyzer Module
  *
- * Analyzes task objectives to detect package boundaries, estimate file modifications,
- * and calculate risk scores for intelligent task matchmaking.
+ * Parses individual task objectives to extract:
+ * - Package boundaries (src/foo/, packages/bar/)
+ * - Estimated files to modify
+ * - Complexity level (low/medium/high)
+ * - Risk score
+ *
+ * Used by: task-scheduler.ts (for compatibility checks), task-board-analyzer.ts (for insights)
+ *
+ * Related modules:
+ * - task-scheduler.ts: Uses analysis results to find compatible parallel task sets
+ * - task-board-analyzer.ts: High-level board insights using analyzer + scheduler
+ * - task-planner.ts: Different concern - handles [plan] prefix tasks via AI
  */
 
 import type { Task } from "./task.js";

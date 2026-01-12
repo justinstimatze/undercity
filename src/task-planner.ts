@@ -1,8 +1,10 @@
 /**
  * Task Planner Module
  *
- * Takes high-level [plan] tasks and generates specific implementation tasks.
- * Uses an agent to explore the codebase and create actionable subtasks.
+ * Handles [plan] prefix tasks by using an AI agent to generate specific subtasks.
+ * This is different from task-analyzer/scheduler/board-analyzer which handle
+ * parallelization and compatibility - this module expands high-level goals into
+ * concrete implementation steps.
  *
  * Flow:
  * 1. Detect [plan] prefix in task objective
@@ -10,6 +12,11 @@
  * 3. Agent explores files, identifies targets
  * 4. Returns specific implementation tasks with file paths
  * 5. Tasks added to board, plan marked complete
+ *
+ * Related modules (different concerns):
+ * - task-analyzer.ts: Static analysis of task objectives
+ * - task-scheduler.ts: Finding compatible parallel task sets
+ * - task-board-analyzer.ts: Board-level insights and recommendations
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
