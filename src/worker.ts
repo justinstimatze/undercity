@@ -211,6 +211,18 @@ export class TaskWorker {
 		// Ensure clean state before starting (in case previous task left dirty state)
 		this.cleanupDirtyState();
 
+		// Record the base commit SHA before the agent runs
+		// This is used by verification to detect if the agent actually made changes
+		let baseCommit: string | undefined;
+		try {
+			baseCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+				encoding: "utf-8",
+				cwd: this.workingDirectory,
+			}).trim();
+		} catch {
+			// Ignore errors - baseCommit will be undefined
+		}
+
 		const taskId = `solo_${Date.now()}`;
 		this.currentTaskId = taskId; // Store for use in other methods
 		const sessionId = `session_${Date.now()}`;
@@ -314,7 +326,7 @@ export class TaskWorker {
 
 				// Verify the work
 				output.workerPhase(taskId, "verifying");
-				const verification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory);
+				const verification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory, baseCommit);
 
 				// Categorize errors for tracking
 				const errorCategories = categorizeErrors(verification);
@@ -347,7 +359,7 @@ export class TaskWorker {
 						}
 						// Re-verify after reviews if issues were found and fixed
 						if (reviewResult.issuesFound.length > 0) {
-							finalVerification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory);
+							finalVerification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory, baseCommit);
 							if (!finalVerification.passed) {
 								output.warning("Final verification failed after reviews", { taskId });
 								this.lastFeedback = finalVerification.feedback;

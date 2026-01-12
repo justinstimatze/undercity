@@ -344,7 +344,8 @@
       "objective": "[cli] Add --priority flag to 'undercity add' command for explicit task prioritization",
       "status": "pending",
       "priority": 3,
-      "createdAt": "2026-01-11T22:29:10.556Z"
+      "createdAt": "2026-01-11T22:29:10.556Z",
+      "completedAt": "2026-01-12T06:39:24.120Z"
     },
     {
       "id": "task-mkabr2sc-ffur",
@@ -404,7 +405,8 @@
       "createdAt": "2026-01-12T01:12:23.614Z",
       "tags": [
         "stabilization"
-      ]
+      ],
+      "completedAt": "2026-01-12T06:39:24.121Z"
     },
     {
       "id": "task-c1h63skgeqjo",
@@ -621,5 +623,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-01-12T04:42:34.000Z"
+  "lastUpdated": "2026-01-12T06:39:24.121Z"
 }

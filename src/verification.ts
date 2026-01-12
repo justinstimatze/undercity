@@ -48,6 +48,7 @@ export async function verifyWork(
 	runTypecheck: boolean = true,
 	runTests: boolean = true,
 	workingDirectory: string = process.cwd(),
+	baseCommit?: string,
 ): Promise<VerificationResult> {
 	const issues: string[] = [];
 	const feedbackParts: string[] = [];
@@ -83,15 +84,17 @@ export async function verifyWork(
 			cwd: workingDirectory,
 		});
 
-		// If no uncommitted changes, check if there are committed changes (HEAD vs parent)
+		// If no uncommitted changes, check if there are committed changes since base
 		if (!diffStat.trim()) {
 			try {
-				diffStat = execSync("git diff --stat HEAD~1 HEAD 2>/dev/null || true", {
+				// Compare HEAD to baseCommit if provided, otherwise fall back to HEAD~1
+				const compareRef = baseCommit || "HEAD~1";
+				diffStat = execSync(`git diff --stat ${compareRef} HEAD 2>/dev/null || true`, {
 					encoding: "utf-8",
 					cwd: workingDirectory,
 				});
 			} catch {
-				// Ignore errors (e.g., no parent commit)
+				// Ignore errors (e.g., no parent commit or invalid base)
 			}
 		}
 
