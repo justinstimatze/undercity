@@ -89,6 +89,19 @@ export {
 	updateTaskCheckpoint,
 	writeTaskAssignment,
 } from "./persistence.js";
+// DSPy-inspired prompt variants
+export {
+	applyPromptVariant,
+	ATOMICITY_PROMPT_VARIANTS,
+	BUILDER_PROMPT_VARIANTS,
+	createPromptExperimentVariants,
+	getAtomicityPrompt,
+	getPromptVariant,
+	getReviewPrompt,
+	type PromptVariant,
+	type PromptVariantId,
+	REVIEW_PROMPT_VARIANTS,
+} from "./prompt-variants.js";
 // HTTP Server
 export {
 	clearDaemonState,
