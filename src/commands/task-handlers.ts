@@ -1119,11 +1119,32 @@ export function handleUpdate(taskId: string, options: UpdateOptions): void {
 
 	let tags: string[] | undefined;
 	if (options.tags) {
-		tags = options.tags.split(",").map((t) => t.trim()).filter(Boolean);
+		tags = options.tags
+			.split(",")
+			.map((t) => t.trim())
+			.filter(Boolean);
 	}
 
-	const validStatuses = ["pending", "in_progress", "complete", "failed", "blocked", "duplicate", "canceled", "obsolete"];
-	let status: "pending" | "in_progress" | "complete" | "failed" | "blocked" | "duplicate" | "canceled" | "obsolete" | undefined;
+	const validStatuses = [
+		"pending",
+		"in_progress",
+		"complete",
+		"failed",
+		"blocked",
+		"duplicate",
+		"canceled",
+		"obsolete",
+	];
+	let status:
+		| "pending"
+		| "in_progress"
+		| "complete"
+		| "failed"
+		| "blocked"
+		| "duplicate"
+		| "canceled"
+		| "obsolete"
+		| undefined;
 	if (options.status) {
 		if (!validStatuses.includes(options.status)) {
 			console.error(chalk.red(`Error: Invalid status '${options.status}'`));

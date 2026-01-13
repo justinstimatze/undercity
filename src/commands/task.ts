@@ -153,7 +153,10 @@ export const taskCommands: CommandModule = {
 			.option("-o, --objective <text>", "New objective text")
 			.option("-p, --priority <number>", "New priority (1-1000, lower = higher priority)")
 			.option("-t, --tags <tags>", "Comma-separated tags (e.g., feature,urgent)")
-			.option("-s, --status <status>", "New status (pending, in_progress, complete, failed, blocked, canceled, obsolete)")
+			.option(
+				"-s, --status <status>",
+				"New status (pending, in_progress, complete, failed, blocked, canceled, obsolete)",
+			)
 			.action((taskId: string, options: UpdateOptions) => handleUpdate(taskId, options));
 	},
 };
