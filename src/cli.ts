@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// CLI entry point - parses commands and routes to appropriate handlers
+// Initializes and configures the Undercity CLI, registering command modules and setting up the base command structure.
 
 /**
  * Undercity CLI - Main Entry Point
