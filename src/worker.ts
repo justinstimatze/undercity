@@ -388,7 +388,8 @@ export class TaskWorker {
 		output.workerPhase(taskId, "analyzing");
 		let targetFiles: string[] = [];
 		try {
-			this.currentBriefing = await prepareContext(task);
+			// CRITICAL: Must pass workingDirectory so context is prepared from worktree, not main repo
+			this.currentBriefing = await prepareContext(task, { cwd: this.workingDirectory });
 			targetFiles = this.currentBriefing.targetFiles;
 			const sigCount = this.currentBriefing.functionSignatures.length;
 			output.debug(`Found ${targetFiles.length} target files, ${sigCount} signatures`, { taskId });

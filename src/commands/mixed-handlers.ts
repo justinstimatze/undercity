@@ -170,7 +170,6 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			getAllItems,
 			markTaskComplete,
 			markTaskFailed,
-			markTaskInProgress,
 			decomposeTaskIntoSubtasks,
 			completeParentIfAllSubtasksDone,
 			getTaskById,
@@ -448,9 +447,9 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			try {
 				output.info(`Running ${tierTasks.length} task(s) with ${modelTier}...`);
 
-				// Mark tasks as in_progress and log starts for this tier
+				// Log task starts (but don't mark in_progress yet - orchestrator will do that
+				// after similarity check passes to avoid false positive duplicate detection)
 				for (const task of tierTasks) {
-					markTaskInProgress(task.id, batchId);
 					logTaskStarted({
 						batchId,
 						taskId: task.id,
