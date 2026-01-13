@@ -44,6 +44,58 @@ import type { AttemptRecord, ErrorCategory, TaskCheckpoint, TokenUsage } from ".
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
 
 /**
+ * Get a few-shot example for common task patterns to help the agent succeed.
+ * Returns undefined for tasks that don't match known patterns.
+ */
+function getFewShotExample(task: string): string | undefined {
+	const taskLower = task.toLowerCase();
+
+	// Typo/comment tasks
+	if (taskLower.includes("typo") || taskLower.includes("comment") || taskLower.includes("spelling")) {
+		return `Task: "Fix typo in src/utils.ts"
+Action: Read the file, find the typo, use Edit tool to fix it
+Result: Changed "recieve" to "receive" on line 45`;
+	}
+
+	// Add/create function tasks
+	if ((taskLower.includes("add") || taskLower.includes("create")) && taskLower.includes("function")) {
+		return `Task: "Add validateEmail function to src/utils.ts"
+Action: Read file to understand patterns, then Edit to add new function
+Result: Added function following existing code style, exported it`;
+	}
+
+	// Fix bug tasks
+	if (taskLower.includes("fix") && (taskLower.includes("bug") || taskLower.includes("error"))) {
+		return `Task: "Fix null error in src/auth.ts:45"
+Action: Read file, understand the code path, add null check
+Result: Added optional chaining (?.) to prevent null access`;
+	}
+
+	// Update/change tasks
+	if (taskLower.includes("update") || taskLower.includes("change") || taskLower.includes("modify")) {
+		return `Task: "Update timeout value in config.ts to 30000"
+Action: Read file, find the timeout setting, Edit to change value
+Result: Changed timeout from 10000 to 30000`;
+	}
+
+	// Rename tasks
+	if (taskLower.includes("rename")) {
+		return `Task: "Rename getUserData to fetchUserProfile in src/api.ts"
+Action: Read file, use Edit with replace_all to rename all occurrences
+Result: Renamed function and all call sites`;
+	}
+
+	// Add test tasks
+	if (taskLower.includes("test") && (taskLower.includes("add") || taskLower.includes("write"))) {
+		return `Task: "Add tests for validateEmail in src/__tests__/utils.test.ts"
+Action: Read the function to understand behavior, then write test cases
+Result: Added 3 test cases: valid email, invalid email, empty string`;
+	}
+
+	return undefined;
+}
+
+/**
  * Extract explicitly mentioned file names from task description
  * e.g., "Fix bug in solo.ts" → ["solo.ts"]
  */
@@ -1139,9 +1191,12 @@ Use this analysis to avoid repeating the same mistakes.`;
 				this.lastPostMortem = undefined;
 			}
 
-			prompt = `${contextSection}TASK:
-${task}${postMortemContext}
+			// Get few-shot example if applicable for this task type
+			const fewShotExample = getFewShotExample(task);
+			const exampleSection = fewShotExample ? `\nEXAMPLE OF SIMILAR TASK:\n${fewShotExample}\n` : "";
 
+			prompt = `${contextSection}TASK:
+${task}${postMortemContext}${exampleSection}
 RULES:
 1. Read target files before editing
 2. Minimal changes only - nothing beyond task scope
