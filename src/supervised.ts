@@ -441,6 +441,7 @@ Fix any issues to complete the original goal. Run typecheck to verify.`;
 
 		const feedback = feedbackParts.join("\n");
 		const passed = filesChanged > 0 && typecheckPassed;
+		const hasWarnings = passed && (!spellPassed || !codeHealthPassed);
 
 		return {
 			passed,
@@ -453,6 +454,7 @@ Fix any issues to complete the original goal. Run typecheck to verify.`;
 			linesChanged,
 			issues,
 			feedback,
+			hasWarnings,
 		};
 	}
 

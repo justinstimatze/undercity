@@ -552,8 +552,28 @@ export class TaskWorker {
 
 				if (verification.passed) {
 					output.workerVerification(taskId, true);
-					// Run review passes if enabled (auto-selected or user-specified)
+
+					// Retry once for warnings (spell, code health)
 					let finalVerification = verification;
+					if (verification.hasWarnings && !this.retriedForWarnings) {
+						this.retriedForWarnings = true;
+						output.info("Verification passed with warnings, asking agent to address them...", { taskId });
+
+						// Ask agent to fix warnings
+						const warningPrompt = `[warning-fix] The task is complete but there are warnings to address:\n\n${verification.feedback}\n\nPlease fix these warnings if possible. Focus on spelling issues and code health improvements. Only make changes if you can clearly fix the warnings.`;
+						await this.executeAgent(warningPrompt);
+
+						// Re-verify after warning fixes
+						const afterWarnings = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory, baseCommit);
+						if (afterWarnings.passed) {
+							finalVerification = afterWarnings;
+							if (!afterWarnings.hasWarnings) {
+								output.success("Warnings resolved", { taskId });
+							}
+						}
+					}
+
+					// Run review passes if enabled (auto-selected or user-specified)
 					if (reviewLevel.review) {
 						// Checkpoint: reviewing (with verification status)
 						this.saveCheckpoint("reviewing", { passed: true });
@@ -882,6 +902,9 @@ Be concise and specific. Focus on actionable insights.`;
 
 	/** Previous verification feedback for retry context */
 	private lastFeedback?: string;
+
+	/** Whether we've already retried once for warnings */
+	private retriedForWarnings = false;
 
 	/** Post-mortem analysis from previous tier (only set on escalation) */
 	private lastPostMortem?: string;

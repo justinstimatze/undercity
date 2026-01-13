@@ -37,6 +37,7 @@ function createResult(overrides: Partial<VerificationResult> = {}): Verification
 		linesChanged: 100,
 		issues: [],
 		feedback: "All checks passed",
+		hasWarnings: false,
 		...overrides,
 	};
 }

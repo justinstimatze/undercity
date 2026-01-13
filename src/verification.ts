@@ -75,6 +75,8 @@ export interface VerificationResult {
 	issues: string[];
 	/** Detailed feedback for the agent to act on */
 	feedback: string;
+	/** True if passed but has non-blocking warnings (spell, code health) */
+	hasWarnings: boolean;
 }
 
 /**
@@ -334,6 +336,9 @@ export async function verifyWork(
 	// Pass if: changes were made AND all critical checks passed
 	const passed = filesChanged > 0 && typecheckPassed && buildPassed && testsPassed && lintPassed;
 
+	// Warnings are non-blocking issues that the agent could fix
+	const hasWarnings = passed && (!spellPassed || !codeHealthPassed);
+
 	return {
 		passed,
 		typecheckPassed,
@@ -345,6 +350,7 @@ export async function verifyWork(
 		linesChanged,
 		issues,
 		feedback,
+		hasWarnings,
 	};
 }
 
