@@ -2,6 +2,9 @@
  * Undercity Types
  *
  * Core type definitions for the multi-agent orchestrator.
+ * These types provide structured interfaces and type aliases
+ * that define the behavior, state, and operations of the
+ * autonomous task execution system.
  */
 import type { ComplexityLevel } from "./complexity.js";
 
