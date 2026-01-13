@@ -439,7 +439,7 @@ export function getTeamComposition(
 		return modelIdx > ceilingIdx ? ceiling : model;
 	};
 
-	const compositions: Record<ComplexityLevel, Partial<TeamComposition>> = {
+	const compositions: Record<ComplexityLevel, TeamComposition> = {
 		trivial: {
 			needsPlanning: false,
 			workerModel: "haiku",
@@ -482,13 +482,13 @@ export function getTeamComposition(
 
 	const composition = compositions[level];
 	return {
-		...composition,
-		workerModel: capModel(composition.workerModel as "haiku" | "sonnet" | "opus", modelCeiling),
-		validatorModel: capModel(composition.validatorModel as "haiku" | "sonnet" | "opus", modelCeiling),
-		plannerModel: composition.plannerModel
-			? capModel(composition.plannerModel as "haiku" | "sonnet" | "opus", modelCeiling)
-			: undefined,
-	} as TeamComposition;
+		needsPlanning: composition.needsPlanning,
+		workerModel: capModel(composition.workerModel, modelCeiling),
+		validatorCount: composition.validatorCount,
+		validatorModel: capModel(composition.validatorModel, modelCeiling),
+		independentValidators: composition.independentValidators,
+		plannerModel: composition.plannerModel ? capModel(composition.plannerModel, modelCeiling) : undefined,
+	};
 }
 
 /**
