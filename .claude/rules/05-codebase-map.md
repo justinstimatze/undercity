@@ -39,7 +39,6 @@
 | **cache.ts** | Context caching for repeated queries | ContextCache |
 | **logger.ts** | Pino-based structured logging | sessionLogger, agentLogger, gitLogger |
 | **dual-logger.ts** | File + console logging for workers | DualLogger |
-| **squad.ts** | Agent creation and management | createAgent, AgentSquad |
 | **meta-tasks.ts** | Meta-task handling ([triage], [plan], etc.) | handleMetaTask |
 | **task-schema.ts** | Task prefix conventions and parsing | parseTaskPrefix, TaskPrefix |
 | **task-analyzer.ts** | Task → packages, files, risk scoring | TaskAnalyzer |

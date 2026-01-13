@@ -73,7 +73,6 @@ export interface UndercityRc {
 
 	// Legacy session options
 	autoApprove?: boolean;
-	maxSquad?: number;
 	maxRetries?: number;
 }
 
@@ -98,7 +97,6 @@ const DEFAULT_CONFIG: Required<UndercityRc> = {
 	maxReviewPassesPerTier: 2,
 	maxOpusReviewPasses: 6,
 	autoApprove: false,
-	maxSquad: 5,
 	maxRetries: 3,
 };
 
@@ -172,7 +170,6 @@ function validateConfig(raw: unknown, filePath: string): UndercityRc | null {
 		{ key: "maxRetriesPerTier", min: 1, max: 10 },
 		{ key: "maxReviewPassesPerTier", min: 1, max: 10 },
 		{ key: "maxOpusReviewPasses", min: 1, max: 20 },
-		{ key: "maxSquad", min: 1, max: 10 },
 		{ key: "maxRetries", min: 0, max: 10 },
 	];
 

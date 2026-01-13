@@ -293,7 +293,7 @@ export class Persistence {
 		this.saveLoadoutStorage(storage);
 	}
 
-	// ============== Squad Member Sessions ==============
+	// ============== Agent Sessions ==============
 	// Per-agent session state for SDK resumption
 
 	getAgentSession(memberId: string): string | undefined {

@@ -34,8 +34,7 @@ describe("CLI", () => {
 				.option("-a, --auto-approve", "Auto-approve plans")
 				.option("-y, --yes", "Full auto mode")
 				.option("-v, --verbose", "Enable verbose logging")
-				.option("-s, --stream", "Stream agent activity")
-				.option("-m, --max-squad <n>", "Maximum squad size", "5");
+				.option("-s, --stream", "Stream agent activity");
 
 			const slingshotCmd = program.commands[0];
 			expect(slingshotCmd.name()).toBe("slingshot");
@@ -46,17 +45,6 @@ describe("CLI", () => {
 			expect(optionNames).toContain("--yes");
 			expect(optionNames).toContain("--verbose");
 			expect(optionNames).toContain("--stream");
-			expect(optionNames).toContain("--max-squad");
-		});
-
-		it("max-squad has default value of 5", async () => {
-			const { Command } = await import("commander");
-
-			const program = new Command();
-			const slingshotCmd = program.command("slingshot [goal]").option("-m, --max-squad <n>", "Maximum squad size", "5");
-
-			const maxSquadOption = slingshotCmd.options.find((o: { long: string }) => o.long === "--max-squad");
-			expect(maxSquadOption.defaultValue).toBe("5");
 		});
 	});
 

@@ -122,15 +122,6 @@ export {
 	saveDaemonState,
 	UndercityServer,
 } from "./server.js";
-// Squad management
-export {
-	createAgent,
-	determineAgentType,
-	generateAgentId,
-	getAgentDefinition,
-	getAllAgentDefinitions,
-	SQUAD_AGENTS,
-} from "./squad.js";
 // Core types
 export type {
 	ActiveTaskState,

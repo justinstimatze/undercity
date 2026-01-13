@@ -655,7 +655,7 @@ export class RateLimitTracker {
 		this.state.pause = { isPaused: false };
 		this.state.lastUpdated = new Date();
 
-		console.log(`✅ Squad resumed from rate limit pause`);
+		console.log(`✅ Resumed from rate limit pause`);
 	}
 
 	/**
