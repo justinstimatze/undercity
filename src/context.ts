@@ -480,32 +480,38 @@ export async function prepareContext(
 		// 2. Extract key terms from task for searching
 		const searchTerms = extractSearchTerms(task);
 
-		// 3. Find related files - prioritize explicitly mentioned files first
+		// 3. Find related files IN PARALLEL - each search term spawns its own process
+		const fileSearchPromises = searchTerms.slice(0, 5).map(async (term) => {
+			if (term.match(/\.(ts|tsx|js|jsx)$/)) {
+				return { type: "explicit" as const, files: findFilesByName(term, repoRoot) };
+			}
+			return { type: "searched" as const, files: findFilesWithTerm(term, repoRoot) };
+		});
+
+		// Run file searches, ast-grep, and related patterns in parallel
+		const [fileSearchResults, astPatterns, relatedPatternsResult] = await Promise.all([
+			Promise.all(fileSearchPromises),
+			findWithAstGrep(task, repoRoot),
+			Promise.resolve(findRelatedPatterns(task, repoRoot)),
+		]);
+
+		// Collect file search results - explicit files first
 		const explicitFiles: string[] = [];
 		const searchedFiles: string[] = [];
-
-		for (const term of searchTerms.slice(0, 5)) {
-			// Check if it looks like a file name - these get priority
-			if (term.match(/\.(ts|tsx|js|jsx)$/)) {
-				const files = findFilesByName(term, repoRoot);
-				explicitFiles.push(...files);
+		for (const result of fileSearchResults) {
+			if (result.type === "explicit") {
+				explicitFiles.push(...result.files);
 			} else {
-				const files = findFilesWithTerm(term, repoRoot);
-				searchedFiles.push(...files);
+				searchedFiles.push(...result.files);
 			}
 		}
-
-		// Explicit files first, then searched files
 		briefing.targetFiles.push(...explicitFiles, ...searchedFiles);
-
-		// 4. Try ast-grep for structural patterns
-		const astPatterns = await findWithAstGrep(task, repoRoot);
 		briefing.relatedPatterns.push(...astPatterns);
 
 		// Deduplicate and limit files
 		briefing.targetFiles = [...new Set(briefing.targetFiles)].slice(0, 10);
 
-		// 4.5. Use AST index for smarter context (if available)
+		// 4. Use AST index for smarter context (if available)
 		await enrichWithASTIndex(briefing, searchTerms, repoRoot);
 
 		// 5. Extract type definitions from common/schema if task mentions types
@@ -514,24 +520,26 @@ export async function prepareContext(
 			briefing.typeDefinitions.push(...types.slice(0, 10));
 		}
 
-		// 6. Find function signatures in target files (prefer ts-morph for accuracy)
-		for (const file of briefing.targetFiles.slice(0, 5)) {
-			// Use full path for ts-morph
+		// 6. Find function signatures in target files IN PARALLEL
+		const signaturePromises = briefing.targetFiles.slice(0, 5).map(async (file) => {
 			const fullPath = path.isAbsolute(file) ? file : path.join(repoRoot, file);
-
 			// Try ts-morph first for full type info
 			let signatures = extractFunctionSignaturesWithTypes(fullPath, repoRoot);
 			if (signatures.length === 0) {
 				// Fall back to regex-based extraction
 				signatures = extractFunctionSignatures(fullPath, repoRoot);
 			}
-			briefing.functionSignatures.push(...signatures);
+			return signatures;
+		});
+
+		const signatureResults = await Promise.all(signaturePromises);
+		for (const sigs of signatureResults) {
+			briefing.functionSignatures.push(...sigs);
 		}
 		briefing.functionSignatures = briefing.functionSignatures.slice(0, 15);
 
-		// 7. Find related patterns (how similar things are done)
-		const patterns = findRelatedPatterns(task, repoRoot);
-		briefing.relatedPatterns.push(...patterns.slice(0, 5));
+		// 7. Add related patterns (already fetched in parallel above)
+		briefing.relatedPatterns.push(...relatedPatternsResult.slice(0, 5));
 
 		// 8. Add repository-specific constraints
 		const constraints = [

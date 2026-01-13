@@ -39,7 +39,7 @@ import * as output from "./output.js";
 import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
 import { type ModelTier, runEscalatingReview, type UnresolvedTicket } from "./review.js";
 import type { HandoffContext } from "./task.js";
-import { extractMetaTaskType, isMetaTask } from "./task-schema.js";
+import { extractMetaTaskType, isMetaTask, isResearchTask, parseResearchResult } from "./task-schema.js";
 import type { AttemptRecord, ErrorCategory, TaskCheckpoint, TokenUsage } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
 
@@ -98,6 +98,8 @@ export interface TaskResult {
 	unresolvedTickets?: UnresolvedTicket[];
 	/** Result from meta-task (triage, prune, etc.) - orchestrator processes these */
 	metaTaskResult?: import("./types.js").MetaTaskResult;
+	/** Result from research task - findings, sources, next steps */
+	researchResult?: import("./task-schema.js").ResearchResultSchemaType;
 }
 
 /**
@@ -195,8 +197,14 @@ export class TaskWorker {
 	/** Track if current task is a meta-task (doesn't require file changes) */
 	private isCurrentTaskMeta: boolean = false;
 
+	/** Track if current task is a research task (doesn't require file changes) */
+	private isCurrentTaskResearch: boolean = false;
+
 	/** Handoff context from calling Claude Code session */
 	private currentHandoffContext?: HandoffContext;
+
+	/** Current agent session ID for resume on retry (preserves agent's exploration work) */
+	private currentAgentSessionId?: string;
 
 	constructor(options: SoloOptions = {}) {
 		this.maxAttempts = options.maxAttempts ?? 3;
@@ -350,6 +358,7 @@ export class TaskWorker {
 		this.sameModelRetries = 0;
 		this.pendingTickets = []; // Clear tickets from previous task
 		this.currentHandoffContext = handoffContext; // Store for use in prompt building
+		this.currentAgentSessionId = undefined; // Reset session ID for new task
 
 		// Checkpoint: starting
 		this.saveCheckpoint("starting");
@@ -377,8 +386,13 @@ export class TaskWorker {
 		this.isCurrentTaskMeta = isMetaTask(task);
 		const metaType = this.isCurrentTaskMeta ? extractMetaTaskType(task) : null;
 
+		// Check if this is a research task (gathers information, no code changes)
+		this.isCurrentTaskResearch = !this.isCurrentTaskMeta && isResearchTask(task);
+
 		if (this.isCurrentTaskMeta) {
 			output.taskStart(taskId, `[meta:${metaType}] ${task.substring(task.indexOf("]") + 1, 60).trim()}...`);
+		} else if (this.isCurrentTaskResearch) {
+			output.taskStart(taskId, `[research] ${task.substring(0, 50)}...`);
 		} else {
 			output.taskStart(taskId, task.substring(0, 60) + (task.length > 60 ? "..." : ""));
 		}
@@ -537,6 +551,56 @@ export class TaskWorker {
 					output.warning("Failed to parse meta-task result, retrying...", { taskId });
 					this.lastFeedback =
 						"Your response could not be parsed as valid recommendations. Please return a JSON object with a 'recommendations' array.";
+					continue;
+				}
+
+				// Research tasks: skip code verification, just check that file was written
+				if (this.isCurrentTaskResearch) {
+					// Check if the research file was created
+					const hasWrittenFile = this.writeCountThisExecution > 0;
+
+					if (hasWrittenFile) {
+						output.workerVerification(taskId, true);
+						output.info("Research findings written to .undercity/research/", { taskId });
+
+						this.attemptRecords.push({
+							model: this.currentModel,
+							durationMs: Date.now() - attemptStart,
+							success: true,
+						});
+
+						// Commit the research file
+						let commitSha: string | undefined;
+						if (this.autoCommit) {
+							output.workerPhase(taskId, "committing");
+							commitSha = await this.commitWork(task);
+						}
+
+						this.metricsTracker.recordAttempts(this.attemptRecords);
+						this.metricsTracker.completeTask(true);
+
+						// Parse output for structured result if available
+						const researchResult = parseResearchResult(agentOutput) ?? undefined;
+
+						return {
+							task,
+							status: "complete",
+							model: this.currentModel,
+							attempts: this.attempts,
+							durationMs: Date.now() - startTime,
+							commitSha,
+							tokenUsage: {
+								attempts: this.tokenUsageThisTask,
+								total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
+							},
+							researchResult,
+						};
+					}
+
+					// No file written - retry
+					output.warning("Research task did not write findings file, retrying...", { taskId });
+					this.lastFeedback =
+						"You must write your research findings to the specified markdown file. Please create the file with your findings.";
 					continue;
 				}
 
@@ -911,6 +975,9 @@ Be concise and specific. Focus on actionable insights.`;
 
 	/**
 	 * Execute the agent on current task
+	 *
+	 * Uses session resume on retry to preserve agent's exploration work.
+	 * Instead of starting fresh, we continue the conversation with feedback.
 	 */
 	private async executeAgent(task: string): Promise<string> {
 		let result = "";
@@ -918,8 +985,28 @@ Be concise and specific. Focus on actionable insights.`;
 		// Meta-tasks use specialized prompts and don't require file changes
 		const metaType = this.isCurrentTaskMeta ? extractMetaTaskType(task) : null;
 
+		// Check if this is a retry with an existing session to resume
+		const isRetry = this.attempts > 1 && this.lastFeedback;
+		const canResume = isRetry && this.currentAgentSessionId && !this.lastPostMortem;
+		// Note: Don't resume if we have a post-mortem (model escalation = new session needed)
+
 		let prompt: string;
-		if (this.isCurrentTaskMeta && metaType) {
+		let resumePrompt: string | undefined;
+
+		if (canResume) {
+			// Build a continuation prompt with verification feedback
+			// The agent keeps its full context from the previous attempt
+			resumePrompt = `VERIFICATION FAILED. Here's what needs to be fixed:
+
+${this.lastFeedback}
+
+Please fix these specific issues. You have all the context from your previous work - focus on addressing these errors.`;
+			prompt = ""; // Not used when resuming
+			sessionLogger.info(
+				{ sessionId: this.currentAgentSessionId, attempt: this.attempts },
+				"Resuming agent session with verification feedback",
+			);
+		} else if (this.isCurrentTaskMeta && metaType) {
 			// Meta-task: use the meta-task template
 			const metaPrompt = getMetaTaskPrompt(metaType);
 			const objectiveWithoutPrefix = task.replace(/^\[(?:meta:\w+|plan)\]\s*/i, "");
@@ -941,6 +1028,62 @@ OBJECTIVE: ${objectiveWithoutPrefix}${retryContext}
 Working directory: ${this.workingDirectory}
 Read the task board from .undercity/tasks.json to analyze.
 Return your analysis as JSON in the format specified above.`;
+		} else if (this.isCurrentTaskResearch) {
+			// Research task: gather information, write findings to markdown file
+			const objectiveWithoutPrefix = task.replace(/^\[research\]\s*/i, "");
+
+			// Generate a filename from the objective
+			const slug = objectiveWithoutPrefix
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, "-")
+				.replace(/^-|-$/g, "")
+				.slice(0, 50);
+			const timestamp = new Date().toISOString().split("T")[0];
+			const outputPath = `.undercity/research/${timestamp}-${slug}.md`;
+
+			let retryContext = "";
+			if (this.attempts > 1 && this.lastFeedback) {
+				retryContext = `
+
+PREVIOUS ATTEMPT FEEDBACK:
+${this.lastFeedback}
+
+Please provide more detailed findings and ensure the markdown file is written.`;
+			}
+
+			prompt = `You are a research assistant. Your task is to gather information and document findings.
+
+RESEARCH OBJECTIVE:
+${objectiveWithoutPrefix}${retryContext}
+
+INSTRUCTIONS:
+1. Use web search, documentation, and any available resources to research this topic
+2. Focus on gathering accurate, relevant information
+3. Cite sources when possible
+4. Provide actionable insights
+
+OUTPUT:
+Write your findings to: ${outputPath}
+
+Use this markdown structure:
+\`\`\`markdown
+# Research: ${objectiveWithoutPrefix}
+
+## Summary
+Brief summary of key findings.
+
+## Findings
+- **Finding 1**: Description (Source: URL)
+- **Finding 2**: Description (Source: URL)
+
+## Recommendations
+- Actionable next steps based on research
+
+## Sources
+- [Source Name](URL)
+\`\`\`
+
+The file MUST be created at ${outputPath} for this task to succeed.`;
 		} else {
 			// Standard implementation task: build prompt with context
 			let contextSection = "";
@@ -965,17 +1108,7 @@ Return your analysis as JSON in the format specified above.`;
 `;
 			}
 
-			let retryContext = "";
-			if (this.attempts > 1 && this.lastFeedback) {
-				retryContext = `
-
-PREVIOUS ATTEMPT FAILED. Here's what the verification tools found:
-${this.lastFeedback}
-
-Please fix these specific issues.`;
-			}
-
-			// Add post-mortem context if escalating from a different tier
+			// For first attempt after escalation, include post-mortem
 			let postMortemContext = "";
 			if (this.lastPostMortem) {
 				postMortemContext = `
@@ -989,7 +1122,7 @@ Use this analysis to avoid repeating the same mistakes.`;
 			}
 
 			prompt = `${contextSection}TASK:
-${task}${retryContext}${postMortemContext}
+${task}${postMortemContext}
 
 RULES:
 1. Read target files before editing
@@ -1004,6 +1137,7 @@ RULES:
 		this.writeCountThisExecution = 0;
 
 		// Build hooks - meta-tasks don't need the "must write files" check
+		// Research tasks now write to .undercity/research/*.md so they use the normal hook
 		const stopHooks = this.isCurrentTaskMeta
 			? [] // Meta-tasks return recommendations, not file changes
 			: [
@@ -1027,26 +1161,31 @@ RULES:
 					},
 				];
 
-		for await (const message of query({
-			prompt,
-			options: {
-				model: MODEL_NAMES[this.currentModel],
-				permissionMode: "bypassPermissions",
-				allowDangerouslySkipPermissions: true,
-				settingSources: ["project"],
-				// CRITICAL: Use workingDirectory so agent edits files in the correct location (worktree)
-				cwd: this.workingDirectory,
-				// Defense-in-depth: explicitly block git push even if settings fail to load
-				disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
-				// Stop hook: prevent agent from finishing without making changes (disabled for meta-tasks)
-				hooks:
-					stopHooks.length > 0
-						? {
-								Stop: stopHooks,
-							}
-						: undefined,
-			},
-		})) {
+		// Build query parameters - use resume if we have a session to continue
+		const queryOptions = {
+			model: MODEL_NAMES[this.currentModel],
+			permissionMode: "bypassPermissions" as const,
+			allowDangerouslySkipPermissions: true,
+			settingSources: ["project"] as ("project" | "user")[],
+			// CRITICAL: Use workingDirectory so agent edits files in the correct location (worktree)
+			cwd: this.workingDirectory,
+			// Defense-in-depth: explicitly block git push even if settings fail to load
+			disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
+			// Stop hook: prevent agent from finishing without making changes (disabled for meta-tasks)
+			hooks:
+				stopHooks.length > 0
+					? {
+							Stop: stopHooks,
+						}
+					: undefined,
+		};
+
+		// Use resume to continue the session, or prompt to start fresh
+		const queryParams = canResume
+			? { resume: this.currentAgentSessionId!, prompt: resumePrompt!, options: queryOptions }
+			: { prompt, options: queryOptions };
+
+		for await (const message of query(queryParams)) {
 			// Track token usage
 			const usage = this.metricsTracker.extractTokenUsage(message);
 			if (usage) {
@@ -1067,6 +1206,13 @@ RULES:
 				const msg = message as Record<string, unknown>;
 				const usageData = msg.usage as Record<string, number> | undefined;
 				const modelUsage = msg.modelUsage as Record<string, Record<string, number>> | undefined;
+
+				// Capture session ID for potential resume on retry
+				// The SDK returns conversationId in the result message
+				if (!this.currentAgentSessionId && msg.conversationId) {
+					this.currentAgentSessionId = msg.conversationId as string;
+					sessionLogger.debug({ sessionId: this.currentAgentSessionId }, "Captured agent session ID for resume");
+				}
 
 				recordQueryResult({
 					success: msg.subtype === "success",
@@ -1265,6 +1411,8 @@ RULES:
 			const newModel = tiers[currentIndex + 1];
 			// Note: output.workerEscalation is called by the caller with reason
 			this.currentModel = newModel;
+			// Clear session ID - new model tier needs fresh session
+			this.currentAgentSessionId = undefined;
 			// Record escalation in metrics tracker
 			this.metricsTracker.recordEscalation(previousModel, newModel);
 			return true;

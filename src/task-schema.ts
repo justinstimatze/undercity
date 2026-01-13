@@ -21,6 +21,27 @@ export type MetaTaskType = "triage" | "prune" | "plan" | "prioritize" | "generat
 const META_TASK_TYPES: MetaTaskType[] = ["triage", "prune", "plan", "prioritize", "generate"];
 
 /**
+ * Research task keywords - tasks that gather information without code changes
+ */
+const RESEARCH_KEYWORDS = [
+	"research",
+	"investigate",
+	"analyze",
+	"find out",
+	"learn about",
+	"explore",
+	"understand",
+	"document",
+	"summarize",
+	"compare",
+	"evaluate",
+	"review",
+	"study",
+	"web search",
+	"search for",
+];
+
+/**
  * Category prefixes: informal tags in brackets at objective start
  */
 export type TaskCategory =
@@ -32,6 +53,8 @@ export type TaskCategory =
 	| "meta:generate"
 	// Planning
 	| "plan"
+	// Research (no code changes)
+	| "research"
 	// Feature categories
 	| "feedback"
 	| "context"
@@ -62,6 +85,7 @@ const TASK_CATEGORIES: TaskCategory[] = [
 	"meta:prioritize",
 	"meta:generate",
 	"plan",
+	"research",
 	"feedback",
 	"context",
 	"metrics",
@@ -88,9 +112,10 @@ const TASK_CATEGORIES: TaskCategory[] = [
 /**
  * Task type classification:
  * - Meta: operate on task board (triage, prune, plan, etc.)
+ * - Research: gather information, no code changes required
  * - Implementation: make code changes
  */
-export type TaskType = "meta" | "implementation";
+export type TaskType = "meta" | "research" | "implementation";
 
 // =============================================================================
 // Task Parsing
@@ -119,8 +144,33 @@ export function getTaskType(objective: string): TaskType {
 		return "meta";
 	}
 
+	// Explicit research prefix
+	if (lower.startsWith("[research]")) {
+		return "research";
+	}
+
+	// Keyword-based research detection
+	for (const keyword of RESEARCH_KEYWORDS) {
+		if (lower.includes(keyword)) {
+			// Make sure it's not asking to implement something with these words
+			// e.g., "implement research feature" is implementation, not research
+			const implementWords = ["implement", "add", "create", "build", "fix", "update", "modify", "refactor"];
+			const hasImplementWord = implementWords.some((w) => lower.includes(w));
+			if (!hasImplementWord) {
+				return "research";
+			}
+		}
+	}
+
 	// Everything else is implementation
 	return "implementation";
+}
+
+/**
+ * Check if objective is a research task
+ */
+export function isResearchTask(objective: string): boolean {
+	return getTaskType(objective) === "research";
 }
 
 /**
@@ -312,6 +362,88 @@ export function parseMetaTaskResult(output: string, metaType: MetaTaskType): Met
 			metrics: parsed.metrics,
 		};
 	} catch {
+		return null;
+	}
+}
+
+// =============================================================================
+// Research Task Result Schema
+// =============================================================================
+
+export interface ResearchFinding {
+	/** Key insight or fact discovered */
+	finding: string;
+	/** Source of this information (URL, file, documentation) */
+	source?: string;
+	/** Confidence in this finding (0-1) */
+	confidence: number;
+	/** Category: fact, recommendation, warning, etc. */
+	category: "fact" | "recommendation" | "warning" | "comparison" | "example";
+}
+
+export interface ResearchResultSchemaType {
+	/** Brief summary of findings */
+	summary: string;
+	/** Detailed findings */
+	findings: ResearchFinding[];
+	/** Suggested next steps or follow-up tasks */
+	nextSteps?: string[];
+	/** Sources consulted */
+	sources?: string[];
+	/** Any limitations or caveats */
+	caveats?: string[];
+}
+
+/**
+ * Parse and validate research result from agent output
+ */
+export function parseResearchResult(output: string): ResearchResultSchemaType | null {
+	try {
+		// Look for JSON block in output
+		const jsonMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
+		if (jsonMatch) {
+			const parsed = JSON.parse(jsonMatch[1]);
+			if (parsed.summary && Array.isArray(parsed.findings)) {
+				return {
+					summary: parsed.summary,
+					findings: parsed.findings,
+					nextSteps: parsed.nextSteps,
+					sources: parsed.sources,
+					caveats: parsed.caveats,
+				};
+			}
+		}
+
+		// If no structured output, create a simple result from the text
+		// Research tasks can succeed with just prose output
+		if (output.trim().length > 100) {
+			return {
+				summary: output.slice(0, 500),
+				findings: [
+					{
+						finding: "Research completed - see full output for details",
+						confidence: 0.8,
+						category: "fact",
+					},
+				],
+			};
+		}
+
+		return null;
+	} catch {
+		// Even if JSON parsing fails, accept prose output
+		if (output.trim().length > 100) {
+			return {
+				summary: output.slice(0, 500),
+				findings: [
+					{
+						finding: "Research completed - see full output for details",
+						confidence: 0.7,
+						category: "fact",
+					},
+				],
+			};
+		}
 		return null;
 	}
 }

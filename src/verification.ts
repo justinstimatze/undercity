@@ -61,6 +61,22 @@ function getVerificationCommands(workingDirectory: string): {
 import type { ErrorCategory } from "./types.js";
 
 /**
+ * Timing data for profiling
+ */
+export interface VerificationTiming {
+	format?: number;
+	security?: number;
+	spell?: number;
+	gitDiff?: number;
+	typecheck?: number;
+	lint?: number;
+	tests?: number;
+	build?: number;
+	codeHealth?: number;
+	total: number;
+}
+
+/**
  * Verification result
  */
 export interface VerificationResult {
@@ -77,6 +93,8 @@ export interface VerificationResult {
 	feedback: string;
 	/** True if passed but has non-blocking warnings (spell, code health) */
 	hasWarnings: boolean;
+	/** Timing data for profiling (if enabled) */
+	timing?: VerificationTiming;
 }
 
 /**
@@ -97,6 +115,7 @@ export async function verifyWork(
 	runTests: boolean = true,
 	workingDirectory: string = process.cwd(),
 	baseCommit?: string,
+	profile: boolean = false,
 ): Promise<VerificationResult> {
 	const issues: string[] = [];
 	const feedbackParts: string[] = [];
@@ -105,18 +124,25 @@ export async function verifyWork(
 	let lintPassed = true;
 	let spellPassed = true;
 
+	// Timing for profiling
+	const timing: VerificationTiming = { total: 0 };
+	const totalStart = Date.now();
+
 	// Get commands from profile or use defaults
 	const commands = getVerificationCommands(workingDirectory);
 
 	// Auto-format code before verification (worktrees don't have pre-commit hooks)
+	let stepStart = Date.now();
 	try {
 		execSync("pnpm format:fix 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
 		feedbackParts.push("✓ Auto-formatted code");
 	} catch {
 		// Format:fix may not be available in all projects, continue
 	}
+	if (profile) timing.format = Date.now() - stepStart;
 
 	// Security scan (mirrors pre-commit hook)
+	stepStart = Date.now();
 	try {
 		execSync("bash ./scripts/security-scan.sh 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
 		feedbackParts.push("✓ Security scan passed");
@@ -129,7 +155,10 @@ export async function verifyWork(
 		}
 		// If script doesn't exist, continue (non-fatal)
 	}
+	if (profile) timing.security = Date.now() - stepStart;
 
+	// Spell check
+	stepStart = Date.now();
 	try {
 		// Only run spell check on typescript and markdown files
 		execSync(`${commands.spell} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
@@ -143,11 +172,13 @@ export async function verifyWork(
 		logger.warn({ errorCount, errors: spellingErrors.slice(0, 5) }, "Spelling issues detected (non-blocking)");
 		feedbackParts.push(`⚠ Spelling issues (${errorCount}) - non-blocking`);
 	}
+	if (profile) timing.spell = Date.now() - stepStart;
 	let codeHealthPassed = true;
 	let filesChanged = 0;
 	let linesChanged = 0;
 
 	// 1. Check what changed
+	stepStart = Date.now();
 	// Check: uncommitted changes, untracked files, AND committed changes since base
 	// This handles: agent left changes uncommitted, created new files, OR already committed
 	let changedFiles: string[] = [];
@@ -208,57 +239,102 @@ export async function verifyWork(
 		issues.push("No changes detected");
 		feedbackParts.push("ERROR: No file changes were made. The task may not have been completed.");
 	}
+	if (profile) timing.gitDiff = Date.now() - stepStart;
 
-	// 2. Run typecheck (critical - must pass)
-	if (runTypecheck) {
+	// 2. Run typecheck, lint, and tests IN PARALLEL (they're independent)
+	// This significantly reduces verification time vs running sequentially
+	const parallelStart = Date.now();
+
+	// Define parallel check functions
+	const runTypecheckTask = async (): Promise<{
+		passed: boolean;
+		feedback: string[];
+		issues: string[];
+		duration: number;
+	}> => {
+		const start = Date.now();
+		const feedback: string[] = [];
+		const taskIssues: string[] = [];
+		let passed = true;
+
+		if (!runTypecheck) {
+			return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
+		}
+
 		try {
 			execSync(`${commands.typecheck} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 60000 });
-			feedbackParts.push("✓ Typecheck passed");
+			feedback.push("✓ Typecheck passed");
 		} catch (error) {
-			typecheckPassed = false;
+			passed = false;
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 
 			// Parse into structured errors (more compact than raw output)
 			const structuredErrors = parseTypeScriptErrors(output);
-			issues.push(`Typecheck failed (${structuredErrors.length} errors)`);
+			taskIssues.push(`Typecheck failed (${structuredErrors.length} errors)`);
 
 			// Format errors with suggestions
 			const formattedErrors = formatErrorsForAgent(structuredErrors);
-			feedbackParts.push(`✗ TYPECHECK FAILED:\n${formattedErrors}`);
+			feedback.push(`✗ TYPECHECK FAILED:\n${formattedErrors}`);
 
 			// Check cache for previous fixes
 			const cache = getCache();
 			for (const err of structuredErrors.slice(0, 3)) {
 				const similarFixes = cache.findSimilarFixes(err.message);
 				if (similarFixes.length > 0) {
-					feedbackParts.push(`  💡 Similar error was fixed before: ${similarFixes[0].fix.slice(0, 50)}...`);
+					feedback.push(`  💡 Similar error was fixed before: ${similarFixes[0].fix.slice(0, 50)}...`);
 				}
 			}
 		}
-	}
+		return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
+	};
 
-	// 3. Run lint check (important for code quality)
-	try {
-		execSync(`${commands.lint} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 60000 });
-		feedbackParts.push("✓ Lint passed");
-	} catch (error) {
-		lintPassed = false;
-		const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
+	const runLintTask = async (): Promise<{
+		passed: boolean;
+		feedback: string[];
+		issues: string[];
+		duration: number;
+	}> => {
+		const start = Date.now();
+		const feedback: string[] = [];
+		const taskIssues: string[] = [];
+		let passed = true;
 
-		// Count lint issues
-		const issueCount = (output.match(/✖|error|warning/gi) || []).length;
-		issues.push(`Lint issues (${issueCount})`);
+		try {
+			execSync(`${commands.lint} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 60000 });
+			feedback.push("✓ Lint passed");
+		} catch (error) {
+			passed = false;
+			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 
-		// Extract first few issues
-		const lines = output
-			.split("\n")
-			.filter((l) => l.includes("error") || l.includes("warning"))
-			.slice(0, 3);
-		feedbackParts.push(`⚠ LINT ISSUES:\n${lines.join("\n")}`);
-	}
+			// Count lint issues
+			const issueCount = (output.match(/✖|error|warning/gi) || []).length;
+			taskIssues.push(`Lint issues (${issueCount})`);
 
-	// 4. Run tests if enabled and tests exist for changed files
-	if (runTests && changedFiles.some((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))) {
+			// Extract first few issues
+			const lines = output
+				.split("\n")
+				.filter((l) => l.includes("error") || l.includes("warning"))
+				.slice(0, 3);
+			feedback.push(`⚠ LINT ISSUES:\n${lines.join("\n")}`);
+		}
+		return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
+	};
+
+	const runTestsTask = async (): Promise<{
+		passed: boolean;
+		feedback: string[];
+		issues: string[];
+		duration: number;
+	}> => {
+		const start = Date.now();
+		const feedback: string[] = [];
+		const taskIssues: string[] = [];
+		let passed = true;
+
+		if (!runTests || !changedFiles.some((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))) {
+			return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
+		}
+
 		try {
 			// Run tests with short timeout - we just want to know if they pass
 			// Set UNDERCITY_VERIFICATION to skip integration tests
@@ -268,26 +344,63 @@ export async function verifyWork(
 				timeout: 120000,
 				env: { ...process.env, UNDERCITY_VERIFICATION: "true" },
 			});
-			feedbackParts.push("✓ Tests passed");
+			feedback.push("✓ Tests passed");
 		} catch (error) {
-			testsPassed = false;
+			passed = false;
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 
 			// Extract failed test info
 			const failedMatch = output.match(/(\d+) failed/);
 			const failedCount = failedMatch ? failedMatch[1] : "some";
-			issues.push(`Tests failed (${failedCount})`);
+			taskIssues.push(`Tests failed (${failedCount})`);
 
 			// Find the FAIL lines
 			const failLines = output
 				.split("\n")
 				.filter((l) => l.includes("FAIL") || l.includes("AssertionError"))
 				.slice(0, 3);
-			feedbackParts.push(`✗ TESTS FAILED:\n${failLines.join("\n")}`);
+			feedback.push(`✗ TESTS FAILED:\n${failLines.join("\n")}`);
+		}
+		return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
+	};
+
+	// Run all three checks in parallel
+	const [typecheckResult, lintResult, testsResult] = await Promise.all([
+		runTypecheckTask(),
+		runLintTask(),
+		runTestsTask(),
+	]);
+
+	// Collect results
+	typecheckPassed = typecheckResult.passed;
+	lintPassed = lintResult.passed;
+	testsPassed = testsResult.passed;
+
+	// Add feedback in consistent order (typecheck → lint → tests)
+	feedbackParts.push(...typecheckResult.feedback);
+	feedbackParts.push(...lintResult.feedback);
+	feedbackParts.push(...testsResult.feedback);
+
+	issues.push(...typecheckResult.issues);
+	issues.push(...lintResult.issues);
+	issues.push(...testsResult.issues);
+
+	if (profile) {
+		timing.typecheck = typecheckResult.duration;
+		timing.lint = lintResult.duration;
+		timing.tests = testsResult.duration;
+		const parallelDuration = Date.now() - parallelStart;
+		const sequentialWouldBe = typecheckResult.duration + lintResult.duration + testsResult.duration;
+		if (sequentialWouldBe > 0) {
+			logger.debug(
+				{ parallelDuration, sequentialWouldBe, savedMs: sequentialWouldBe - parallelDuration },
+				"Parallel verification saved time",
+			);
 		}
 	}
 
-	// 5. Run build (mirrors pre-commit hook - ensures code compiles)
+	// 3. Run build (after parallel checks - uses compiled output)
+	stepStart = Date.now();
 	let buildPassed = true;
 	try {
 		execSync("pnpm build 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 60000 });
@@ -303,8 +416,10 @@ export async function verifyWork(
 			.slice(0, 3);
 		feedbackParts.push(`✗ BUILD FAILED:\n${errorLines.join("\n")}`);
 	}
+	if (profile) timing.build = Date.now() - stepStart;
 
 	// 6. CodeScene code health (optional, nice to have)
+	stepStart = Date.now();
 	try {
 		// Only check changed files to be fast
 		if (changedFiles.length > 0 && changedFiles.length <= 5) {
@@ -329,6 +444,19 @@ export async function verifyWork(
 	} catch {
 		// CodeScene check is optional, don't fail on errors
 	}
+	if (profile) timing.codeHealth = Date.now() - stepStart;
+
+	// Calculate total time
+	if (profile) {
+		timing.total = Date.now() - totalStart;
+		logger.info(
+			{
+				timing,
+				breakdown: `format=${timing.format}ms security=${timing.security}ms spell=${timing.spell}ms git=${timing.gitDiff}ms typecheck=${timing.typecheck}ms lint=${timing.lint}ms tests=${timing.tests}ms build=${timing.build}ms health=${timing.codeHealth}ms`,
+			},
+			`Verification completed in ${timing.total}ms`,
+		);
+	}
 
 	// Build final feedback
 	const feedback = feedbackParts.join("\n");
@@ -351,6 +479,7 @@ export async function verifyWork(
 		issues,
 		feedback,
 		hasWarnings,
+		timing: profile ? timing : undefined,
 	};
 }
 
