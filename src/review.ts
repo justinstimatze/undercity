@@ -346,8 +346,8 @@ async function runAnnealingReview(
 		coolingRate: 0.4,
 	});
 
-	// Limit to 1 annealing pass - each is an expensive Opus call
-	// The standard review after this will catch remaining issues
+	// Limit to 1 annealing pass - each is an expensive Opus call providing diminishing returns
+	// The standard review after this will catch remaining issues more cost-effectively
 	const schedule = annealing.generateSchedule().slice(0, 1);
 	const insights: string[] = [];
 
