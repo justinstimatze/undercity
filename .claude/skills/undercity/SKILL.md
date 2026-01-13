@@ -73,6 +73,20 @@ node ./bin/undercity.js tasks pending
 node ./bin/undercity.js tasks complete
 ```
 
+### Mark Tasks Complete
+
+```bash
+# Mark task as complete
+node ./bin/undercity.js complete <task-id>
+
+# With resolution notes
+node ./bin/undercity.js complete <task-id> --resolution "Fixed in commit abc"
+
+# With reason (alias for --resolution, useful for closures)
+node ./bin/undercity.js complete <task-id> --reason "Already implemented"
+node ./bin/undercity.js complete <task-id> --reason "Deferred"
+```
+
 ### Start Autonomous Execution
 
 ```bash

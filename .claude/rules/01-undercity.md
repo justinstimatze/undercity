@@ -34,6 +34,7 @@ undercity tasks --tag context              # Filter by tag
 undercity tasks --all                      # Show all (not just 10)
 undercity tasks --count 20                 # Show first 20
 undercity complete <task-id>               # Mark task complete
+undercity complete <task-id> --reason "Already implemented"  # With explanation
 undercity reconcile                        # Mark duplicate/done tasks complete
 
 # Autonomous execution
