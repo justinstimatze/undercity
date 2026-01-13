@@ -1073,8 +1073,7 @@ ${task}
 ## Instructions
 1. Explore the codebase to find relevant files
 2. Follow existing patterns
-3. Run typecheck before finishing
-4. Make minimal changes to complete the objective`;
+3. Make minimal changes to complete the objective`;
 }
 
 /**

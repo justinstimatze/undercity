@@ -55,8 +55,8 @@ export interface ParallelSoloOptions {
 	annealingAtOpus?: boolean; // Enable annealing review at opus tier
 	pushOnSuccess?: boolean; // Push to remote after successful merge (default: false)
 	// Verification retry options
-	maxAttempts?: number; // Maximum attempts per task before failing (default: 3)
-	maxRetriesPerTier?: number; // Maximum fix attempts at same tier before escalating (default: 3)
+	maxAttempts?: number; // Maximum attempts per task before failing (default: 7)
+	maxRetriesPerTier?: number; // Maximum fix attempts at same tier before escalating (default: 2)
 	maxReviewPassesPerTier?: number; // Maximum review passes per tier before escalating (default: 2)
 	maxOpusReviewPasses?: number; // Maximum review passes at opus tier (default: 6)
 	// Worker health monitoring
@@ -222,8 +222,9 @@ export class Orchestrator {
 		this.annealingAtOpus = options.annealingAtOpus ?? false;
 		this.pushOnSuccess = options.pushOnSuccess ?? false; // Default to no push - user must explicitly opt in
 		// Verification retry options with defaults
-		this.maxAttempts = options.maxAttempts ?? 3;
-		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
+		// 7 attempts allows full escalation: 2 haiku + 2 sonnet + 3 opus
+		this.maxAttempts = options.maxAttempts ?? 7;
+		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 2;
 		this.maxReviewPassesPerTier = options.maxReviewPassesPerTier ?? 2;
 		this.maxOpusReviewPasses = options.maxOpusReviewPasses ?? 6;
 		// Health monitoring with defaults

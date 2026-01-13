@@ -145,7 +145,9 @@ describe("complexity", () => {
 			it("identifies migration tasks as complex", () => {
 				const result = assessComplexityFast("migrate database schema");
 				expect(result.level).toBe("complex");
-				expect(result.model).toBe("opus");
+				// Complex tasks now start with sonnet, escalate to opus if needed
+				// This saves tokens - most complex tasks succeed with sonnet
+				expect(result.model).toBe("sonnet");
 				expect(result.useFullChain).toBe(true);
 			});
 

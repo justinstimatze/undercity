@@ -401,6 +401,50 @@ export function getChangedFiles(since: string): string[] {
 - Incremental updates (only re-index modified files)
 - Change detection for verification
 
+## Token Efficiency Optimizations
+
+### Escalation Tuning
+Default escalation settings balance retry attempts with cost:
+
+```typescript
+maxAttempts: 7,        // Total attempts before failure
+maxRetriesPerTier: 2,  // Retries before escalating to next model
+```
+
+**Why these values**: 7 attempts allows full escalation path (2 haiku + 2 sonnet + 3 opus).
+Previous default of 3 total attempts with 3 retries per tier created a dead escalation path
+where escalation would trigger but no attempts remained.
+
+### Verification Cost
+
+**Avoid redundant verification**:
+- Agent prompt does NOT tell agent to run typecheck (we verify externally)
+- Warning retry disabled by default (extra agent call + verify for minor issues)
+- Review verification only after actual fixes (not every review pass)
+
+**Verification calls per task**:
+- Standard task: 1 (after agent completes)
+- With reviews enabled: 1-3 (after agent + after review fixes)
+- Maximum: ~6 (complex task with multiple review tiers)
+
+### Review Efficiency
+
+**Annealing review**:
+- Limited to 1 Opus call (down from 3)
+- Standard review after catches remaining issues
+- Full annealing only for critical/complex tasks
+
+**Review tier capping**:
+- Trivial/simple/standard tasks: cap at sonnet (no Opus review)
+- Complex/critical tasks: full escalation to Opus
+
+### Agent Turn Efficiency
+
+Monitor turn counts in `.undercity/live-metrics.json`:
+- Good: 5-10 turns per task
+- Concerning: >15 turns (agent may be stuck in loop)
+- Bad: >25 turns (likely anti-pattern in prompt or task)
+
 ## Prompt Caching (Blocked)
 
 ### Status: NOT IMPLEMENTED

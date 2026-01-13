@@ -169,6 +169,7 @@ export async function runEscalatingReview(
 		let tierPasses = 0;
 		let tierFoundIssues = false;
 
+		let tierMadeChanges = false;
 		while (tierPasses < maxPasses) {
 			tierPasses++;
 			totalPasses++;
@@ -184,24 +185,13 @@ export async function runEscalatingReview(
 			if (review.madeChanges) {
 				// Review found and fixed issues
 				tierFoundIssues = true;
+				tierMadeChanges = true;
 				console.log(chalk.cyan(`  [${tier}] Pass ${tierPasses}/${maxPasses}: Fixed issues`));
 				for (const issue of review.issues) {
 					console.log(chalk.dim(`    - ${issue.slice(0, 80)}`));
 					allIssuesFound.push(issue);
 				}
-
-				// Verify the fixes
-				const verification = await verifyWork(runTypecheck, runTests, workingDirectory);
-				if (!verification.passed) {
-					console.log(chalk.red(`  [${tier}] Verification failed after fix`));
-					return {
-						converged: false,
-						issuesFound: allIssuesFound,
-						reviewPasses: totalPasses,
-						finalTier: tier,
-					};
-				}
-				// Fix verified - continue to check for more issues
+				// Don't verify after each fix - batch verify at end of tier
 			} else if (review.foundIssues) {
 				// Found issues but didn't fix - just log and continue
 				tierFoundIssues = true;
@@ -210,6 +200,20 @@ export async function runEscalatingReview(
 					console.log(chalk.dim(`    - ${issue.slice(0, 80)}`));
 					allIssuesFound.push(issue);
 				}
+			}
+		}
+
+		// Verify once at end of tier if any changes were made
+		if (tierMadeChanges) {
+			const verification = await verifyWork(runTypecheck, runTests, workingDirectory);
+			if (!verification.passed) {
+				console.log(chalk.red(`  [${tier}] Verification failed after fixes`));
+				return {
+					converged: false,
+					issuesFound: allIssuesFound,
+					reviewPasses: totalPasses,
+					finalTier: tier,
+				};
 			}
 		}
 
@@ -342,7 +346,9 @@ async function runAnnealingReview(
 		coolingRate: 0.4,
 	});
 
-	const schedule = annealing.generateSchedule().slice(0, 3);
+	// Limit to 1 annealing pass - each is an expensive Opus call
+	// The standard review after this will catch remaining issues
+	const schedule = annealing.generateSchedule().slice(0, 1);
 	const insights: string[] = [];
 
 	let diffOutput = "";

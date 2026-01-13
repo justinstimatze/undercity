@@ -264,7 +264,8 @@ export class TaskWorker {
 	private lastAgentTurns: number = 0;
 
 	constructor(options: SoloOptions = {}) {
-		this.maxAttempts = options.maxAttempts ?? 3;
+		// Default 7 attempts allows full escalation: 2 haiku + 2 sonnet + 3 opus
+		this.maxAttempts = options.maxAttempts ?? 7;
 		this.startingModel = options.startingModel ?? "sonnet";
 		this.autoCommit = options.autoCommit ?? true;
 		this.stream = options.stream ?? false;
@@ -278,7 +279,8 @@ export class TaskWorker {
 		// Opus is final tier - no escalation path, so give it more attempts by default
 		this.maxOpusReviewPasses = options.maxOpusReviewPasses ?? this.maxReviewPassesPerTier * 3;
 		this.annealingAtOpus = options.annealingAtOpus ?? false;
-		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
+		// 2 retries per tier before escalating (was 3, but that's too slow)
+		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 2;
 		this.maxOpusRetries = options.maxOpusRetries ?? 7;
 		this.currentModel = this.startingModel;
 		this.metricsTracker = new MetricsTracker();
@@ -756,24 +758,15 @@ export class TaskWorker {
 				if (verification.passed) {
 					output.workerVerification(taskId, true);
 
-					// Retry once for warnings (spell, code health)
+					// Warnings are logged but don't block success
+					// Cost-benefit: An extra agent call + verification for minor issues isn't worth it
+					// The warnings are in verification.feedback if someone wants to see them
 					let finalVerification = verification;
-					if (verification.hasWarnings && !this.retriedForWarnings) {
-						this.retriedForWarnings = true;
-						output.info("Verification passed with warnings, asking agent to address them...", { taskId });
-
-						// Ask agent to fix warnings
-						const warningPrompt = `[warning-fix] The task is complete but there are warnings to address:\n\n${verification.feedback}\n\nPlease fix these warnings if possible. Focus on spelling issues and code health improvements. Only make changes if you can clearly fix the warnings.`;
-						await this.executeAgent(warningPrompt);
-
-						// Re-verify after warning fixes
-						const afterWarnings = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory, baseCommit);
-						if (afterWarnings.passed) {
-							finalVerification = afterWarnings;
-							if (!afterWarnings.hasWarnings) {
-								output.success("Warnings resolved", { taskId });
-							}
-						}
+					if (verification.hasWarnings) {
+						output.debug("Verification passed with warnings (skipping retry)", {
+							taskId,
+							warnings: verification.feedback.slice(0, 200),
+						});
 					}
 
 					// Run review passes if enabled (auto-selected or user-specified)
@@ -1114,9 +1107,6 @@ Be concise and specific. Focus on actionable insights.`;
 	/** Previous verification feedback for retry context */
 	private lastFeedback?: string;
 
-	/** Whether we've already retried once for warnings */
-	private retriedForWarnings = false;
-
 	/** Post-mortem analysis from previous tier (only set on escalation) */
 	private lastPostMortem?: string;
 
@@ -1287,8 +1277,7 @@ ${task}${postMortemContext}${exampleSection}
 RULES:
 1. Read target files before editing
 2. Minimal changes only - nothing beyond task scope
-3. Run typecheck before finishing
-4. No questions - decide and proceed`;
+3. No questions - decide and proceed`;
 		}
 
 		// Token usage will be accumulated in this.tokenUsageThisTask
@@ -1321,6 +1310,14 @@ RULES:
 					},
 				];
 
+		// Set maxTurns based on model tier - prevents runaway exploration
+		// Simple tasks (haiku): 10 turns, Standard (sonnet): 15, Complex (opus): 25
+		const maxTurnsPerModel: Record<ModelTier, number> = {
+			haiku: 10,
+			sonnet: 15,
+			opus: 25,
+		};
+
 		// Build query parameters - use resume if we have a session to continue
 		const queryOptions = {
 			model: MODEL_NAMES[this.currentModel],
@@ -1329,6 +1326,8 @@ RULES:
 			settingSources: ["project"] as ("project" | "user")[],
 			// CRITICAL: Use workingDirectory so agent edits files in the correct location (worktree)
 			cwd: this.workingDirectory,
+			// Limit turns to prevent runaway exploration - simple tasks don't need 20+ turns
+			maxTurns: maxTurnsPerModel[this.currentModel],
 			// Defense-in-depth: explicitly block git push even if settings fail to load
 			disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
 			// Stop hook: prevent agent from finishing without making changes (disabled for meta-tasks)

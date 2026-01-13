@@ -549,9 +549,10 @@ function getLevelConfig(
 			needsReview: true,
 			description: "Typical features requiring basic review",
 		},
-		// Complex tasks: multi-file changes, refactors - escalate to opus
+		// Complex tasks: multi-file changes, refactors - start with sonnet, let escalation handle opus
+		// Previously sent directly to opus, wasting tokens when sonnet could handle it
 		complex: {
-			model: "opus",
+			model: "sonnet",
 			useFullChain: true,
 			needsReview: true,
 			description: "Significant architectural or multi-file changes",
