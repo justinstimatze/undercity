@@ -29,9 +29,9 @@ import type {
 	ProjectProfile,
 	PromptKnowledge,
 	RateLimitState,
-	SafePocket,
 	ScoutCache,
 	ScoutCacheEntry,
+	SessionRecovery,
 	Step,
 	TaskMetrics,
 	WorktreeInfo,
@@ -111,24 +111,39 @@ export class Persistence {
 		}
 	}
 
-	// ============== Safe Pocket ==============
+	// ============== Session Recovery ==============
 	// Critical state that survives crashes
 
-	getPocket(): SafePocket {
-		return this.readJson<SafePocket>("pocket.json", {
+	getSessionRecovery(): SessionRecovery {
+		return this.readJson<SessionRecovery>("session-recovery.json", {
 			lastUpdated: new Date(),
 		});
 	}
 
-	savePocket(pocket: SafePocket): void {
-		pocket.lastUpdated = new Date();
-		this.writeJson("pocket.json", pocket);
+	saveSessionRecovery(recovery: SessionRecovery): void {
+		recovery.lastUpdated = new Date();
+		this.writeJson("session-recovery.json", recovery);
 	}
 
+	clearSessionRecovery(): void {
+		this.writeJson<SessionRecovery>("session-recovery.json", {
+			lastUpdated: new Date(),
+		});
+	}
+
+	/** @deprecated Use getSessionRecovery instead */
+	getPocket(): SessionRecovery {
+		return this.getSessionRecovery();
+	}
+
+	/** @deprecated Use saveSessionRecovery instead */
+	savePocket(pocket: SessionRecovery): void {
+		this.saveSessionRecovery(pocket);
+	}
+
+	/** @deprecated Use clearSessionRecovery instead */
 	clearPocket(): void {
-		this.writeJson<SafePocket>("pocket.json", {
-			lastUpdated: new Date(),
-		});
+		this.clearSessionRecovery();
 	}
 
 	// ============== Inventory ==============
@@ -390,7 +405,7 @@ export class Persistence {
 	 * Clear all state for a fresh start
 	 */
 	clearAll(): void {
-		this.clearPocket();
+		this.clearSessionRecovery();
 		this.saveInventory({
 			steps: [],
 			agents: [],

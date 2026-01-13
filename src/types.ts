@@ -87,17 +87,20 @@ export interface Agent {
 
 /**
  * Persistence hierarchy:
- * - Pocket: Critical state surviving crashes (session ID, goal, status)
+ * - SessionRecovery: Critical state surviving crashes (session ID, goal, status)
  * - Inventory: Active state during session (agent sessions, steps)
  * - Loadout: Pre-session config (agent types, rules)
  */
-export interface SafePocket {
+export interface SessionRecovery {
 	sessionId?: string;
 	goal?: string;
 	status?: SessionStatus;
 	checkpoint?: string;
 	lastUpdated: Date;
 }
+
+/** @deprecated Use SessionRecovery instead */
+export type SafePocket = SessionRecovery;
 
 export interface Inventory {
 	steps: Step[];

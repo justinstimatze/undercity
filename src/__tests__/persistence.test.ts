@@ -1,7 +1,7 @@
 /**
  * Persistence Module Tests
  *
- * Tests for SafePocket persistence operations.
+ * Tests for SessionRecovery persistence operations.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -42,7 +42,7 @@ vi.mock("node:fs", () => ({
 
 // Import after mocking
 import { Persistence } from "../persistence.js";
-import { createMockPocket } from "./helpers.js";
+import { createMockSessionRecovery } from "./helpers.js";
 
 describe("Persistence", () => {
 	let persistence: Persistence;
@@ -57,53 +57,53 @@ describe("Persistence", () => {
 		persistence = new Persistence(".undercity");
 	});
 
-	describe("getPocket", () => {
-		it("returns default pocket when file does not exist", () => {
-			const pocket = persistence.getPocket();
+	describe("getSessionRecovery", () => {
+		it("returns default session recovery when file does not exist", () => {
+			const recovery = persistence.getSessionRecovery();
 
-			expect(pocket.lastUpdated).toBeInstanceOf(Date);
-			expect(pocket.sessionId).toBeUndefined();
-			expect(pocket.goal).toBeUndefined();
-			expect(pocket.status).toBeUndefined();
+			expect(recovery.lastUpdated).toBeInstanceOf(Date);
+			expect(recovery.sessionId).toBeUndefined();
+			expect(recovery.goal).toBeUndefined();
+			expect(recovery.status).toBeUndefined();
 		});
 
-		it("parses existing pocket file correctly", () => {
-			const existingPocket = createMockPocket({
+		it("parses existing session recovery file correctly", () => {
+			const existingRecovery = createMockSessionRecovery({
 				sessionId: "session-123",
 				goal: "Build feature X",
 				status: "executing",
 			});
-			mockFiles.set(".undercity/pocket.json", JSON.stringify(existingPocket));
+			mockFiles.set(".undercity/session-recovery.json", JSON.stringify(existingRecovery));
 
-			const pocket = persistence.getPocket();
+			const recovery = persistence.getSessionRecovery();
 
-			expect(pocket.sessionId).toBe("session-123");
-			expect(pocket.goal).toBe("Build feature X");
-			expect(pocket.status).toBe("executing");
+			expect(recovery.sessionId).toBe("session-123");
+			expect(recovery.goal).toBe("Build feature X");
+			expect(recovery.status).toBe("executing");
 		});
 
-		it("returns default pocket when file contains invalid JSON", () => {
-			mockFiles.set(".undercity/pocket.json", "{ invalid json }");
+		it("returns default session recovery when file contains invalid JSON", () => {
+			mockFiles.set(".undercity/session-recovery.json", "{ invalid json }");
 
-			const pocket = persistence.getPocket();
+			const recovery = persistence.getSessionRecovery();
 
-			expect(pocket.lastUpdated).toBeInstanceOf(Date);
-			expect(pocket.sessionId).toBeUndefined();
+			expect(recovery.lastUpdated).toBeInstanceOf(Date);
+			expect(recovery.sessionId).toBeUndefined();
 		});
 	});
 
-	describe("savePocket", () => {
+	describe("saveSessionRecovery", () => {
 		it("updates lastUpdated timestamp on save", () => {
-			const pocket = createMockPocket({
+			const recovery = createMockSessionRecovery({
 				sessionId: "session-456",
 				lastUpdated: new Date("2020-01-01"),
 			});
 
 			const beforeSave = new Date();
-			persistence.savePocket(pocket);
+			persistence.saveSessionRecovery(recovery);
 			const afterSave = new Date();
 
-			const saved = JSON.parse(mockFiles.get(".undercity/pocket.json") ?? "{}");
+			const saved = JSON.parse(mockFiles.get(".undercity/session-recovery.json") ?? "{}");
 			const savedDate = new Date(saved.lastUpdated);
 
 			expect(savedDate.getTime()).toBeGreaterThanOrEqual(beforeSave.getTime());
@@ -111,12 +111,12 @@ describe("Persistence", () => {
 		});
 
 		it("writes to correct path", () => {
-			const pocket = createMockPocket({ sessionId: "session-789" });
+			const recovery = createMockSessionRecovery({ sessionId: "session-789" });
 
-			persistence.savePocket(pocket);
+			persistence.saveSessionRecovery(recovery);
 
-			expect(mockFiles.has(".undercity/pocket.json")).toBe(true);
-			const saved = JSON.parse(mockFiles.get(".undercity/pocket.json") ?? "{}");
+			expect(mockFiles.has(".undercity/session-recovery.json")).toBe(true);
+			const saved = JSON.parse(mockFiles.get(".undercity/session-recovery.json") ?? "{}");
 			expect(saved.sessionId).toBe("session-789");
 		});
 
@@ -125,27 +125,27 @@ describe("Persistence", () => {
 			mockDirs.clear();
 
 			const customPersistence = new Persistence(".custom-state");
-			const pocket = createMockPocket({ sessionId: "new-session" });
+			const recovery = createMockSessionRecovery({ sessionId: "new-session" });
 
-			customPersistence.savePocket(pocket);
+			customPersistence.saveSessionRecovery(recovery);
 
 			expect(mockDirs.has(".custom-state")).toBe(true);
 		});
 	});
 
-	describe("clearPocket", () => {
-		it("resets pocket to default state", () => {
-			// Set up existing pocket with data
-			const existingPocket = createMockPocket({
+	describe("clearSessionRecovery", () => {
+		it("resets session recovery to default state", () => {
+			// Set up existing session recovery with data
+			const existingRecovery = createMockSessionRecovery({
 				sessionId: "old-session",
 				goal: "Old goal",
 				status: "complete",
 			});
-			mockFiles.set(".undercity/pocket.json", JSON.stringify(existingPocket));
+			mockFiles.set(".undercity/session-recovery.json", JSON.stringify(existingRecovery));
 
-			persistence.clearPocket();
+			persistence.clearSessionRecovery();
 
-			const cleared = persistence.getPocket();
+			const cleared = persistence.getSessionRecovery();
 			expect(cleared.sessionId).toBeUndefined();
 			expect(cleared.goal).toBeUndefined();
 			expect(cleared.status).toBeUndefined();
@@ -153,14 +153,14 @@ describe("Persistence", () => {
 
 		it("sets fresh lastUpdated timestamp", () => {
 			const beforeClear = new Date();
-			persistence.clearPocket();
+			persistence.clearSessionRecovery();
 			const afterClear = new Date();
 
-			const pocket = persistence.getPocket();
-			const pocketDate = new Date(pocket.lastUpdated);
+			const recovery = persistence.getSessionRecovery();
+			const recoveryDate = new Date(recovery.lastUpdated);
 
-			expect(pocketDate.getTime()).toBeGreaterThanOrEqual(beforeClear.getTime());
-			expect(pocketDate.getTime()).toBeLessThanOrEqual(afterClear.getTime());
+			expect(recoveryDate.getTime()).toBeGreaterThanOrEqual(beforeClear.getTime());
+			expect(recoveryDate.getTime()).toBeLessThanOrEqual(afterClear.getTime());
 		});
 	});
 
@@ -647,17 +647,17 @@ describe("Persistence", () => {
 	});
 
 	describe("clearAll", () => {
-		it("clears pocket and inventory", () => {
+		it("clears session recovery and inventory", () => {
 			// Set up data
-			mockFiles.set(".undercity/pocket.json", JSON.stringify({ sessionId: "test" }));
+			mockFiles.set(".undercity/session-recovery.json", JSON.stringify({ sessionId: "test" }));
 			mockFiles.set(".undercity/inventory.json", JSON.stringify({ steps: [{ id: "1" }], agents: [{ id: "a" }] }));
 
 			persistence.clearAll();
 
-			const pocket = persistence.getPocket();
+			const recovery = persistence.getSessionRecovery();
 			const inventory = persistence.getInventory();
 
-			expect(pocket.sessionId).toBeUndefined();
+			expect(recovery.sessionId).toBeUndefined();
 			expect(inventory.steps).toEqual([]);
 			expect(inventory.agents).toEqual([]);
 		});

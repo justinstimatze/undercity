@@ -261,7 +261,7 @@ export class UndercityServer {
 	}
 
 	private handleStatus(res: ServerResponse): void {
-		const pocket = this.persistence.getPocket();
+		const recovery = this.persistence.getSessionRecovery();
 		const inventory = this.persistence.getInventory();
 		const summary = getBacklogSummary();
 
@@ -273,12 +273,12 @@ export class UndercityServer {
 				paused: this.paused,
 				grindActive: this.grindActive,
 			},
-			session: pocket.sessionId
+			session: recovery.sessionId
 				? {
-						id: pocket.sessionId,
-						status: pocket.status,
-						goal: pocket.goal,
-						checkpoint: pocket.checkpoint,
+						id: recovery.sessionId,
+						status: recovery.status,
+						goal: recovery.goal,
+						checkpoint: recovery.checkpoint,
 					}
 				: null,
 			agents: inventory.agents.map((a) => ({

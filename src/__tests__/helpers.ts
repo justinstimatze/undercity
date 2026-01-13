@@ -4,7 +4,7 @@
  * Type-safe mock factories for testing Undercity persistence.
  */
 
-import type { AgentType, SafePocket, Step, StepStatus } from "../types.js";
+import type { AgentType, SessionRecovery, Step, StepStatus } from "../types.js";
 
 /**
  * All agent types for parametrized testing
@@ -25,12 +25,15 @@ export const createMockTask = (overrides: Partial<Step> = {}): Step => ({
 });
 
 /**
- * Create a mock SafePocket with sensible defaults
+ * Create a mock SessionRecovery with sensible defaults
  */
-export const createMockPocket = (overrides: Partial<SafePocket> = {}): SafePocket => ({
+export const createMockSessionRecovery = (overrides: Partial<SessionRecovery> = {}): SessionRecovery => ({
 	lastUpdated: new Date("2024-01-01T00:00:00.000Z"),
 	...overrides,
 });
+
+/** @deprecated Use createMockSessionRecovery instead */
+export const createMockPocket = createMockSessionRecovery;
 
 /**
  * Mock fs module state for testing
