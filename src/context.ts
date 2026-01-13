@@ -992,34 +992,51 @@ function buildBriefingDoc(briefing: ContextBriefing): string {
 	const sections: string[] = [];
 
 	sections.push(`# CONTEXT BRIEFING`);
+
+	// For simple single-file tasks, add a very explicit quick-start
+	if (briefing.targetFiles.length === 1) {
+		sections.push(
+			`\n**QUICK START: Modify \`${briefing.targetFiles[0]}\` to complete the objective below.**`,
+		);
+	} else if (briefing.targetFiles.length > 0 && briefing.targetFiles.length <= 3) {
+		sections.push(
+			`\n**QUICK START: Focus your changes on these ${briefing.targetFiles.length} files:**\n${briefing.targetFiles.map((f) => `- \`${f}\``).join("\n")}`,
+		);
+	}
+
 	sections.push(`\n## Objective\n${briefing.objective}`);
 
 	if (briefing.constraints.length > 0) {
 		sections.push(`\n## Constraints\n${briefing.constraints.map((c) => `- ${c}`).join("\n")}`);
 	}
 
+	// Make target files section more directive
 	if (briefing.targetFiles.length > 0) {
-		sections.push(`\n## Target Files (start here)\n${briefing.targetFiles.map((f) => `- ${f}`).join("\n")}`);
+		if (briefing.targetFiles.length === 1) {
+			sections.push(`\n## PRIMARY FILE TO MODIFY\n\`${briefing.targetFiles[0]}\`\nRead this file first, then make your changes here.`);
+		} else {
+			sections.push(`\n## FILES TO MODIFY (in order of priority)\n${briefing.targetFiles.map((f, i) => `${i + 1}. \`${f}\``).join("\n")}`);
+		}
 	}
 
 	// Add file summaries if available
 	const summaryEntries = Object.entries(briefing.fileSummaries);
 	if (summaryEntries.length > 0) {
-		const summaryLines = summaryEntries.map(([file, summary]) => `- ${file}: ${summary}`);
+		const summaryLines = summaryEntries.map(([file, summary]) => `- \`${file}\`: ${summary}`);
 		sections.push(`\n## File Summaries\n${summaryLines.join("\n")}`);
 	}
 
-	// Add dependencies section (files that target files depend on)
+	// Add dependencies section - these are for READING, not modifying
 	if (briefing.dependencies.length > 0) {
 		sections.push(
-			`\n## Dependencies (may need to reference)\n${briefing.dependencies.map((f) => `- ${f}`).join("\n")}`,
+			`\n## Reference Files (read-only, for context)\n${briefing.dependencies.map((f) => `- \`${f}\``).join("\n")}`,
 		);
 	}
 
 	// Add impact analysis section (files that depend on target files)
 	if (briefing.impactedFiles.length > 0) {
 		sections.push(
-			`\n## Impact Analysis (files affected by changes)\n${briefing.impactedFiles.map((f) => `- ${f}`).join("\n")}`,
+			`\n## Impact Analysis (may need updates if API changes)\n${briefing.impactedFiles.map((f) => `- \`${f}\``).join("\n")}`,
 		);
 	}
 
@@ -1036,7 +1053,7 @@ function buildBriefingDoc(briefing: ContextBriefing): string {
 	}
 
 	sections.push(
-		`\n## Instructions\n1. Start by reading the target files listed above\n2. Follow existing patterns in the codebase\n3. Run typecheck before finishing\n4. Make minimal changes to complete the objective`,
+		`\n## Instructions\n1. Read the primary file(s) listed above\n2. Make focused changes to complete the objective\n3. Follow existing patterns in the codebase\n4. Avoid modifying unrelated files`,
 	);
 
 	return sections.join("\n");

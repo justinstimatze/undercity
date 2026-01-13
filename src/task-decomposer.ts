@@ -68,22 +68,29 @@ export async function checkAtomicity(task: string): Promise<AtomicityCheckResult
 		let result = "";
 
 		for await (const message of query({
-			prompt: `You are assessing a coding task's complexity to determine execution strategy.
+			prompt: `You are assessing a coding task's atomicity and model assignment. Be CONSERVATIVE about atomicity - when in doubt, mark as NOT atomic.
 
 Task: ${task}
 
-ATOMICITY (can it be done in one session?):
-- ATOMIC: 1-3 files, clear objective, single focus area
-- NOT ATOMIC: many files, multiple objectives, needs research
+ATOMICITY RULES:
+- ATOMIC (true): Single file change, OR 2-3 closely related files with ONE clear objective
+- NOT ATOMIC (false): Multiple unrelated changes, vague scope, "and" connecting different actions, requires exploration
 
-MODEL SELECTION (which AI model should execute this?):
-- "haiku": ONLY for purely mechanical tasks - typo fixes, delete unused code, simple renames, clear copy-paste
-- "sonnet": Tasks requiring judgment - new features, bug fixes, config changes that need domain knowledge, any "create/add/design new X" task
-- "opus": Complex tasks - architectural changes, multi-system integration, ambiguous requirements
+EXAMPLES:
+- "Add comment to cli.ts" → atomic (1 file, clear action)
+- "Fix typo in README" → atomic (1 file, trivial)
+- "Add error handling to auth module" → NOT atomic (could touch many files)
+- "Update types and add tests" → NOT atomic (two separate objectives)
+- "Refactor X" → NOT atomic unless very specific
 
-IMPORTANT: If the task involves creating NEW content (not just editing existing), use sonnet minimum. Haiku should only handle tasks with obvious, unambiguous solutions.
+MODEL SELECTION:
+- "haiku": Trivial mechanical changes - typos, comments, simple renames, deleting unused code
+- "sonnet": Most tasks - bug fixes, new features, any change requiring judgment or domain knowledge
+- "opus": Architectural changes, multi-system integration, ambiguous requirements
 
-Respond with ONLY this JSON, no other text:
+DEFAULT TO SONNET unless the task is clearly trivial (typo, comment, rename).
+
+Respond with ONLY this JSON:
 {
   "isAtomic": true/false,
   "confidence": 0.0-1.0,
@@ -154,28 +161,38 @@ export async function decomposeTask(task: string): Promise<DecompositionResult> 
 		let result = "";
 
 		for await (const message of query({
-			prompt: `You are breaking down a complex coding task into smaller, atomic subtasks.
+			prompt: `You are breaking down a complex coding task into smaller, atomic subtasks that a junior developer (haiku model) can execute.
 
 Task to decompose: ${task}
 
-Rules for subtasks:
-1. Each subtask should be completable in a single focused session
-2. Each subtask should modify at most 1-3 files
-3. Subtasks should be independent when possible (can be done in parallel)
-4. Subtasks should have clear, specific objectives
-5. Create 2-5 subtasks (prefer fewer, well-scoped tasks)
-6. Order subtasks by dependency (things that must be done first come first)
+CRITICAL RULES:
+1. Each subtask should modify exactly 1 file when possible (2-3 max for tightly coupled changes)
+2. INCLUDE THE FILE PATH in each subtask objective (e.g., "In src/auth.ts, add validation...")
+3. Make objectives specific and unambiguous - no room for interpretation
+4. Subtasks should be independent when possible (can run in parallel)
+5. Create 2-5 subtasks (fewer is better)
+6. Order by dependency (prerequisites first)
 
-Respond with ONLY this JSON, no other text:
+GOOD SUBTASK EXAMPLES:
+- "In src/types.ts, add the UserRole enum with values ADMIN, USER, GUEST"
+- "In src/auth.ts:45, fix the null check by adding optional chaining"
+- "In README.md, update the installation section to include pnpm commands"
+
+BAD SUBTASK EXAMPLES:
+- "Update the types" (which file? what types?)
+- "Add error handling" (where? what errors?)
+- "Improve the code" (too vague)
+
+Respond with ONLY this JSON:
 {
   "subtasks": [
     {
-      "objective": "specific task description",
-      "estimatedFiles": ["path/to/file1.ts", "path/to/file2.ts"],
+      "objective": "In path/to/file.ts, do specific thing",
+      "estimatedFiles": ["path/to/file.ts"],
       "order": 1
     }
   ],
-  "reasoning": "brief explanation of decomposition strategy"
+  "reasoning": "brief explanation"
 }`,
 			options: {
 				model: "claude-3-5-haiku-20241022",
