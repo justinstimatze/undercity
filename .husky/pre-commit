@@ -1,30 +1,5 @@
 #!/bin/bash
 
-# Security scan (secrets detection)
-echo "Running security scans..."
-bash ./scripts/security-scan.sh || exit 1
-
-echo "Running Biome on staged files..."
-
-# Check and fix staged files (--unsafe applies all fixable issues)
-pnpm exec biome check --write --unsafe --staged --no-errors-on-unmatched --files-ignore-unknown=true
-
-# Re-stage any files that were modified
-git update-index --again
-
-echo "Biome check complete!"
-
-# TypeScript check
-echo "Running TypeScript check..."
-pnpm exec tsc --noEmit || exit 1
-echo "TypeScript check complete!"
-
-# Build check
-echo "Running build..."
-pnpm build || exit 1
-echo "Build complete!"
-
-# Run tests with coverage
-echo "Running tests with coverage..."
-pnpm test:coverage 2>&1 || exit 1
-echo "Tests complete!"
+# Single source of truth: run verification script
+# Uses tsx to run TypeScript directly (no build required)
+pnpm exec tsx src/verification-cli.ts

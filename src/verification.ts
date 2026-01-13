@@ -114,6 +114,20 @@ export async function verifyWork(
 		// Format:fix may not be available in all projects, continue
 	}
 
+	// Security scan (mirrors pre-commit hook)
+	try {
+		execSync("bash ./scripts/security-scan.sh 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
+		feedbackParts.push("✓ Security scan passed");
+	} catch (error) {
+		const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
+		// Security issues are blocking
+		if (output.includes("secret") || output.includes("leak")) {
+			issues.push("Security scan failed - potential secrets detected");
+			feedbackParts.push("✗ SECURITY: Potential secrets detected in code. Remove before committing.");
+		}
+		// If script doesn't exist, continue (non-fatal)
+	}
+
 	try {
 		// Only run spell check on typescript and markdown files
 		execSync(`${commands.spell} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
@@ -265,7 +279,24 @@ export async function verifyWork(
 		}
 	}
 
-	// 5. CodeScene code health (optional, nice to have)
+	// 5. Run build (mirrors pre-commit hook - ensures code compiles)
+	let buildPassed = true;
+	try {
+		execSync("pnpm build 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 60000 });
+		feedbackParts.push("✓ Build passed");
+	} catch (error) {
+		buildPassed = false;
+		const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
+		issues.push("Build failed");
+		// Extract first few error lines
+		const errorLines = output
+			.split("\n")
+			.filter((l) => l.includes("error") || l.includes("Error"))
+			.slice(0, 3);
+		feedbackParts.push(`✗ BUILD FAILED:\n${errorLines.join("\n")}`);
+	}
+
+	// 6. CodeScene code health (optional, nice to have)
 	try {
 		// Only check changed files to be fast
 		if (changedFiles.length > 0 && changedFiles.length <= 5) {
@@ -294,8 +325,8 @@ export async function verifyWork(
 	// Build final feedback
 	const feedback = feedbackParts.join("\n");
 
-	// Pass if: changes were made AND typecheck passed (lint/tests are warnings)
-	const passed = filesChanged > 0 && typecheckPassed;
+	// Pass if: changes were made AND typecheck passed AND build passed (lint/tests are warnings)
+	const passed = filesChanged > 0 && typecheckPassed && buildPassed;
 
 	return {
 		passed,
