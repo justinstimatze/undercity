@@ -782,7 +782,7 @@ export class ASTIndexManager {
 
 		const summary = parts.join(". ");
 		if (summary.length > 120) {
-			return summary.slice(0, 117) + "...";
+			return `${summary.slice(0, 117)}...`;
 		}
 		return summary;
 	}
