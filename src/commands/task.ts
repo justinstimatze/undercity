@@ -21,6 +21,7 @@ import {
 	type PruneOptions,
 	type ReconcileOptions,
 	type TaskAnalyzeOptions,
+	type TasksOptions,
 	type TriageOptions,
 	type WorkOptions,
 } from "./task-handlers.js";
@@ -32,7 +33,11 @@ export const taskCommands: CommandModule = {
 		program
 			.command("tasks")
 			.description("Show the task board")
-			.action(() => handleTasks());
+			.option("-s, --status <status>", "Filter by status: pending, in_progress, complete, failed")
+			.option("-t, --tag <tag>", "Filter by tag")
+			.option("-a, --all", "Show all tasks (not just first 10)")
+			.option("-c, --count <n>", "Number of tasks to show (default: 10)")
+			.action((options: TasksOptions) => handleTasks(options));
 
 		// Add command - add a goal to the backlog
 		program

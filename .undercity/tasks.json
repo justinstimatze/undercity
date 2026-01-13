@@ -67,24 +67,26 @@
     {
       "id": "task-context-ast-indexer",
       "objective": "[context] Build AST indexer - parse TypeScript files, extract function/class/type definitions, store in queryable format for fast lookup",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": [
         "context",
         "tooling"
-      ]
+      ],
+      "completedAt": "2026-01-13T00:37:15.962Z"
     },
     {
       "id": "task-context-dependency-graph",
       "objective": "[context] Build dependency graph - map imports/exports between files, identify which files are affected by changes to a given file",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": [
         "context",
         "tooling"
-      ]
+      ],
+      "completedAt": "2026-01-13T00:37:15.962Z"
     },
     {
       "id": "task-context-file-summaries",
@@ -100,7 +102,7 @@
     {
       "id": "task-context-smart-context",
       "objective": "[context] Smart context selection - given a task, automatically identify which files/functions are relevant using AST + dependency graph",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": [
@@ -110,7 +112,8 @@
       "dependsOn": [
         "task-context-ast-indexer",
         "task-context-dependency-graph"
-      ]
+      ],
+      "completedAt": "2026-01-13T00:37:15.962Z"
     },
     {
       "id": "task-metrics-success-rate",
@@ -641,5 +644,5 @@
       "createdAt": "2026-01-12T07:10:57.716Z"
     }
   ],
-  "lastUpdated": "2026-01-12T18:05:39.658Z"
+  "lastUpdated": "2026-01-13T00:37:15.962Z"
 }

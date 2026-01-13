@@ -64,10 +64,17 @@ export interface ReconcileOptions {
 	lookback?: string;
 }
 
+export interface TasksOptions {
+	status?: "pending" | "in_progress" | "complete" | "failed";
+	tag?: string;
+	all?: boolean;
+	count?: string;
+}
+
 /**
  * Handle the tasks command - show task board
  */
-export function handleTasks(): void {
+export function handleTasks(options: TasksOptions = {}): void {
 	const items = getAllItems();
 	const summary = getBacklogSummary();
 
@@ -83,8 +90,51 @@ export function handleTasks(): void {
 		return;
 	}
 
-	const pending = items.filter((i) => i.status === "pending");
-	const inProgress = items.filter((i) => i.status === "in_progress");
+	// Filter by status if specified
+	let filtered = items;
+	if (options.status) {
+		filtered = filtered.filter((i) => i.status === options.status);
+	}
+
+	// Filter by tag if specified
+	if (options.tag) {
+		filtered = filtered.filter((i) => i.tags?.includes(options.tag as string));
+	}
+
+	// Determine display limit
+	const limit = options.all ? filtered.length : options.count ? Number.parseInt(options.count, 10) : 10;
+
+	// If status filter specified, show all matching items up to limit
+	if (options.status || options.tag) {
+		const statusEmoji: Record<string, string> = {
+			pending: chalk.gray("○"),
+			in_progress: chalk.cyan("🏃"),
+			complete: chalk.green("✓"),
+			failed: chalk.red("✗"),
+			blocked: chalk.yellow("⏸"),
+			duplicate: chalk.magenta("≡"),
+			canceled: chalk.gray("⨯"),
+			obsolete: chalk.gray("~"),
+		};
+
+		const statusLabel = options.status || (options.tag ? `[${options.tag}]` : "Filtered");
+		console.log(chalk.bold(`${statusLabel} (${filtered.length} total)`));
+
+		for (const item of filtered.slice(0, limit)) {
+			const emoji = statusEmoji[item.status] || chalk.gray("○");
+			const tags = item.tags?.length ? chalk.gray(` [${item.tags.join(", ")}]`) : "";
+			console.log(`  ${emoji} ${item.objective.substring(0, 55)}${item.objective.length > 55 ? "..." : ""}${tags}`);
+		}
+
+		if (filtered.length > limit) {
+			console.log(chalk.gray(`  ... and ${filtered.length - limit} more (use --all to show all)`));
+		}
+		return;
+	}
+
+	// Default view: show in_progress and pending
+	const pending = filtered.filter((i) => i.status === "pending");
+	const inProgress = filtered.filter((i) => i.status === "in_progress");
 
 	if (inProgress.length > 0) {
 		console.log(chalk.bold("In Progress"));
@@ -96,11 +146,11 @@ export function handleTasks(): void {
 
 	if (pending.length > 0) {
 		console.log(chalk.bold("Pending"));
-		for (const item of pending.slice(0, 10)) {
+		for (const item of pending.slice(0, limit)) {
 			console.log(`  ${chalk.gray("○")} ${item.objective.substring(0, 60)}${item.objective.length > 60 ? "..." : ""}`);
 		}
-		if (pending.length > 10) {
-			console.log(chalk.gray(`  ... and ${pending.length - 10} more`));
+		if (pending.length > limit) {
+			console.log(chalk.gray(`  ... and ${pending.length - limit} more (use --all or --count N)`));
 		}
 	}
 }

@@ -377,6 +377,7 @@ export function getContextLimit(agentType: AgentType): number {
 import { execFileSync, execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { getASTIndex } from "./ast-index.js";
 import { sessionLogger } from "./logger.js";
 import { extractFunctionSignaturesWithTypes } from "./ts-analysis.js";
 
@@ -396,6 +397,10 @@ export interface ContextBriefing {
 	relatedPatterns: string[];
 	/** Any constraints or warnings */
 	constraints: string[];
+	/** Files that depend on target files (impact analysis) */
+	impactedFiles: string[];
+	/** Files that target files depend on */
+	dependencies: string[];
 	/** Pre-formatted briefing document */
 	briefingDoc: string;
 }
@@ -445,6 +450,8 @@ export async function prepareContext(
 		functionSignatures: [],
 		relatedPatterns: [],
 		constraints: [],
+		impactedFiles: [],
+		dependencies: [],
 		briefingDoc: "",
 	};
 
@@ -494,6 +501,9 @@ export async function prepareContext(
 
 		// Deduplicate and limit files
 		briefing.targetFiles = [...new Set(briefing.targetFiles)].slice(0, 10);
+
+		// 4.5. Use AST index for smarter context (if available)
+		await enrichWithASTIndex(briefing, searchTerms, repoRoot);
 
 		// 5. Extract type definitions from common/schema if task mentions types
 		if (task.match(/type|interface|schema|zod/i)) {
@@ -869,6 +879,85 @@ function detectConstraints(_task: string, cwd: string): string[] {
 }
 
 /**
+ * Enrich context briefing using AST index for smarter context selection
+ * Uses persistent index for fast symbol and dependency lookups
+ */
+async function enrichWithASTIndex(briefing: ContextBriefing, searchTerms: string[], repoRoot: string): Promise<void> {
+	try {
+		const index = getASTIndex(repoRoot);
+		await index.load();
+
+		const stats = index.getStats();
+		if (stats.fileCount === 0) {
+			// Index not built yet - skip enrichment
+			sessionLogger.debug("AST index empty, skipping enrichment");
+			return;
+		}
+
+		// 1. Find files defining symbols mentioned in the task
+		const symbolFiles: string[] = [];
+		for (const term of searchTerms) {
+			// Skip short terms and file-like patterns
+			if (term.length < 3 || term.includes(".")) continue;
+
+			// Check if term looks like a symbol (PascalCase or camelCase)
+			if (/^[A-Z][a-zA-Z0-9]*$/.test(term) || /^[a-z][a-zA-Z0-9]*$/.test(term)) {
+				const files = index.findSymbolDefinition(term);
+				symbolFiles.push(...files);
+			}
+		}
+
+		// Add symbol-based files to target files (prioritize them)
+		if (symbolFiles.length > 0) {
+			const uniqueSymbolFiles = [...new Set(symbolFiles)];
+			// Prepend symbol files - they're more likely to be relevant
+			briefing.targetFiles = [...uniqueSymbolFiles, ...briefing.targetFiles];
+			briefing.targetFiles = [...new Set(briefing.targetFiles)].slice(0, 10);
+		}
+
+		// 2. Find dependencies for target files
+		const allDependencies: string[] = [];
+		for (const file of briefing.targetFiles.slice(0, 5)) {
+			const deps = index.findImports(file);
+			allDependencies.push(...deps);
+		}
+		briefing.dependencies = [...new Set(allDependencies)].filter((f) => !briefing.targetFiles.includes(f)).slice(0, 5);
+
+		// 3. Find impacted files (what depends on target files)
+		const allImpacted: string[] = [];
+		for (const file of briefing.targetFiles.slice(0, 5)) {
+			const importers = index.findImporters(file);
+			allImpacted.push(...importers);
+		}
+		briefing.impactedFiles = [...new Set(allImpacted)].filter((f) => !briefing.targetFiles.includes(f)).slice(0, 5);
+
+		// 4. Enrich type definitions from index
+		const typeTerms = searchTerms.filter((t) => /^[A-Z][a-zA-Z0-9]*$/.test(t) && t.length > 2);
+		for (const typeName of typeTerms.slice(0, 5)) {
+			const info = index.getSymbolInfo(typeName);
+			if (info && (info.kind === "interface" || info.kind === "type")) {
+				if (!briefing.typeDefinitions.includes(typeName)) {
+					const sig = info.signature ? `: ${info.signature}` : "";
+					briefing.typeDefinitions.push(`${typeName}${sig}`);
+				}
+			}
+		}
+
+		sessionLogger.debug(
+			{
+				symbolFilesFound: symbolFiles.length,
+				dependenciesFound: briefing.dependencies.length,
+				impactedFilesFound: briefing.impactedFiles.length,
+			},
+			"AST index enrichment complete",
+		);
+	} catch (error) {
+		// AST index errors are non-fatal - fall back to existing behavior
+		sessionLogger.debug({ error: String(error) }, "AST index enrichment failed");
+	}
+}
+
+/**
  * Build the full briefing document
  */
 function buildBriefingDoc(briefing: ContextBriefing): string {
@@ -885,14 +974,26 @@ function buildBriefingDoc(briefing: ContextBriefing): string {
 		sections.push(`\n## Target Files (start here)\n${briefing.targetFiles.map((f) => `- ${f}`).join("\n")}`);
 	}
 
+	// Add dependencies section (files that target files depend on)
+	if (briefing.dependencies.length > 0) {
+		sections.push(
+			`\n## Dependencies (may need to reference)\n${briefing.dependencies.map((f) => `- ${f}`).join("\n")}`,
+		);
+	}
+
+	// Add impact analysis section (files that depend on target files)
+	if (briefing.impactedFiles.length > 0) {
+		sections.push(
+			`\n## Impact Analysis (files affected by changes)\n${briefing.impactedFiles.map((f) => `- ${f}`).join("\n")}`,
+		);
+	}
+
 	if (briefing.functionSignatures.length > 0) {
 		sections.push(`\n## Relevant Functions\n\`\`\`\n${briefing.functionSignatures.join("\n")}\n\`\`\``);
 	}
 
 	if (briefing.typeDefinitions.length > 0) {
-		sections.push(
-			`\n## Available Types (from common/schema)\n${briefing.typeDefinitions.map((t) => `- ${t}`).join("\n")}`,
-		);
+		sections.push(`\n## Available Types\n${briefing.typeDefinitions.map((t) => `- ${t}`).join("\n")}`);
 	}
 
 	if (briefing.relatedPatterns.length > 0) {
