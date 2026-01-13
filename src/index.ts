@@ -1,15 +1,22 @@
 /**
- * Undercity
+ * Undercity - Centralized Export Module
  *
- * Multi-agent orchestrator for Claude Max - Gas Town for normal people.
+ * @module index
+ * @description Single entry point for Undercity core functionality
  *
- * Inspired by:
- * - Gas Town (Steve Yegge) - Multi-agent orchestration
- * - BMAD-METHOD - Planning before execution
- * - ARC Raiders - Extraction shooter mechanics (undercity/topside)
+ * Core exports include:
+ * - Capability ledger (model performance tracking)
+ * - Git operations and branch management
+ * - Live metrics and dashboards
+ * - Orchestration and worker management
+ * - Output and logging systems
+ * - Core type definitions
+ *
+ * References:
+ * - Inspired by Gas Town (Steve Yegge) - Multi-agent orchestration
+ * - BMAD-METHOD - Planning-first execution
  *
  * @see https://github.com/steveyegge/gastown
- * @see https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04
  */
 
 // Capability ledger (model performance tracking)
