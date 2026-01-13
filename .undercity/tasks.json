@@ -187,13 +187,15 @@
     {
       "id": "task-onboard-detect-tooling",
       "objective": "[onboard] Auto-detect project tooling - scan package.json/configs for package manager, test runner, linter, build system",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
         "onboarding",
         "portability"
-      ]
+      ],
+      "completedAt": "2026-01-13T03:50:19.936Z",
+      "resolution": "Implemented as part of 'undercity init' - detects package manager, test runner, linter, build tool"
     },
     {
       "id": "task-onboard-verify-abstraction",
@@ -225,13 +227,15 @@
     {
       "id": "task-onboard-project-profile",
       "objective": "[onboard] Create project profile system - .undercity/profile.json storing learned patterns, failure modes, optimal thresholds per project",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
         "onboarding",
         "learning"
-      ]
+      ],
+      "completedAt": "2026-01-13T03:50:23.997Z",
+      "resolution": "Implemented via ProjectProfile interface and .undercity/profile.json - stores detected tooling and verification commands"
     },
     {
       "id": "task-onboard-self-tune",
@@ -273,20 +277,24 @@
     {
       "id": "task-agent-optimize-prompts",
       "objective": "[agent-opt] Audit all agent prompts (squad definitions) - optimize for task completion, remove fluff, add concrete behavioral guidelines",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:35:00.000Z",
       "tags": [
         "agent-optimization",
         "prompts"
-      ]
+      ],
+      "completedAt": "2026-01-13T04:00:33.664Z",
+      "resolution": "Tightened squad prompts: fixed naming (flute→scout, logistics→planner, sheriff→reviewer), removed hardcoded pnpm commands, reduced verbosity by ~60%"
     },
     {
       "id": "task-mka7ceac-m3kf",
       "objective": "[periodic] Run semantic-check and fix high-priority density issues",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-11T20:44:14.292Z"
+      "createdAt": "2026-01-11T20:44:14.292Z",
+      "completedAt": "2026-01-13T03:58:24.310Z",
+      "resolution": "Added --summary flag (default) for compact agent-friendly output. Removed redundant comments in mixed-handlers.ts."
     },
     {
       "id": "task-mka7cfkg-avsy",
@@ -305,16 +313,20 @@
     {
       "id": "task-mkab2aof-ygpz",
       "objective": "[grind] Enhanced verification retry logic - opus tier should get 7 attempts instead of 2, progressive escalation with more retries per tier",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-11T22:28:21.519Z"
+      "createdAt": "2026-01-11T22:28:21.519Z",
+      "completedAt": "2026-01-13T04:05:28.305Z",
+      "resolution": "Added maxOpusRetries option (default 7). Opus tier now gets 7 attempts before failing vs 3 for other tiers. Progressive escalation maintained."
     },
     {
       "id": "task-mkab2b12-h2rm",
       "objective": "[grind] Task conflict detection - before starting task, check if similar task (>70% similarity) is already running",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-11T22:28:21.974Z"
+      "createdAt": "2026-01-11T22:28:21.974Z",
+      "completedAt": "2026-01-13T04:03:24.078Z",
+      "resolution": "Added findSimilarInProgressTask() with Jaccard similarity. Orchestrator now skips tasks >70% similar to in-progress tasks."
     },
     {
       "id": "task-mkab2bct-bb5k",
@@ -729,5 +741,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-01-13T03:34:37.372Z"
+  "lastUpdated": "2026-01-13T04:05:28.305Z"
 }

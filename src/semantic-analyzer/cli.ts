@@ -7,6 +7,7 @@ export interface CLIOptions {
 	output?: string;
 	fix?: boolean;
 	human?: boolean;
+	summary?: boolean;
 }
 
 export async function runSemanticCheck(options: CLIOptions): Promise<SemanticReport> {
@@ -19,20 +20,58 @@ export async function runSemanticCheck(options: CLIOptions): Promise<SemanticRep
 	// Output report
 	if (options.output) {
 		writeFileSync(options.output, JSON.stringify(report, null, 2));
-		// Still print summary
-		if (!options.human) {
-			console.log(JSON.stringify(report, null, 2));
-		} else {
-			printHumanReport(report);
-		}
-	} else if (options.human) {
+	}
+
+	if (options.human) {
 		printHumanReport(report);
-	} else {
-		// Default: machine-readable JSON
+	} else if (options.summary) {
+		printSummaryReport(report);
+	} else if (!options.output) {
 		console.log(JSON.stringify(report, null, 2));
 	}
 
 	return report;
+}
+
+function printSummaryReport(report: SemanticReport): void {
+	const high = report.files.reduce((sum, f) => sum + f.issues.filter((i) => i.severity === "high").length, 0);
+	const medium = report.files.reduce((sum, f) => sum + f.issues.filter((i) => i.severity === "medium").length, 0);
+	const low = report.files.reduce((sum, f) => sum + f.issues.filter((i) => i.severity === "low").length, 0);
+
+	console.log(`Files: ${report.files.length} | Issues: ${high} high, ${medium} medium, ${low} low`);
+	console.log(
+		`Tokens: ${report.metrics.totalTokens} | Facts: ${report.metrics.totalFacts} | Density: ${report.metrics.avgDensity.toFixed(2)}`,
+	);
+
+	if (high > 0) {
+		console.log("\nHigh priority:");
+		const seen = new Set<string>();
+		for (const file of report.files) {
+			for (const issue of file.issues.filter((i) => i.severity === "high")) {
+				const key = `${issue.type}:${issue.message}`;
+				if (!seen.has(key)) {
+					seen.add(key);
+					console.log(`  ${file.path}:${issue.line || 0} ${issue.type}`);
+				}
+				if (seen.size >= 10) break;
+			}
+			if (seen.size >= 10) break;
+		}
+		if (high > 10) console.log(`  ... and ${high - 10} more`);
+	}
+
+	if (medium > 0 && high === 0) {
+		console.log("\nMedium priority:");
+		let count = 0;
+		for (const file of report.files) {
+			for (const issue of file.issues.filter((i) => i.severity === "medium")) {
+				console.log(`  ${file.path}:${issue.line || 0} ${issue.type}`);
+				if (++count >= 5) break;
+			}
+			if (count >= 5) break;
+		}
+		if (medium > 5) console.log(`  ... and ${medium - 5} more`);
+	}
 }
 
 function printHumanReport(report: SemanticReport): void {

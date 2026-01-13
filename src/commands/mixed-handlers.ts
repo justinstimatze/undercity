@@ -784,20 +784,13 @@ function generateCommands(
 ): { typecheck: string; test: string; lint: string; build: string } {
 	const run = pm === "npm" ? "npm run" : pm;
 
-	// Typecheck
 	const typecheck = tooling.hasTypescript ? `${run} typecheck` : "echo 'No TypeScript'";
 
-	// Test
 	let test = "echo 'No tests configured'";
-	if (tooling.testRunner === "vitest") {
-		test = `${run} test`;
-	} else if (tooling.testRunner === "jest") {
-		test = `${run} test`;
-	} else if (tooling.testRunner === "mocha") {
+	if (tooling.testRunner !== "none") {
 		test = `${run} test`;
 	}
 
-	// Lint
 	let lint = "echo 'No linter configured'";
 	if (tooling.linter === "biome") {
 		lint = `${run} check`;
@@ -805,7 +798,6 @@ function generateCommands(
 		lint = `${run} lint`;
 	}
 
-	// Build
 	let build = "echo 'No build configured'";
 	if (tooling.buildTool !== "none") {
 		build = `${run} build`;

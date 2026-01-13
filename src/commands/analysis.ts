@@ -403,14 +403,16 @@ export const analysisCommands: CommandModule = {
 			.command("semantic-check")
 			.description("Analyze semantic density and code efficiency")
 			.option("--fix", "Auto-fix issues")
+			.option("--summary", "Compact summary (default for agents)")
 			.option("--human", "Human-readable output")
-			.option("--output <file>", "Save report to file")
+			.option("--output <file>", "Save full report to file")
 			.action(async (options) => {
 				const { runSemanticCheck } = await import("../semantic-analyzer/index.js");
 				const { SemanticFixer } = await import("../semantic-analyzer/index.js");
 
 				const report = await runSemanticCheck({
 					rootDir: process.cwd(),
+					summary: options.summary ?? true,
 					human: options.human,
 					output: options.output,
 				});

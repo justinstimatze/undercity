@@ -24,7 +24,15 @@ import { FileTracker } from "./file-tracker.js";
 import * as output from "./output.js";
 import { Persistence, readTaskAssignment, writeTaskAssignment } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
-import { addTask, type HandoffContext, loadTaskBoard, removeTasks, saveTaskBoard, type Task } from "./task.js";
+import {
+	addTask,
+	findSimilarInProgressTask,
+	type HandoffContext,
+	loadTaskBoard,
+	removeTasks,
+	saveTaskBoard,
+	type Task,
+} from "./task.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
 import type {
 	ActiveTaskState,
@@ -829,6 +837,25 @@ export class Orchestrator {
 
 			for (const task of batchTasks) {
 				const taskId = generateTaskId();
+
+				// Check for similar in-progress tasks to avoid duplication
+				const similarTask = findSimilarInProgressTask(task, 0.7);
+				if (similarTask) {
+					output.warning(
+						`Skipping task (${(similarTask.similarity * 100).toFixed(0)}% similar to in-progress): ${task.substring(0, 50)}`,
+					);
+					results.push({
+						task,
+						taskId,
+						result: null,
+						worktreePath: "",
+						branch: "",
+						merged: false,
+						mergeError: `Skipped: too similar to in-progress task "${similarTask.task.objective.substring(0, 50)}"`,
+					});
+					continue;
+				}
+
 				try {
 					const worktreeInfo = this.worktreeManager.createWorktree(taskId);
 					preparedTasks.push({

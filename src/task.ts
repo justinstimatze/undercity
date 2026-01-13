@@ -877,6 +877,107 @@ export function getTaskById(taskId: string, path: string = DEFAULT_TASK_BOARD_PA
 }
 
 /**
+ * Check if a task is too similar to any in-progress tasks
+ * Returns the similar task if similarity > threshold, null otherwise
+ */
+export function findSimilarInProgressTask(
+	objective: string,
+	threshold = 0.7,
+	path: string = DEFAULT_TASK_BOARD_PATH,
+): { task: Task; similarity: number } | null {
+	const board = loadTaskBoard(path);
+	const inProgress = board.tasks.filter((t) => t.status === "in_progress");
+
+	if (inProgress.length === 0) {
+		return null;
+	}
+
+	// Simple keyword extraction (stop words filtered)
+	const stopWords = new Set([
+		"the",
+		"a",
+		"an",
+		"is",
+		"are",
+		"was",
+		"were",
+		"be",
+		"been",
+		"being",
+		"have",
+		"has",
+		"had",
+		"do",
+		"does",
+		"did",
+		"will",
+		"would",
+		"could",
+		"should",
+		"may",
+		"might",
+		"must",
+		"shall",
+		"can",
+		"to",
+		"of",
+		"in",
+		"for",
+		"on",
+		"with",
+		"at",
+		"by",
+		"from",
+		"as",
+		"into",
+		"through",
+		"and",
+		"or",
+		"but",
+		"if",
+		"then",
+		"than",
+		"so",
+		"that",
+		"this",
+		"these",
+		"those",
+		"it",
+		"its",
+	]);
+
+	const extractKeywords = (text: string): Set<string> => {
+		return new Set(
+			text
+				.toLowerCase()
+				.replace(/[[\](){}:,."'`]/g, " ")
+				.split(/\s+/)
+				.filter((w) => w.length > 2 && !stopWords.has(w)),
+		);
+	};
+
+	const targetKeywords = extractKeywords(objective);
+	if (targetKeywords.size === 0) {
+		return null;
+	}
+
+	for (const task of inProgress) {
+		const taskKeywords = extractKeywords(task.objective);
+
+		// Jaccard similarity
+		const intersection = [...targetKeywords].filter((k) => taskKeywords.has(k)).length;
+		const union = new Set([...targetKeywords, ...taskKeywords]).size;
+		const similarity = union > 0 ? intersection / union : 0;
+
+		if (similarity >= threshold) {
+			return { task, similarity };
+		}
+	}
+
+	return null;
+}
+
+/**
  * Reconcile tasks with git history to detect duplicates
  * Scans recent commits and checks actual diffs to find completed work
  */

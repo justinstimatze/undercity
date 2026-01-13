@@ -134,6 +134,12 @@ export interface SoloOptions {
 	 * Default: 3 (allows 3 retries at same tier before escalating)
 	 */
 	maxRetriesPerTier?: number;
+	/**
+	 * Maximum fix attempts at opus tier (final tier has no escalation path).
+	 * Opus is expensive but capable - give it more chances to succeed.
+	 * Default: 7
+	 */
+	maxOpusRetries?: number;
 }
 
 /**
@@ -156,6 +162,7 @@ export class TaskWorker {
 	private maxOpusReviewPasses: number;
 	private annealingAtOpus: boolean;
 	private maxRetriesPerTier: number;
+	private maxOpusRetries: number;
 
 	private currentModel: ModelTier;
 	private attempts: number = 0;
@@ -202,6 +209,7 @@ export class TaskWorker {
 		this.maxOpusReviewPasses = options.maxOpusReviewPasses ?? this.maxReviewPassesPerTier * 3;
 		this.annealingAtOpus = options.annealingAtOpus ?? false;
 		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
+		this.maxOpusRetries = options.maxOpusRetries ?? 7;
 		this.currentModel = this.startingModel;
 		this.metricsTracker = new MetricsTracker();
 	}
@@ -1147,12 +1155,10 @@ RULES:
 	 *
 	 * Strategy:
 	 * - No changes made: escalate immediately (agent is stuck)
+	 * - At opus tier: use maxOpusRetries (default 7) - more attempts at final tier
 	 * - Trivial errors (lint/spell only): allow full maxRetriesPerTier attempts
 	 * - Serious errors (typecheck/build/test): allow fewer retries (maxRetriesPerTier - 1)
 	 *   to escalate faster for errors that likely need a smarter model
-	 *
-	 * The configurable maxRetriesPerTier (default: 3) allows multiple fix attempts
-	 * at the same tier before escalating to a stronger model.
 	 */
 	private shouldEscalate(
 		verification: VerificationResult,
@@ -1163,12 +1169,20 @@ RULES:
 			return { shouldEscalate: true, reason: "no changes made" };
 		}
 
+		// At opus tier, use maxOpusRetries for more attempts (no escalation available)
+		if (this.currentModel === "opus") {
+			if (this.sameModelRetries < this.maxOpusRetries) {
+				const remaining = this.maxOpusRetries - this.sameModelRetries;
+				return { shouldEscalate: false, reason: `opus tier, ${remaining} retries left` };
+			}
+			return { shouldEscalate: true, reason: `max opus retries (${this.maxOpusRetries})` };
+		}
+
 		// Check if errors are only trivial (lint/spell)
 		const trivialOnly = errorCategories.every((c) => c === "lint" || c === "spell");
 		const hasSerious = errorCategories.some((c) => c === "typecheck" || c === "build" || c === "test");
 
 		if (trivialOnly) {
-			// Trivial errors: allow full maxRetriesPerTier attempts before escalating
 			if (this.sameModelRetries < this.maxRetriesPerTier) {
 				const remaining = this.maxRetriesPerTier - this.sameModelRetries;
 				return { shouldEscalate: false, reason: `trivial error, ${remaining} retries left at tier` };
@@ -1177,8 +1191,7 @@ RULES:
 		}
 
 		if (hasSerious) {
-			// Serious errors: allow fewer retries (at least 2, but less than max for trivial)
-			// This escalates faster for type/build/test errors that likely need a smarter model
+			// Serious errors: allow fewer retries to escalate faster
 			const seriousRetryLimit = Math.max(2, this.maxRetriesPerTier - 1);
 			if (this.sameModelRetries < seriousRetryLimit) {
 				const remaining = seriousRetryLimit - this.sameModelRetries;
