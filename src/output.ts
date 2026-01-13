@@ -432,6 +432,61 @@ export function summary(
 }
 
 /**
+ * Result summary for a completed task (used in grindComplete)
+ */
+export interface TaskResultSummary {
+	task: string;
+	taskId: string;
+	status: "completed" | "failed" | "merged";
+	modifiedFiles?: string[];
+	error?: string;
+}
+
+/**
+ * Structured results summary for grind completion
+ * Designed for parsing by calling Claude Code session
+ */
+export interface GrindResultsSummary {
+	batchId?: string;
+	totalTasks: number;
+	successful: number;
+	failed: number;
+	merged: number;
+	durationMs: number;
+	tasks: TaskResultSummary[];
+}
+
+/**
+ * Output grind completion results in a structured format
+ * In agent mode, outputs a parseable JSON summary
+ */
+export function grindComplete(results: GrindResultsSummary): void {
+	if (globalConfig.mode === "human") {
+		// Human mode already handled by summary() call in handleGrind
+		return;
+	}
+
+	// Agent mode: output structured JSON summary
+	outputEvent({
+		type: "metrics",
+		message: "GRIND_COMPLETE",
+		timestamp: now(),
+		data: {
+			summary: {
+				totalTasks: results.totalTasks,
+				successful: results.successful,
+				failed: results.failed,
+				merged: results.merged,
+				durationMs: results.durationMs,
+				durationMinutes: Math.round(results.durationMs / 60000),
+			},
+			tasks: results.tasks,
+			batchId: results.batchId,
+		},
+	});
+}
+
+/**
  * Print a simple key-value pair
  */
 export function keyValue(key: string, value: string | number | boolean): void {

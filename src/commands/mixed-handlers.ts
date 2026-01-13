@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { getConfigSource, loadConfig } from "../config.js";
 import { type OracleCard, UndercityOracle } from "../oracle.js";
+import type { TaskResultSummary } from "../output.js";
 import * as output from "../output.js";
 import { Persistence } from "../persistence.js";
 import { RateLimitTracker } from "../rate-limit.js";
@@ -378,6 +379,9 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		let totalMerged = 0;
 		let totalDurationMs = 0;
 
+		// Track task results for structured output
+		const taskResults: TaskResultSummary[] = [];
+
 		for (const modelTier of modelOrder) {
 			const tierTasks = tasksByModel[modelTier];
 			if (tierTasks.length === 0) continue;
@@ -456,6 +460,14 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 								});
 							}
 
+							// Track result for structured output
+							taskResults.push({
+								task: taskResult.task,
+								taskId,
+								status: "merged",
+								modifiedFiles: taskResult.modifiedFiles,
+							});
+
 							// Check if this was a subtask and auto-complete parent if all siblings done
 							const task = getTaskById(taskId);
 							if (task?.parentId) {
@@ -493,6 +505,14 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 									errorCategories: [errorMsg.substring(0, 50)],
 								});
 							}
+
+							// Track result for structured output
+							taskResults.push({
+								task: taskResult.task,
+								taskId,
+								status: "failed",
+								error: errorMsg,
+							});
 						}
 					}
 				}
@@ -534,6 +554,14 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 								errorCategories: [`Tier error: ${String(tierError).substring(0, 50)}`],
 							});
 						}
+
+						// Track result for structured output
+						taskResults.push({
+							task: task.objective,
+							taskId,
+							status: "failed",
+							error: `Tier error: ${tierError}`,
+						});
 					}
 				}
 				totalFailed += tierTasks.length;
@@ -559,6 +587,17 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			{ label: "Model distribution", value: modelCounts },
 			{ label: "Duration", value: `${Math.round(totalDurationMs / 60000)} minutes` },
 		]);
+
+		// Output structured results for calling session to parse
+		output.grindComplete({
+			batchId,
+			totalTasks: tasksWithModels.length + tasksProcessed,
+			successful: totalSuccessful,
+			failed: totalFailed,
+			merged: totalMerged,
+			durationMs: totalDurationMs,
+			tasks: taskResults,
+		});
 
 		// Show experiment metrics if active
 		if (activeExperiment && taskVariantMap.size > 0) {
