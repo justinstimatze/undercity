@@ -2,19 +2,19 @@
  * Undercity - Centralized Export Module
  *
  * @module index
- * @description Single entry point for Undercity core functionality
+ * @description Comprehensive module serving as the single entry point for Undercity's core functionality
  *
- * Core exports include:
- * - Capability ledger (model performance tracking)
- * - Git operations and branch management
- * - Live metrics and dashboards
- * - Orchestration and worker management
- * - Output and logging systems
- * - Core type definitions
+ * This module aggregates and re-exports key components across the Undercity ecosystem:
+ * - Capability ledger for tracking model performance and routing
+ * - Git operations for branch and repository management
+ * - Live metrics for real-time system monitoring
+ * - Orchestration primitives for task execution and worker management
+ * - Structured output and logging systems
+ * - Core type definitions and interfaces
  *
- * References:
- * - Inspired by Gas Town (Steve Yegge) - Multi-agent orchestration
- * - BMAD-METHOD - Planning-first execution
+ * Architecture Inspirations:
+ * - Gas Town (Steve Yegge) - Multi-agent autonomous orchestration
+ * - BMAD-METHOD - Iterative, planning-first execution strategy
  *
  * @see https://github.com/steveyegge/gastown
  */
