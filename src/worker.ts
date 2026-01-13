@@ -1277,9 +1277,10 @@ Use this analysis to avoid repeating the same mistakes.`;
 			prompt = `${contextSection}TASK:
 ${task}${postMortemContext}${exampleSection}
 RULES:
-1. Read target files before editing
-2. Minimal changes only - nothing beyond task scope
-3. No questions - decide and proceed`;
+1. If the task requires creating new files, create them (Write tool creates parent directories)
+2. If editing existing files, read them first before editing
+3. Minimal changes only - nothing beyond task scope
+4. No questions - decide and proceed`;
 		}
 
 		// Token usage will be accumulated in this.tokenUsageThisTask
@@ -1303,7 +1304,7 @@ RULES:
 									return {
 										continue: false,
 										reason:
-											"You haven't made any code changes yet. Your task requires writing or editing files. Please implement the required changes before finishing.",
+											"You haven't made any code changes yet. Your task requires creating or editing files. If the task specifies a new file path, use the Write tool to create it (parent directories are created automatically). Please implement the required changes before finishing.",
 									};
 								}
 								return { continue: true };
