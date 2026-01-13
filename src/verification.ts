@@ -8,13 +8,55 @@
  * - Tests
  * - Spell check
  * - CodeScene code health (optional)
+ *
+ * Commands are configurable via project profile (.undercity/profile.json).
+ * Falls back to pnpm if no profile exists.
  */
 
 import { execSync } from "node:child_process";
 import { formatErrorsForAgent, getCache, parseTypeScriptErrors } from "./cache.js";
 import { sessionLogger } from "./logger.js";
+import { Persistence } from "./persistence.js";
 
 const logger = sessionLogger.child({ module: "verification" });
+
+/**
+ * Get verification commands from profile or use defaults
+ */
+function getVerificationCommands(workingDirectory: string): {
+	typecheck: string;
+	test: string;
+	lint: string;
+	spell: string;
+	qualityCheck: string;
+} {
+	try {
+		const persistence = new Persistence(`${workingDirectory}/.undercity`);
+		const profile = persistence.getProfile();
+
+		if (profile) {
+			// Use profile commands, with fallbacks for optional ones
+			return {
+				typecheck: profile.commands.typecheck,
+				test: profile.commands.test,
+				lint: profile.commands.lint,
+				spell: "pnpm spell", // Spell check not yet in profile
+				qualityCheck: "pnpm quality:check", // Quality check not yet in profile
+			};
+		}
+	} catch {
+		// Profile not available, use defaults
+	}
+
+	// Default commands (pnpm-based)
+	return {
+		typecheck: "pnpm typecheck",
+		test: "pnpm test --run",
+		lint: "pnpm lint",
+		spell: "pnpm spell",
+		qualityCheck: "pnpm quality:check",
+	};
+}
 
 import type { ErrorCategory } from "./types.js";
 
@@ -60,9 +102,13 @@ export async function verifyWork(
 	let testsPassed = true;
 	let lintPassed = true;
 	let spellPassed = true;
+
+	// Get commands from profile or use defaults
+	const commands = getVerificationCommands(workingDirectory);
+
 	try {
 		// Only run spell check on typescript and markdown files
-		execSync("pnpm spell 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
+		execSync(`${commands.spell} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
 		feedbackParts.push("✓ Spell check passed");
 	} catch (error) {
 		// Spell errors are non-blocking - just log a warning
@@ -142,7 +188,7 @@ export async function verifyWork(
 	// 2. Run typecheck (critical - must pass)
 	if (runTypecheck) {
 		try {
-			execSync("pnpm typecheck 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 60000 });
+			execSync(`${commands.typecheck} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 60000 });
 			feedbackParts.push("✓ Typecheck passed");
 		} catch (error) {
 			typecheckPassed = false;
@@ -169,7 +215,7 @@ export async function verifyWork(
 
 	// 3. Run lint check (important for code quality)
 	try {
-		execSync("pnpm lint 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 60000 });
+		execSync(`${commands.lint} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 60000 });
 		feedbackParts.push("✓ Lint passed");
 	} catch (error) {
 		lintPassed = false;
@@ -191,7 +237,7 @@ export async function verifyWork(
 	if (runTests && changedFiles.some((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))) {
 		try {
 			// Run tests with short timeout - we just want to know if they pass
-			execSync("pnpm test --run 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 120000 });
+			execSync(`${commands.test} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 120000 });
 			feedbackParts.push("✓ Tests passed");
 		} catch (error) {
 			testsPassed = false;
@@ -217,7 +263,7 @@ export async function verifyWork(
 		if (changedFiles.length > 0 && changedFiles.length <= 5) {
 			const tsFiles = changedFiles.filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
 			if (tsFiles.length > 0) {
-				const result = execSync("pnpm quality:check 2>&1 || true", {
+				const result = execSync(`${commands.qualityCheck} 2>&1 || true`, {
 					encoding: "utf-8",
 					cwd: workingDirectory,
 					timeout: 30000,

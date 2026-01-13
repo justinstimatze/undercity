@@ -26,6 +26,7 @@ import type {
 	LoadoutScore,
 	LoadoutStorage,
 	ParallelRecoveryState,
+	ProjectProfile,
 	PromptKnowledge,
 	RateLimitState,
 	SafePocket,
@@ -1152,6 +1153,31 @@ export class Persistence {
 	 */
 	saveExperimentStorage<T>(data: T): void {
 		this.writeJson("experiment-storage.json", data);
+	}
+
+	// ============== Project Profile ==============
+
+	/**
+	 * Get project profile
+	 */
+	getProfile(): ProjectProfile | null {
+		const profile = this.readJson<ProjectProfile | null>("profile.json", null);
+		return profile;
+	}
+
+	/**
+	 * Save project profile
+	 */
+	saveProfile(profile: ProjectProfile): void {
+		profile.updatedAt = new Date();
+		this.writeJson("profile.json", profile);
+	}
+
+	/**
+	 * Check if profile exists
+	 */
+	hasProfile(): boolean {
+		return existsSync(this.getPath("profile.json"));
 	}
 }
 

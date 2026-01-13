@@ -706,6 +706,115 @@ export async function handleLimits(): Promise<void> {
 }
 
 /**
+ * Detect project tooling from package.json and config files
+ */
+function detectProjectTooling(): {
+	packageManager: "npm" | "yarn" | "pnpm" | "bun";
+	hasTypescript: boolean;
+	testRunner: "vitest" | "jest" | "mocha" | "none";
+	linter: "biome" | "eslint" | "none";
+	buildTool: "tsc" | "vite" | "webpack" | "esbuild" | "none";
+} {
+	const result = {
+		packageManager: "npm" as "npm" | "yarn" | "pnpm" | "bun",
+		hasTypescript: false,
+		testRunner: "none" as "vitest" | "jest" | "mocha" | "none",
+		linter: "none" as "biome" | "eslint" | "none",
+		buildTool: "none" as "tsc" | "vite" | "webpack" | "esbuild" | "none",
+	};
+
+	// Detect package manager from lock files
+	if (existsSync("pnpm-lock.yaml")) {
+		result.packageManager = "pnpm";
+	} else if (existsSync("yarn.lock")) {
+		result.packageManager = "yarn";
+	} else if (existsSync("bun.lockb")) {
+		result.packageManager = "bun";
+	}
+
+	// Read package.json if it exists
+	if (existsSync("package.json")) {
+		try {
+			const pkg = JSON.parse(readFileSync("package.json", "utf-8"));
+			const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+
+			// TypeScript
+			result.hasTypescript = "typescript" in deps || existsSync("tsconfig.json");
+
+			// Test runner
+			if ("vitest" in deps) {
+				result.testRunner = "vitest";
+			} else if ("jest" in deps) {
+				result.testRunner = "jest";
+			} else if ("mocha" in deps) {
+				result.testRunner = "mocha";
+			}
+
+			// Linter
+			if ("@biomejs/biome" in deps || existsSync("biome.json")) {
+				result.linter = "biome";
+			} else if ("eslint" in deps || existsSync(".eslintrc.js") || existsSync(".eslintrc.json")) {
+				result.linter = "eslint";
+			}
+
+			// Build tool
+			if ("vite" in deps) {
+				result.buildTool = "vite";
+			} else if ("webpack" in deps) {
+				result.buildTool = "webpack";
+			} else if ("esbuild" in deps) {
+				result.buildTool = "esbuild";
+			} else if (result.hasTypescript) {
+				result.buildTool = "tsc";
+			}
+		} catch {
+			// Ignore parsing errors
+		}
+	}
+
+	return result;
+}
+
+/**
+ * Generate verification commands based on detected tooling
+ */
+function generateCommands(
+	pm: "npm" | "yarn" | "pnpm" | "bun",
+	tooling: ReturnType<typeof detectProjectTooling>,
+): { typecheck: string; test: string; lint: string; build: string } {
+	const run = pm === "npm" ? "npm run" : pm;
+
+	// Typecheck
+	const typecheck = tooling.hasTypescript ? `${run} typecheck` : "echo 'No TypeScript'";
+
+	// Test
+	let test = "echo 'No tests configured'";
+	if (tooling.testRunner === "vitest") {
+		test = `${run} test`;
+	} else if (tooling.testRunner === "jest") {
+		test = `${run} test`;
+	} else if (tooling.testRunner === "mocha") {
+		test = `${run} test`;
+	}
+
+	// Lint
+	let lint = "echo 'No linter configured'";
+	if (tooling.linter === "biome") {
+		lint = `${run} check`;
+	} else if (tooling.linter === "eslint") {
+		lint = `${run} lint`;
+	}
+
+	// Build
+	let build = "echo 'No build configured'";
+	if (tooling.buildTool !== "none") {
+		build = `${run} build`;
+	}
+
+	return { typecheck, test, lint, build };
+}
+
+/**
  * Handle the init command
  */
 export function handleInit(options: InitOptions): void {
@@ -716,6 +825,39 @@ export function handleInit(options: InitOptions): void {
 	const undercityDir = options.directory || ".undercity";
 	persistence.initializeUndercity(options.directory);
 	console.log(chalk.green(`  Created ${undercityDir}/`));
+
+	// Detect project tooling
+	console.log(chalk.dim("  Detecting project tooling..."));
+	const detected = detectProjectTooling();
+	const commands = generateCommands(detected.packageManager, detected);
+
+	// Create and save project profile
+	const profile = {
+		packageManager: detected.packageManager,
+		commands,
+		detected: {
+			hasTypescript: detected.hasTypescript,
+			testRunner: detected.testRunner,
+			linter: detected.linter,
+			buildTool: detected.buildTool,
+		},
+		createdAt: new Date(),
+		updatedAt: new Date(),
+	};
+
+	if (persistence.hasProfile() && !options.force) {
+		console.log(chalk.yellow("  Profile already exists (use --force to overwrite)"));
+	} else {
+		persistence.saveProfile(profile);
+		console.log(chalk.green("  Created project profile"));
+	}
+
+	// Show detected tooling
+	console.log(chalk.dim(`    Package manager: ${detected.packageManager}`));
+	console.log(chalk.dim(`    TypeScript: ${detected.hasTypescript ? "yes" : "no"}`));
+	console.log(chalk.dim(`    Test runner: ${detected.testRunner}`));
+	console.log(chalk.dim(`    Linter: ${detected.linter}`));
+	console.log(chalk.dim(`    Build tool: ${detected.buildTool}`));
 
 	// Find the templates directory (relative to compiled output)
 	const templatesDir = join(__dirname, "..", "..", "templates");
@@ -755,7 +897,7 @@ export function handleInit(options: InitOptions): void {
 	console.log();
 	console.log(chalk.green.bold("Undercity initialized!"));
 	console.log(chalk.dim("Run 'undercity tasks' to view the task board"));
-	console.log(chalk.dim("Run 'undercity tasks add <task>' to add tasks"));
+	console.log(chalk.dim("Run 'undercity add <task>' to add tasks"));
 	console.log(chalk.dim("Run 'undercity grind' to process tasks"));
 }
 

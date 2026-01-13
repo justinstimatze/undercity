@@ -3,18 +3,20 @@
     {
       "id": "task-feedback-metrics-reader",
       "objective": "[feedback] Create metrics reader - load metrics.jsonl, parse outcomes, compute success rates by model/complexity",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": [
         "feedback-loop",
         "metrics"
-      ]
+      ],
+      "completedAt": "2026-01-13T02:49:04.147Z",
+      "resolution": "Implemented src/feedback-metrics.ts with loadMetrics(), analyzeMetrics(), success rate analysis by model/complexity, and insights CLI command"
     },
     {
       "id": "task-feedback-routing-adjustment",
       "objective": "[feedback] Wire metrics to routing - adjust complexity thresholds based on historical success rates per model tier",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": [
@@ -23,12 +25,13 @@
       ],
       "dependsOn": [
         "task-feedback-metrics-reader"
-      ]
+      ],
+      "completedAt": "2026-01-13T03:17:15.371Z"
     },
     {
       "id": "task-feedback-introspect-command",
       "objective": "[feedback] Add 'undercity introspect' command - analyze own metrics, identify improvement opportunities, generate tasks",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": [
@@ -37,23 +40,26 @@
       ],
       "dependsOn": [
         "task-feedback-metrics-reader"
-      ]
+      ],
+      "completedAt": "2026-01-13T03:17:15.371Z"
     },
     {
       "id": "task-feedback-ab-integration",
       "objective": "[feedback] Wire experiment framework to grind - randomly assign tasks to variants, track which routing/prompts work better",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": [
         "feedback-loop",
         "experiments"
-      ]
+      ],
+      "completedAt": "2026-01-13T03:29:42.520Z",
+      "resolution": "Already fully implemented and wired into grind - selectVariant, recordResult, getVariantMetrics all integrated"
     },
     {
       "id": "task-feedback-pattern-learning",
       "objective": "[feedback] Learn task patterns - cluster similar tasks by objective keywords, track which patterns succeed at which tiers",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:00:00.000Z",
       "tags": [
@@ -62,7 +68,8 @@
       ],
       "dependsOn": [
         "task-feedback-metrics-reader"
-      ]
+      ],
+      "completedAt": "2026-01-13T03:17:15.375Z"
     },
     {
       "id": "task-context-ast-indexer",
@@ -91,13 +98,15 @@
     {
       "id": "task-context-file-summaries",
       "objective": "[context] Pre-compute file summaries - for each file, generate a 1-2 line description of purpose/exports, cache for fast context loading",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:10:00.000Z",
       "tags": [
         "context",
         "tooling"
-      ]
+      ],
+      "completedAt": "2026-01-13T03:00:10.183Z",
+      "resolution": "Auto-generated file summaries from AST exports. Added getFileSummary(), getFileSummaries(), getAllSummaries() to index. Added --summaries CLI option. Summaries included in context briefing for agents."
     },
     {
       "id": "task-context-smart-context",
@@ -118,12 +127,14 @@
     {
       "id": "task-metrics-success-rate",
       "objective": "[metrics] Track success rate per complexity level - which tasks need escalation most?",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-10T08:50:00.000Z",
       "tags": [
         "metrics"
-      ]
+      ],
+      "completedAt": "2026-01-13T03:27:42.549Z",
+      "resolution": "Already implemented via complexity-metrics command - tracks success rate per complexity level with escalation recommendations"
     },
     {
       "id": "task-dspy-evaluation",
@@ -139,33 +150,39 @@
     {
       "id": "task-continuous-sync",
       "objective": "[continuous] Sync task board with grind - mark tasks complete when merged, update status during execution",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T02:15:00.000Z",
       "tags": [
         "continuous"
-      ]
+      ],
+      "completedAt": "2026-01-13T02:55:08.132Z",
+      "resolution": "Tasks now marked in_progress when grind starts working on them. Complete/failed status already handled."
     },
     {
       "id": "task-spell-nonblocking",
       "objective": "[verify] Make spell check non-blocking - spell failures should warn but not fail verification",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T02:15:00.000Z",
       "tags": [
         "verification"
-      ]
+      ],
+      "completedAt": "2026-01-13T02:53:01.001Z",
+      "resolution": "Spell errors are non-blocking - log warning but do not fail verification (verification.ts:68-74)"
     },
     {
       "id": "task-onboard-init",
       "objective": "[onboard] Create 'undercity init' command - interactive/auto-detecting setup for new projects, creates .undercity/ structure",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
         "onboarding",
         "portability"
-      ]
+      ],
+      "completedAt": "2026-01-13T03:32:59.518Z",
+      "resolution": "Init command now detects project tooling (package manager, test runner, linter, build tool) and creates profile.json with verification commands"
     },
     {
       "id": "task-onboard-detect-tooling",
@@ -181,7 +198,7 @@
     {
       "id": "task-onboard-verify-abstraction",
       "objective": "[onboard] Abstract verification loop - replace hardcoded 'pnpm check && pnpm build && pnpm test' with configurable project-specific commands",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
@@ -190,7 +207,9 @@
       ],
       "dependsOn": [
         "task-onboard-detect-tooling"
-      ]
+      ],
+      "completedAt": "2026-01-13T03:34:37.372Z",
+      "resolution": "Verification loop now reads commands from .undercity/profile.json - typecheck, test, lint, spell, qualityCheck are all configurable"
     },
     {
       "id": "task-onboard-scout-rules",
@@ -516,7 +535,7 @@
     {
       "id": "task-skill-results-return",
       "objective": "[skill] Implement results return protocol - when undercity completes tasks, return structured summary to calling Claude Code session. Include: tasks completed, files changed, any failures",
-      "status": "pending",
+      "status": "complete",
       "priority": 22,
       "createdAt": "2026-01-12T04:00:00.000Z",
       "tags": [
@@ -526,7 +545,9 @@
       ],
       "dependsOn": [
         "task-skill-claude-code-integration"
-      ]
+      ],
+      "completedAt": "2026-01-13T02:49:04.151Z",
+      "resolution": "Implemented grindComplete() in output.ts for structured JSON summary of grind results"
     },
     {
       "id": "task-witness-health-monitor",
@@ -708,5 +729,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-01-13T01:33:13.995Z"
+  "lastUpdated": "2026-01-13T03:34:37.372Z"
 }

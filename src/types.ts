@@ -1140,6 +1140,32 @@ export interface TaskCheckpoint {
 }
 
 /**
+ * Project profile for configurable verification
+ */
+export interface ProjectProfile {
+	/** Package manager (npm, yarn, pnpm, bun) */
+	packageManager: "npm" | "yarn" | "pnpm" | "bun";
+	/** Verification commands */
+	commands: {
+		typecheck: string;
+		test: string;
+		lint: string;
+		build: string;
+	};
+	/** Detected tooling info */
+	detected: {
+		hasTypescript: boolean;
+		testRunner: "vitest" | "jest" | "mocha" | "none";
+		linter: "biome" | "eslint" | "none";
+		buildTool: "tsc" | "vite" | "webpack" | "esbuild" | "none";
+	};
+	/** When profile was created */
+	createdAt: Date;
+	/** When profile was last updated */
+	updatedAt: Date;
+}
+
+/**
  * Check if a task objective indicates a meta-task
  * Meta-tasks are prefixed with [meta:type]
  */
