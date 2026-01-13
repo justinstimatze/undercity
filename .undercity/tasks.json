@@ -1009,8 +1009,57 @@
       "objective": "Implement safe burn monitoring - track API usage against plan limits and auto-pause grind when approaching thresholds",
       "status": "pending",
       "priority": 91,
-      "createdAt": "2026-01-13T22:08:49.334Z"
+      "createdAt": "2026-01-13T22:08:49.334Z",
+      "isDecomposed": true,
+      "subtaskIds": [
+        "task-mkd6i2lh-c5f8e4",
+        "task-mkd6i2lh-08e33b",
+        "task-mkd6i2lh-e6d02a"
+      ]
+    },
+    {
+      "id": "task-mkd6czy0-4ecb16",
+      "objective": "Add a JSDoc comment to the prepareContext function in src/context.ts explaining what it does",
+      "status": "failed",
+      "priority": 92,
+      "createdAt": "2026-01-13T22:40:01.272Z",
+      "completedAt": "2026-01-13T22:42:22.678Z",
+      "error": "Task failed"
+    },
+    {
+      "id": "task-mkd6i2lh-c5f8e4",
+      "objective": "In src/config/limits.ts, define an interface for API usage limits with properties for total limit, warning threshold, and current usage",
+      "status": "pending",
+      "priority": 91.1,
+      "createdAt": "2026-01-13T22:43:57.989Z",
+      "parentId": "task-mkd58vjq-4e6a1f",
+      "estimatedFiles": [
+        "src/config/limits.ts"
+      ]
+    },
+    {
+      "id": "task-mkd6i2lh-08e33b",
+      "objective": "In src/services/usage-tracker.ts, create a UsageTracker class with methods to increment usage, check against thresholds, and determine if grinding should be paused",
+      "status": "pending",
+      "priority": 91.2,
+      "createdAt": "2026-01-13T22:43:57.989Z",
+      "parentId": "task-mkd58vjq-4e6a1f",
+      "estimatedFiles": [
+        "src/services/usage-tracker.ts"
+      ]
+    },
+    {
+      "id": "task-mkd6i2lh-e6d02a",
+      "objective": "In src/middleware/api-usage-guard.ts, implement middleware to intercept API calls, update usage tracking, and automatically pause grinding when approaching limits",
+      "status": "complete",
+      "priority": 91.3,
+      "createdAt": "2026-01-13T22:43:57.989Z",
+      "parentId": "task-mkd58vjq-4e6a1f",
+      "estimatedFiles": [
+        "src/middleware/api-usage-guard.ts"
+      ],
+      "completedAt": "2026-01-13T22:48:19.066Z"
     }
   ],
-  "lastUpdated": "2026-01-13T22:08:49.334Z"
+  "lastUpdated": "2026-01-13T22:48:19.066Z"
 }

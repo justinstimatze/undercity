@@ -4,10 +4,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	type ApiCallUsage,
 	ApiUsageGuard,
 	createApiUsageGuard,
 	withUsageTracking,
-	type ApiCallUsage,
 } from "../middleware/api-usage-guard.js";
 import { RateLimitTracker } from "../rate-limit.js";
 

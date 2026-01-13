@@ -125,7 +125,12 @@ export function loadLiveMetrics(): LiveMetrics {
 			return createEmptyMetrics();
 		}
 		const content = readFileSync(METRICS_FILE, "utf-8");
-		return JSON.parse(content) as LiveMetrics;
+		const parsed = JSON.parse(content);
+		// Validate structure - if missing required fields, return empty metrics
+		if (typeof parsed.tokens?.total !== "number" || !parsed.byModel) {
+			return createEmptyMetrics();
+		}
+		return parsed as LiveMetrics;
 	} catch {
 		return createEmptyMetrics();
 	}

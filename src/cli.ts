@@ -49,7 +49,7 @@ const program = new Command();
 
 program
 	.name("undercity")
-	.description("Multi-agent orchestrator for Claude Max - Gas Town for budget extraction")
+	.description("Multi-agent orchestrator for autonomous task execution")
 	.version(getVersion())
 	.option("--human", "Human-readable output (default: structured JSON for agents)")
 	.option("--agent", "Structured JSON output (default when not a TTY)")
