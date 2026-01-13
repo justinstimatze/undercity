@@ -26,8 +26,13 @@ Multi-agent orchestrator for autonomous task execution. Processes tasks from boa
 ```bash
 # Task board
 undercity add "task description"           # Add task
+undercity add "task" --priority 5          # Add with priority
 undercity tasks                            # List all tasks
-undercity tasks pending                    # Show pending only
+undercity tasks --status pending           # Filter by status
+undercity tasks --status complete          # Show completed
+undercity tasks --tag context              # Filter by tag
+undercity tasks --all                      # Show all (not just 10)
+undercity tasks --count 20                 # Show first 20
 
 # Autonomous execution
 undercity grind                            # Process all tasks
