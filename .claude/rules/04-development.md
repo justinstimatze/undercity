@@ -68,13 +68,14 @@ cs check <file>      # Check specific file health
 
 ```bash
 # Via global link (if set up)
-undercity slingshot "goal"
+undercity grind "goal"              # Single task
+undercity grind                     # Process task board
 
 # Directly
-node ./bin/undercity.js slingshot "goal"
+node ./bin/undercity.js grind "goal"
 
 # Or via pnpm
-pnpm start slingshot "goal"
+pnpm start grind "goal"
 ```
 
 ## PM2 Daemon

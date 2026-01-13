@@ -5,8 +5,8 @@
 | File | Purpose | Key Exports |
 |------|---------|-------------|
 | **cli.ts** | CLI entry, routes to command modules | - |
-| **commands/task.ts** | Task board commands (tasks, add, work, plan, import-plan) | taskCommands |
-| **commands/mixed.ts** | Main commands (grind, limits, watch, serve, daemon, status) | mixedCommands |
+| **commands/task.ts** | Task board commands (tasks, add, work, plan, import-plan, reconcile, triage, prune) | taskCommands |
+| **commands/mixed.ts** | Main commands (grind, limits, watch, serve, daemon, status, index, init, setup, oracle, config) | mixedCommands |
 | **commands/analysis.ts** | Metrics/analysis commands | analysisCommands |
 | **orchestrator.ts** | Main production orchestrator, parallel execution | Orchestrator |
 | **worker.ts** | Single-task executor, runs in worktree | TaskWorker |
@@ -30,7 +30,8 @@
 | **types.ts** | Core type definitions | SessionStatus, AgentType, Task, MergeQueueItem |
 | **output.ts** | Structured output (human/agent modes) | info, success, error, header, metrics |
 | **oracle.ts** | Oblique strategy cards | UndercityOracle |
-| **context.ts** | Codebase context extraction (git grep, briefing) | prepareContext, summarizeContextForAgent |
+| **context.ts** | Codebase context extraction (git grep, briefing, AST index) | prepareContext, summarizeContextForAgent |
+| **ast-index.ts** | Persistent AST index for symbol/dependency lookup | ASTIndexManager, getASTIndex |
 | **ts-analysis.ts** | Deep TypeScript AST analysis (ts-morph) | extractFunctionSignaturesWithTypes, getTypeDefinition |
 | **verification.ts** | Build/test/lint verification loop | runVerification |
 | **review.ts** | Escalating review with annealing | ReviewManager |
@@ -66,6 +67,8 @@
 - Analyze task board → `task-board-analyzer.ts`
 - Schedule compatible tasks → `task-scheduler.ts`
 - Generate codebase context → `context.ts`
+- Query symbol definitions → `ast-index.ts` (ASTIndexManager)
+- Find file dependencies → `ast-index.ts` (findImports, findImporters)
 - Run verification (build/test/lint) → `verification.ts`
 - Handle meta-tasks ([triage], [plan]) → `meta-tasks.ts`
 - Persist state → `persistence.ts`
@@ -111,12 +114,11 @@ Orchestrator.run():
 | `.undercity/file-tracking.json` | Modified files per branch | `FileTrackingState` |
 | `.undercity/rate-limit-state.json` | Rate limit state | `RateLimitState` |
 | `.undercity/parallel-recovery.json` | Interrupted batch state | `ParallelRecoveryState` |
-| `.undercity/task-metrics.json` | Task execution metrics | `TaskMetrics[]` |
 | `.undercity/live-metrics.json` | Running totals for dashboard | `LiveMetrics` |
 | `.undercity/grind-events.jsonl` | Event log (append-only) | `{type, timestamp, data}` per line |
-| `.undercity/pocket.json` | Active session state | `SafePocket` |
-| `.undercity/inventory.json` | Active agents | `Inventory` |
-| `.undercity/experiment-storage.json` | A/B test state | `ExperimentStorage` |
+| `.undercity/ast-index.json` | Persistent AST index | `ASTIndex` |
+| `.undercity/experiments.json` | A/B test state | `ExperimentStorage` |
+| `.undercity/daemon.json` | Daemon PID and port | `{pid, port}` |
 
 ## Gotchas
 
