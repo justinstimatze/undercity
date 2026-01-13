@@ -400,3 +400,27 @@ export function getChangedFiles(since: string): string[] {
 - Cache invalidation (rebuild AST index only if files changed)
 - Incremental updates (only re-index modified files)
 - Change detection for verification
+
+## Prompt Caching (Blocked)
+
+### Status: NOT IMPLEMENTED
+
+Prompt caching via `cache_control` would provide **90% cost reduction** on cache hits, but is currently blocked.
+
+### Why Blocked
+
+| Auth Method | SDK | cache_control Support |
+|-------------|-----|----------------------|
+| Claude Max (OAuth) | Agent SDK | No |
+| API Key | Raw SDK (`@anthropic-ai/sdk`) | Yes |
+
+We use Claude Max OAuth login, which only works with the Agent SDK. The Agent SDK doesn't expose `cache_control`.
+
+### When to Revisit
+
+Monitor: https://github.com/anthropics/claude-agent-sdk-typescript/issues
+
+When the Agent SDK adds `cache_control` support:
+1. Add cache markers to system prompts in `complexity.ts`, `worker.ts`
+2. Verify cache metrics in `.undercity/live-metrics.json`
+3. Expected savings: ~90% on repeated system prompts

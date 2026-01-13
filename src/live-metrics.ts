@@ -206,35 +206,35 @@ export function recordQueryResult(result: {
 		metrics.queries.rateLimited++;
 	}
 
-	// Update token counts
-	if (result.inputTokens) {
+	// Update token counts (use != null to handle 0 values correctly)
+	if (result.inputTokens != null) {
 		metrics.tokens.input += result.inputTokens;
 		metrics.tokens.total += result.inputTokens;
 	}
-	if (result.outputTokens) {
+	if (result.outputTokens != null) {
 		metrics.tokens.output += result.outputTokens;
 		metrics.tokens.total += result.outputTokens;
 	}
-	if (result.cacheReadTokens) {
+	if (result.cacheReadTokens != null) {
 		metrics.tokens.cacheRead += result.cacheReadTokens;
 	}
-	if (result.cacheCreationTokens) {
+	if (result.cacheCreationTokens != null) {
 		metrics.tokens.cacheCreation += result.cacheCreationTokens;
 	}
 
-	// Update cost
-	if (result.costUsd) {
+	// Update cost (use != null to handle 0 values correctly)
+	if (result.costUsd != null) {
 		metrics.cost.total += result.costUsd;
 	}
 
-	// Update timing
-	if (result.durationMs) {
+	// Update timing (use != null to handle 0 values correctly)
+	if (result.durationMs != null) {
 		metrics.timing.totalDurationMs += result.durationMs;
 	}
-	if (result.apiDurationMs) {
+	if (result.apiDurationMs != null) {
 		metrics.timing.totalApiMs += result.apiDurationMs;
 	}
-	if (result.turns) {
+	if (result.turns != null) {
 		metrics.timing.turns += result.turns;
 	}
 

@@ -1028,6 +1028,11 @@ export async function assessComplexityDeep(task: string): Promise<ComplexityAsse
 		return fastAssessment;
 	}
 
+	// TODO: Add prompt caching when Agent SDK supports cache_control
+	// See: https://github.com/anthropics/claude-agent-sdk-typescript/issues
+	// The raw @anthropic-ai/sdk supports cache_control but requires API key auth,
+	// which doesn't work with Claude Max OAuth login.
+
 	try {
 		let result = "";
 
