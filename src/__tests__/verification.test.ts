@@ -174,7 +174,7 @@ describe("verification.ts", () => {
 
 		it("should correctly represent partial failures", () => {
 			const result = createResult({
-				passed: true, // Can pass if typecheck passes even with lint issues
+				passed: false, // Lint and tests are blocking
 				typecheckPassed: true,
 				lintPassed: false,
 				testsPassed: false,
@@ -183,7 +183,7 @@ describe("verification.ts", () => {
 				feedback: "✓ Typecheck passed\n⚠ LINT ISSUES\n✗ TESTS FAILED",
 			});
 
-			expect(result.passed).toBe(true);
+			expect(result.passed).toBe(false);
 			expect(result.typecheckPassed).toBe(true);
 			expect(result.lintPassed).toBe(false);
 			expect(result.testsPassed).toBe(false);
@@ -416,7 +416,7 @@ describe("verification.ts", () => {
 			const result = await verifyWork(true, false, "/test/dir");
 
 			expect(result.lintPassed).toBe(false);
-			expect(result.passed).toBe(true); // Lint is not blocking if typecheck passes
+			expect(result.passed).toBe(false); // Lint is blocking
 			expect(result.feedback).toContain("⚠ LINT ISSUES");
 		});
 
@@ -452,7 +452,7 @@ describe("verification.ts", () => {
 			const result = await verifyWork(true, true, "/test/dir");
 
 			expect(result.testsPassed).toBe(false);
-			expect(result.passed).toBe(true); // Tests are not blocking if typecheck passes
+			expect(result.passed).toBe(false); // Tests are blocking
 			expect(result.issues).toContain("Tests failed (2)");
 			expect(result.feedback).toContain("✗ TESTS FAILED");
 		});

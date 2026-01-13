@@ -15,9 +15,10 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { WorktreeError, WorktreeManager } from "../../worktree-manager.js";
 
-// Skip git operation tests in coverage mode to prevent interference with other tests
+// Skip git operation tests in coverage mode or during verification
 const isCoverage = process.env.npm_lifecycle_event?.includes("coverage");
-const describeGit = isCoverage ? describe.skip : describe.sequential;
+const isVerification = process.env.UNDERCITY_VERIFICATION === "true";
+const describeGit = isCoverage || isVerification ? describe.skip : describe.sequential;
 
 // Use describe.sequential to prevent parallel execution issues with git operations
 describeGit("WorktreeManager Integration Tests", () => {

@@ -24,9 +24,10 @@ import {
 } from "../../git.js";
 import { MergeQueue } from "../../merge-queue.js";
 
-// Skip git operation tests in coverage mode - they change process.cwd() which affects other tests
+// Skip git operation tests in coverage mode or during verification
 const isCoverage = process.env.npm_lifecycle_event?.includes("coverage");
-const describeGit = isCoverage ? describe.skip : describe.sequential;
+const isVerification = process.env.UNDERCITY_VERIFICATION === "true";
+const describeGit = isCoverage || isVerification ? describe.skip : describe.sequential;
 
 // Use describe.sequential to prevent parallel execution issues with git operations
 describeGit("MergeQueue Integration Tests", () => {

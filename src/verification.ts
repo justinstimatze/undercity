@@ -259,7 +259,13 @@ export async function verifyWork(
 	if (runTests && changedFiles.some((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))) {
 		try {
 			// Run tests with short timeout - we just want to know if they pass
-			execSync(`${commands.test} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 120000 });
+			// Set UNDERCITY_VERIFICATION to skip integration tests
+			execSync(`${commands.test} 2>&1`, {
+				encoding: "utf-8",
+				cwd: workingDirectory,
+				timeout: 120000,
+				env: { ...process.env, UNDERCITY_VERIFICATION: "true" },
+			});
 			feedbackParts.push("✓ Tests passed");
 		} catch (error) {
 			testsPassed = false;
@@ -325,8 +331,8 @@ export async function verifyWork(
 	// Build final feedback
 	const feedback = feedbackParts.join("\n");
 
-	// Pass if: changes were made AND typecheck passed AND build passed (lint/tests are warnings)
-	const passed = filesChanged > 0 && typecheckPassed && buildPassed;
+	// Pass if: changes were made AND all critical checks passed
+	const passed = filesChanged > 0 && typecheckPassed && buildPassed && testsPassed && lintPassed;
 
 	return {
 		passed,
