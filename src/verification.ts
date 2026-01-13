@@ -508,3 +508,92 @@ export function categorizeErrors(verification: VerificationResult): ErrorCategor
 
 	return categories.length > 0 ? categories : ["unknown"];
 }
+
+// ============================================================================
+// BASELINE VERIFICATION
+// ============================================================================
+
+interface BaselineCache {
+	commit: string;
+	verifiedAt: number;
+	passed: boolean;
+}
+
+interface BaselineResult {
+	passed: boolean;
+	feedback: string;
+	cached: boolean;
+}
+
+const BASELINE_CACHE_FILE = ".undercity/baseline-cache.json";
+const BASELINE_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Verify that the main branch is in a good state before running tasks.
+ * Uses caching to avoid re-running checks on the same commit.
+ * Only runs typecheck (fast) - not full tests.
+ */
+export async function verifyBaseline(cwd: string = process.cwd()): Promise<BaselineResult> {
+	const { existsSync, readFileSync, writeFileSync, mkdirSync } = await import("node:fs");
+	const { join, dirname } = await import("node:path");
+
+	// Get current HEAD commit
+	let currentCommit: string;
+	try {
+		currentCommit = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8" }).trim();
+	} catch {
+		return { passed: true, feedback: "Not a git repo, skipping baseline check", cached: false };
+	}
+
+	const cachePath = join(cwd, BASELINE_CACHE_FILE);
+
+	// Check cache
+	try {
+		if (existsSync(cachePath)) {
+			const cached = JSON.parse(readFileSync(cachePath, "utf-8")) as BaselineCache;
+			if (cached && cached.commit === currentCommit && Date.now() - cached.verifiedAt < BASELINE_CACHE_TTL) {
+				if (cached.passed) {
+					return { passed: true, feedback: "Baseline previously verified", cached: true };
+				}
+				// Cached failure - still fail but note it's cached
+				return { passed: false, feedback: "Baseline previously failed (cached)", cached: true };
+			}
+		}
+	} catch {
+		// No cache or invalid cache - continue with verification
+	}
+
+	// Run typecheck only (fast baseline check)
+	const commands = getVerificationCommands(cwd);
+	const feedbackParts: string[] = [];
+	let passed = true;
+
+	try {
+		execSync(`${commands.typecheck} 2>&1`, { encoding: "utf-8", cwd, timeout: 60000 });
+		feedbackParts.push("✓ Typecheck passed");
+	} catch (error) {
+		passed = false;
+		const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
+		const tsErrors = parseTypeScriptErrors(output);
+		if (tsErrors.length > 0) {
+			const errorSummary = formatErrorsForAgent(tsErrors);
+			feedbackParts.push(`✗ Typecheck failed:\n${errorSummary}`);
+		} else {
+			feedbackParts.push(`✗ Typecheck failed: ${output.slice(0, 500)}`);
+		}
+	}
+
+	// Cache result
+	try {
+		const dir = dirname(cachePath);
+		if (!existsSync(dir)) {
+			mkdirSync(dir, { recursive: true });
+		}
+		writeFileSync(cachePath, JSON.stringify({ commit: currentCommit, verifiedAt: Date.now(), passed }));
+	} catch {
+		// Cache write failure is non-fatal
+		logger.warn("Failed to write baseline cache");
+	}
+
+	return { passed, feedback: feedbackParts.join("\n"), cached: false };
+}

@@ -168,6 +168,21 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			});
 		}
 
+		// Baseline check: verify main branch is green before starting tasks
+		// This prevents agents from being blamed for pre-existing failures
+		const { verifyBaseline } = await import("../verification.js");
+		const baselineResult = await verifyBaseline();
+		if (!baselineResult.passed) {
+			output.error("Baseline check failed - fix issues before running grind:");
+			output.error(baselineResult.feedback);
+			process.exit(1);
+		}
+		if (baselineResult.cached) {
+			output.info("Baseline verified (cached)");
+		} else {
+			output.success("Baseline verified");
+		}
+
 		const {
 			getAllItems,
 			markTaskComplete,
