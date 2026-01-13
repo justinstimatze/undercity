@@ -12,6 +12,7 @@ import {
 	handleGrind,
 	handleIndex,
 	handleInit,
+	handleIntrospect,
 	handleLimits,
 	handleOracle,
 	handleServe,
@@ -20,6 +21,7 @@ import {
 	handleWatch,
 	type IndexOptions,
 	type InitOptions,
+	type IntrospectOptions,
 	type OracleOptions,
 	type ServeOptions,
 	type StatusOptions,
@@ -132,5 +134,14 @@ export const mixedCommands: CommandModule = {
 			.option("-s, --stats", "Show index statistics only")
 			.option("--summaries", "Show file summaries")
 			.action((options: IndexOptions) => handleIndex(options));
+
+		// Introspect command - analyze own metrics and performance
+		program
+			.command("introspect")
+			.description("Analyze own metrics: success rates, routing accuracy, escalation patterns")
+			.option("-j, --json", "Output raw JSON for agent consumption")
+			.option("-n, --limit <n>", "Only analyze last N task records")
+			.option("--since <date>", "Only analyze records since date (YYYY-MM-DD)")
+			.action((options: IntrospectOptions) => handleIntrospect(options));
 	},
 };

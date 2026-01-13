@@ -1156,3 +1156,65 @@ export async function handleIndex(options: IndexOptions): Promise<void> {
 	const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
 	console.log(chalk.dim(`Completed in ${elapsed}s`));
 }
+
+/**
+ * Introspect command options
+ */
+export interface IntrospectOptions {
+	json?: boolean;
+	limit?: string;
+	since?: string;
+}
+
+/**
+ * Handle the introspect command - analyze own metrics and performance
+ */
+export async function handleIntrospect(options: IntrospectOptions): Promise<void> {
+	const { getMetricsAnalysis, formatAnalysisSummary } = await import("../feedback-metrics.js");
+
+	const loadOptions: { limit?: number; since?: Date } = {};
+
+	if (options.limit) {
+		loadOptions.limit = Number.parseInt(options.limit, 10);
+	}
+
+	if (options.since) {
+		const date = new Date(options.since);
+		if (!Number.isNaN(date.getTime())) {
+			loadOptions.since = date;
+		}
+	}
+
+	const analysis = getMetricsAnalysis(loadOptions);
+
+	if (options.json) {
+		console.log(JSON.stringify(analysis, null, 2));
+		return;
+	}
+
+	// Human-readable output
+	console.log(chalk.bold.cyan("\n🔍 Undercity Self-Analysis\n"));
+	console.log(formatAnalysisSummary(analysis));
+
+	// Add routing accuracy section if there's data
+	if (analysis.totalTasks > 0) {
+		console.log("");
+		console.log(chalk.bold("Routing Accuracy:"));
+		const { correctTier, needsEscalation } = analysis.routingAccuracy;
+		const total = correctTier + needsEscalation;
+		if (total > 0) {
+			const accuracy = ((correctTier / total) * 100).toFixed(0);
+			console.log(`  Correct tier on first try: ${accuracy}% (${correctTier}/${total})`);
+		}
+	}
+
+	// Show escalation paths if any
+	if (Object.keys(analysis.escalation.byPath).length > 0) {
+		console.log("");
+		console.log(chalk.bold("Escalation Paths:"));
+		for (const [path, stats] of Object.entries(analysis.escalation.byPath)) {
+			const successRate = stats.count > 0 ? ((stats.successCount / stats.count) * 100).toFixed(0) : "0";
+			console.log(`  ${path}: ${stats.count} times (${successRate}% success)`);
+		}
+	}
+}
