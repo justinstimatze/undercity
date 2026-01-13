@@ -7,6 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	adjustModelFromMetrics,
 	assessComplexityFast,
 	canHandleWithLocalTools,
 	getTeamComposition,
@@ -513,6 +514,121 @@ describe("complexity", () => {
 				hasBuildErrors: false,
 			});
 			expect(result).toBe(false);
+		});
+	});
+
+	describe("adjustModelFromMetrics", () => {
+		beforeEach(() => {
+			vi.resetModules();
+		});
+
+		afterEach(() => {
+			vi.restoreAllMocks();
+		});
+
+		it("should return recommended model when no metrics data", async () => {
+			vi.doMock("../feedback-metrics.js", () => ({
+				getMetricsAnalysis: () => ({
+					totalTasks: 0,
+					byModel: {},
+					byModelAndComplexity: {},
+				}),
+			}));
+
+			const result = await adjustModelFromMetrics("sonnet", "standard", 3);
+			expect(result).toBe("sonnet");
+		});
+
+		it("should return recommended model when insufficient samples", async () => {
+			vi.doMock("../feedback-metrics.js", () => ({
+				getMetricsAnalysis: () => ({
+					totalTasks: 2, // Below minSamples
+					byModel: {
+						sonnet: { total: 2, rate: 0.5 },
+					},
+					byModelAndComplexity: {},
+				}),
+			}));
+
+			const result = await adjustModelFromMetrics("sonnet", "standard", 3);
+			expect(result).toBe("sonnet");
+		});
+
+		it("should upgrade haiku to sonnet when success rate below threshold", async () => {
+			vi.doMock("../feedback-metrics.js", () => ({
+				getMetricsAnalysis: () => ({
+					totalTasks: 10,
+					byModel: {
+						haiku: { total: 10, rate: 0.5 }, // Below 0.7 threshold
+					},
+					byModelAndComplexity: {},
+				}),
+			}));
+
+			const result = await adjustModelFromMetrics("haiku", "simple", 3);
+			expect(result).toBe("sonnet");
+		});
+
+		it("should upgrade sonnet to opus when success rate below threshold", async () => {
+			vi.doMock("../feedback-metrics.js", () => ({
+				getMetricsAnalysis: () => ({
+					totalTasks: 10,
+					byModel: {
+						sonnet: { total: 10, rate: 0.4 }, // Below 0.6 threshold
+					},
+					byModelAndComplexity: {},
+				}),
+			}));
+
+			const result = await adjustModelFromMetrics("sonnet", "standard", 3);
+			expect(result).toBe("opus");
+		});
+
+		it("should not upgrade opus (ceiling)", async () => {
+			vi.doMock("../feedback-metrics.js", () => ({
+				getMetricsAnalysis: () => ({
+					totalTasks: 10,
+					byModel: {
+						opus: { total: 10, rate: 0.3 }, // Even low rate doesn't upgrade opus
+					},
+					byModelAndComplexity: {},
+				}),
+			}));
+
+			const result = await adjustModelFromMetrics("opus", "complex", 3);
+			expect(result).toBe("opus");
+		});
+
+		it("should keep model when success rate meets threshold", async () => {
+			vi.doMock("../feedback-metrics.js", () => ({
+				getMetricsAnalysis: () => ({
+					totalTasks: 10,
+					byModel: {
+						haiku: { total: 10, rate: 0.85 }, // Above 0.7 threshold
+					},
+					byModelAndComplexity: {},
+				}),
+			}));
+
+			const result = await adjustModelFromMetrics("haiku", "simple", 3);
+			expect(result).toBe("haiku");
+		});
+
+		it("should use model+complexity combo stats when available", async () => {
+			vi.doMock("../feedback-metrics.js", () => ({
+				getMetricsAnalysis: () => ({
+					totalTasks: 20,
+					byModel: {
+						haiku: { total: 20, rate: 0.8 }, // Overall good
+					},
+					byModelAndComplexity: {
+						"haiku:complex": { total: 5, rate: 0.4 }, // But bad for complex tasks
+					},
+				}),
+			}));
+
+			const result = await adjustModelFromMetrics("haiku", "complex", 3);
+			expect(result).toBe("sonnet"); // Upgrade based on combo stats
 		});
 	});
 });
