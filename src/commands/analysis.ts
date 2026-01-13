@@ -309,6 +309,66 @@ export const analysisCommands: CommandModule = {
 				}
 			});
 
+		// Feedback insights command - uses the feedback metrics reader
+		program
+			.command("insights")
+			.description("Analyze historical metrics and get routing recommendations")
+			.option("--json", "Output as JSON for programmatic use")
+			.option("--path <file>", "Path to metrics.jsonl file")
+			.action(async (options) => {
+				const { getMetricsAnalysis, formatAnalysisSummary } = await import("../feedback-metrics.js");
+
+				const analysis = getMetricsAnalysis(options.path);
+
+				if (options.json) {
+					console.log(JSON.stringify(analysis, null, 2));
+					return;
+				}
+
+				// Human-readable output
+				console.log(chalk.bold("\n📊 Feedback Metrics Analysis\n"));
+				console.log(formatAnalysisSummary(analysis));
+
+				// Highlight key recommendations
+				if (analysis.recommendations.length > 0) {
+					console.log(chalk.cyan("\n💡 Key Insights:\n"));
+					for (const rec of analysis.recommendations) {
+						console.log(chalk.yellow(`  → ${rec}`));
+					}
+				}
+
+				// Show model-complexity matrix for routing decisions
+				if (analysis.totalTasks >= 10) {
+					console.log(chalk.cyan("\n📈 Success Rate Matrix (model × complexity):\n"));
+					const complexities = ["trivial", "simple", "standard", "complex", "critical"] as const;
+					const models = ["haiku", "sonnet", "opus"] as const;
+
+					// Header
+					process.stdout.write("           ");
+					for (const c of complexities) {
+						process.stdout.write(c.padEnd(10));
+					}
+					console.log();
+
+					// Rows
+					for (const m of models) {
+						process.stdout.write(`  ${m.padEnd(8)} `);
+						for (const c of complexities) {
+							const key = `${m}:${c}`;
+							const stats = analysis.byModelAndComplexity[key];
+							if (stats && stats.total >= 2) {
+								const rate = (stats.rate * 100).toFixed(0);
+								const color = stats.rate >= 0.7 ? chalk.green : stats.rate >= 0.5 ? chalk.yellow : chalk.red;
+								process.stdout.write(color(`${rate}%`.padEnd(10)));
+							} else {
+								process.stdout.write(chalk.dim("-".padEnd(10)));
+							}
+						}
+						console.log();
+					}
+				}
+			});
+
 		// Benchmark command
 		program
 			.command("benchmark")
