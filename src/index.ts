@@ -53,6 +53,8 @@ export {
 } from "./live-metrics.js";
 // Merge queue (extracted from git.ts)
 export { MergeQueue } from "./merge-queue.js";
+// Metrics dashboard
+export { launchMetricsDashboard } from "./metrics-dashboard.js";
 // Orchestration
 export { Orchestrator } from "./orchestrator.js";
 // Output system

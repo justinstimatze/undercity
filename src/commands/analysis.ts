@@ -4,6 +4,7 @@
 import chalk from "chalk";
 import { Orchestrator } from "../orchestrator.js";
 import type { CommandModule } from "./types.js";
+import { launchMetricsDashboard } from "../metrics-dashboard.js";
 
 export const analysisCommands: CommandModule = {
 	register(program) {
@@ -428,6 +429,15 @@ export const analysisCommands: CommandModule = {
 				if (highPriorityCount > 0 && !options.fix) {
 					process.exit(1);
 				}
+			});
+
+		// Metrics dashboard command - comprehensive metrics TUI
+		program
+			.command("metrics-dashboard")
+			.alias("md")
+			.description("Launch interactive metrics dashboard with token usage, success rates, and cost tracking")
+			.action(() => {
+				launchMetricsDashboard();
 			});
 	},
 };
