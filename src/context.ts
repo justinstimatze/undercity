@@ -894,6 +894,15 @@ async function enrichWithASTIndex(briefing: ContextBriefing, searchTerms: string
 			return;
 		}
 
+		// Lazy incremental update: check if target files are stale
+		const filesToCheck = briefing.targetFiles.slice(0, 10);
+		const staleFiles = filesToCheck.filter((f) => index.isStale(f));
+		if (staleFiles.length > 0) {
+			sessionLogger.debug({ count: staleFiles.length }, "Updating stale files in AST index");
+			await index.indexFiles(staleFiles);
+			await index.save();
+		}
+
 		// 1. Find files defining symbols mentioned in the task
 		const symbolFiles: string[] = [];
 		for (const term of searchTerms) {
