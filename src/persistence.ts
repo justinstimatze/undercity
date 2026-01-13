@@ -1241,7 +1241,8 @@ export function readTaskAssignment(worktreePath: string): TaskAssignment | null 
 export function updateTaskCheckpoint(worktreePath: string, checkpoint: TaskCheckpoint): void {
 	const assignment = readTaskAssignment(worktreePath);
 	if (!assignment) {
-		persistenceLogger.warn({ worktreePath }, "No assignment found for checkpoint update");
+		// Debug level: expected in solo mode (no worktree), only relevant in parallel mode
+		persistenceLogger.debug({ worktreePath }, "No assignment found for checkpoint update");
 		return;
 	}
 

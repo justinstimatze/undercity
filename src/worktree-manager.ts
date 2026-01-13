@@ -298,6 +298,46 @@ export class WorktreeManager {
 				// Don't throw - let the task continue and fail at verification stage with clearer error
 			}
 
+			// Copy gitignored directories that agents may need to edit
+			// .undercity/ contains state files like experiments.json that tasks may modify
+			gitLogger.info({ sessionId }, "Copying gitignored directories to worktree");
+			try {
+				const undercitySource = `${this.repoRoot}/.undercity`;
+				const undercityDest = `${worktreePath}/.undercity`;
+				// Only copy if source exists and dest doesn't
+				if (existsSync(undercitySource) && !existsSync(undercityDest)) {
+					execSync(`cp -r "${undercitySource}" "${undercityDest}"`, {
+						encoding: "utf-8",
+						stdio: ["pipe", "pipe", "pipe"],
+					});
+					gitLogger.debug({ sessionId }, "Copied .undercity/ to worktree");
+				}
+			} catch (copyError) {
+				gitLogger.warn(
+					{ sessionId, error: String(copyError) },
+					"Failed to copy .undercity/ to worktree - agents may edit wrong files",
+				);
+			}
+
+			// Symlink .husky so pre-commit hooks work in worktree
+			try {
+				const huskySource = `${this.repoRoot}/.husky`;
+				const huskyDest = `${worktreePath}/.husky`;
+				if (existsSync(huskySource) && !existsSync(huskyDest)) {
+					execSync(`ln -s "${huskySource}" "${huskyDest}"`, {
+						cwd: worktreePath,
+						encoding: "utf-8",
+						stdio: ["pipe", "pipe", "pipe"],
+					});
+					gitLogger.debug({ sessionId }, "Symlinked .husky/ to worktree");
+				}
+			} catch (symlinkError) {
+				gitLogger.warn(
+					{ sessionId, error: String(symlinkError) },
+					"Failed to symlink .husky/ - pre-commit hooks may not work in worktree",
+				);
+			}
+
 			// Block direct pushes from worktree - orchestrator controls all pushes after verification
 			// Use --worktree flag to set config only for this worktree (not shared with main repo)
 			gitLogger.info({ sessionId }, "Blocking direct pushes from worktree");

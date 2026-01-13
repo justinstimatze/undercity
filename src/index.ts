@@ -91,8 +91,8 @@ export {
 } from "./persistence.js";
 // DSPy-inspired prompt variants
 export {
-	applyPromptVariant,
 	ATOMICITY_PROMPT_VARIANTS,
+	applyPromptVariant,
 	BUILDER_PROMPT_VARIANTS,
 	createPromptExperimentVariants,
 	getAtomicityPrompt,

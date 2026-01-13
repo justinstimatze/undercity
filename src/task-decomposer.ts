@@ -77,9 +77,11 @@ ATOMICITY (can it be done in one session?):
 - NOT ATOMIC: many files, multiple objectives, needs research
 
 MODEL SELECTION (which AI model should execute this?):
-- "haiku": Simple tasks - file deletions, small edits, clear single-file changes
-- "sonnet": Medium tasks - new features, bug fixes, moderate complexity
+- "haiku": ONLY for purely mechanical tasks - typo fixes, delete unused code, simple renames, clear copy-paste
+- "sonnet": Tasks requiring judgment - new features, bug fixes, config changes that need domain knowledge, any "create/add/design new X" task
 - "opus": Complex tasks - architectural changes, multi-system integration, ambiguous requirements
+
+IMPORTANT: If the task involves creating NEW content (not just editing existing), use sonnet minimum. Haiku should only handle tasks with obvious, unambiguous solutions.
 
 Respond with ONLY this JSON, no other text:
 {
