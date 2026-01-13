@@ -1091,6 +1091,13 @@ export class Orchestrator {
 		}
 
 		// Phase 3: Merge successful branches serially
+		// TODO: Serial merge strategy explained
+		// We process merges one at a time to avoid conflicts and maintain consistency:
+		// 1. Each task rebases onto the current local main HEAD before merging
+		// 2. Fast-forward merge ensures clean history without merge commits
+		// 3. If conflicts occur during rebase, the task fails gracefully
+		// 4. Later tasks automatically get the latest state from earlier merges
+		// 5. This serial approach prevents race conditions in parallel merges
 		const successfulTasks = results.filter((r) => r.result?.status === "complete" && r.branch);
 
 		if (successfulTasks.length > 0) {
