@@ -1184,6 +1184,18 @@ export function assessComplexityQuantitative(
 		combinedSignals.push(...criticalSignals);
 	}
 
+	// IMPORTANT: If task keywords indicate trivial/simple work, cap the level
+	// This prevents large file metrics from overriding obviously simple tasks
+	// e.g., "add a log statement" in a 5000-line file shouldn't be critical
+	let levelCap: ComplexityLevel | null = null;
+	if (keywordAssessment.level === "trivial") {
+		levelCap = "simple"; // Trivial tasks cap at simple even in large files
+		combinedSignals.push("keyword-cap:simple");
+	} else if (keywordAssessment.level === "simple" && keywordAssessment.confidence >= 0.6) {
+		levelCap = "standard"; // Simple tasks cap at standard
+		combinedSignals.push("keyword-cap:standard");
+	}
+
 	// Determine level from combined score
 	let level: ComplexityLevel;
 	if (combinedScore <= 1) {
@@ -1196,6 +1208,17 @@ export function assessComplexityQuantitative(
 		level = "complex";
 	} else {
 		level = "critical";
+	}
+
+	// Apply level cap from keyword assessment
+	if (levelCap) {
+		const levelOrder: ComplexityLevel[] = ["trivial", "simple", "standard", "complex", "critical"];
+		const capIndex = levelOrder.indexOf(levelCap);
+		const levelIndex = levelOrder.indexOf(level);
+		if (levelIndex > capIndex) {
+			level = levelCap;
+			combinedSignals.push(`capped-from:${levelOrder[levelIndex]}`);
+		}
 	}
 
 	// Determine scope from metrics
