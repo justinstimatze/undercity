@@ -206,6 +206,9 @@ export class TaskWorker {
 	/** Current agent session ID for resume on retry (preserves agent's exploration work) */
 	private currentAgentSessionId?: string;
 
+	/** Turn count from last agent execution (for performance analysis) */
+	private lastAgentTurns: number = 0;
+
 	constructor(options: SoloOptions = {}) {
 		this.maxAttempts = options.maxAttempts ?? 3;
 		this.startingModel = options.startingModel ?? "sonnet";
@@ -400,6 +403,8 @@ export class TaskWorker {
 		// Pre-flight: Prepare context briefing (FREE - no LLM tokens)
 		// Do this FIRST so we can use target files for quantitative complexity assessment
 		output.workerPhase(taskId, "analyzing");
+		const phaseTimings: Record<string, number> = {};
+		const phaseStart = Date.now();
 		let targetFiles: string[] = [];
 		try {
 			// CRITICAL: Must pass workingDirectory so context is prepared from worktree, not main repo
@@ -411,6 +416,7 @@ export class TaskWorker {
 			this.log("Context preparation failed", { error: String(error) });
 			// Continue without briefing - agent will explore
 		}
+		phaseTimings.contextPrep = Date.now() - phaseStart;
 
 		// Checkpoint: context gathered
 		this.saveCheckpoint("context");
@@ -513,7 +519,9 @@ export class TaskWorker {
 
 				// Run the agent
 				output.workerPhase(taskId, "executing", { model: this.currentModel });
+				const agentStart = Date.now();
 				const agentOutput = await this.executeAgent(task);
+				phaseTimings.agentExecution = Date.now() - agentStart;
 
 				// Meta-tasks: parse recommendations, skip code verification
 				if (this.isCurrentTaskMeta && metaType) {
@@ -609,7 +617,9 @@ export class TaskWorker {
 				this.saveCheckpoint("verifying");
 
 				output.workerPhase(taskId, "verifying");
+				const verifyStart = Date.now();
 				const verification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory, baseCommit);
+				phaseTimings.verification = Date.now() - verifyStart;
 
 				// Categorize errors for tracking
 				const errorCategories = categorizeErrors(verification);
@@ -696,6 +706,14 @@ export class TaskWorker {
 
 					// Complete task tracking
 					this.metricsTracker.completeTask(true);
+
+					// Log phase timings for performance analysis
+					const totalMs = Date.now() - startTime;
+					const msPerTurn = this.lastAgentTurns > 0 ? Math.round(phaseTimings.agentExecution / this.lastAgentTurns) : 0;
+					output.info(
+						`Phase timings: context=${phaseTimings.contextPrep}ms, agent=${phaseTimings.agentExecution}ms (${this.lastAgentTurns} turns, ${msPerTurn}ms/turn), verify=${phaseTimings.verification}ms, total=${totalMs}ms`,
+						{ taskId, phaseTimings, totalMs, turns: this.lastAgentTurns, msPerTurn },
+					);
 
 					return {
 						task,
@@ -1214,6 +1232,9 @@ RULES:
 					sessionLogger.debug({ sessionId: this.currentAgentSessionId }, "Captured agent session ID for resume");
 				}
 
+				// Capture turn count for performance analysis
+				this.lastAgentTurns = (msg.num_turns as number) ?? 0;
+
 				recordQueryResult({
 					success: msg.subtype === "success",
 					rateLimited: msg.subtype === "error" && String(msg.result || "").includes("rate"),
@@ -1224,7 +1245,7 @@ RULES:
 					costUsd: (msg.total_cost_usd as number) ?? 0,
 					durationMs: (msg.duration_ms as number) ?? 0,
 					apiDurationMs: (msg.duration_api_ms as number) ?? 0,
-					turns: (msg.num_turns as number) ?? 0,
+					turns: this.lastAgentTurns,
 					model: this.currentModel,
 					modelUsage: modelUsage as Record<string, { inputTokens?: number; outputTokens?: number; costUSD?: number }>,
 				});

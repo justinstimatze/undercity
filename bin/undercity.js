@@ -23,7 +23,6 @@ if (existsSync(distPath)) {
 	const { spawn } = await import("node:child_process");
 	const tsx = spawn("tsx", [srcPath, ...process.argv.slice(2)], {
 		stdio: "inherit",
-		shell: true,
 	});
 	tsx.on("exit", (code) => process.exit(code || 0));
 } else {
