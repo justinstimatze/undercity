@@ -276,6 +276,25 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			}));
 		}
 
+		// Adjust models based on historical metrics (unless model explicitly set)
+		if (!options.model) {
+			const { adjustModelFromMetrics } = await import("../complexity.js");
+			for (const task of tasksWithModels) {
+				// Get complexity level from decomposer result if available, default to 'standard'
+				const complexityLevel = (task as { complexity?: string }).complexity || "standard";
+				const adjustedModel = await adjustModelFromMetrics(
+					task.recommendedModel || "sonnet",
+					complexityLevel as "trivial" | "simple" | "standard" | "complex" | "critical",
+				);
+				if (adjustedModel !== task.recommendedModel) {
+					output.debug(
+						`Metrics adjustment: ${task.objective.substring(0, 30)}... ${task.recommendedModel} → ${adjustedModel}`,
+					);
+					task.recommendedModel = adjustedModel;
+				}
+			}
+		}
+
 		// Group tasks by recommended model for efficient execution
 		const tasksByModel = {
 			haiku: tasksWithModels.filter((t) => t.recommendedModel === "haiku"),

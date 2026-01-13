@@ -576,6 +576,107 @@ function getLevelConfig(
 }
 
 /**
+ * Minimum success rate thresholds for model tiers
+ * Below these, escalate to next tier
+ */
+const MODEL_SUCCESS_THRESHOLDS = {
+	haiku: 0.7, // If haiku succeeds < 70%, try sonnet
+	sonnet: 0.6, // If sonnet succeeds < 60%, try opus
+	opus: 0.0, // Opus is the ceiling
+};
+
+/**
+ * Check historical metrics and potentially upgrade model tier
+ * Returns adjusted model if historical success rate is too low
+ */
+export async function adjustModelFromMetrics(
+	recommendedModel: "haiku" | "sonnet" | "opus",
+	complexityLevel: ComplexityLevel,
+	minSamples: number = 3,
+): Promise<"haiku" | "sonnet" | "opus"> {
+	try {
+		const { getMetricsAnalysis } = await import("./feedback-metrics.js");
+		const analysis = getMetricsAnalysis();
+
+		// Check if we have enough data
+		if (analysis.totalTasks < minSamples) {
+			sessionLogger.debug(
+				{ totalTasks: analysis.totalTasks, minSamples },
+				"Not enough metrics data for adjustment, using default model",
+			);
+			return recommendedModel;
+		}
+
+		// Check success rate for this model + complexity combo
+		const comboKey = `${recommendedModel}:${complexityLevel}`;
+		const combo = analysis.byModelAndComplexity[comboKey];
+
+		if (!combo || combo.total < minSamples) {
+			// Not enough specific data, check model-level success rate
+			const modelStats = analysis.byModel[recommendedModel];
+			if (!modelStats || modelStats.total < minSamples) {
+				return recommendedModel;
+			}
+
+			// Check if model-level success rate is below threshold
+			const threshold = MODEL_SUCCESS_THRESHOLDS[recommendedModel];
+			if (modelStats.rate < threshold) {
+				const upgraded = upgradeModel(recommendedModel);
+				sessionLogger.info(
+					{
+						originalModel: recommendedModel,
+						upgradedModel: upgraded,
+						successRate: modelStats.rate,
+						threshold,
+					},
+					"Upgrading model due to low historical success rate",
+				);
+				return upgraded;
+			}
+			return recommendedModel;
+		}
+
+		// Check specific combo success rate
+		const comboThreshold = MODEL_SUCCESS_THRESHOLDS[recommendedModel];
+		if (combo.rate < comboThreshold) {
+			const upgraded = upgradeModel(recommendedModel);
+			sessionLogger.info(
+				{
+					originalModel: recommendedModel,
+					upgradedModel: upgraded,
+					complexity: complexityLevel,
+					successRate: combo.rate,
+					threshold: comboThreshold,
+					samples: combo.total,
+				},
+				"Upgrading model due to low historical success rate for complexity level",
+			);
+			return upgraded;
+		}
+
+		return recommendedModel;
+	} catch (error) {
+		// Metrics unavailable - use default
+		sessionLogger.debug({ error: String(error) }, "Could not load metrics, using default model");
+		return recommendedModel;
+	}
+}
+
+/**
+ * Upgrade model to next tier
+ */
+function upgradeModel(model: "haiku" | "sonnet" | "opus"): "haiku" | "sonnet" | "opus" {
+	switch (model) {
+		case "haiku":
+			return "sonnet";
+		case "sonnet":
+			return "opus";
+		case "opus":
+			return "opus";
+	}
+}
+
+/**
  * Keywords and patterns that indicate complexity
  */
 // Complexity signals with refined categorization
