@@ -1203,7 +1203,37 @@ RULES:
 			? { resume: this.currentAgentSessionId!, prompt: resumePrompt!, options: queryOptions }
 			: { prompt, options: queryOptions };
 
+		// Log prompt size for performance analysis
+		const promptSize = prompt?.length || resumePrompt?.length || 0;
+		sessionLogger.info({ promptSize, hasContext: !!this.currentBriefing }, `Agent prompt size: ${promptSize} chars`);
+
+		const queryStart = Date.now();
+		let lastMsgTime = queryStart;
+		let msgCount = 0;
+
 		for await (const message of query(queryParams)) {
+			msgCount++;
+			const now = Date.now();
+			const delta = now - lastMsgTime;
+			const msgType = (message as Record<string, unknown>).type as string;
+
+			// Log slow messages (>5s between messages)
+			if (delta > 5000) {
+				const msg = message as Record<string, unknown>;
+				const subtype = msg.subtype as string | undefined;
+				const toolName =
+					msgType === "assistant"
+						? ((msg.message as Record<string, unknown>)?.content as Array<{ type: string; name?: string }>)?.find(
+								(c) => c.type === "tool_use",
+							)?.name
+						: undefined;
+				sessionLogger.info(
+					{ msgCount, msgType, subtype, toolName, deltaMs: delta, totalMs: now - queryStart },
+					`Slow message gap: ${delta}ms waiting for ${msgType}${toolName ? `:${toolName}` : ""}`,
+				);
+			}
+			lastMsgTime = now;
+
 			// Track token usage
 			const usage = this.metricsTracker.extractTokenUsage(message);
 			if (usage) {

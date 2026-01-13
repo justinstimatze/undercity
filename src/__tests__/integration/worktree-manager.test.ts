@@ -102,12 +102,15 @@ describeGit("WorktreeManager Integration Tests", () => {
 			execSync("git add . && git commit -m 'init'", { cwd: newTestDir, stdio: "pipe" });
 
 			new WorktreeManager({ repoRoot: newTestDir, defaultBranch: "main" });
-			const worktreesPath = join(newTestDir, ".undercity", "worktrees");
+			// Worktrees directory is now in /tmp for isolation
+			const repoHash = Buffer.from(newTestDir).toString("base64url").slice(0, 12);
+			const worktreesPath = `/tmp/undercity-worktrees/${repoHash}`;
 
 			expect(existsSync(worktreesPath)).toBe(true);
 
 			// Cleanup
 			rmSync(newTestDir, { recursive: true, force: true });
+			rmSync(worktreesPath, { recursive: true, force: true });
 		});
 	});
 
@@ -128,7 +131,9 @@ describeGit("WorktreeManager Integration Tests", () => {
 		it("should generate correct worktree path", () => {
 			manager = new WorktreeManager({ repoRoot: testDir, defaultBranch });
 			const sessionId = "test-session-123";
-			const expected = join(testDir, ".undercity", "worktrees", sessionId);
+			// Worktrees are now in /tmp to avoid SDK inheriting any parent .claude rules
+			const repoHash = Buffer.from(testDir).toString("base64url").slice(0, 12);
+			const expected = `/tmp/undercity-worktrees/${repoHash}/${sessionId}`;
 			expect(manager.getWorktreePath(sessionId)).toBe(expected);
 		});
 

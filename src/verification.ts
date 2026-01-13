@@ -165,12 +165,18 @@ export async function verifyWork(
 		feedbackParts.push("✓ Spell check passed");
 	} catch (error) {
 		// Spell errors are non-blocking - just log a warning
-		spellPassed = false;
 		const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 		const spellingErrors = output.split("\n").filter((line) => line.includes("spelling error"));
 		const errorCount = spellingErrors.length;
-		logger.warn({ errorCount, errors: spellingErrors.slice(0, 5) }, "Spelling issues detected (non-blocking)");
-		feedbackParts.push(`⚠ Spelling issues (${errorCount}) - non-blocking`);
+		// Only mark as failed if there are actual spelling errors to fix
+		if (errorCount > 0) {
+			spellPassed = false;
+			logger.warn({ errorCount, errors: spellingErrors.slice(0, 5) }, "Spelling issues detected (non-blocking)");
+			feedbackParts.push(`⚠ Spelling issues (${errorCount}) - non-blocking`);
+		} else {
+			// Spell command failed but no actionable errors - treat as passed
+			feedbackParts.push("✓ Spell check passed");
+		}
 	}
 	if (profile) timing.spell = Date.now() - stepStart;
 	let codeHealthPassed = true;

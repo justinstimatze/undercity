@@ -164,7 +164,12 @@ export class WorktreeManager {
 				: resolve(this.repoRoot, options.stateDir)
 			: join(this.repoRoot, ".undercity");
 
-		this.worktreesDir = join(this.undercityDir, "worktrees");
+		// CRITICAL: Put worktrees in /tmp for complete isolation.
+		// If worktrees are anywhere that could have parent .claude/ directories,
+		// the SDK walks up the tree and loads those rules, causing 10-15s latency per turn!
+		// Using /tmp ensures no ancestor has .claude/ rules.
+		const repoHash = Buffer.from(this.repoRoot).toString("base64url").slice(0, 12);
+		this.worktreesDir = `/tmp/undercity-worktrees/${repoHash}`;
 
 		// Get main branch with multiple fallback strategies
 		try {
