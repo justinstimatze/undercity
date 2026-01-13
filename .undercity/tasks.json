@@ -139,13 +139,14 @@
     {
       "id": "task-dspy-evaluation",
       "objective": "[learning] Evaluate DSPy for prompt optimization - assess if prompt quality is the bottleneck vs routing/model selection",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-10T09:51:35.101Z",
       "tags": [
         "learning",
         "prompts"
-      ]
+      ],
+      "completedAt": "2026-01-13T05:13:52.871Z"
     },
     {
       "id": "task-continuous-sync",
@@ -216,13 +217,14 @@
     {
       "id": "task-onboard-scout-rules",
       "objective": "[onboard] Scout-generated rules - use scout agent to analyze codebase and generate .claude/rules/ with architecture, patterns, conventions",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
         "onboarding",
         "portability"
-      ]
+      ],
+      "completedAt": "2026-01-13T05:13:53.455Z"
     },
     {
       "id": "task-onboard-project-profile",
@@ -240,7 +242,7 @@
     {
       "id": "task-onboard-self-tune",
       "objective": "[onboard] Self-tuning after tasks - analyze verification failures, adjust complexity routing, update project profile automatically",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
@@ -250,29 +252,32 @@
       "dependsOn": [
         "task-onboard-project-profile",
         "task-feedback-metrics-reader"
-      ]
+      ],
+      "completedAt": "2026-01-13T05:09:36.178Z"
     },
     {
       "id": "task-portable-package",
       "objective": "[portable] Make undercity installable as npm package - 'npx undercity init' or 'pnpm add -D undercity' workflow",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:30:00.000Z",
       "tags": [
         "portability",
         "distribution"
-      ]
+      ],
+      "completedAt": "2026-01-13T05:14:00.601Z"
     },
     {
       "id": "task-agent-optimize-oracle",
       "objective": "[agent-opt] Rewrite oracle cards for agent utility - replace poetic lore with concrete examples, action patterns, or decision heuristics that actually help agents",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-11T07:35:00.000Z",
       "tags": [
         "agent-optimization",
         "prompts"
-      ]
+      ],
+      "completedAt": "2026-01-13T04:57:26.772Z"
     },
     {
       "id": "task-agent-optimize-prompts",
@@ -299,16 +304,19 @@
     {
       "id": "task-mka7cfkg-avsy",
       "objective": "[optimization] Review .claude/rules files for semantic density improvements",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-11T20:44:15.952Z"
+      "createdAt": "2026-01-11T20:44:15.952Z",
+      "completedAt": "2026-01-13T04:37:10.637Z"
     },
     {
       "id": "task-mka7chrr-udp0",
       "objective": "[optimization] Convert low-density prose to tables/lists in documentation",
-      "status": "pending",
+      "status": "failed",
       "priority": 900,
-      "createdAt": "2026-01-11T20:44:18.807Z"
+      "createdAt": "2026-01-11T20:44:18.807Z",
+      "completedAt": "2026-01-13T05:41:32.264Z",
+      "error": "Task failed"
     },
     {
       "id": "task-mkab2aof-ygpz",
@@ -331,16 +339,18 @@
     {
       "id": "task-mkab2bct-bb5k",
       "objective": "[grind] Improve agent prompts - add instruction to check git log before implementing, return TASK_ALREADY_COMPLETE if work exists",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-11T22:28:22.397Z"
+      "createdAt": "2026-01-11T22:28:22.397Z",
+      "completedAt": "2026-01-13T04:20:26.744Z"
     },
     {
       "id": "task-mkab2bog-89d5",
       "objective": "[docs] Add reconciliation to grind workflow docs - explain when to run reconcile, how confidence scoring works",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-11T22:28:22.816Z"
+      "createdAt": "2026-01-11T22:28:22.816Z",
+      "completedAt": "2026-01-13T04:58:20.377Z"
     },
     {
       "id": "task-mkab3cik-8i42",
@@ -353,30 +363,36 @@
     {
       "id": "task-mkabr2sc-ffur",
       "objective": "[refactor] Refactor git.ts MergeQueue.processNext method - complexity 18, 2 nested blocks. Simplify merge processing logic",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-11T22:47:37.692Z"
+      "createdAt": "2026-01-11T22:47:37.692Z",
+      "completedAt": "2026-01-13T04:53:50.877Z"
     },
     {
       "id": "task-mkabr37z-vjy8",
       "objective": "[refactor] Refactor git.ts MergeQueue.processWorktreeBranch method - complexity 17. Extract rebase and merge strategies",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-11T22:47:38.255Z"
+      "createdAt": "2026-01-11T22:47:38.255Z",
+      "completedAt": "2026-01-13T04:53:51.292Z"
     },
     {
       "id": "task-mkabr42j-4igg",
       "objective": "[refactor] Reduce primitive obsession in task.ts - 89% primitive args. Introduce typed parameter objects where appropriate",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-11T22:47:39.355Z"
+      "createdAt": "2026-01-11T22:47:39.355Z",
+      "completedAt": "2026-01-13T06:20:15.630Z",
+      "error": "Task failed",
+      "resolution": "Work completed via worktree, committed to main in 6952482"
     },
     {
       "id": "task-mkadtxcu-cn6i",
       "objective": "[cli] Add 'undercity update' command - update task objective, priority, tags, or status. Usage: undercity update <task-id> --objective '...' --priority N --tags tag1,tag2",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-11T23:45:49.854Z"
+      "createdAt": "2026-01-11T23:45:49.854Z",
+      "completedAt": "2026-01-13T06:26:21.352Z"
     },
     {
       "id": "task-mf48mfkx7msu",
@@ -596,13 +612,14 @@
     {
       "id": "task-push-after-success",
       "objective": "[integration] Add push-after-success option - optionally push to remote after successful merge. Default off, enable with --push flag or config",
-      "status": "pending",
+      "status": "complete",
       "priority": 30,
       "createdAt": "2026-01-12T04:00:00.000Z",
       "tags": [
         "integration",
         "git"
-      ]
+      ],
+      "completedAt": "2026-01-13T09:45:41.904Z"
     },
     {
       "id": "task-atomic-recovery-state",
@@ -621,19 +638,20 @@
     {
       "id": "task-phase3-metrics-dashboard",
       "objective": "[phase3] Build metrics dashboard - display token usage per model, success/failure rates by complexity, cost tracking over time. Integrate with existing live-metrics.ts",
-      "status": "pending",
+      "status": "complete",
       "priority": 100,
       "createdAt": "2026-01-12T04:10:00.000Z",
       "tags": [
         "phase3",
         "metrics",
         "polish"
-      ]
+      ],
+      "completedAt": "2026-01-13T09:26:50.950Z"
     },
     {
       "id": "task-phase3-capability-ledger",
       "objective": "[phase3] Create capability ledger - track what task types succeed at each model tier. Use historical data to improve routing decisions. Store in .undercity/capability-ledger.json",
-      "status": "pending",
+      "status": "complete",
       "priority": 101,
       "createdAt": "2026-01-12T04:10:00.000Z",
       "tags": [
@@ -643,56 +661,68 @@
       ],
       "dependsOn": [
         "task-feedback-metrics-reader"
-      ]
+      ],
+      "completedAt": "2026-01-13T05:10:04.880Z"
     },
     {
       "id": "task-mkatqd9t-bf40fc",
       "objective": "In src/commands/mixed.ts, add --dry-run option to grind command definition",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-12T07:10:57.713Z"
+      "createdAt": "2026-01-12T07:10:57.713Z",
+      "completedAt": "2026-01-13T04:19:20.702Z"
     },
     {
       "id": "task-mkatqd9u-890c64",
       "objective": "In src/commands/mixed-handlers.ts, add dryRun boolean to GrindOptions interface",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-12T07:10:57.714Z"
+      "createdAt": "2026-01-12T07:10:57.714Z",
+      "completedAt": "2026-01-13T04:19:21.144Z"
     },
     {
       "id": "task-mkatqd9v-d4a541",
       "objective": "In src/commands/mixed-handlers.ts, modify handleGrind function to pass dryRun option to Orchestrator and skip actual execution when dryRun is true",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-12T07:10:57.715Z"
+      "createdAt": "2026-01-12T07:10:57.715Z",
+      "completedAt": "2026-01-13T04:19:21.587Z"
     },
     {
       "id": "task-mkatqd9v-b67501",
       "objective": "In src/orchestrator.ts, add dryRun boolean to ParallelSoloOptions interface and Orchestrator constructor",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-12T07:10:57.715Z"
+      "createdAt": "2026-01-12T07:10:57.715Z",
+      "resolution": "Not needed - implemented at handler level",
+      "completedAt": 1768279771.708299
     },
     {
       "id": "task-mkatqd9v-549609",
       "objective": "In src/orchestrator.ts, modify runSingle and runParallel methods to output task plan instead of executing when dryRun is true",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-12T07:10:57.715Z"
+      "createdAt": "2026-01-12T07:10:57.715Z",
+      "resolution": "Not needed - implemented at handler level",
+      "completedAt": 1768279771.708303
     },
     {
       "id": "task-mkatqd9w-a25b4b",
       "objective": "In src/worker.ts, add dryRun boolean to SoloOptions interface and TaskWorker constructor",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-12T07:10:57.716Z"
+      "createdAt": "2026-01-12T07:10:57.716Z",
+      "resolution": "Not needed - implemented at handler level",
+      "completedAt": 1768279771.708306
     },
     {
       "id": "task-mkatqd9w-f85562",
       "objective": "In src/worker.ts, modify runTask method to output execution plan instead of calling executeAgent when dryRun is true",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
-      "createdAt": "2026-01-12T07:10:57.716Z"
+      "createdAt": "2026-01-12T07:10:57.716Z",
+      "resolution": "Not needed - implemented at handler level",
+      "completedAt": 1768279771.708308
     },
     {
       "id": "task-vocab-review-witness",
@@ -710,36 +740,277 @@
     {
       "id": "task-vocab-review-flute",
       "objective": "[vocab] Review flute/scout terminology - evaluate if these names are clear or should use standard terms like codebase-analyzer",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-13T01:33:13.995Z",
       "tags": [
         "vocabulary",
         "naming"
-      ]
+      ],
+      "completedAt": "2026-01-13T04:09:37.537Z"
     },
     {
       "id": "task-vocab-review-elevator",
       "objective": "[vocab] Review elevator/merge-queue terminology - is elevator intuitive or should it be merge-queue/merge-pipeline",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-13T01:33:13.995Z",
       "tags": [
         "vocabulary",
         "naming"
-      ]
+      ],
+      "completedAt": "2026-01-13T04:55:30.187Z"
     },
     {
       "id": "task-vocab-review-oracle",
       "objective": "[vocab] Review oracle terminology - oblique strategy cards, evaluate if this adds value or is just decoration",
-      "status": "pending",
+      "status": "complete",
       "priority": 900,
       "createdAt": "2026-01-13T01:33:13.995Z",
       "tags": [
         "vocabulary",
         "naming"
+      ],
+      "completedAt": "2026-01-13T04:55:52.575Z"
+    },
+    {
+      "id": "task-mkc4zfrj-162578",
+      "objective": "[research] DSPy prompt optimization - web search DSPy docs, create 2-3 prompt variants based on DSPy techniques, add as experiment variants in experiments.json",
+      "status": "pending",
+      "priority": 850,
+      "createdAt": "2026-01-13T05:13:42.799Z",
+      "isDecomposed": true,
+      "subtaskIds": [
+        "task-mkc7gjnn-327a6e",
+        "task-mkc7gjnn-1256c1",
+        "task-mkc7gjnn-387c3e"
       ]
+    },
+    {
+      "id": "task-mkc4zg9t-21c9d5",
+      "objective": "[dogfood] Scout undercity codebase - run scout analysis on src/, identify patterns and conventions, generate new rules for .claude/rules/",
+      "status": "complete",
+      "priority": 850,
+      "createdAt": "2026-01-13T05:13:43.457Z",
+      "completedAt": "2026-01-13T08:55:25.379Z"
+    },
+    {
+      "id": "task-mkc5yg5g-e91740",
+      "objective": "[audit] Review streaming log output for agent monitoring - ensure logs are optimally useful for AI agent monitoring, remove stale debug output, improve signal-to-noise ratio",
+      "status": "failed",
+      "priority": 800,
+      "createdAt": "2026-01-13T05:40:56.261Z",
+      "completedAt": "2026-01-13T09:16:57.483Z",
+      "error": "Error: Verification failed for task-mkcdlp5r-c3aea6: Error: Command failed: pnpm test --run\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject invalid action types\n\u001b[22m\u001b[39mInvalid meta-task action: explode\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject missing reason\n\u001b[22m\u001b[39mMissing reason in recommendation\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject invalid confidence scores\n\u001b[22m\u001b[39mInvalid confidence: \u001b[33m1.5\u001b[39m\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject negative confidence scores\n\u001b[22m\u001b[39mInvalid confidence: \u001b[33m-0.5\u001b[39m\n\n(node:2286241) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nfatal: not a git repository (or any parent up to mount point /)\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n\n\u001b[31m⎯⎯⎯⎯⎯⎯⎯\u001b[39m\u001b[1m\u001b[41m Failed Tests 1 \u001b[49m\u001b[22m\u001b[31m⎯⎯⎯⎯⎯⎯⎯\u001b[39m\n\n\u001b[41m\u001b[1m FAIL \u001b[22m\u001b[49m src/__tests__/integration/cli-smoke.test.ts\u001b[2m > \u001b[22mCLI Smoke Tests\u001b[2m > \u001b[22mTask Board Commands\u001b[2m > \u001b[22madd command adds task to board\n\u001b[31m\u001b[1mError\u001b[22m: Command failed: node /home/justin/Documents/undercity/.undercity/worktrees/task-mkcdlp5r-c3aea6/bin/undercity.js add Test task from smoke test\n(node:2287858) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nerror: too many arguments for 'add'. Expected 1 argument but got 5.\n\u001b[39m\n\u001b[36m \u001b[2m❯\u001b[22m runCli src/__tests__/integration/cli-smoke.test.ts:\u001b[2m21:9\u001b[22m\u001b[39m\n    \u001b[90m 19| \u001b[39m */\u001b[39m\n    \u001b[90m 20| \u001b[39mfunction runCli(args: string[], options: { cwd?: string } = {}): strin…\n    \u001b[90m 21| \u001b[39m \u001b[35mreturn\u001b[39m \u001b[34mexecFileSync\u001b[39m(\u001b[32m\"node\"\u001b[39m\u001b[33m,\u001b[39m [\u001b[33mCLI_PATH\u001b[39m\u001b[33m,\u001b[39m \u001b[33m...\u001b[39margs]\u001b[33m,\u001b[39m {\n    \u001b[90m   | \u001b[39m        \u001b[31m^\u001b[39m\n    \u001b[90m 22| \u001b[39m  encoding\u001b[33m:\u001b[39m \u001b[32m\"utf-8\"\u001b[39m\u001b[33m,\u001b[39m\n    \u001b[90m 23| \u001b[39m  cwd\u001b[33m:\u001b[39m options\u001b[33m.\u001b[39mcwd\u001b[33m,\u001b[39m\n\u001b[90m \u001b[2m❯\u001b[22m src/__tests__/integration/cli-smoke.test.ts:\u001b[2m138:4\u001b[22m\u001b[39m\n\n\u001b[31m\u001b[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\u001b[22m\u001b[39m\n\n"
+    },
+    {
+      "id": "task-mkc7gjnn-327a6e",
+      "objective": "Web search DSPy documentation and techniques for prompt engineering",
+      "status": "complete",
+      "priority": 850.1,
+      "createdAt": "2026-01-13T06:23:00.227Z",
+      "parentId": "task-mkc4zfrj-162578",
+      "estimatedFiles": [],
+      "completedAt": "2026-01-13T07:56:04.784Z"
+    },
+    {
+      "id": "task-mkc7gjnn-1256c1",
+      "objective": "Create 2-3 prompt variants using DSPy optimization techniques based on research",
+      "status": "complete",
+      "priority": 850.2,
+      "createdAt": "2026-01-13T06:23:00.227Z",
+      "parentId": "task-mkc4zfrj-162578",
+      "estimatedFiles": [
+        "experiments.json"
+      ],
+      "completedAt": "2026-01-13T07:29:33.453Z"
+    },
+    {
+      "id": "task-mkc7gjnn-387c3e",
+      "objective": "Add new prompt experiment variants to experiments.json file",
+      "status": "failed",
+      "priority": 850.3,
+      "createdAt": "2026-01-13T06:23:00.227Z",
+      "parentId": "task-mkc4zfrj-162578",
+      "estimatedFiles": [
+        "experiments.json"
+      ],
+      "completedAt": "2026-01-13T07:22:42.573Z",
+      "error": "Task failed"
+    },
+    {
+      "id": "task-mkcd0vv6-b5a8b4",
+      "objective": "[refactor] Rename pocket to something more descriptive",
+      "status": "complete",
+      "priority": 70,
+      "createdAt": "2026-01-13T08:58:47.250Z",
+      "completedAt": "2026-01-13T09:40:15.907Z"
+    },
+    {
+      "id": "task-mkcdqekx-f1f978",
+      "objective": "Test task from smoke test",
+      "status": "failed",
+      "priority": 71,
+      "createdAt": "2026-01-13T09:18:37.905Z",
+      "completedAt": "2026-01-13T09:34:31.851Z",
+      "error": "Task failed"
+    },
+    {
+      "id": "task-mkcerof6-9fc215",
+      "objective": "[test] Add a simple comment to src/index.ts explaining the module exports",
+      "status": "complete",
+      "priority": 72,
+      "createdAt": "2026-01-13T09:47:36.930Z",
+      "completedAt": "2026-01-13T09:49:50.762Z"
+    },
+    {
+      "id": "task-mkcf95fx-206222",
+      "objective": "[test] Add a JSDoc comment to the TaskWorker constructor in src/worker.ts",
+      "status": "failed",
+      "priority": 73,
+      "createdAt": "2026-01-13T10:01:12.141Z",
+      "completedAt": "2026-01-13T10:03:37.725Z",
+      "error": "Error: Merge into local main failed for task-mkcf98y3-575e09: Error: Command failed: git merge --ff-only b395651fb695021c9d7795971a6ee4bb51fe5e13\nerror: Your local changes to the following files would be overwritten by merge:\n\tsrc/worker.ts\nPlease commit your changes or stash them before you merge.\nAborting\n"
+    },
+    {
+      "id": "task-mkcfkhqc-7e68e9",
+      "objective": "[test] Add JSDoc to constructor in worker.ts",
+      "status": "failed",
+      "priority": 74,
+      "createdAt": "2026-01-13T10:10:01.284Z",
+      "completedAt": "2026-01-13T10:13:29.168Z",
+      "error": "Error: Merge into local main failed for task-mkcfklwu-5d0365: Error: Command failed: git merge --ff-only 96ad7d495f07da808486a669ded41245347b39fb\nerror: Your local changes to the following files would be overwritten by merge:\n\tsrc/worker.ts\nPlease commit your changes or stash them before you merge.\nAborting\n"
+    },
+    {
+      "id": "task-mkcfqda6-304e20",
+      "objective": "[test] Fix the typo in src/output.ts line 1 - add space after colon",
+      "status": "failed",
+      "priority": 75,
+      "createdAt": "2026-01-13T10:14:35.454Z",
+      "completedAt": "2026-01-13T10:17:05.910Z",
+      "error": "Task failed"
+    },
+    {
+      "id": "task-mkcfyk5j-9110c1",
+      "objective": "[test] Add a simple comment to cli.ts explaining what it does",
+      "status": "complete",
+      "priority": 76,
+      "createdAt": "2026-01-13T10:20:57.607Z",
+      "completedAt": "2026-01-13T10:23:06.166Z"
+    },
+    {
+      "id": "task-mkcg3fw0-f9d423",
+      "objective": "[test] Update the comment in index.ts to be more descriptive",
+      "status": "complete",
+      "priority": 77,
+      "createdAt": "2026-01-13T10:24:45.360Z",
+      "completedAt": "2026-01-13T10:26:12.033Z"
+    },
+    {
+      "id": "task-mkcgbvrv-89e25c",
+      "objective": "[test] Add a comment to types.ts",
+      "status": "complete",
+      "priority": 78,
+      "createdAt": "2026-01-13T10:31:19.195Z",
+      "completedAt": "2026-01-13T10:32:52.377Z"
+    },
+    {
+      "id": "task-mkd1bzzy-5053bd",
+      "objective": "[test] Add a comment to config.ts explaining what it does",
+      "status": "complete",
+      "priority": 79,
+      "createdAt": "2026-01-13T20:19:16.606Z",
+      "completedAt": "2026-01-13T20:20:47.112Z"
+    },
+    {
+      "id": "task-mkd28ut5-2322d6",
+      "objective": "Improve context selection - use AST index more aggressively to reduce token usage in worker prompts",
+      "status": "pending",
+      "priority": 80,
+      "createdAt": "2026-01-13T20:44:49.529Z"
+    },
+    {
+      "id": "task-mkd28v4n-9579cf",
+      "objective": "Tune self-tuning thresholds - review feedback-metrics and routing profile for better model selection",
+      "status": "pending",
+      "priority": 81,
+      "createdAt": "2026-01-13T20:44:49.943Z"
+    },
+    {
+      "id": "task-mkd28vgb-5c45ae",
+      "objective": "Batch similar tasks - enhance task scheduler to group related tasks and share context",
+      "status": "pending",
+      "priority": 82,
+      "createdAt": "2026-01-13T20:44:50.363Z"
+    },
+    {
+      "id": "task-mkd28vrm-56e4a6",
+      "objective": "Reduce verification overhead - skip lint/format for trivial changes, cache verification results",
+      "status": "pending",
+      "priority": 83,
+      "createdAt": "2026-01-13T20:44:50.770Z"
+    },
+    {
+      "id": "task-mkd28w3r-683751",
+      "objective": "Agent memory/learning - persist successful task patterns for few-shot examples",
+      "status": "pending",
+      "priority": 84,
+      "createdAt": "2026-01-13T20:44:51.207Z"
+    },
+    {
+      "id": "task-mkd3np2y-e33506",
+      "objective": "Expand experiment framework for automated A/B testing - add maxTurns, maxAttempts, maxRetriesPerTier, complexityRouting to ExperimentVariant; add statistical significance calculation; add auto-conclude when confident; improve CLI for creating/monitoring experiments",
+      "status": "pending",
+      "priority": 85,
+      "createdAt": "2026-01-13T21:24:21.563Z"
+    },
+    {
+      "id": "task-mkd3plyd-34f927",
+      "objective": "Refactor the getTeamComposition function in complexity.ts to use a lookup object instead of the switch-like if/else pattern",
+      "status": "complete",
+      "priority": 86,
+      "createdAt": "2026-01-13T21:25:50.821Z",
+      "completedAt": "2026-01-13T21:27:31.602Z"
+    },
+    {
+      "id": "task-mkd3th3s-6e043c",
+      "objective": "Add JSDoc comment to the assessComplexityFast function in complexity.ts explaining the scoring system",
+      "status": "complete",
+      "priority": 87,
+      "createdAt": "2026-01-13T21:28:51.160Z",
+      "completedAt": "2026-01-13T21:31:14.512Z"
+    },
+    {
+      "id": "task-mkd3thfp-b9702b",
+      "objective": "Add a debug log statement in worker.ts executeAgent method showing the maxTurns value being used",
+      "status": "complete",
+      "priority": 88,
+      "createdAt": "2026-01-13T21:28:51.589Z",
+      "completedAt": "2026-01-13T21:31:14.511Z"
+    },
+    {
+      "id": "task-mkd46aqu-1f26e4",
+      "objective": "Add a TODO comment in orchestrator.ts near the merge queue processing explaining the serial merge strategy",
+      "status": "complete",
+      "priority": 89,
+      "createdAt": "2026-01-13T21:38:49.446Z",
+      "completedAt": "2026-01-13T21:41:13.679Z"
+    },
+    {
+      "id": "task-mkd46b2k-651798",
+      "objective": "Add a brief inline comment in review.ts explaining why annealing is limited to 1 pass",
+      "status": "complete",
+      "priority": 90,
+      "createdAt": "2026-01-13T21:38:49.868Z",
+      "completedAt": "2026-01-13T21:41:13.677Z"
+    },
+    {
+      "id": "task-mkd58vjq-4e6a1f",
+      "objective": "Implement safe burn monitoring - track API usage against plan limits and auto-pause grind when approaching thresholds",
+      "status": "pending",
+      "priority": 91,
+      "createdAt": "2026-01-13T22:08:49.334Z"
     }
   ],
-  "lastUpdated": "2026-01-13T04:05:28.305Z"
+  "lastUpdated": "2026-01-13T22:08:49.334Z"
 }

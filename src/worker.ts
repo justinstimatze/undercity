@@ -1088,15 +1088,17 @@ Be concise and specific. Focus on actionable insights.`;
 		}
 
 		// Reviews are enabled - determine escalation cap based on complexity
+		// Note: Complex tasks now start on sonnet, so review should match
 		switch (assessment.level) {
 			case "trivial":
 			case "simple":
 			case "standard":
-				// Simple tasks get capped review: haiku → sonnet only (no opus)
-				return { review: true, annealing: false, maxReviewTier: "sonnet" };
 			case "complex":
+				// Simple and complex tasks get capped review: haiku → sonnet only
+				// Complex tasks execution was demoted from opus to sonnet, review follows
+				return { review: true, annealing: false, maxReviewTier: "sonnet" };
 			case "critical":
-				// Complex/critical tasks get full escalation + annealing
+				// Only critical tasks get opus review + annealing
 				return { review: true, annealing: true, maxReviewTier: "opus" };
 			default:
 				// Default to capped review

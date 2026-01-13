@@ -206,14 +206,17 @@ export function recordQueryResult(result: {
 		metrics.queries.rateLimited++;
 	}
 
-	// Update token counts (use != null to handle 0 values correctly)
-	if (result.inputTokens != null) {
-		metrics.tokens.input += result.inputTokens;
-		metrics.tokens.total += result.inputTokens;
-	}
-	if (result.outputTokens != null) {
-		metrics.tokens.output += result.outputTokens;
-		metrics.tokens.total += result.outputTokens;
+	// Update token counts - only from raw values if modelUsage not provided
+	// (modelUsage updates totals later to avoid double-counting)
+	if (!result.modelUsage) {
+		if (result.inputTokens != null) {
+			metrics.tokens.input += result.inputTokens;
+			metrics.tokens.total += result.inputTokens;
+		}
+		if (result.outputTokens != null) {
+			metrics.tokens.output += result.outputTokens;
+			metrics.tokens.total += result.outputTokens;
+		}
 	}
 	if (result.cacheReadTokens != null) {
 		metrics.tokens.cacheRead += result.cacheReadTokens;
@@ -250,9 +253,15 @@ export function recordQueryResult(result: {
 						: null;
 
 			if (modelKey && metrics.byModel[modelKey]) {
-				metrics.byModel[modelKey].input += usage.inputTokens || 0;
-				metrics.byModel[modelKey].output += usage.outputTokens || 0;
+				const inputToks = usage.inputTokens || 0;
+				const outputToks = usage.outputTokens || 0;
+				metrics.byModel[modelKey].input += inputToks;
+				metrics.byModel[modelKey].output += outputToks;
 				metrics.byModel[modelKey].cost += usage.costUSD || 0;
+				// Also add to top-level totals
+				metrics.tokens.input += inputToks;
+				metrics.tokens.output += outputToks;
+				metrics.tokens.total += inputToks + outputToks;
 			}
 		}
 	} else if (result.model && metrics.byModel[result.model]) {
