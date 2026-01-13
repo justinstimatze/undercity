@@ -408,6 +408,18 @@ export interface ClearCompletedTasksParams {
 }
 
 /**
+ * Parameters for updating a task
+ */
+export interface UpdateTaskParams {
+	id: string;
+	objective?: string;
+	priority?: number;
+	tags?: string[];
+	status?: Task["status"];
+	path?: string;
+}
+
+/**
  * Add a task to the board
  */
 export function addTask(
@@ -460,6 +472,67 @@ export function addTasks(objectives: string[], path: string = DEFAULT_TASK_BOARD
 		board.tasks.push(...tasks);
 		saveTaskBoard(board, path);
 		return tasks;
+	});
+}
+
+/**
+ * Update task fields (objective, priority, tags, status)
+ */
+export function updateTaskFields(params: UpdateTaskParams): Task | undefined;
+export function updateTaskFields(
+	id: string,
+	updates: { objective?: string; priority?: number; tags?: string[]; status?: Task["status"] },
+	path?: string,
+): Task | undefined;
+export function updateTaskFields(
+	paramsOrId: UpdateTaskParams | string,
+	updates?: { objective?: string; priority?: number; tags?: string[]; status?: Task["status"] },
+	path?: string,
+): Task | undefined {
+	let id: string;
+	let objective: string | undefined;
+	let priority: number | undefined;
+	let tags: string[] | undefined;
+	let status: Task["status"] | undefined;
+	let actualPath: string;
+
+	if (typeof paramsOrId === "object") {
+		({ id, objective, priority, tags, status, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrId);
+	} else {
+		id = paramsOrId;
+		objective = updates?.objective;
+		priority = updates?.priority;
+		tags = updates?.tags;
+		status = updates?.status;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
+	return withLock(getLockPath(actualPath), () => {
+		const board = loadTaskBoard(actualPath);
+		const task = board.tasks.find((t) => t.id === id);
+
+		if (!task) {
+			return undefined;
+		}
+
+		if (objective !== undefined) {
+			task.objective = objective;
+		}
+		if (priority !== undefined) {
+			task.priority = priority;
+		}
+		if (tags !== undefined) {
+			task.tags = tags;
+		}
+		if (status !== undefined) {
+			task.status = status;
+			if (status === "complete" || status === "failed" || status === "canceled" || status === "obsolete") {
+				task.completedAt = new Date();
+			}
+		}
+
+		saveTaskBoard(board, actualPath);
+		return task;
 	});
 }
 

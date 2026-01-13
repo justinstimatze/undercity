@@ -23,6 +23,7 @@ import {
 	getNextGoal,
 	getReadyTasksForBatch,
 	getTaskBoardAnalytics,
+	getTaskById,
 	type HandoffContext,
 	loadTaskBoard,
 	markComplete,
@@ -30,6 +31,7 @@ import {
 	markInProgress,
 	removeTasks,
 	saveTaskBoard,
+	updateTaskFields,
 } from "../task.js";
 import { TaskBoardAnalyzer } from "../task-board-analyzer.js";
 
@@ -1079,4 +1081,96 @@ export function handleComplete(taskId: string, options: CompleteOptions): void {
 
 	saveTaskBoard(board);
 	console.log(chalk.green(`Marked complete: ${task.objective.slice(0, 60)}...`));
+}
+
+export interface UpdateOptions {
+	objective?: string;
+	priority?: string;
+	tags?: string;
+	status?: string;
+}
+
+/**
+ * Handle the update command - update task fields
+ */
+export function handleUpdate(taskId: string, options: UpdateOptions): void {
+	const existingTask = getTaskById(taskId);
+
+	if (!existingTask) {
+		console.log(chalk.red(`Task not found: ${taskId}`));
+		console.log(chalk.dim("Use 'undercity tasks --all' to see all task IDs"));
+		process.exit(1);
+	}
+
+	// Validate and parse options
+	let priority: number | undefined;
+	if (options.priority) {
+		const parsedPriority = Number.parseInt(options.priority, 10);
+		if (Number.isNaN(parsedPriority)) {
+			console.error(chalk.red(`Error: Priority must be a number, got: ${options.priority}`));
+			process.exit(1);
+		}
+		if (parsedPriority < 1 || parsedPriority > 1000) {
+			console.error(chalk.red(`Error: Priority must be between 1 and 1000, got: ${parsedPriority}`));
+			process.exit(1);
+		}
+		priority = parsedPriority;
+	}
+
+	let tags: string[] | undefined;
+	if (options.tags) {
+		tags = options.tags.split(",").map((t) => t.trim()).filter(Boolean);
+	}
+
+	const validStatuses = ["pending", "in_progress", "complete", "failed", "blocked", "duplicate", "canceled", "obsolete"];
+	let status: "pending" | "in_progress" | "complete" | "failed" | "blocked" | "duplicate" | "canceled" | "obsolete" | undefined;
+	if (options.status) {
+		if (!validStatuses.includes(options.status)) {
+			console.error(chalk.red(`Error: Invalid status '${options.status}'`));
+			console.error(chalk.dim(`Valid statuses: ${validStatuses.join(", ")}`));
+			process.exit(1);
+		}
+		status = options.status as typeof status;
+	}
+
+	// Check if any updates were provided
+	if (!options.objective && priority === undefined && tags === undefined && status === undefined) {
+		console.log(chalk.yellow("No updates provided. Use --objective, --priority, --tags, or --status"));
+		console.log(chalk.dim("Example: undercity update <task-id> --priority 5 --tags feature,urgent"));
+		process.exit(1);
+	}
+
+	const updatedTask = updateTaskFields({
+		id: taskId,
+		objective: options.objective,
+		priority,
+		tags,
+		status,
+	});
+
+	if (!updatedTask) {
+		console.log(chalk.red(`Failed to update task: ${taskId}`));
+		process.exit(1);
+	}
+
+	console.log(chalk.green(`Updated task: ${taskId}`));
+
+	// Show what was updated
+	const updates: string[] = [];
+	if (options.objective) {
+		updates.push(`objective: "${options.objective.substring(0, 50)}${options.objective.length > 50 ? "..." : ""}"`);
+	}
+	if (priority !== undefined) {
+		updates.push(`priority: ${priority}`);
+	}
+	if (tags !== undefined) {
+		updates.push(`tags: [${tags.join(", ")}]`);
+	}
+	if (status !== undefined) {
+		updates.push(`status: ${status}`);
+	}
+
+	for (const update of updates) {
+		console.log(chalk.gray(`  ${update}`));
+	}
 }

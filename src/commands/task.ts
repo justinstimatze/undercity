@@ -6,6 +6,7 @@
  * | tasks        | Show/filter task board                       |
  * | add          | Add goal to backlog                          |
  * | complete     | Mark task as complete                        |
+ * | update       | Update task objective, priority, tags, status|
  * | load         | Bulk load goals from file                    |
  * | import-plan  | Parse plan file into discrete tasks          |
  * | plan         | Execute plan file with judgment              |
@@ -32,6 +33,7 @@ import {
 	handleTaskStatus,
 	handleTasks,
 	handleTriage,
+	handleUpdate,
 	handleWork,
 	type ImportPlanOptions,
 	type PlanOptions,
@@ -40,6 +42,7 @@ import {
 	type TaskAnalyzeOptions,
 	type TasksOptions,
 	type TriageOptions,
+	type UpdateOptions,
 	type WorkOptions,
 } from "./task-handlers.js";
 import type { CommandModule } from "./types.js";
@@ -142,5 +145,15 @@ export const taskCommands: CommandModule = {
 			.option("-r, --resolution <text>", "Resolution notes describing how the task was completed")
 			.option("--reason <text>", "Reason for completion (alias for --resolution)")
 			.action((taskId: string, options: CompleteOptions) => handleComplete(taskId, options));
+
+		// Update command - update task fields
+		program
+			.command("update <taskId>")
+			.description("Update task objective, priority, tags, or status")
+			.option("-o, --objective <text>", "New objective text")
+			.option("-p, --priority <number>", "New priority (1-1000, lower = higher priority)")
+			.option("-t, --tags <tags>", "Comma-separated tags (e.g., feature,urgent)")
+			.option("-s, --status <status>", "New status (pending, in_progress, complete, failed, blocked, canceled, obsolete)")
+			.action((taskId: string, options: UpdateOptions) => handleUpdate(taskId, options));
 	},
 };
