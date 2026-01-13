@@ -656,7 +656,53 @@
       "status": "pending",
       "priority": 900,
       "createdAt": "2026-01-12T07:10:57.716Z"
+    },
+    {
+      "id": "task-vocab-review-witness",
+      "objective": "[vocab] Review witness/watchdog terminology - gastown uses witness, evaluate if watchdog/health-monitor/supervisor fits better",
+      "status": "complete",
+      "priority": 900,
+      "createdAt": "2026-01-13T01:33:13.995Z",
+      "completedAt": "2026-01-13T01:33:13.995Z",
+      "resolution": "Using worker health monitoring with standard terms: health check, watchdog timeout, recovery intervention",
+      "tags": [
+        "vocabulary",
+        "naming"
+      ]
+    },
+    {
+      "id": "task-vocab-review-flute",
+      "objective": "[vocab] Review flute/scout terminology - evaluate if these names are clear or should use standard terms like codebase-analyzer",
+      "status": "pending",
+      "priority": 900,
+      "createdAt": "2026-01-13T01:33:13.995Z",
+      "tags": [
+        "vocabulary",
+        "naming"
+      ]
+    },
+    {
+      "id": "task-vocab-review-elevator",
+      "objective": "[vocab] Review elevator/merge-queue terminology - is elevator intuitive or should it be merge-queue/merge-pipeline",
+      "status": "pending",
+      "priority": 900,
+      "createdAt": "2026-01-13T01:33:13.995Z",
+      "tags": [
+        "vocabulary",
+        "naming"
+      ]
+    },
+    {
+      "id": "task-vocab-review-oracle",
+      "objective": "[vocab] Review oracle terminology - oblique strategy cards, evaluate if this adds value or is just decoration",
+      "status": "pending",
+      "priority": 900,
+      "createdAt": "2026-01-13T01:33:13.995Z",
+      "tags": [
+        "vocabulary",
+        "naming"
+      ]
     }
   ],
-  "lastUpdated": "2026-01-13T00:37:15.962Z"
+  "lastUpdated": "2026-01-13T01:33:13.995Z"
 }

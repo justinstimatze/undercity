@@ -16,7 +16,7 @@
 
 import { execFileSync, execSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { isAbsolute, normalize } from "node:path";
 import { updateLedger } from "./capability-ledger.js";
 import { type ExperimentManager, getExperimentManager } from "./experiment.js";
@@ -51,6 +51,24 @@ export interface ParallelSoloOptions {
 	maxRetriesPerTier?: number; // Maximum fix attempts at same tier before escalating (default: 3)
 	maxReviewPassesPerTier?: number; // Maximum review passes per tier before escalating (default: 2)
 	maxOpusReviewPasses?: number; // Maximum review passes at opus tier (default: 6)
+	// Worker health monitoring
+	healthCheck?: WorkerHealthConfig;
+}
+
+/**
+ * Configuration for worker health monitoring
+ */
+export interface WorkerHealthConfig {
+	/** Enable health monitoring (default: true) */
+	enabled?: boolean;
+	/** How often to check worker health in ms (default: 60000 = 1 min) */
+	checkIntervalMs?: number;
+	/** Max time since last checkpoint before worker is considered stuck (default: 300000 = 5 min) */
+	stuckThresholdMs?: number;
+	/** Whether to attempt recovery intervention before killing (default: true) */
+	attemptRecovery?: boolean;
+	/** Max recovery attempts before killing worker (default: 2) */
+	maxRecoveryAttempts?: number;
 }
 
 export interface ParallelTaskResult {
@@ -172,6 +190,16 @@ export class Orchestrator {
 	private experimentManager: ExperimentManager;
 	/** Recovered checkpoints from crashed tasks (task objective → checkpoint) */
 	private recoveredCheckpoints: Map<string, TaskCheckpoint> = new Map();
+	// Worker health monitoring
+	private healthCheckEnabled: boolean;
+	private healthCheckIntervalMs: number;
+	private stuckThresholdMs: number;
+	private attemptRecovery: boolean;
+	private maxRecoveryAttempts: number;
+	/** Track recovery attempts per task (taskId → attempts) */
+	private recoveryAttempts: Map<string, number> = new Map();
+	/** Active health check interval handle */
+	private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
 
 	constructor(options: ParallelSoloOptions = {}) {
 		this.maxConcurrent = options.maxConcurrent ?? 3;
@@ -186,6 +214,14 @@ export class Orchestrator {
 		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
 		this.maxReviewPassesPerTier = options.maxReviewPassesPerTier ?? 2;
 		this.maxOpusReviewPasses = options.maxOpusReviewPasses ?? 6;
+		// Health monitoring with defaults
+		const healthConfig = options.healthCheck ?? {};
+		this.healthCheckEnabled = healthConfig.enabled ?? true;
+		this.healthCheckIntervalMs = healthConfig.checkIntervalMs ?? 60_000; // 1 minute
+		this.stuckThresholdMs = healthConfig.stuckThresholdMs ?? 300_000; // 5 minutes
+		this.attemptRecovery = healthConfig.attemptRecovery ?? true;
+		this.maxRecoveryAttempts = healthConfig.maxRecoveryAttempts ?? 2;
+
 		this.worktreeManager = new WorktreeManager();
 
 		// Initialize persistence and trackers
@@ -750,6 +786,9 @@ export class Orchestrator {
 
 		const totalBatches = Math.ceil(tasks_to_run.length / this.maxConcurrent);
 
+		// Start health monitoring for this batch
+		this.startHealthMonitoring();
+
 		for (let batchStart = 0; batchStart < tasks_to_run.length; batchStart += this.maxConcurrent) {
 			const batchEnd = Math.min(batchStart + this.maxConcurrent, tasks_to_run.length);
 			const batchTasks = tasks_to_run.slice(batchStart, batchEnd);
@@ -1092,6 +1131,9 @@ export class Orchestrator {
 		} catch (metricsError) {
 			output.debug(`Metrics display failed (non-fatal): ${metricsError}`);
 		}
+
+		// Stop health monitoring
+		this.stopHealthMonitoring();
 
 		return {
 			results,
@@ -1495,6 +1537,125 @@ export class Orchestrator {
 			if (metadata) {
 				this.persistence.clearBatch(metadata.batchId);
 			}
+		}
+	}
+
+	// ============== Worker Health Monitoring ==============
+
+	/**
+	 * Start periodic health checks for active workers
+	 */
+	private startHealthMonitoring(): void {
+		if (!this.healthCheckEnabled) {
+			return;
+		}
+
+		// Clear any existing interval
+		this.stopHealthMonitoring();
+
+		output.debug(
+			`Health monitoring started (check every ${this.healthCheckIntervalMs / 1000}s, stuck after ${this.stuckThresholdMs / 1000}s)`,
+		);
+
+		this.healthCheckInterval = setInterval(() => {
+			this.checkWorkerHealth();
+		}, this.healthCheckIntervalMs);
+	}
+
+	/**
+	 * Stop health monitoring
+	 */
+	private stopHealthMonitoring(): void {
+		if (this.healthCheckInterval) {
+			clearInterval(this.healthCheckInterval);
+			this.healthCheckInterval = null;
+		}
+		// Clear recovery attempts tracking
+		this.recoveryAttempts.clear();
+	}
+
+	/**
+	 * Check health of all active workers
+	 * Detects stuck workers via stale checkpoints
+	 */
+	private checkWorkerHealth(): void {
+		const activeTasks = this.persistence.scanActiveTasks();
+		const now = Date.now();
+
+		for (const task of activeTasks) {
+			// Only check running tasks (not pending)
+			if (task.status !== "running") {
+				continue;
+			}
+
+			// Read the assignment to get checkpoint timestamp
+			const assignment = readTaskAssignment(task.worktreePath);
+			if (!assignment?.checkpoint?.savedAt) {
+				// No checkpoint yet - check if task has been running too long without one
+				if (task.startedAt) {
+					const startedAtMs = new Date(task.startedAt).getTime();
+					const elapsedMs = now - startedAtMs;
+					if (elapsedMs > this.stuckThresholdMs) {
+						output.warning(`Worker ${task.taskId} has no checkpoint after ${Math.round(elapsedMs / 1000)}s`);
+						this.handleStuckWorker(task.taskId, task.worktreePath, "no_checkpoint");
+					}
+				}
+				continue;
+			}
+
+			// Check checkpoint staleness
+			const checkpointMs = new Date(assignment.checkpoint.savedAt).getTime();
+			const staleDurationMs = now - checkpointMs;
+
+			if (staleDurationMs > this.stuckThresholdMs) {
+				const phase = assignment.checkpoint.phase;
+				output.warning(`Worker ${task.taskId} stuck in '${phase}' phase for ${Math.round(staleDurationMs / 1000)}s`);
+				this.handleStuckWorker(task.taskId, task.worktreePath, phase);
+			}
+		}
+	}
+
+	/**
+	 * Handle a stuck worker - attempt recovery or terminate
+	 */
+	private handleStuckWorker(taskId: string, worktreePath: string, stuckPhase: string): void {
+		const attempts = this.recoveryAttempts.get(taskId) ?? 0;
+
+		if (this.attemptRecovery && attempts < this.maxRecoveryAttempts) {
+			// Attempt recovery intervention
+			this.recoveryAttempts.set(taskId, attempts + 1);
+			output.info(`Attempting recovery for ${taskId} (attempt ${attempts + 1}/${this.maxRecoveryAttempts})`);
+
+			// Write a nudge file to the worktree that the worker can detect
+			try {
+				const nudgePath = `${worktreePath}/.undercity-nudge`;
+				const nudgeContent = JSON.stringify(
+					{
+						timestamp: new Date().toISOString(),
+						reason: `Stuck in ${stuckPhase} phase`,
+						attempt: attempts + 1,
+						message: "Health check detected inactivity. Please continue or report status.",
+					},
+					null,
+					2,
+				);
+				writeFileSync(nudgePath, nudgeContent, "utf-8");
+				output.debug(`Wrote nudge file to ${nudgePath}`);
+			} catch (err) {
+				output.debug(`Failed to write nudge file: ${err}`);
+			}
+		} else {
+			// Max recovery attempts exceeded - log for manual intervention
+			// Note: We don't actually kill the process here because we don't have
+			// direct control over the worker process. The worker will eventually
+			// timeout or complete. This is just alerting.
+			output.error(
+				`Worker ${taskId} unresponsive after ${this.maxRecoveryAttempts} recovery attempts. ` +
+					`Consider manual intervention or wait for worker timeout.`,
+			);
+
+			// Clear recovery attempts since we've given up
+			this.recoveryAttempts.delete(taskId);
 		}
 	}
 }
