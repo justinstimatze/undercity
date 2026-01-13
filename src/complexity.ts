@@ -835,6 +835,49 @@ const SCOPE_SIGNALS = {
 /**
  * Assess complexity via heuristics
  * Characteristics: fast, no API calls, initial triage
+ *
+ * @param task - Task description to analyze
+ * @returns ComplexityAssessment with level, model recommendation, and score
+ *
+ * ## Scoring System
+ *
+ * The function calculates a complexity score by adding weights from multiple components:
+ *
+ * ### Keyword/Pattern Weights:
+ * - **trivial** (weight: 0): typos, comments, renames, version bumps
+ * - **simple** (weight: 1): logs, small changes, imports, cleanup
+ * - **standard** (weight: 2): features, bug fixes, tests, typical work
+ * - **complex** (weight: 3): refactors, migrations, architecture changes
+ * - **critical** (weight: 4): security, auth, payments, production changes
+ *
+ * ### Scope Modifiers:
+ * - **single-file**: +0 points
+ * - **few-files**: +1 point
+ * - **many-files**: +2 points
+ * - **cross-package**: +3 points
+ *
+ * ### Length Modifiers:
+ * - **>50 words**: +1 point ("long-description")
+ * - **>100 words**: +1 additional point ("very-long-description")
+ *
+ * ### Score → Complexity Level Mapping:
+ * - **≤1**: trivial (haiku, no review)
+ * - **2-3**: simple (sonnet, no review)
+ * - **4-6**: standard (sonnet, review recommended)
+ * - **7-9**: complex (sonnet, full chain + review)
+ * - **≥10**: critical (opus, full chain + review)
+ *
+ * ### Special Cases:
+ * - **Empty task**: Returns "simple" with score 1
+ * - **Local tools** (format, lint, test): Returns "trivial" with score 0
+ *
+ * @example
+ * ```typescript
+ * // "fix typo in readme" → trivial (0) + single-file (0) = 0 → trivial
+ * // "add new feature" → standard (2) + few-files (1) = 3 → simple
+ * // "refactor auth system" → complex (3) + cross-package (3) = 6 → standard
+ * // "security audit and payment integration" → critical (4+4) + cross-package (3) = 11 → critical
+ * ```
  */
 export function assessComplexityFast(task: string): ComplexityAssessment {
 	if (!task) {
