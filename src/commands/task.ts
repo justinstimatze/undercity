@@ -125,6 +125,7 @@ export const taskCommands: CommandModule = {
 			.command("complete <taskId>")
 			.description("Mark a task as complete")
 			.option("-r, --resolution <text>", "Resolution notes describing how the task was completed")
+			.option("--reason <text>", "Reason for completion (alias for --resolution)")
 			.action((taskId: string, options: CompleteOptions) => handleComplete(taskId, options));
 	},
 };

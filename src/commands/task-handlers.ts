@@ -737,6 +737,7 @@ export interface PruneOptions {
 
 export interface CompleteOptions {
 	resolution?: string;
+	reason?: string; // Alias for resolution, useful for marking obsolete/deferred
 }
 
 interface TriageIssue {
@@ -1070,8 +1071,10 @@ export function handleComplete(taskId: string, options: CompleteOptions): void {
 
 	task.status = "complete";
 	task.completedAt = new Date();
-	if (options.resolution) {
-		task.resolution = options.resolution;
+	// Support both --resolution and --reason (reason is alias for resolution)
+	const resolutionText = options.resolution || options.reason;
+	if (resolutionText) {
+		task.resolution = resolutionText;
 	}
 
 	saveTaskBoard(board);
