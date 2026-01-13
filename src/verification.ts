@@ -106,6 +106,14 @@ export async function verifyWork(
 	// Get commands from profile or use defaults
 	const commands = getVerificationCommands(workingDirectory);
 
+	// Auto-format code before verification (worktrees don't have pre-commit hooks)
+	try {
+		execSync("pnpm format:fix 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
+		feedbackParts.push("✓ Auto-formatted code");
+	} catch {
+		// Format:fix may not be available in all projects, continue
+	}
+
 	try {
 		// Only run spell check on typescript and markdown files
 		execSync(`${commands.spell} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
