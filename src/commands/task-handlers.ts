@@ -15,7 +15,6 @@ import {
 	planToTasks,
 } from "../plan-parser.js";
 import {
-	addGoal,
 	addGoals,
 	addTask,
 	addTasks,
