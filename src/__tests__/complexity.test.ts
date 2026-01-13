@@ -555,6 +555,12 @@ describe("complexity", () => {
 		});
 
 		it("should upgrade haiku to sonnet when success rate below threshold", async () => {
+			// Mock self-tuning to return null so we fall through to feedback-metrics
+			vi.doMock("../self-tuning.js", () => ({
+				loadRoutingProfile: () => null,
+				shouldSkipModel: () => false,
+				getThreshold: () => ({ minSuccessRate: 0.7, minSamples: 3 }),
+			}));
 			vi.doMock("../feedback-metrics.js", () => ({
 				getMetricsAnalysis: () => ({
 					totalTasks: 10,
@@ -565,11 +571,18 @@ describe("complexity", () => {
 				}),
 			}));
 
-			const result = await adjustModelFromMetrics("haiku", "simple", 3);
+			const { adjustModelFromMetrics: adjustFn } = await import("../complexity.js");
+			const result = await adjustFn("haiku", "simple", 3);
 			expect(result).toBe("sonnet");
 		});
 
 		it("should upgrade sonnet to opus when success rate below threshold", async () => {
+			// Mock self-tuning to return null so we fall through to feedback-metrics
+			vi.doMock("../self-tuning.js", () => ({
+				loadRoutingProfile: () => null,
+				shouldSkipModel: () => false,
+				getThreshold: () => ({ minSuccessRate: 0.6, minSamples: 3 }),
+			}));
 			vi.doMock("../feedback-metrics.js", () => ({
 				getMetricsAnalysis: () => ({
 					totalTasks: 10,
@@ -580,7 +593,8 @@ describe("complexity", () => {
 				}),
 			}));
 
-			const result = await adjustModelFromMetrics("sonnet", "standard", 3);
+			const { adjustModelFromMetrics: adjustFn } = await import("../complexity.js");
+			const result = await adjustFn("sonnet", "standard", 3);
 			expect(result).toBe("opus");
 		});
 
@@ -615,6 +629,12 @@ describe("complexity", () => {
 		});
 
 		it("should use model+complexity combo stats when available", async () => {
+			// Mock self-tuning to return null so we fall through to feedback-metrics
+			vi.doMock("../self-tuning.js", () => ({
+				loadRoutingProfile: () => null,
+				shouldSkipModel: () => false,
+				getThreshold: () => ({ minSuccessRate: 0.7, minSamples: 3 }),
+			}));
 			vi.doMock("../feedback-metrics.js", () => ({
 				getMetricsAnalysis: () => ({
 					totalTasks: 20,
@@ -627,7 +647,8 @@ describe("complexity", () => {
 				}),
 			}));
 
-			const result = await adjustModelFromMetrics("haiku", "complex", 3);
+			const { adjustModelFromMetrics: adjustFn } = await import("../complexity.js");
+			const result = await adjustFn("haiku", "complex", 3);
 			expect(result).toBe("sonnet"); // Upgrade based on combo stats
 		});
 	});
