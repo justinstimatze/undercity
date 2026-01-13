@@ -2,9 +2,9 @@
  * Analysis and metrics commands
  */
 import chalk from "chalk";
+import { launchMetricsDashboard } from "../metrics-dashboard.js";
 import { Orchestrator } from "../orchestrator.js";
 import type { CommandModule } from "./types.js";
-import { launchMetricsDashboard } from "../metrics-dashboard.js";
 
 export const analysisCommands: CommandModule = {
 	register(program) {

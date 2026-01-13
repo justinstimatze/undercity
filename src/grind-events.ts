@@ -32,6 +32,8 @@ export type GrindEventType =
 	| "task_progress"
 	| "task_complete"
 	| "task_failed"
+	| "fast_path_complete"
+	| "fast_path_failed"
 	| "merge_started"
 	| "merge_complete"
 	| "merge_failed"
@@ -243,6 +245,53 @@ export function logTaskComplete(options: {
 }
 
 /**
+ * Log fast-path completion (task completed without LLM via ast-grep or similar)
+ */
+export function logFastPathComplete(options: {
+	batchId: string;
+	taskId: string;
+	objective: string;
+	durationMs: number;
+	modifiedFiles?: string[];
+	tool: string; // e.g., "ast-grep", "jq", "simple-replace"
+}): void {
+	logEvent("fast_path_complete", `Fast-path complete: ${options.objective.substring(0, 60)}...`, {
+		batchId: options.batchId,
+		taskId: options.taskId,
+		data: {
+			objective: options.objective,
+			durationMs: options.durationMs,
+			durationSeconds: Math.round(options.durationMs / 1000),
+			modifiedFiles: options.modifiedFiles,
+			fileCount: options.modifiedFiles?.length ?? 0,
+			tool: options.tool,
+			tokensSaved: "~2000", // Rough estimate of tokens saved
+		},
+	});
+}
+
+/**
+ * Log fast-path failure (attempted but failed, falling back to LLM)
+ */
+export function logFastPathFailed(options: {
+	batchId: string;
+	taskId: string;
+	objective: string;
+	error: string;
+	tool: string;
+}): void {
+	logEvent("fast_path_failed", `Fast-path failed: ${options.error.substring(0, 80)}`, {
+		batchId: options.batchId,
+		taskId: options.taskId,
+		data: {
+			objective: options.objective,
+			error: options.error,
+			tool: options.tool,
+		},
+	});
+}
+
+/**
  * Log task failure
  */
 export function logTaskFailed(options: {
@@ -357,6 +406,8 @@ export function getCurrentGrindStatus(): {
 	tasksStarted: number;
 	tasksComplete: number;
 	tasksFailed: number;
+	fastPathComplete: number;
+	fastPathFailed: number;
 	lastEvent?: GrindEvent;
 } {
 	const events = readRecentEvents(200);
@@ -367,6 +418,8 @@ export function getCurrentGrindStatus(): {
 			tasksStarted: 0,
 			tasksComplete: 0,
 			tasksFailed: 0,
+			fastPathComplete: 0,
+			fastPathFailed: 0,
 		};
 	}
 
@@ -386,6 +439,8 @@ export function getCurrentGrindStatus(): {
 			tasksStarted: 0,
 			tasksComplete: 0,
 			tasksFailed: 0,
+			fastPathComplete: 0,
+			fastPathFailed: 0,
 			lastEvent: events[events.length - 1],
 		};
 	}
@@ -402,6 +457,8 @@ export function getCurrentGrindStatus(): {
 	const tasksStarted = currentSessionEvents.filter((e) => e.type === "task_started").length;
 	const tasksComplete = currentSessionEvents.filter((e) => e.type === "task_complete").length;
 	const tasksFailed = currentSessionEvents.filter((e) => e.type === "task_failed").length;
+	const fastPathComplete = currentSessionEvents.filter((e) => e.type === "fast_path_complete").length;
+	const fastPathFailed = currentSessionEvents.filter((e) => e.type === "fast_path_failed").length;
 
 	return {
 		isRunning: !isComplete,
@@ -411,6 +468,8 @@ export function getCurrentGrindStatus(): {
 		tasksStarted,
 		tasksComplete,
 		tasksFailed,
+		fastPathComplete,
+		fastPathFailed,
 		lastEvent: currentSessionEvents[currentSessionEvents.length - 1],
 	};
 }

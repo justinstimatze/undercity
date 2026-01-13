@@ -30,7 +30,9 @@ import {
 } from "./complexity.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
+import { generateToolsPrompt } from "./efficiency-tools.js";
 import { createAndCheckout } from "./git.js";
+import { logFastPathComplete, logFastPathFailed } from "./grind-events.js";
 import { recordQueryResult } from "./live-metrics.js";
 import { sessionLogger } from "./logger.js";
 import { getMetaTaskPrompt, parseMetaTaskResult } from "./meta-tasks.js";
@@ -450,6 +452,81 @@ export class TaskWorker {
 			output.taskStart(taskId, `[research] ${task.substring(0, 50)}...`);
 		} else {
 			output.taskStart(taskId, task.substring(0, 60) + (task.length > 60 ? "..." : ""));
+		}
+
+		// Fast-path: Try ast-grep for trivial mechanical tasks (rename, replace)
+		// This bypasses the LLM entirely for ~100x speedup on qualifying tasks
+		if (!this.isCurrentTaskMeta && !this.isCurrentTaskResearch) {
+			const { tryFastPath } = await import("./fast-path.js");
+			const fastResult = tryFastPath(task, this.workingDirectory);
+
+			if (fastResult.handled) {
+				if (fastResult.success) {
+					output.success(`Fast-path completed: ${fastResult.filesChanged?.join(", ")}`, { taskId });
+
+					// Verify the fast-path changes
+					const verification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory, baseCommit);
+					if (verification.passed) {
+						// Commit the changes
+						if (this.autoCommit && fastResult.filesChanged?.length) {
+							try {
+								for (const file of fastResult.filesChanged) {
+									execSync(`git add "${file}"`, { cwd: this.workingDirectory, stdio: "pipe" });
+								}
+								execSync(`git commit -m "${task.substring(0, 50)}"`, { cwd: this.workingDirectory, stdio: "pipe" });
+								output.success("Fast-path changes committed", { taskId });
+							} catch (e) {
+								output.warning("Fast-path commit failed, changes staged", { taskId, error: String(e) });
+							}
+						}
+
+						const durationMs = Date.now() - startTime;
+						output.info(`Fast-path completed in ${durationMs}ms (vs ~60s with LLM)`, { taskId, durationMs });
+
+						// Log fast-path success for metrics tracking
+						logFastPathComplete({
+							batchId: sessionId,
+							taskId,
+							objective: task,
+							durationMs,
+							modifiedFiles: fastResult.filesChanged,
+							tool: "ast-grep",
+						});
+
+						return {
+							status: "complete",
+							task,
+							model: "haiku" as ModelTier, // fast-path is cheaper than haiku
+							attempts: 0,
+							durationMs,
+							tokenUsage: { attempts: [], total: 0 },
+						};
+					} else {
+						output.warning("Fast-path changes failed verification, falling back to LLM", { taskId });
+						// Log fast-path failure due to verification
+						logFastPathFailed({
+							batchId: sessionId,
+							taskId,
+							objective: task,
+							error: "Verification failed after fast-path changes",
+							tool: "ast-grep",
+						});
+						// Revert changes and fall through to LLM
+						execSync("git checkout -- .", { cwd: this.workingDirectory, stdio: "pipe" });
+					}
+				} else {
+					output.debug(`Fast-path attempted but failed: ${fastResult.error}`, { taskId });
+					// Log fast-path failure
+					logFastPathFailed({
+						batchId: sessionId,
+						taskId,
+						objective: task,
+						error: fastResult.error || "Unknown error",
+						tool: "ast-grep",
+					});
+					// Fall through to LLM
+				}
+			}
 		}
 
 		// Pre-flight: Prepare context briefing (FREE - no LLM tokens)
@@ -1172,6 +1249,16 @@ The file MUST be created at ${outputPath} for this task to succeed.`;
 
 			if (this.currentBriefing?.briefingDoc) {
 				contextSection += `${this.currentBriefing.briefingDoc}
+
+---
+
+`;
+			}
+
+			// Add efficiency tools section if any tools are available
+			const toolsPrompt = generateToolsPrompt();
+			if (toolsPrompt) {
+				contextSection += `${toolsPrompt}
 
 ---
 

@@ -941,11 +941,58 @@ export function handleInit(options: InitOptions): void {
 		}
 	}
 
-	console.log();
-	console.log(chalk.green.bold("Undercity initialized!"));
-	console.log(chalk.dim("Run 'undercity tasks' to view the task board"));
-	console.log(chalk.dim("Run 'undercity add <task>' to add tasks"));
-	console.log(chalk.dim("Run 'undercity grind' to process tasks"));
+	// Check efficiency tools for fast-path optimization
+	console.log(chalk.dim("  Checking efficiency tools..."));
+	// Dynamic import for ESM compatibility
+	import("../efficiency-tools.js")
+		.then(({ getToolAvailability, getAvailableTools }) => {
+			const availability = getToolAvailability();
+			const available = getAvailableTools();
+			const missing: string[] = [];
+
+			// Check key tools and suggest installation
+			const toolInstallHints: Record<string, string> = {
+				"ast-grep": "cargo install ast-grep (or brew install ast-grep)",
+				jq: "apt install jq (or brew install jq)",
+				comby: "bash <(curl -sL get.comby.dev)",
+				sd: "cargo install sd",
+			};
+
+			for (const [tool, hint] of Object.entries(toolInstallHints)) {
+				if (!availability.get(tool)) {
+					missing.push(`${tool}: ${hint}`);
+				}
+			}
+
+			if (available.length > 0) {
+				console.log(
+					chalk.green(
+						`  ${available.length} efficiency tools available: ${available.map((t: { name: string }) => t.name).join(", ")}`,
+					),
+				);
+			}
+
+			if (missing.length > 0) {
+				console.log(chalk.yellow("  Optional tools for faster task execution:"));
+				for (const m of missing) {
+					console.log(chalk.dim(`    ${m}`));
+				}
+			}
+
+			console.log();
+			console.log(chalk.green.bold("Undercity initialized!"));
+			console.log(chalk.dim("Run 'undercity tasks' to view the task board"));
+			console.log(chalk.dim("Run 'undercity add <task>' to add tasks"));
+			console.log(chalk.dim("Run 'undercity grind' to process tasks"));
+		})
+		.catch(() => {
+			// If tools check fails, just continue without it
+			console.log();
+			console.log(chalk.green.bold("Undercity initialized!"));
+			console.log(chalk.dim("Run 'undercity tasks' to view the task board"));
+			console.log(chalk.dim("Run 'undercity add <task>' to add tasks"));
+			console.log(chalk.dim("Run 'undercity grind' to process tasks"));
+		});
 }
 
 /**

@@ -11,7 +11,7 @@
 
 import blessed from "blessed";
 import * as contrib from "blessed-contrib";
-import { loadLiveMetrics, type LiveMetrics } from "./live-metrics.js";
+import { type LiveMetrics, loadLiveMetrics } from "./live-metrics.js";
 import { loadTaskMetrics } from "./metrics.js";
 
 // Type helpers for blessed-contrib widgets

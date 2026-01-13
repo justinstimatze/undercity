@@ -995,9 +995,7 @@ function buildBriefingDoc(briefing: ContextBriefing): string {
 
 	// For simple single-file tasks, add a very explicit quick-start
 	if (briefing.targetFiles.length === 1) {
-		sections.push(
-			`\n**QUICK START: Modify \`${briefing.targetFiles[0]}\` to complete the objective below.**`,
-		);
+		sections.push(`\n**QUICK START: Modify \`${briefing.targetFiles[0]}\` to complete the objective below.**`);
 	} else if (briefing.targetFiles.length > 0 && briefing.targetFiles.length <= 3) {
 		sections.push(
 			`\n**QUICK START: Focus your changes on these ${briefing.targetFiles.length} files:**\n${briefing.targetFiles.map((f) => `- \`${f}\``).join("\n")}`,
@@ -1013,9 +1011,13 @@ function buildBriefingDoc(briefing: ContextBriefing): string {
 	// Make target files section more directive
 	if (briefing.targetFiles.length > 0) {
 		if (briefing.targetFiles.length === 1) {
-			sections.push(`\n## PRIMARY FILE TO MODIFY\n\`${briefing.targetFiles[0]}\`\nRead this file first, then make your changes here.`);
+			sections.push(
+				`\n## PRIMARY FILE TO MODIFY\n\`${briefing.targetFiles[0]}\`\nRead this file first, then make your changes here.`,
+			);
 		} else {
-			sections.push(`\n## FILES TO MODIFY (in order of priority)\n${briefing.targetFiles.map((f, i) => `${i + 1}. \`${f}\``).join("\n")}`);
+			sections.push(
+				`\n## FILES TO MODIFY (in order of priority)\n${briefing.targetFiles.map((f, i) => `${i + 1}. \`${f}\``).join("\n")}`,
+			);
 		}
 	}
 
