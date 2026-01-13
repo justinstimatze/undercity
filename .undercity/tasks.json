@@ -394,9 +394,11 @@
     {
       "id": "task-priming-work-hook",
       "objective": "[priming] Implement work hook system - write assignment.json to worktree before spawning agent. Assignment survives crashes. Agent reads assignment on startup and enters autonomous mode immediately",
-      "status": "pending",
+      "status": "complete",
       "priority": 10,
       "createdAt": "2026-01-12T04:00:00.000Z",
+      "completedAt": "2026-01-13T01:14:00.000Z",
+      "resolution": "Implemented writeTaskAssignment in orchestrator.ts, TaskAssignment interface in types.ts",
       "tags": [
         "priming",
         "gastown-pattern",
@@ -406,9 +408,11 @@
     {
       "id": "task-priming-per-task-checkpoint",
       "objective": "[priming] Implement per-task checkpoints - write .undercity/checkpoints/{taskId}.json after each significant action. Track: lastAction, modifiedFiles, verificationStatus, attempt number. Enables granular crash recovery",
-      "status": "pending",
+      "status": "complete",
       "priority": 11,
       "createdAt": "2026-01-12T04:00:00.000Z",
+      "completedAt": "2026-01-13T01:14:00.000Z",
+      "resolution": "Implemented saveCheckpoint in worker.ts at phases: starting, context, executing, verifying, reviewing, committing. Stores in assignment file.",
       "tags": [
         "priming",
         "gastown-pattern",
@@ -418,9 +422,11 @@
     {
       "id": "task-priming-worker-prompt",
       "objective": "[priming] Create worker prompt template with propulsion directive - include task assignment, verification requirements, completion protocol, and explicit DO NOT list (no questions, no waiting, no planning before acting)",
-      "status": "pending",
+      "status": "complete",
       "priority": 12,
       "createdAt": "2026-01-12T04:00:00.000Z",
+      "completedAt": "2026-01-13T01:14:00.000Z",
+      "resolution": "Implemented buildAssignmentContext in worker.ts - injects assignment, recovery context into agent prompt",
       "tags": [
         "priming",
         "gastown-pattern",
@@ -433,9 +439,11 @@
     {
       "id": "task-priming-checkpoint-recovery",
       "objective": "[priming] Wire checkpoint recovery to worker spawn - on crash recovery, inject checkpoint context into worker prompt showing previous progress, modified files, and resume point",
-      "status": "pending",
+      "status": "complete",
       "priority": 13,
       "createdAt": "2026-01-12T04:00:00.000Z",
+      "completedAt": "2026-01-13T01:19:00.000Z",
+      "resolution": "resumeRecovery extracts checkpoints from worktrees before cleanup, stores in recoveredCheckpoints map, injects into new assignment",
       "tags": [
         "priming",
         "gastown-pattern",
@@ -449,9 +457,11 @@
     {
       "id": "task-priming-identity-from-path",
       "objective": "[priming] Add worker identity detection from worktree path - worker knows its task ID, branch, and role from directory structure. No need to pass context explicitly",
-      "status": "pending",
+      "status": "complete",
       "priority": 14,
       "createdAt": "2026-01-12T04:00:00.000Z",
+      "completedAt": "2026-01-13T01:14:00.000Z",
+      "resolution": "Implemented detectAssignmentFromCwd in persistence.ts, exported from index.ts",
       "tags": [
         "priming",
         "gastown-pattern"
@@ -460,9 +470,11 @@
     {
       "id": "task-priming-verification-status-tracking",
       "objective": "[priming] Track verification status per checkpoint - record which verifications (typecheck/test/lint) passed/failed per attempt. Worker sees what already passed and focuses on failures",
-      "status": "pending",
+      "status": "complete",
       "priority": 15,
       "createdAt": "2026-01-12T04:00:00.000Z",
+      "completedAt": "2026-01-13T01:14:00.000Z",
+      "resolution": "Checkpoints include lastVerification with passed/failed status and errors array. Shown in prompt via buildAssignmentContext.",
       "tags": [
         "priming",
         "gastown-pattern",

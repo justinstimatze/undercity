@@ -22,7 +22,7 @@ import { updateLedger } from "./capability-ledger.js";
 import { type ExperimentManager, getExperimentManager } from "./experiment.js";
 import { FileTracker } from "./file-tracker.js";
 import * as output from "./output.js";
-import { Persistence, writeTaskAssignment } from "./persistence.js";
+import { Persistence, readTaskAssignment, writeTaskAssignment } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
 import { addTask, loadTaskBoard, removeTasks, saveTaskBoard } from "./task.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
@@ -32,6 +32,7 @@ import type {
 	ParallelRecoveryState,
 	ParallelTaskState,
 	TaskAssignment,
+	TaskCheckpoint,
 } from "./types.js";
 import { type TaskResult, TaskWorker } from "./worker.js";
 import { WorktreeManager } from "./worktree-manager.js";
@@ -168,6 +169,8 @@ export class Orchestrator {
 	private rateLimitTracker: RateLimitTracker;
 	private fileTracker: FileTracker;
 	private experimentManager: ExperimentManager;
+	/** Recovered checkpoints from crashed tasks (task objective → checkpoint) */
+	private recoveredCheckpoints: Map<string, TaskCheckpoint> = new Map();
 
 	constructor(options: ParallelSoloOptions = {}) {
 		this.maxConcurrent = options.maxConcurrent ?? 3;
@@ -845,8 +848,13 @@ export class Orchestrator {
 						reviewPasses: effectiveReview,
 						autoCommit: this.autoCommit,
 						experimentVariantId: variant?.id,
+						// Inject recovered checkpoint if resuming from crash
+						checkpoint: this.recoveredCheckpoints.get(task),
 					};
 					writeTaskAssignment(assignment);
+
+					// Clear the recovered checkpoint after use (one-time injection)
+					this.recoveredCheckpoints.delete(task);
 
 					const result = await worker.runTask(task);
 
@@ -1241,9 +1249,25 @@ export class Orchestrator {
 
 		output.progress(`Resuming interrupted batch: ${state.batchId}`);
 
-		// Clean up any stale worktrees from the previous run
+		// Clear recovered checkpoints from any previous recovery
+		this.recoveredCheckpoints.clear();
+
+		// Extract checkpoints from worktrees before cleaning them up
 		for (const task of state.tasks) {
 			if (task.status === "running" && task.worktreePath) {
+				try {
+					// Read the assignment file to get checkpoint data
+					const assignment = readTaskAssignment(task.worktreePath);
+					if (assignment?.checkpoint) {
+						// Store checkpoint keyed by task objective for use in runParallel
+						this.recoveredCheckpoints.set(task.task, assignment.checkpoint);
+						output.debug(`Recovered checkpoint for: ${task.task.substring(0, 40)}...`);
+					}
+				} catch {
+					// Ignore read errors - checkpoint recovery is best-effort
+				}
+
+				// Clean up the stale worktree
 				try {
 					this.worktreeManager.removeWorktree(task.taskId, true);
 					output.debug(`Cleaned up stale worktree: ${task.taskId}`);
@@ -1256,7 +1280,10 @@ export class Orchestrator {
 		// Get tasks that need to be re-run
 		const pendingTasks = state.tasks.filter((t) => t.status === "pending" || t.status === "running").map((t) => t.task);
 
-		output.info(`${pendingTasks.length} tasks to resume`);
+		const checkpointsRecovered = this.recoveredCheckpoints.size;
+		output.info(
+			`${pendingTasks.length} tasks to resume${checkpointsRecovered > 0 ? ` (${checkpointsRecovered} with checkpoints)` : ""}`,
+		);
 
 		// Clear the old state - runParallel will create new state
 		this.persistence.clearParallelRecoveryState();

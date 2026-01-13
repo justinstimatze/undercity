@@ -728,6 +728,8 @@ export interface ParallelTaskState {
 	startedAt?: Date;
 	/** Completed timestamp */
 	completedAt?: Date;
+	/** Checkpoint from previous run (for crash recovery) */
+	previousCheckpoint?: TaskCheckpoint;
 }
 
 /**
