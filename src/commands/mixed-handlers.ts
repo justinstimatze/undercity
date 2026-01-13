@@ -320,6 +320,24 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 					task.recommendedModel = adjustedModel;
 				}
 			}
+
+			// Check capability ledger for pattern-specific model recommendations
+			// This can downgrade models when historical data shows simpler models work
+			const { getRecommendedModel: getLedgerRecommendation } = await import("../capability-ledger.js");
+			for (const task of tasksWithModels) {
+				const ledgerRec = getLedgerRecommendation(task.objective);
+				// Only apply ledger recommendation if high confidence and it suggests a CHEAPER model
+				// (escalation handles upgrading, ledger helps identify when we can save tokens)
+				const modelOrder = ["haiku", "sonnet", "opus"] as const;
+				const currentIdx = modelOrder.indexOf(task.recommendedModel || "sonnet");
+				const ledgerIdx = modelOrder.indexOf(ledgerRec.model);
+				if (ledgerRec.confidence >= 0.7 && ledgerIdx < currentIdx) {
+					output.debug(
+						`Ledger adjustment: ${task.objective.substring(0, 30)}... ${task.recommendedModel} → ${ledgerRec.model} (${ledgerRec.reason})`,
+					);
+					task.recommendedModel = ledgerRec.model;
+				}
+			}
 		}
 
 		// Group tasks by recommended model for efficient execution
@@ -464,6 +482,62 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			try {
 				output.info(`Running ${tierTasks.length} task(s) with ${modelTier}...`);
 
+				// Analyze task compatibility to detect conflicts before parallel execution
+				// This uses regex-based analysis (no LLM cost) to predict file conflicts
+				const { TaskBoardAnalyzer } = await import("../task-board-analyzer.js");
+				const boardAnalyzer = new TaskBoardAnalyzer();
+				const compatMatrix = await boardAnalyzer.generateCompatibilityMatrix(tierTasks);
+
+				// Group tasks into compatible batches to avoid parallel conflicts
+				const taskBatches: Array<typeof tierTasks> = [];
+				const assignedTasks = new Set<string>();
+
+				// Build batches by greedily adding compatible tasks
+				for (const task of tierTasks) {
+					if (assignedTasks.has(task.id)) continue;
+
+					// Start a new batch with this task
+					const batch: typeof tierTasks = [task];
+					assignedTasks.add(task.id);
+
+					// Try to add other tasks that are compatible with all batch members
+					for (const candidate of tierTasks) {
+						if (assignedTasks.has(candidate.id)) continue;
+
+						// Check if candidate is compatible with all tasks in current batch
+						const taskIdx = compatMatrix.tasks.findIndex((t) => t.id === candidate.id);
+						let compatible = true;
+
+						for (const batchMember of batch) {
+							const memberIdx = compatMatrix.tasks.findIndex((t) => t.id === batchMember.id);
+							if (taskIdx >= 0 && memberIdx >= 0) {
+								const result = compatMatrix.matrix[taskIdx][memberIdx];
+								if (!result.compatible) {
+									compatible = false;
+									break;
+								}
+							}
+						}
+
+						if (compatible) {
+							batch.push(candidate);
+							assignedTasks.add(candidate.id);
+						}
+					}
+
+					taskBatches.push(batch);
+				}
+
+				// Log if we split into multiple batches due to conflicts
+				if (taskBatches.length > 1) {
+					output.info(
+						`Split ${tierTasks.length} tasks into ${taskBatches.length} sequential batches to avoid conflicts`,
+					);
+					for (let i = 0; i < taskBatches.length; i++) {
+						output.debug(`  Batch ${i + 1}: ${taskBatches[i].length} task(s)`);
+					}
+				}
+
 				// Log task starts (but don't mark in_progress yet - orchestrator will do that
 				// after similarity check passes to avoid false positive duplicate detection)
 				for (const task of tierTasks) {
@@ -484,119 +558,128 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 						return variant?.reviewEnabled;
 					});
 
-				// Create orchestrator for this model tier
-				const tierOrchestrator = new Orchestrator({
-					maxConcurrent: parallelism,
-					autoCommit: options.commit !== false,
-					stream: options.stream || false,
-					verbose: options.verbose || false,
-					startingModel: modelTier,
-					reviewPasses: options.review === true || experimentReviewEnabled === true,
-					pushOnSuccess: options.push === true,
-					maxAttempts,
-					maxRetriesPerTier,
-					maxReviewPassesPerTier,
-					maxOpusReviewPasses,
-				});
+				// Execute each batch sequentially (compatible tasks within batch run in parallel)
+				for (let batchIdx = 0; batchIdx < taskBatches.length; batchIdx++) {
+					const batchTasks = taskBatches[batchIdx];
 
-				const tierObjectives = tierTasks.map((t) => t.objective);
-				const tierStartTime = Date.now();
-				const result = await tierOrchestrator.runParallel(tierObjectives);
-				const tierDurationMs = Date.now() - tierStartTime;
+					if (taskBatches.length > 1) {
+						output.info(`Running batch ${batchIdx + 1}/${taskBatches.length} (${batchTasks.length} task(s))...`);
+					}
 
-				// Update task status based on results
-				for (const taskResult of result.results) {
-					const taskId = objectiveToQuestId.get(taskResult.task);
-					if (taskId) {
-						if (taskResult.merged) {
-							markTaskComplete(taskId);
-							output.taskComplete(taskId, `Task merged (${modelTier})`);
-							completedCount++;
-							updateGrindProgress(completedCount, totalToProcess);
+					// Create orchestrator for this batch
+					const batchOrchestrator = new Orchestrator({
+						maxConcurrent: parallelism,
+						autoCommit: options.commit !== false,
+						stream: options.stream || false,
+						verbose: options.verbose || false,
+						startingModel: modelTier,
+						reviewPasses: options.review === true || experimentReviewEnabled === true,
+						pushOnSuccess: options.push === true,
+						maxAttempts,
+						maxRetriesPerTier,
+						maxReviewPassesPerTier,
+						maxOpusReviewPasses,
+					});
 
-							// Log completion event
-							logTaskComplete({
-								batchId,
-								taskId,
-								objective: taskResult.task,
-								durationMs: tierDurationMs,
-								commitSha: taskResult.result?.commitSha,
-							});
+					const batchObjectives = batchTasks.map((t) => t.objective);
+					const batchStartTime = Date.now();
+					const result = await batchOrchestrator.runParallel(batchObjectives);
+					const batchDurationMs = Date.now() - batchStartTime;
 
-							// Record experiment result if variant was assigned
-							const variantId = taskVariantMap.get(taskId);
-							if (variantId && activeExperiment) {
-								experimentManager.recordResult({
+					// Update task status based on results
+					for (const taskResult of result.results) {
+						const taskId = objectiveToQuestId.get(taskResult.task);
+						if (taskId) {
+							if (taskResult.merged) {
+								markTaskComplete(taskId);
+								output.taskComplete(taskId, `Task merged (${modelTier})`);
+								completedCount++;
+								updateGrindProgress(completedCount, totalToProcess);
+
+								// Log completion event
+								logTaskComplete({
+									batchId,
 									taskId,
-									variantId,
-									success: true,
-									durationMs: taskResult.result?.durationMs ?? tierDurationMs,
-									tokensUsed: taskResult.result?.tokenUsage?.total ?? 0,
-									attempts: taskResult.result?.attempts ?? 1,
+									objective: taskResult.task,
+									durationMs: batchDurationMs,
+									commitSha: taskResult.result?.commitSha,
 								});
-							}
 
-							// Track result for structured output
-							taskResults.push({
-								task: taskResult.task,
-								taskId,
-								status: "merged",
-								modifiedFiles: taskResult.modifiedFiles,
-							});
-
-							// Check if this was a subtask and auto-complete parent if all siblings done
-							const task = getTaskById(taskId);
-							if (task?.parentId) {
-								const parentCompleted = completeParentIfAllSubtasksDone(task.parentId);
-								if (parentCompleted) {
-									output.info(`Parent task ${task.parentId} auto-completed (all subtasks done)`);
+								// Record experiment result if variant was assigned
+								const variantId = taskVariantMap.get(taskId);
+								if (variantId && activeExperiment) {
+									experimentManager.recordResult({
+										taskId,
+										variantId,
+										success: true,
+										durationMs: taskResult.result?.durationMs ?? batchDurationMs,
+										tokensUsed: taskResult.result?.tokenUsage?.total ?? 0,
+										attempts: taskResult.result?.attempts ?? 1,
+									});
 								}
-							}
-						} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
-							const errorMsg = taskResult.mergeError || "Task failed";
-							markTaskFailed(taskId, errorMsg);
-							output.taskFailed(taskId, `Task failed (${modelTier})`, errorMsg);
-							completedCount++;
-							updateGrindProgress(completedCount, totalToProcess);
 
-							// Log failure event
-							logTaskFailed({
-								batchId,
-								taskId,
-								objective: taskResult.task,
-								error: errorMsg,
-								durationMs: tierDurationMs,
-							});
-
-							// Record experiment result if variant was assigned
-							const variantId = taskVariantMap.get(taskId);
-							if (variantId && activeExperiment) {
-								experimentManager.recordResult({
+								// Track result for structured output
+								taskResults.push({
+									task: taskResult.task,
 									taskId,
-									variantId,
-									success: false,
-									durationMs: taskResult.result?.durationMs ?? tierDurationMs,
-									tokensUsed: taskResult.result?.tokenUsage?.total ?? 0,
-									attempts: taskResult.result?.attempts ?? 1,
-									errorCategories: [errorMsg.substring(0, 50)],
+									status: "merged",
+									modifiedFiles: taskResult.modifiedFiles,
+								});
+
+								// Check if this was a subtask and auto-complete parent if all siblings done
+								const task = getTaskById(taskId);
+								if (task?.parentId) {
+									const parentCompleted = completeParentIfAllSubtasksDone(task.parentId);
+									if (parentCompleted) {
+										output.info(`Parent task ${task.parentId} auto-completed (all subtasks done)`);
+									}
+								}
+							} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
+								const errorMsg = taskResult.mergeError || "Task failed";
+								markTaskFailed(taskId, errorMsg);
+								output.taskFailed(taskId, `Task failed (${modelTier})`, errorMsg);
+								completedCount++;
+								updateGrindProgress(completedCount, totalToProcess);
+
+								// Log failure event
+								logTaskFailed({
+									batchId,
+									taskId,
+									objective: taskResult.task,
+									error: errorMsg,
+									durationMs: batchDurationMs,
+								});
+
+								// Record experiment result if variant was assigned
+								const variantId = taskVariantMap.get(taskId);
+								if (variantId && activeExperiment) {
+									experimentManager.recordResult({
+										taskId,
+										variantId,
+										success: false,
+										durationMs: taskResult.result?.durationMs ?? batchDurationMs,
+										tokensUsed: taskResult.result?.tokenUsage?.total ?? 0,
+										attempts: taskResult.result?.attempts ?? 1,
+										errorCategories: [errorMsg.substring(0, 50)],
+									});
+								}
+
+								// Track result for structured output
+								taskResults.push({
+									task: taskResult.task,
+									taskId,
+									status: "failed",
+									error: errorMsg,
 								});
 							}
-
-							// Track result for structured output
-							taskResults.push({
-								task: taskResult.task,
-								taskId,
-								status: "failed",
-								error: errorMsg,
-							});
 						}
 					}
-				}
 
-				totalSuccessful += result.successful;
-				totalFailed += result.failed;
-				totalMerged += result.merged;
-				totalDurationMs += result.durationMs;
+					totalSuccessful += result.successful;
+					totalFailed += result.failed;
+					totalMerged += result.merged;
+					totalDurationMs += result.durationMs;
+				}
 			} catch (tierError) {
 				// Tier-level error - log and continue to next tier
 				output.error(`Model tier ${modelTier} failed: ${tierError}`);
