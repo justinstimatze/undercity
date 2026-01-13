@@ -646,7 +646,14 @@ export interface PatternAnalysis {
 }
 
 /**
- * Extract meaningful keywords from task objective
+ * Extract meaningful keywords from task objective for pattern analysis and clustering.
+ *
+ * Normalizes text by converting to lowercase, removing special characters, and filtering
+ * out stop words and short words (< 3 chars). Used to identify similar task patterns
+ * and build success/failure clusters for model recommendation tuning.
+ *
+ * @param objective - The task description to extract keywords from
+ * @returns Array of unique, meaningful keywords suitable for pattern matching
  */
 export function extractKeywords(objective: string): string[] {
 	// Convert to lowercase and split on non-word characters
