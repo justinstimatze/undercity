@@ -1467,6 +1467,7 @@ export function findSimilarInProgressTask(
 		"its",
 	]);
 
+	// Extract meaningful keywords for similarity comparison by removing stop words, punctuation, and short words
 	const extractKeywords = (text: string): Set<string> => {
 		return new Set(
 			text
