@@ -487,9 +487,10 @@
     {
       "id": "task-skill-claude-code-integration",
       "objective": "[skill] Create undercity as Claude Code skill - expose grind, add, tasks commands as skill invocations. Normal Claude Code session can spawn undercity for autonomous batch work",
-      "status": "pending",
+      "status": "complete",
       "priority": 20,
       "createdAt": "2026-01-12T04:00:00.000Z",
+      "completedAt": "2026-01-13T01:40:00.000Z",
       "tags": [
         "skill",
         "claude-code",
@@ -529,9 +530,10 @@
     {
       "id": "task-witness-health-monitor",
       "objective": "[witness] Add lightweight health monitoring - detect stuck workers (no checkpoint update in N minutes), log warnings before killing. Pattern from gastown witness",
-      "status": "pending",
+      "status": "complete",
       "priority": 25,
       "createdAt": "2026-01-12T04:00:00.000Z",
+      "completedAt": "2026-01-13T01:37:00.000Z",
       "tags": [
         "witness",
         "gastown-pattern",
@@ -544,7 +546,8 @@
     {
       "id": "task-witness-nudge-before-kill",
       "objective": "[witness] Implement nudge-before-kill pattern - if worker appears stuck, send context nudge before terminating. Give worker chance to recover",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-01-13T01:37:00.000Z",
       "priority": 26,
       "createdAt": "2026-01-12T04:00:00.000Z",
       "tags": [

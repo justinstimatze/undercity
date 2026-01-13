@@ -2,6 +2,7 @@
   "allowedTools": [
     "Bash(pnpm *)",
     "Bash(npm *)",
+    "Bash(node ./bin/undercity.js *)",
     "Bash(git status)",
     "Bash(git diff *)",
     "Bash(git log *)",
