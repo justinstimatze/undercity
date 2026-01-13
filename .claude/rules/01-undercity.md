@@ -38,6 +38,7 @@ undercity tasks --count 20                 # Show first 20
 undercity grind                            # Process all tasks
 undercity grind -n 10                      # Process 10 tasks
 undercity grind --parallel 3               # Max 3 concurrent
+undercity grind --dry-run                  # Show what would run without executing
 
 # Monitoring
 undercity status                           # Current state

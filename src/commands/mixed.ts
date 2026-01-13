@@ -50,6 +50,7 @@ export const mixedCommands: CommandModule = {
 			.option("--max-retries-per-tier <n>", "Maximum fix attempts at same tier before escalating (default: 3)")
 			.option("--max-review-passes <n>", "Maximum review passes per tier before escalating (default: 2)")
 			.option("--max-opus-review-passes <n>", "Maximum review passes at opus tier (default: 6)")
+			.option("--dry-run", "Show what would execute without running tasks")
 			.action((options: GrindOptions) => handleGrind(options));
 
 		// Limits command - quick snapshot of usage (use 'watch' for live monitoring)

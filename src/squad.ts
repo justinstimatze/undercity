@@ -223,6 +223,11 @@ Don't write code - write specs. The builder implements.`,
 
 CRITICAL: Use tools immediately. Don't ask permission, explain what you'd do, or wait - ACT.
 
+BEFORE STARTING:
+- Run 'git log --oneline -10' to check recent commits
+- If the requested work is already done, report TASK_ALREADY_COMPLETE with the commit SHA
+- If partially done, continue from where it left off
+
 Guidelines:
 - Follow spec exactly - don't improvise or expand scope
 - Use existing patterns in the codebase

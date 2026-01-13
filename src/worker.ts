@@ -22,7 +22,12 @@
 import { execFileSync, execSync } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
-import { assessComplexityFast, assessComplexityQuantitative, type ComplexityAssessment } from "./complexity.js";
+import {
+	adjustModelFromMetrics,
+	assessComplexityFast,
+	assessComplexityQuantitative,
+	type ComplexityAssessment,
+} from "./complexity.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
 import { createAndCheckout } from "./git.js";
@@ -438,6 +443,22 @@ export class TaskWorker {
 		}
 
 		this.currentModel = this.determineStartingModel(assessment);
+
+		// Adjust model based on historical success rates (unless model explicitly set)
+		if (this.startingModel === "sonnet") {
+			// "sonnet" is the default - user didn't override
+			const adjustedModel = await adjustModelFromMetrics(this.currentModel, assessment.level);
+			if (adjustedModel !== this.currentModel) {
+				output.debug(`Metrics adjustment: ${this.currentModel} → ${adjustedModel}`, {
+					taskId,
+					originalModel: this.currentModel,
+					adjustedModel,
+					complexity: assessment.level,
+				});
+				this.currentModel = adjustedModel;
+			}
+		}
+
 		const reviewLevel = this.determineReviewLevel(assessment);
 
 		// Start task tracking in metrics with the starting model

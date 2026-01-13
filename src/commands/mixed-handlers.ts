@@ -30,6 +30,7 @@ export interface GrindOptions {
 	review?: boolean;
 	decompose?: boolean;
 	taskId?: string;
+	dryRun?: boolean;
 	// Verification retry options
 	maxAttempts?: string;
 	maxRetriesPerTier?: string;
@@ -103,8 +104,13 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 	// Track how many tasks we've processed (for -n flag)
 	let tasksProcessed = 0;
 
+	// Dry-run mode skips recovery (just shows what would run from current board)
+	if (options.dryRun && orchestrator.hasActiveRecovery()) {
+		output.info("Skipping recovery in dry-run mode (use without --dry-run to resume)");
+	}
+
 	// Check for interrupted batch and offer to resume
-	if (orchestrator.hasActiveRecovery()) {
+	if (!options.dryRun && orchestrator.hasActiveRecovery()) {
 		const recoveryInfo = orchestrator.getRecoveryInfo();
 		if (recoveryInfo) {
 			output.warning("Interrupted batch detected", {
@@ -308,6 +314,33 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			.map(([model, tasks]) => `${model}: ${tasks.length}`)
 			.join(", ");
 		output.info(`Task model distribution: ${modelCounts}`);
+
+		// Dry-run mode: show what would execute without running
+		if (options.dryRun) {
+			output.header("Dry Run", "Showing what would execute");
+
+			output.summary("Tasks to Execute", [
+				{ label: "Total tasks", value: tasksWithModels.length },
+				{ label: "Haiku", value: tasksByModel.haiku.length },
+				{ label: "Sonnet", value: tasksByModel.sonnet.length },
+				{ label: "Opus", value: tasksByModel.opus.length },
+				{ label: "Parallelism", value: parallelism },
+			]);
+
+			// List tasks by model tier
+			for (const tier of ["haiku", "sonnet", "opus"] as const) {
+				const tierTasks = tasksByModel[tier];
+				if (tierTasks.length > 0) {
+					console.log(`\n${tier.toUpperCase()} tier (${tierTasks.length} tasks):`);
+					for (const task of tierTasks) {
+						console.log(`  - ${task.objective.substring(0, 70)}${task.objective.length > 70 ? "..." : ""}`);
+					}
+				}
+			}
+
+			console.log("\nNo tasks were executed (dry-run mode)");
+			return;
+		}
 
 		// Update tasksToProcess for the loop below
 		tasksToProcess = tasksWithModels;
