@@ -31,6 +31,7 @@ export interface GrindOptions {
 	decompose?: boolean;
 	taskId?: string;
 	dryRun?: boolean;
+	push?: boolean;
 	// Verification retry options
 	maxAttempts?: string;
 	maxRetriesPerTier?: string;
@@ -97,6 +98,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		verbose: options.verbose || false,
 		startingModel: (options.model || "sonnet") as "haiku" | "sonnet" | "opus",
 		reviewPasses: options.review === true,
+		pushOnSuccess: options.push === true,
 		maxAttempts,
 		maxRetriesPerTier,
 		maxReviewPassesPerTier,
@@ -475,6 +477,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 					verbose: options.verbose || false,
 					startingModel: modelTier,
 					reviewPasses: options.review === true || experimentReviewEnabled === true,
+					pushOnSuccess: options.push === true,
 					maxAttempts,
 					maxRetriesPerTier,
 					maxReviewPassesPerTier,

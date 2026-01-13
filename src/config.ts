@@ -47,6 +47,8 @@ export interface UndercityRc {
 
 	// Grind options
 	parallel?: number;
+	/** Push to remote after successful merge (default: false) */
+	push?: boolean;
 
 	// Verification retry options
 	/** Maximum attempts per task before failing (default: 3) */
@@ -79,6 +81,7 @@ const DEFAULT_CONFIG: Required<UndercityRc> = {
 	annealing: false,
 	supervised: false,
 	parallel: 1,
+	push: false,
 	maxAttempts: 3,
 	maxRetriesPerTier: 3,
 	maxReviewPassesPerTier: 2,
@@ -138,6 +141,7 @@ function validateConfig(raw: unknown, filePath: string): UndercityRc | null {
 		"annealing",
 		"supervised",
 		"autoApprove",
+		"push",
 	];
 
 	for (const key of booleanKeys) {

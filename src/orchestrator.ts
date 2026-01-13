@@ -53,6 +53,7 @@ export interface ParallelSoloOptions {
 	verbose?: boolean;
 	reviewPasses?: boolean; // Enable escalating review (haiku → sonnet → opus)
 	annealingAtOpus?: boolean; // Enable annealing review at opus tier
+	pushOnSuccess?: boolean; // Push to remote after successful merge (default: false)
 	// Verification retry options
 	maxAttempts?: number; // Maximum attempts per task before failing (default: 3)
 	maxRetriesPerTier?: number; // Maximum fix attempts at same tier before escalating (default: 3)
@@ -185,6 +186,7 @@ export class Orchestrator {
 	private verbose: boolean;
 	private reviewPasses: boolean;
 	private annealingAtOpus: boolean;
+	private pushOnSuccess: boolean;
 	// Verification retry options
 	private maxAttempts: number;
 	private maxRetriesPerTier: number;
@@ -218,6 +220,7 @@ export class Orchestrator {
 		this.verbose = options.verbose ?? false;
 		this.reviewPasses = options.reviewPasses ?? false; // Default to no automatic reviews - use --review flag to enable
 		this.annealingAtOpus = options.annealingAtOpus ?? false;
+		this.pushOnSuccess = options.pushOnSuccess ?? false; // Default to no push - user must explicitly opt in
 		// Verification retry options with defaults
 		this.maxAttempts = options.maxAttempts ?? 3;
 		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
@@ -1121,6 +1124,24 @@ export class Orchestrator {
 				} catch (err) {
 					taskResult.mergeError = String(err);
 					output.error(`Merge failed: ${taskResult.taskId}`, { error: String(err) });
+				}
+			}
+
+			// Push to remote if enabled and there were successful merges
+			if (this.pushOnSuccess) {
+				const mergedCount = successfulTasks.filter((t) => t.merged).length;
+				if (mergedCount > 0) {
+					output.progress("Pushing to remote...");
+					try {
+						const mainRepo = this.worktreeManager.getMainRepoPath();
+						const mainBranch = this.worktreeManager.getMainBranch();
+						validateGitRef(mainBranch);
+						execGitInDir(["push", "origin", mainBranch], mainRepo);
+						output.success(`Pushed ${mergedCount} merged commit(s) to origin/${mainBranch}`);
+					} catch (pushErr) {
+						output.error("Push to remote failed", { error: String(pushErr) });
+						output.info("Changes remain in local main. Push manually when ready.");
+					}
 				}
 			}
 		}
