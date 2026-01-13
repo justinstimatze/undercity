@@ -1088,6 +1088,7 @@ export async function handleStatus(options: StatusOptions): Promise<void> {
 export interface IndexOptions {
 	full?: boolean;
 	stats?: boolean;
+	summaries?: boolean;
 }
 
 /**
@@ -1105,6 +1106,20 @@ export async function handleIndex(options: IndexOptions): Promise<void> {
 		console.log(`  Files indexed: ${stats.fileCount}`);
 		console.log(`  Symbols tracked: ${stats.symbolCount}`);
 		console.log(`  Last updated: ${stats.lastUpdated}`);
+		return;
+	}
+
+	if (options.summaries) {
+		const summaries = index.getAllSummaries();
+		if (summaries.length === 0) {
+			console.log(chalk.yellow("No summaries available. Run 'undercity index --full' first."));
+			return;
+		}
+		console.log(chalk.bold(`File Summaries (${summaries.length} files)\n`));
+		for (const { path, summary } of summaries) {
+			console.log(chalk.cyan(path));
+			console.log(`  ${summary}\n`);
+		}
 		return;
 	}
 

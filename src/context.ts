@@ -401,6 +401,8 @@ export interface ContextBriefing {
 	impactedFiles: string[];
 	/** Files that target files depend on */
 	dependencies: string[];
+	/** File summaries for quick context */
+	fileSummaries: Record<string, string>;
 	/** Pre-formatted briefing document */
 	briefingDoc: string;
 }
@@ -452,6 +454,7 @@ export async function prepareContext(
 		constraints: [],
 		impactedFiles: [],
 		dependencies: [],
+		fileSummaries: {},
 		briefingDoc: "",
 	};
 
@@ -952,6 +955,14 @@ async function enrichWithASTIndex(briefing: ContextBriefing, searchTerms: string
 			}
 		}
 
+		// 5. Get file summaries for target files and dependencies
+		const allRelevantFiles = [
+			...briefing.targetFiles.slice(0, 5),
+			...briefing.dependencies.slice(0, 3),
+			...briefing.impactedFiles.slice(0, 3),
+		];
+		briefing.fileSummaries = index.getFileSummaries(allRelevantFiles);
+
 		sessionLogger.debug(
 			{
 				symbolFilesFound: symbolFiles.length,
@@ -981,6 +992,13 @@ function buildBriefingDoc(briefing: ContextBriefing): string {
 
 	if (briefing.targetFiles.length > 0) {
 		sections.push(`\n## Target Files (start here)\n${briefing.targetFiles.map((f) => `- ${f}`).join("\n")}`);
+	}
+
+	// Add file summaries if available
+	const summaryEntries = Object.entries(briefing.fileSummaries);
+	if (summaryEntries.length > 0) {
+		const summaryLines = summaryEntries.map(([file, summary]) => `- ${file}: ${summary}`);
+		sections.push(`\n## File Summaries\n${summaryLines.join("\n")}`);
 	}
 
 	// Add dependencies section (files that target files depend on)

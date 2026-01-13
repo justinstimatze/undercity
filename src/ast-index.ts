@@ -51,6 +51,8 @@ export interface FileASTInfo {
 	indexedAt: string;
 	exports: ExportedSymbol[];
 	imports: ImportInfo[];
+	/** Auto-generated 1-2 line summary of file purpose */
+	summary?: string;
 }
 
 /**
@@ -230,6 +232,38 @@ export class ASTIndexManager {
 	getFileInfo(filePath: string): FileASTInfo | null {
 		const normalizedPath = this.normalizePath(filePath);
 		return this.index.files[normalizedPath] || null;
+	}
+
+	/**
+	 * Get summary for a specific file
+	 */
+	getFileSummary(filePath: string): string | null {
+		const info = this.getFileInfo(filePath);
+		return info?.summary || null;
+	}
+
+	/**
+	 * Get summaries for multiple files (useful for context preparation)
+	 */
+	getFileSummaries(filePaths: string[]): Record<string, string> {
+		const summaries: Record<string, string> = {};
+		for (const filePath of filePaths) {
+			const summary = this.getFileSummary(filePath);
+			if (summary) {
+				summaries[filePath] = summary;
+			}
+		}
+		return summaries;
+	}
+
+	/**
+	 * Get all file summaries (for overview/debugging)
+	 */
+	getAllSummaries(): Array<{ path: string; summary: string }> {
+		return Object.values(this.index.files)
+			.filter((f) => f.summary)
+			.map((f) => ({ path: f.path, summary: f.summary as string }))
+			.sort((a, b) => a.path.localeCompare(b.path));
 	}
 
 	/**
@@ -420,6 +454,7 @@ export class ASTIndexManager {
 
 			const exports = this.extractExports(sourceFile);
 			const imports = this.extractImports(sourceFile, normalizedPath);
+			const summary = this.generateSummary(normalizedPath, exports, imports);
 
 			return {
 				path: normalizedPath,
@@ -427,6 +462,7 @@ export class ASTIndexManager {
 				indexedAt: new Date().toISOString(),
 				exports,
 				imports,
+				summary,
 			};
 		} catch (error) {
 			logger.debug({ error: String(error), file: normalizedPath }, "Failed to extract file info");
@@ -691,6 +727,64 @@ export class ASTIndexManager {
 	private formatSignature(sig: string): string {
 		const cleaned = sig.replace(/\s+/g, " ").trim();
 		return cleaned.length > 120 ? `${cleaned.slice(0, 117)}...` : cleaned;
+	}
+
+	/**
+	 * Generate a 1-2 line summary of file purpose based on exports
+	 */
+	private generateSummary(filePath: string, exports: ExportedSymbol[], imports: ImportInfo[]): string {
+		const fileName = path.basename(filePath, ".ts");
+		const parts: string[] = [];
+
+		// Group exports by kind
+		const byKind: Record<string, string[]> = {};
+		for (const exp of exports) {
+			if (!byKind[exp.kind]) byKind[exp.kind] = [];
+			byKind[exp.kind].push(exp.name);
+		}
+
+		// Build summary based on what's exported
+		if (byKind.class?.length) {
+			const classes = byKind.class.slice(0, 3).join(", ");
+			const more = byKind.class.length > 3 ? ` (+${byKind.class.length - 3})` : "";
+			parts.push(`Classes: ${classes}${more}`);
+		}
+
+		if (byKind.function?.length) {
+			const funcs = byKind.function.slice(0, 4).join(", ");
+			const more = byKind.function.length > 4 ? ` (+${byKind.function.length - 4})` : "";
+			parts.push(`Functions: ${funcs}${more}`);
+		}
+
+		if (byKind.interface?.length || byKind.type?.length) {
+			const types = [...(byKind.interface || []), ...(byKind.type || [])];
+			const shown = types.slice(0, 4).join(", ");
+			const more = types.length > 4 ? ` (+${types.length - 4})` : "";
+			parts.push(`Types: ${shown}${more}`);
+		}
+
+		if (byKind.const?.length && !byKind.class?.length && !byKind.function?.length) {
+			const consts = byKind.const.slice(0, 4).join(", ");
+			const more = byKind.const.length > 4 ? ` (+${byKind.const.length - 4})` : "";
+			parts.push(`Constants: ${consts}${more}`);
+		}
+
+		// Add dependency context if notable
+		const localImports = imports.filter((i) => i.resolvedPath).length;
+
+		if (parts.length === 0) {
+			// No exports - might be entry point or config
+			if (localImports > 5) {
+				return `${fileName}: Orchestration module (imports ${localImports} local modules)`;
+			}
+			return `${fileName}: Internal module (no exports)`;
+		}
+
+		const summary = parts.join(". ");
+		if (summary.length > 120) {
+			return summary.slice(0, 117) + "...";
+		}
+		return summary;
 	}
 }
 

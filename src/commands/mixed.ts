@@ -130,6 +130,7 @@ export const mixedCommands: CommandModule = {
 			.description("Build or update AST index for smart context selection")
 			.option("-f, --full", "Full rebuild (instead of incremental update)")
 			.option("-s, --stats", "Show index statistics only")
+			.option("--summaries", "Show file summaries")
 			.action((options: IndexOptions) => handleIndex(options));
 	},
 };
