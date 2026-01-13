@@ -33,6 +33,7 @@ import { MetricsTracker } from "./metrics.js";
 import * as output from "./output.js";
 import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
 import { type ModelTier, runEscalatingReview, type UnresolvedTicket } from "./review.js";
+import type { HandoffContext } from "./task.js";
 import { extractMetaTaskType, isMetaTask } from "./task-schema.js";
 import type { AttemptRecord, ErrorCategory, TaskCheckpoint, TokenUsage } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
@@ -182,6 +183,9 @@ export class TaskWorker {
 	/** Track if current task is a meta-task (doesn't require file changes) */
 	private isCurrentTaskMeta: boolean = false;
 
+	/** Handoff context from calling Claude Code session */
+	private currentHandoffContext?: HandoffContext;
+
 	constructor(options: SoloOptions = {}) {
 		this.maxAttempts = options.maxAttempts ?? 3;
 		this.startingModel = options.startingModel ?? "sonnet";
@@ -275,15 +279,64 @@ export class TaskWorker {
 	}
 
 	/**
-	 * Run a single task with verification and potential escalation
+	 * Build handoff context section for the prompt
+	 * Contains context passed from the calling Claude Code session
 	 */
-	async runTask(task: string): Promise<TaskResult> {
+	private buildHandoffContextSection(): string {
+		if (!this.currentHandoffContext) {
+			return "";
+		}
+
+		const ctx = this.currentHandoffContext;
+		const lines: string[] = [];
+		lines.push("HANDOFF CONTEXT FROM CALLER:");
+		lines.push("The session that dispatched this task provided the following context:");
+		lines.push("");
+
+		if (ctx.filesRead && ctx.filesRead.length > 0) {
+			lines.push("Files already analyzed:");
+			for (const file of ctx.filesRead) {
+				lines.push(`  - ${file}`);
+			}
+			lines.push("");
+		}
+
+		if (ctx.decisions && ctx.decisions.length > 0) {
+			lines.push("Key decisions/constraints established:");
+			for (const decision of ctx.decisions) {
+				lines.push(`  - ${decision}`);
+			}
+			lines.push("");
+		}
+
+		if (ctx.codeContext) {
+			lines.push("Relevant code context:");
+			lines.push(ctx.codeContext);
+			lines.push("");
+		}
+
+		if (ctx.notes) {
+			lines.push("Notes from caller:");
+			lines.push(ctx.notes);
+			lines.push("");
+		}
+
+		return lines.join("\n");
+	}
+
+	/**
+	 * Run a single task with verification and potential escalation
+	 * @param task The task objective string
+	 * @param handoffContext Optional context from calling Claude Code session
+	 */
+	async runTask(task: string, handoffContext?: HandoffContext): Promise<TaskResult> {
 		const startTime = Date.now();
 		this.attempts = 0;
 		this.attemptRecords = [];
 		this.tokenUsageThisTask = [];
 		this.sameModelRetries = 0;
 		this.pendingTickets = []; // Clear tickets from previous task
+		this.currentHandoffContext = handoffContext; // Store for use in prompt building
 
 		// Checkpoint: starting
 		this.saveCheckpoint("starting");
@@ -843,6 +896,12 @@ Return your analysis as JSON in the format specified above.`;
 			const assignmentContext = this.buildAssignmentContext();
 			if (assignmentContext) {
 				contextSection += `${assignmentContext}\n---\n\n`;
+			}
+
+			// Add handoff context from calling Claude Code session
+			if (this.currentHandoffContext) {
+				contextSection += this.buildHandoffContextSection();
+				contextSection += "\n---\n\n";
 			}
 
 			if (this.currentBriefing?.briefingDoc) {

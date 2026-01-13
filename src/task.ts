@@ -153,6 +153,24 @@ export interface Task {
 	parentId?: string; // ID of parent task (if this is a subtask)
 	subtaskIds?: string[]; // IDs of subtasks (if this was decomposed)
 	isDecomposed?: boolean; // True if this task was decomposed into subtasks
+
+	// Handoff context from Claude Code session
+	handoffContext?: HandoffContext;
+}
+
+/**
+ * Context passed from Claude Code session when dispatching tasks
+ * Allows workers to start with relevant context instead of cold
+ */
+export interface HandoffContext {
+	/** Files the caller already read/analyzed */
+	filesRead?: string[];
+	/** Key decisions or constraints the caller established */
+	decisions?: string[];
+	/** Relevant code snippets or context */
+	codeContext?: string;
+	/** Free-form notes from the caller */
+	notes?: string;
 }
 
 export interface TaskBoard {
@@ -220,20 +238,47 @@ export function saveTaskBoard(board: TaskBoard, path: string = DEFAULT_TASK_BOAR
 }
 
 /**
+ * Options for adding a task
+ */
+export interface AddTaskOptions {
+	priority?: number;
+	handoffContext?: HandoffContext;
+	path?: string;
+}
+
+/**
  * Add a task to the board
  */
-export function addTask(objective: string, priority?: number, path: string = DEFAULT_TASK_BOARD_PATH): Task {
-	return withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
+export function addTask(
+	objective: string,
+	priorityOrOptions?: number | AddTaskOptions,
+	path: string = DEFAULT_TASK_BOARD_PATH,
+): Task {
+	// Support both old signature (priority, path) and new signature (options)
+	let priority: number | undefined;
+	let handoffContext: HandoffContext | undefined;
+	let taskPath = path;
+
+	if (typeof priorityOrOptions === "number") {
+		priority = priorityOrOptions;
+	} else if (priorityOrOptions) {
+		priority = priorityOrOptions.priority;
+		handoffContext = priorityOrOptions.handoffContext;
+		taskPath = priorityOrOptions.path ?? path;
+	}
+
+	return withLock(getLockPath(taskPath), () => {
+		const board = loadTaskBoard(taskPath);
 		const task: Task = {
 			id: generateTaskId(),
 			objective,
 			status: "pending",
 			priority: priority ?? board.tasks.length,
 			createdAt: new Date(),
+			handoffContext,
 		};
 		board.tasks.push(task);
-		saveTaskBoard(board, path);
+		saveTaskBoard(board, taskPath);
 		return task;
 	});
 }

@@ -500,9 +500,10 @@
     {
       "id": "task-skill-handoff-protocol",
       "objective": "[skill] Implement handoff protocol - when Claude Code invokes undercity skill, pass current context (files read, decisions made) as handoff content. Undercity workers start with context, not cold",
-      "status": "pending",
+      "status": "complete",
       "priority": 21,
       "createdAt": "2026-01-12T04:00:00.000Z",
+      "completedAt": "2026-01-13T02:25:00.000Z",
       "tags": [
         "skill",
         "claude-code",

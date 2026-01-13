@@ -24,7 +24,7 @@ import { FileTracker } from "./file-tracker.js";
 import * as output from "./output.js";
 import { Persistence, readTaskAssignment, writeTaskAssignment } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
-import { addTask, loadTaskBoard, removeTasks, saveTaskBoard } from "./task.js";
+import { addTask, type HandoffContext, loadTaskBoard, removeTasks, saveTaskBoard, type Task } from "./task.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
 import type {
 	ActiveTaskState,
@@ -190,6 +190,8 @@ export class Orchestrator {
 	private experimentManager: ExperimentManager;
 	/** Recovered checkpoints from crashed tasks (task objective → checkpoint) */
 	private recoveredCheckpoints: Map<string, TaskCheckpoint> = new Map();
+	/** Handoff context from calling Claude Code session (task objective → context) */
+	private handoffContexts: Map<string, HandoffContext> = new Map();
 	// Worker health monitoring
 	private healthCheckEnabled: boolean;
 	private healthCheckIntervalMs: number;
@@ -580,7 +582,11 @@ export class Orchestrator {
 	 * This is an optimization for when only one task needs to run.
 	 * It runs TaskWorker directly in the current directory.
 	 */
-	async runSingle(task: string): Promise<ParallelBatchResult> {
+	async runSingle(taskOrObj: string | Task): Promise<ParallelBatchResult> {
+		// Extract objective and handoff context
+		const task = typeof taskOrObj === "string" ? taskOrObj : taskOrObj.objective;
+		const handoffContext = typeof taskOrObj === "string" ? undefined : taskOrObj.handoffContext;
+
 		// Check for [plan] prefix - route to planner instead of worker
 		if (isPlanTask(task)) {
 			return this.handlePlanTask(task);
@@ -629,7 +635,7 @@ export class Orchestrator {
 				// No workingDirectory - runs in current directory
 			});
 
-			const result = await worker.runTask(task);
+			const result = await worker.runTask(task, handoffContext);
 
 			// Record token usage
 			if (result.tokenUsage) {
@@ -688,14 +694,31 @@ export class Orchestrator {
 	/**
 	 * Run multiple tasks in parallel
 	 *
+	 * Accepts either task objective strings or full Task objects.
+	 * When Task objects are provided, handoff context is preserved.
+	 *
 	 * If only one task is provided and maxConcurrent is 1, runs in direct mode
 	 * without worktree overhead.
 	 */
-	async runParallel(tasks: string[]): Promise<ParallelBatchResult> {
+	async runParallel(tasks: Array<string | Task>): Promise<ParallelBatchResult> {
+		// Extract objectives and store handoff contexts
+		const objectives: string[] = [];
+		for (const t of tasks) {
+			if (typeof t === "string") {
+				objectives.push(t);
+			} else {
+				objectives.push(t.objective);
+				// Store handoff context if present
+				if (t.handoffContext) {
+					this.handoffContexts.set(t.objective, t.handoffContext);
+				}
+			}
+		}
+
 		// Separate plan tasks from implementation tasks
 		// Plan tasks are processed first since they generate new tasks
-		const planTasks = tasks.filter(isPlanTask);
-		const implTasks = tasks.filter((t) => !isPlanTask(t));
+		const planTasks = objectives.filter(isPlanTask);
+		const implTasks = objectives.filter((t) => !isPlanTask(t));
 
 		// Process plan tasks first (serially, they add to the queue)
 		if (planTasks.length > 0) {
@@ -909,7 +932,10 @@ export class Orchestrator {
 					// Clear the recovered checkpoint after use (one-time injection)
 					this.recoveredCheckpoints.delete(task);
 
-					const result = await worker.runTask(task);
+					// Get handoff context if available
+					const handoffContext = this.handoffContexts.get(task);
+
+					const result = await worker.runTask(task, handoffContext);
 
 					// Get modified files from git diff
 					const modifiedFiles = getModifiedFilesInWorktree(worktreePath, mainBranch);

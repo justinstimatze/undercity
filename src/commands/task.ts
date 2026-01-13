@@ -44,6 +44,9 @@ export const taskCommands: CommandModule = {
 			.command("add <goal>")
 			.description("Add a goal to the backlog")
 			.option("-p, --priority <number>", "Task priority (lower = higher priority)")
+			.option("-c, --context <file>", "JSON file with handoff context for worker")
+			.option("--files-read <files>", "Comma-separated list of files already analyzed")
+			.option("--notes <notes>", "Notes to pass to the worker")
 			.action((goal: string, options: AddOptions) => handleAdd(goal, options));
 
 		// Load command - load goals from a file (one per line)

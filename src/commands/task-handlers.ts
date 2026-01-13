@@ -17,12 +17,14 @@ import {
 import {
 	addGoal,
 	addGoals,
+	addTask,
 	addTasks,
 	getAllItems,
 	getBacklogSummary,
 	getNextGoal,
 	getReadyTasksForBatch,
 	getTaskBoardAnalytics,
+	type HandoffContext,
 	loadTaskBoard,
 	markComplete,
 	markFailed,
@@ -35,6 +37,12 @@ import { TaskBoardAnalyzer } from "../task-board-analyzer.js";
 // Type definitions for command options
 export interface AddOptions {
 	priority?: string;
+	/** Path to JSON file containing handoff context */
+	context?: string;
+	/** Files the caller already read (comma-separated) */
+	filesRead?: string;
+	/** Notes to pass to the worker */
+	notes?: string;
 }
 
 export interface ImportPlanOptions {
@@ -174,11 +182,39 @@ export function handleAdd(goal: string, options: AddOptions = {}): void {
 		priority = parsedPriority;
 	}
 
-	const item = addGoal(goal, priority);
+	// Build handoff context from options
+	let handoffContext: HandoffContext | undefined;
+
+	// Read context from JSON file if provided
+	if (options.context) {
+		try {
+			const content = readFileSync(options.context, "utf-8");
+			handoffContext = JSON.parse(content) as HandoffContext;
+		} catch (error) {
+			console.error(chalk.red(`Error reading context file: ${error instanceof Error ? error.message : error}`));
+			process.exit(1);
+		}
+	}
+
+	// Build context from individual options (merge with file context if both provided)
+	if (options.filesRead || options.notes) {
+		handoffContext = handoffContext ?? {};
+		if (options.filesRead) {
+			handoffContext.filesRead = options.filesRead.split(",").map((f) => f.trim());
+		}
+		if (options.notes) {
+			handoffContext.notes = options.notes;
+		}
+	}
+
+	const item = addTask(goal, { priority, handoffContext });
 	console.log(chalk.green(`Added: ${goal}`));
 	console.log(chalk.gray(`  ID: ${item.id}`));
 	if (priority !== undefined) {
 		console.log(chalk.gray(`  Priority: ${priority}`));
+	}
+	if (handoffContext) {
+		console.log(chalk.gray(`  Handoff context: ${Object.keys(handoffContext).join(", ")}`));
 	}
 }
 

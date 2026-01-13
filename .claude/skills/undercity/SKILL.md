@@ -36,6 +36,30 @@ node ./bin/undercity.js add "Add JSDoc comments to all exported functions"
 node ./bin/undercity.js add "Migrate deprecated API calls to v2"
 ```
 
+### Add Task with Context (Handoff)
+
+Pass context to help workers start with relevant information:
+
+```bash
+# Pass files you've already analyzed
+node ./bin/undercity.js add "Refactor auth module" --files-read "src/auth.ts,src/types.ts"
+
+# Pass notes about decisions or constraints
+node ./bin/undercity.js add "Fix validation bug" --notes "Issue is in validateInput(), not the schema"
+
+# Pass full context via JSON file
+node ./bin/undercity.js add "Implement feature X" --context ./handoff.json
+```
+
+Context JSON format:
+```json
+{
+  "filesRead": ["src/api.ts", "src/types.ts"],
+  "decisions": ["Use zod for validation", "Keep backward compatible"],
+  "notes": "Auth token is in request headers"
+}
+```
+
 ### Check Task Board
 
 ```bash
