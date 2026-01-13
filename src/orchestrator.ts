@@ -997,7 +997,7 @@ export class Orchestrator {
 					const taskStatus = result.status === "complete" ? "complete" : "failed";
 					this.updateTaskStatus(taskId, taskStatus, { modifiedFiles });
 
-					// Update capability ledger with task outcome
+					// Update capability ledger with task outcome (including cost metrics)
 					try {
 						const escalated = result.model !== this.startingModel;
 						updateLedger({
@@ -1005,6 +1005,9 @@ export class Orchestrator {
 							model: result.model,
 							success: result.status === "complete",
 							escalated,
+							tokenCost: result.tokenUsage?.total,
+							durationMs: result.durationMs,
+							attempts: result.attempts,
 						});
 					} catch {
 						// Silent failure - ledger is optional

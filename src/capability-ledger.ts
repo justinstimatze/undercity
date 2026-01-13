@@ -26,6 +26,12 @@ export interface TaskResult {
 	success: boolean;
 	/** Whether the task was escalated to a higher tier */
 	escalated: boolean;
+	/** Total tokens used (input + output) */
+	tokenCost?: number;
+	/** Total duration in milliseconds */
+	durationMs?: number;
+	/** Number of attempts (retries + initial) */
+	attempts?: number;
 }
 
 /**
@@ -38,6 +44,12 @@ export interface PatternModelStats {
 	successes: number;
 	/** Tasks that required escalation */
 	escalations: number;
+	/** Total tokens used across all tasks */
+	totalTokens: number;
+	/** Total duration in ms across all tasks */
+	totalDurationMs: number;
+	/** Sum of attempt counts (for averaging) */
+	totalRetries: number;
 }
 
 /**
@@ -129,6 +141,9 @@ function createEmptyModelStats(): PatternModelStats {
 		attempts: 0,
 		successes: 0,
 		escalations: 0,
+		totalTokens: 0,
+		totalDurationMs: 0,
+		totalRetries: 0,
 	};
 }
 
@@ -231,12 +246,28 @@ export function updateLedger(taskResult: TaskResult, stateDir: string = DEFAULT_
 		const patternStats = ledger.patterns[keyword];
 		const modelStats = patternStats.byModel[taskResult.model];
 
+		// Ensure new fields exist (migration for old ledgers)
+		modelStats.totalTokens ??= 0;
+		modelStats.totalDurationMs ??= 0;
+		modelStats.totalRetries ??= 0;
+
 		modelStats.attempts++;
 		if (taskResult.success) {
 			modelStats.successes++;
 		}
 		if (taskResult.escalated) {
 			modelStats.escalations++;
+		}
+
+		// Record cost metrics
+		if (taskResult.tokenCost !== undefined) {
+			modelStats.totalTokens += taskResult.tokenCost;
+		}
+		if (taskResult.durationMs !== undefined) {
+			modelStats.totalDurationMs += taskResult.durationMs;
+		}
+		if (taskResult.attempts !== undefined) {
+			modelStats.totalRetries += taskResult.attempts;
 		}
 
 		patternStats.lastSeen = new Date();
@@ -263,6 +294,20 @@ function getEscalationRate(stats: PatternModelStats): number {
 }
 
 /**
+ * Cost metrics for a model
+ */
+export interface ModelCostMetrics {
+	successRate: number;
+	escalationRate: number;
+	attempts: number;
+	avgTokens: number;
+	avgDurationMs: number;
+	avgRetries: number;
+	/** Expected value score (higher = better ROI) */
+	expectedValue: number;
+}
+
+/**
  * Recommendation result from getRecommendedModel
  */
 export interface ModelRecommendation {
@@ -274,6 +319,8 @@ export interface ModelRecommendation {
 	reason: string;
 	/** Success rates by model for the matched patterns */
 	patternRates?: Record<ModelChoice, { successRate: number; escalationRate: number; attempts: number }>;
+	/** Cost metrics by model (when available) */
+	costMetrics?: Record<ModelChoice, ModelCostMetrics>;
 }
 
 /**
@@ -300,10 +347,20 @@ export function getRecommendedModel(objective: string, stateDir: string = DEFAUL
 	}
 
 	// Aggregate stats across all matching patterns
-	const aggregateStats: Record<ModelChoice, { successes: number; attempts: number; escalations: number }> = {
-		haiku: { successes: 0, attempts: 0, escalations: 0 },
-		sonnet: { successes: 0, attempts: 0, escalations: 0 },
-		opus: { successes: 0, attempts: 0, escalations: 0 },
+	const aggregateStats: Record<
+		ModelChoice,
+		{
+			successes: number;
+			attempts: number;
+			escalations: number;
+			totalTokens: number;
+			totalDurationMs: number;
+			totalRetries: number;
+		}
+	> = {
+		haiku: { successes: 0, attempts: 0, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
+		sonnet: { successes: 0, attempts: 0, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
+		opus: { successes: 0, attempts: 0, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 	};
 
 	let matchedPatterns = 0;
@@ -318,6 +375,9 @@ export function getRecommendedModel(objective: string, stateDir: string = DEFAUL
 			aggregateStats[model].successes += modelStats.successes;
 			aggregateStats[model].attempts += modelStats.attempts;
 			aggregateStats[model].escalations += modelStats.escalations;
+			aggregateStats[model].totalTokens += modelStats.totalTokens ?? 0;
+			aggregateStats[model].totalDurationMs += modelStats.totalDurationMs ?? 0;
+			aggregateStats[model].totalRetries += modelStats.totalRetries ?? 0;
 		}
 	}
 
@@ -348,51 +408,100 @@ export function getRecommendedModel(objective: string, stateDir: string = DEFAUL
 		},
 	};
 
-	// Decision logic:
-	// 1. If haiku has high success rate (>80%) and low escalation (<20%), use haiku
-	// 2. If sonnet has high success rate (>80%) and low escalation (<20%), use sonnet
-	// 3. Otherwise, recommend opus
+	// Relative cost multipliers (haiku = 1, sonnet = 10, opus = 100)
+	const COST_MULTIPLIER: Record<ModelChoice, number> = {
+		haiku: 1,
+		sonnet: 10,
+		opus: 100,
+	};
 
-	const haikuViable =
-		patternRates.haiku.attempts >= 3 &&
-		patternRates.haiku.successRate >= 0.8 &&
-		patternRates.haiku.escalationRate < 0.2;
+	// Calculate cost metrics and expected value per model
+	const costMetrics: Record<ModelChoice, ModelCostMetrics> = {} as Record<ModelChoice, ModelCostMetrics>;
+	for (const model of ["haiku", "sonnet", "opus"] as ModelChoice[]) {
+		const stats = aggregateStats[model];
+		const successRate = getSuccessRate(stats);
+		const escalationRate = getEscalationRate(stats);
+		const avgTokens = stats.attempts > 0 ? stats.totalTokens / stats.attempts : 0;
+		const avgDurationMs = stats.attempts > 0 ? stats.totalDurationMs / stats.attempts : 0;
+		const avgRetries = stats.attempts > 0 ? stats.totalRetries / stats.attempts : 1;
 
-	const sonnetViable =
-		patternRates.sonnet.attempts >= 3 &&
-		patternRates.sonnet.successRate >= 0.8 &&
-		patternRates.sonnet.escalationRate < 0.2;
+		// Expected value = success probability / (cost × avg retries)
+		// Higher = better ROI (more likely to succeed per dollar spent)
+		const costFactor = COST_MULTIPLIER[model] * Math.max(1, avgRetries);
+		const expectedValue = stats.attempts >= 3 ? successRate / costFactor : 0;
 
-	// Check for high escalation from lower tiers (suggests task is harder than model tier)
-	const haikuEscalationHigh = patternRates.haiku.attempts >= 3 && patternRates.haiku.escalationRate >= 0.3;
-	const sonnetEscalationHigh = patternRates.sonnet.attempts >= 3 && patternRates.sonnet.escalationRate >= 0.3;
+		costMetrics[model] = {
+			successRate,
+			escalationRate,
+			attempts: stats.attempts,
+			avgTokens,
+			avgDurationMs,
+			avgRetries,
+			expectedValue,
+		};
+	}
 
-	// Determine recommendation
+	// Find best model by expected value (with minimum data threshold)
+	let bestModel: ModelChoice = "sonnet";
+	let bestValue = -1;
+	let usedExpectedValue = false;
+
+	for (const model of ["haiku", "sonnet", "opus"] as ModelChoice[]) {
+		const metrics = costMetrics[model];
+		// Require minimum 3 attempts and 60% success rate
+		if (metrics.attempts >= 3 && metrics.successRate >= 0.6 && metrics.expectedValue > bestValue) {
+			bestValue = metrics.expectedValue;
+			bestModel = model;
+			usedExpectedValue = true;
+		}
+	}
+
+	// Fallback to original logic if no model has enough data for expected value
 	let model: ModelChoice;
 	let reason: string;
 	let confidence: number;
 
-	if (haikuViable && !haikuEscalationHigh) {
-		model = "haiku";
-		reason = `Haiku succeeds ${(patternRates.haiku.successRate * 100).toFixed(0)}% for similar patterns`;
-		confidence = Math.min(0.9, patternRates.haiku.successRate);
-	} else if (sonnetViable && !sonnetEscalationHigh) {
-		model = "sonnet";
-		reason = `Sonnet succeeds ${(patternRates.sonnet.successRate * 100).toFixed(0)}% for similar patterns`;
-		confidence = Math.min(0.9, patternRates.sonnet.successRate);
-	} else if (haikuEscalationHigh || sonnetEscalationHigh) {
-		model = "opus";
-		reason = "High escalation rate from lower tiers for similar patterns";
-		confidence = 0.7;
-	} else if (patternRates.opus.attempts > 0 && patternRates.opus.successRate > 0.5) {
-		model = "opus";
-		reason = `Similar patterns typically require opus (${(patternRates.opus.successRate * 100).toFixed(0)}% success)`;
-		confidence = Math.min(0.85, patternRates.opus.successRate);
+	if (usedExpectedValue) {
+		model = bestModel;
+		const metrics = costMetrics[model];
+		reason = `Best ROI: ${model} (${(metrics.successRate * 100).toFixed(0)}% success, ${metrics.avgRetries.toFixed(1)} avg retries)`;
+		confidence = Math.min(0.9, metrics.successRate);
 	} else {
-		// Default to sonnet when data is inconclusive
-		model = "sonnet";
-		reason = "Insufficient conclusive data - defaulting to sonnet";
-		confidence = 0.4;
+		// Original fallback logic
+		const haikuViable =
+			patternRates.haiku.attempts >= 3 &&
+			patternRates.haiku.successRate >= 0.8 &&
+			patternRates.haiku.escalationRate < 0.2;
+
+		const sonnetViable =
+			patternRates.sonnet.attempts >= 3 &&
+			patternRates.sonnet.successRate >= 0.8 &&
+			patternRates.sonnet.escalationRate < 0.2;
+
+		const haikuEscalationHigh = patternRates.haiku.attempts >= 3 && patternRates.haiku.escalationRate >= 0.3;
+		const sonnetEscalationHigh = patternRates.sonnet.attempts >= 3 && patternRates.sonnet.escalationRate >= 0.3;
+
+		if (haikuViable && !haikuEscalationHigh) {
+			model = "haiku";
+			reason = `Haiku succeeds ${(patternRates.haiku.successRate * 100).toFixed(0)}% for similar patterns`;
+			confidence = Math.min(0.9, patternRates.haiku.successRate);
+		} else if (sonnetViable && !sonnetEscalationHigh) {
+			model = "sonnet";
+			reason = `Sonnet succeeds ${(patternRates.sonnet.successRate * 100).toFixed(0)}% for similar patterns`;
+			confidence = Math.min(0.9, patternRates.sonnet.successRate);
+		} else if (haikuEscalationHigh || sonnetEscalationHigh) {
+			model = "opus";
+			reason = "High escalation rate from lower tiers for similar patterns";
+			confidence = 0.7;
+		} else if (patternRates.opus.attempts > 0 && patternRates.opus.successRate > 0.5) {
+			model = "opus";
+			reason = `Similar patterns typically require opus (${(patternRates.opus.successRate * 100).toFixed(0)}% success)`;
+			confidence = Math.min(0.85, patternRates.opus.successRate);
+		} else {
+			model = "sonnet";
+			reason = "Insufficient conclusive data - defaulting to sonnet";
+			confidence = 0.4;
+		}
 	}
 
 	return {
@@ -400,6 +509,7 @@ export function getRecommendedModel(objective: string, stateDir: string = DEFAUL
 		confidence,
 		reason,
 		patternRates,
+		costMetrics,
 	};
 }
 
