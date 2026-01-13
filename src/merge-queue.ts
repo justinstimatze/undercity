@@ -384,151 +384,128 @@ export class MergeQueue {
 	}
 
 	/**
+	 * Rebase a branch in its worktree
+	 */
+	private rebaseInWorktree(branch: string, worktreePath: string): { success: boolean; error?: string } {
+		gitLogger.debug({ branch, worktreePath, onto: this.mainBranch }, "Rebasing in worktree");
+		try {
+			execGit(["rebase", this.mainBranch], worktreePath);
+			return { success: true };
+		} catch (_rebaseError) {
+			try {
+				execGit(["rebase", "--abort"], worktreePath);
+			} catch {
+				// Ignore abort errors
+			}
+			return { success: false, error: "Rebase failed - manual resolution required" };
+		}
+	}
+
+	/**
+	 * Push merge to origin and log result
+	 */
+	private pushMergeToOrigin(): void {
+		try {
+			pushToOrigin(this.mainBranch);
+			gitLogger.info({ branch: this.mainBranch }, "Pushed merge to origin");
+		} catch (pushError) {
+			gitLogger.error(
+				{ branch: this.mainBranch, error: String(pushError) },
+				"Failed to push to origin - work is on local main, push manually",
+			);
+		}
+	}
+
+	/**
+	 * Clean up worktree and branch after successful merge
+	 */
+	private cleanupAfterMerge(branch: string, worktreePath: string): void {
+		try {
+			execGit(["worktree", "remove", worktreePath, "--force"]);
+			gitLogger.debug({ branch, worktreePath }, "Removed worktree after successful merge");
+		} catch (worktreeError) {
+			gitLogger.warn({ branch, error: String(worktreeError) }, "Failed to remove worktree, but merge succeeded");
+		}
+
+		try {
+			deleteBranch(branch);
+		} catch (branchError) {
+			gitLogger.warn({ branch, error: String(branchError) }, "Failed to delete branch after merge");
+		}
+	}
+
+	/**
+	 * Mark item as complete and remove from queue
+	 */
+	private async completeItem(item: MergeQueueItem): Promise<void> {
+		item.status = "complete";
+		item.completedAt = new Date();
+		await autoDetectCompletedTasks();
+		this.queue = this.queue.filter((i) => i !== item);
+		gitLogger.info({ branch: item.branch, stepId: item.stepId }, "Merge complete");
+	}
+
+	/**
 	 * Process a worktree branch safely without checkout conflicts
-	 * @param item - The merge queue item to process
-	 * @returns the processed item
 	 */
 	private async processWorktreeBranch(item: MergeQueueItem, cwd: string): Promise<MergeQueueItem> {
 		const worktreePath = this.getWorktreePath(item.branch);
 		if (!worktreePath) {
-			item.status = "conflict";
-			item.error = "Could not find worktree path for branch";
+			return this.handleMergeFailure(item, "Could not find worktree path for branch");
+		}
+
+		// Step 1: Rebase in the worktree
+		item.status = "rebasing";
+		const rebaseResult = this.rebaseInWorktree(item.branch, worktreePath);
+		if (!rebaseResult.success) {
+			return this.handleMergeFailure(item, rebaseResult.error!);
+		}
+
+		// Step 2: Run tests in the worktree
+		item.status = "testing";
+		gitLogger.debug({ branch: item.branch, worktreePath }, "Running tests in worktree");
+		const testResult = await runTests(worktreePath || cwd);
+		if (!testResult.success) {
+			item.status = "test_failed";
+			item.error = testResult.output;
 			item.completedAt = new Date();
-			gitLogger.warn({ branch: item.branch }, "Branch preserved for manual recovery - worktree path not found");
+			gitLogger.warn({ branch: item.branch }, "Branch preserved for manual recovery - tests failed");
 			return item;
 		}
 
+		// Step 3: Merge into main
+		const originalBranch = getCurrentBranch();
 		try {
-			// Step 1: Rebase in the worktree
-			item.status = "rebasing";
-			gitLogger.debug({ branch: item.branch, worktreePath, onto: this.mainBranch }, "Rebasing in worktree");
+			checkoutBranch(this.mainBranch);
+			item.status = "merging";
 
-			try {
-				execGit(["rebase", this.mainBranch], worktreePath);
-			} catch (_rebaseError) {
-				// Abort the rebase to clean up
-				try {
-					execGit(["rebase", "--abort"], worktreePath);
-				} catch {
-					// Ignore abort errors
-				}
-				item.status = "conflict";
-				item.error = "Rebase failed - manual resolution required";
-				item.completedAt = new Date();
-				gitLogger.warn({ branch: item.branch }, "Branch preserved for manual recovery - rebase failed");
-				return item;
+			const mergeResult = mergeWithFallback(item.branch, `Merge ${item.branch} via undercity`);
+			if (!mergeResult.success) {
+				return this.handleMergeFailure(item, mergeResult.error || "Merge failed", mergeResult.conflictFiles);
 			}
 
-			// Step 2: Run tests in the worktree
-			item.status = "testing";
-			gitLogger.debug({ branch: item.branch, worktreePath }, "Running tests in worktree");
-			const testResult = await runTests(worktreePath || cwd);
-
-			if (!testResult.success) {
-				item.status = "test_failed";
-				item.error = testResult.output;
-				item.completedAt = new Date();
-				gitLogger.warn({ branch: item.branch }, "Branch preserved for manual recovery - tests failed");
-				return item;
-			}
-
-			// Step 3: Switch to main in the main repo and merge
-			const originalBranch = getCurrentBranch();
-			try {
-				checkoutBranch(this.mainBranch);
-
-				item.status = "merging";
-				gitLogger.debug(
-					{ branch: item.branch, into: this.mainBranch },
-					"Merging worktree branch with optimal strategy (clean → ours → report)",
+			item.strategyUsed = mergeResult.strategyUsed;
+			if (mergeResult.strategyUsed !== "default") {
+				gitLogger.info(
+					{ branch: item.branch, strategy: mergeResult.strategyUsed },
+					"Merge succeeded with fallback strategy",
 				);
-
-				// Use mergeWithFallback for optimal merge strategy:
-				// 1. Try clean merge (most precise)
-				// 2. Try -X ours (favor main)
-				// 3. Report truly unresolvable conflicts
-				const mergeResult = mergeWithFallback(item.branch, `Merge ${item.branch} via undercity`);
-
-				if (!mergeResult.success) {
-					item.status = "conflict";
-					item.error = mergeResult.error || "Merge failed - manual resolution required";
-					item.conflictFiles = mergeResult.conflictFiles;
-					item.completedAt = new Date();
-					gitLogger.warn(
-						{ branch: item.branch, conflictFiles: mergeResult.conflictFiles },
-						"Branch preserved for manual recovery - truly unresolvable conflicts",
-					);
-					return item;
-				}
-
-				// Record which strategy succeeded
-				item.strategyUsed = mergeResult.strategyUsed;
-				if (mergeResult.strategyUsed !== "default") {
-					gitLogger.info(
-						{ branch: item.branch, strategy: mergeResult.strategyUsed },
-						"Merge succeeded with fallback strategy",
-					);
-				}
-
-				// Step 4: Push to origin - CRITICAL to save work remotely
-				item.status = "pushing";
-				try {
-					pushToOrigin(this.mainBranch);
-					gitLogger.info({ branch: this.mainBranch }, "Pushed merge to origin");
-				} catch (pushError) {
-					// Push failure is serious but don't fail the whole merge
-					// Work is on local main, user can push manually
-					gitLogger.error(
-						{ branch: this.mainBranch, error: String(pushError) },
-						"Failed to push to origin - work is on local main, push manually",
-					);
-				}
-
-				// Step 5: On successful merge, we can safely delete the branch
-				// The worktree cleanup will happen separately via WorktreeManager
-				try {
-					// First remove the worktree to release the branch lock
-					execGit(["worktree", "remove", worktreePath, "--force"]);
-					gitLogger.debug({ branch: item.branch, worktreePath }, "Removed worktree after successful merge");
-				} catch (worktreeError) {
-					gitLogger.warn(
-						{ branch: item.branch, error: String(worktreeError) },
-						"Failed to remove worktree, but merge succeeded",
-					);
-				}
-
-				// Now delete the branch
-				try {
-					deleteBranch(item.branch);
-				} catch (branchError) {
-					gitLogger.warn({ branch: item.branch, error: String(branchError) }, "Failed to delete branch after merge");
-				}
-
-				item.status = "complete";
-				item.completedAt = new Date();
-
-				// Auto-detect and mark related tasks as complete
-				await autoDetectCompletedTasks();
-
-				// Remove from queue
-				this.queue = this.queue.filter((i) => i !== item);
-
-				gitLogger.info({ branch: item.branch, stepId: item.stepId }, "Worktree branch merge complete");
-				return item;
-			} finally {
-				// Return to original branch
-				try {
-					checkoutBranch(originalBranch);
-				} catch {
-					// Best effort
-				}
 			}
-		} catch (error) {
-			item.status = "conflict";
-			item.error = error instanceof Error ? error.message : String(error);
-			item.completedAt = new Date();
-			gitLogger.warn({ branch: item.branch, error: item.error }, "Branch preserved for manual recovery");
+
+			// Step 4: Push and cleanup
+			item.status = "pushing";
+			this.pushMergeToOrigin();
+			this.cleanupAfterMerge(item.branch, worktreePath);
+			await this.completeItem(item);
 			return item;
+		} catch (error) {
+			return this.handleMergeFailure(item, error instanceof Error ? error.message : String(error));
+		} finally {
+			try {
+				checkoutBranch(originalBranch);
+			} catch {
+				// Best effort
+			}
 		}
 	}
 
@@ -669,98 +646,81 @@ export class MergeQueue {
 	}
 
 	/**
+	 * Log pre-merge conflicts for a branch (informational only, doesn't block)
+	 */
+	private logPreMergeConflicts(branch: string): void {
+		const queueConflicts = this.getConflictsForBranch(branch);
+		if (queueConflicts.length === 0) return;
+
+		const hasErrorSeverity = queueConflicts.some((c) => c.severity === "error");
+		gitLogger.warn(
+			{
+				branch,
+				conflicts: queueConflicts.map((c) => ({ with: c.conflictsWith, files: c.overlappingFiles })),
+				severity: hasErrorSeverity ? "error" : "warning",
+			},
+			"Pre-merge conflict flagged: branch modifies files touched by other queued branches",
+		);
+
+		if (hasErrorSeverity) {
+			const allOverlappingFiles = [...new Set(queueConflicts.flatMap((c) => c.overlappingFiles))];
+			gitLogger.info(
+				{ branch, overlappingFiles: allOverlappingFiles },
+				"Proceeding with merge despite file overlap - fallback strategies may resolve conflicts",
+			);
+		}
+	}
+
+	/**
+	 * Process a non-worktree branch (legacy path)
+	 */
+	private async processLegacyBranch(item: MergeQueueItem, cwd: string): Promise<MergeQueueItem> {
+		gitLogger.debug({ branch: item.branch }, "Checking out branch");
+		checkoutBranch(item.branch);
+
+		// Rebase and test
+		const rebaseResult = await this.tryRebase(item, cwd);
+		if (!rebaseResult.success) {
+			return this.handleMergeFailure(item, rebaseResult.error!);
+		}
+
+		// Merge into main
+		const mergeResult = await this.tryMerge(item);
+		if (!mergeResult.success) {
+			return this.handleMergeFailure(item, mergeResult.error!, mergeResult.conflictFiles);
+		}
+
+		// Success
+		item.strategyUsed = mergeResult.strategyUsed;
+		deleteBranch(item.branch);
+		await this.completeItem(item);
+		return item;
+	}
+
+	/**
 	 * Process the next item in the queue
 	 */
 	async processNext(): Promise<MergeQueueItem | null> {
-		if (this.processing) {
-			return null;
-		}
+		if (this.processing) return null;
 
 		const item = this.queue.find((i) => i.status === "pending");
-		if (!item) {
-			return null;
-		}
+		if (!item) return null;
 
-		// Pre-merge conflict detection: flag if this branch conflicts with other queued branches
-		const queueConflicts = this.getConflictsForBranch(item.branch);
-		if (queueConflicts.length > 0) {
-			const hasErrorSeverity = queueConflicts.some((c) => c.severity === "error");
-			const allOverlappingFiles = [...new Set(queueConflicts.flatMap((c) => c.overlappingFiles))];
-
-			gitLogger.warn(
-				{
-					branch: item.branch,
-					conflicts: queueConflicts.map((c) => ({
-						with: c.conflictsWith,
-						files: c.overlappingFiles,
-					})),
-					severity: hasErrorSeverity ? "error" : "warning",
-				},
-				"Pre-merge conflict flagged: branch modifies files touched by other queued branches",
-			);
-
-			// For severe conflicts (>3 overlapping files), mark for manual review
-			// but continue processing - the merge may still succeed with -X ours strategy
-			if (hasErrorSeverity) {
-				gitLogger.info(
-					{ branch: item.branch, overlappingFiles: allOverlappingFiles },
-					"Proceeding with merge despite file overlap - fallback strategies may resolve conflicts",
-				);
-			}
-		}
-
+		this.logPreMergeConflicts(item.branch);
 		this.processing = true;
+
 		const originalBranch = getCurrentBranch();
-		const cwd = process.cwd(); // Capture current working directory
+		const cwd = process.cwd();
 
 		try {
-			// Check if this branch is owned by a worktree
-			const isWorktreeBranch = this.isWorktreeBranch(item.branch);
-
-			if (isWorktreeBranch) {
-				// CRITICAL FIX: For worktree branches, merge from the worktree location
-				// This avoids the checkout conflict and preserves all work
+			if (this.isWorktreeBranch(item.branch)) {
 				gitLogger.debug({ branch: item.branch }, "Detected worktree branch, merging from worktree");
 				return await this.processWorktreeBranch(item, cwd);
 			}
-
-			// Legacy path: For non-worktree branches, use the original approach
-			// Step 1: Checkout the branch
-			gitLogger.debug({ branch: item.branch }, "Checking out branch");
-			checkoutBranch(item.branch);
-
-			// Step 2: Rebase and test
-			const rebaseResult = await this.tryRebase(item, cwd);
-			if (!rebaseResult.success) {
-				return this.handleMergeFailure(item, rebaseResult.error!);
-			}
-
-			// Step 3: Merge into main
-			const mergeResult = await this.tryMerge(item);
-			if (!mergeResult.success) {
-				return this.handleMergeFailure(item, mergeResult.error!, mergeResult.conflictFiles);
-			}
-
-			// Record successful merge strategy
-			item.strategyUsed = mergeResult.strategyUsed;
-
-			// Step 4: Delete the branch (only on success)
-			deleteBranch(item.branch);
-			item.status = "complete";
-			item.completedAt = new Date();
-
-			// Auto-detect and mark related tasks as complete
-			await autoDetectCompletedTasks();
-
-			// Remove from queue
-			this.queue = this.queue.filter((i) => i !== item);
-
-			gitLogger.info({ branch: item.branch, stepId: item.stepId }, "Merge complete");
-			return item;
+			return await this.processLegacyBranch(item, cwd);
 		} catch (error) {
 			return this.handleMergeFailure(item, error instanceof Error ? error.message : String(error));
 		} finally {
-			// Return to original branch
 			try {
 				checkoutBranch(originalBranch);
 			} catch {

@@ -1174,6 +1174,17 @@ export class Orchestrator {
 			output.warning(`Batch completion tracking failed (non-fatal): ${batchCompleteError}`);
 		}
 
+		// Update routing profile from accumulated metrics (with error boundary)
+		try {
+			const { maybeUpdateProfile } = await import("./self-tuning.js");
+			const updated = maybeUpdateProfile(process.cwd(), 5);
+			if (updated) {
+				output.debug("Routing profile updated from task metrics");
+			}
+		} catch (tuningError) {
+			output.debug(`Self-tuning update failed (non-fatal): ${tuningError}`);
+		}
+
 		// Show updated rate limit usage (with error boundary)
 		try {
 			const finalUsage = this.rateLimitTracker.getUsageSummary();

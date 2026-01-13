@@ -18,6 +18,7 @@ import {
 	handleServe,
 	handleSetup,
 	handleStatus,
+	handleTuning,
 	handleWatch,
 	type IndexOptions,
 	type InitOptions,
@@ -25,6 +26,7 @@ import {
 	type OracleOptions,
 	type ServeOptions,
 	type StatusOptions,
+	type TuningOptions,
 } from "./mixed-handlers.js";
 import type { CommandModule } from "./types.js";
 
@@ -58,6 +60,14 @@ export const mixedCommands: CommandModule = {
 			.command("limits")
 			.description("Show current usage snapshot (use 'watch' for live dashboard)")
 			.action(() => handleLimits());
+
+		// Tuning command - view/manage learned routing profile
+		program
+			.command("tuning")
+			.description("View learned model routing profile (self-tuning)")
+			.option("--rebuild", "Force rebuild profile from metrics")
+			.option("--clear", "Clear learned profile (reset to defaults)")
+			.action((options: TuningOptions) => handleTuning(options));
 
 		// Init command - set up undercity in a new topside repo
 		program

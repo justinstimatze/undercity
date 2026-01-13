@@ -38,7 +38,7 @@ describeGit("MergeQueue Integration Tests", () => {
 		originalCwd = process.cwd();
 
 		// Create a real git repo in temp directory
-		testDir = mkdtempSync(join(tmpdir(), "elevator-test-"));
+		testDir = mkdtempSync(join(tmpdir(), "merge-queue-test-"));
 
 		// Initialize git repo with explicit branch name
 		execSync("git init -b main", { cwd: testDir, stdio: "pipe" });

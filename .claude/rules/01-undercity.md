@@ -214,6 +214,33 @@ Documentation should optimize for agent efficiency:
 
 Agents can infer intent - provide facts and mappings.
 
+## Task Reconciliation
+
+**When to use `undercity reconcile`:**
+- After manual commits that completed tasks outside grind
+- When task board has duplicates or stale entries
+- Before starting a fresh grind session
+- After importing tasks from an external source
+
+**How it works:**
+1. Scans recent git history (default: 100 commits)
+2. Matches commit messages against pending task keywords
+3. Marks matched tasks as complete automatically
+
+```bash
+undercity reconcile              # Auto-mark completed tasks
+undercity reconcile --dry-run    # Preview without changes
+undercity reconcile --lookback 50  # Search last 50 commits
+```
+
+**Typical workflow:**
+```bash
+# You completed work manually, now sync the board
+undercity reconcile --dry-run    # See what would be marked
+undercity reconcile              # Apply the changes
+undercity tasks                  # Verify board state
+```
+
 ## When NOT to Use Undercity
 
 Skip undercity for:

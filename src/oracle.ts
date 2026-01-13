@@ -30,182 +30,182 @@ const ORACLE_DECK: OracleCard[] = [
 	{
 		text: "What would fail spectacularly?",
 		category: "questioning",
-		loreContext: "Scout's wisdom: 'Know your breaking points before the enemy does.'",
+		loreContext: "Example: null input, empty array, concurrent access, network timeout",
 	},
 	{
 		text: "What are you avoiding?",
 		category: "questioning",
-		loreContext: "Survivor's truth: 'The path you don't take might be the one that leads home.'",
+		loreContext: "Check: error handling, edge cases, tests, documentation, refactoring",
 	},
 	{
 		text: "What would a rival agent exploit?",
 		category: "questioning",
-		loreContext: "Radio chatter: 'Think like the competition. They're thinking about you.'",
+		loreContext: "Review: input validation, auth checks, rate limits, injection points",
 	},
 	{
 		text: "What if the opposite were true?",
 		category: "questioning",
-		loreContext: "Undercity paradox: 'Sometimes you dig up to find the way down.'",
+		loreContext: "Try: if sync→async, if push→pull, if client→server, if required→optional",
 	},
 	{
 		text: "What would you do if you couldn't fail?",
 		category: "questioning",
-		loreContext: "Raider's courage: 'Fear is just intel telling you where the treasure is.'",
+		loreContext: "Consider: rewrite from scratch, use different tech, simplify radically",
 	},
 	{
 		text: "What assumptions are you making?",
 		category: "questioning",
-		loreContext: "Old survivor saying: 'Assumptions are just lies we tell ourselves about tomorrow.'",
+		loreContext: "List: input format, execution order, availability, permissions, state",
 	},
 
 	// Action Cards - Direct interventions
 	{
 		text: "Reverse the dependency",
 		category: "action",
-		loreContext: "Engineer's insight: 'When the system breaks, rebuild it backwards.'",
+		loreContext: "Pattern: A calls B → B emits event, A listens. Inversion of control.",
 	},
 	{
 		text: "Honor the accidental pattern",
 		category: "action",
-		loreContext: "Scavenger wisdom: 'The best finds are the ones you weren't looking for.'",
+		loreContext: "Action: If code accidentally works, understand why before 'fixing' it",
 	},
 	{
 		text: "Start from the end and work backwards",
 		category: "action",
-		loreContext: "Navigator's method: 'Plot your exit before you enter the ruins.'",
+		loreContext: "Method: Write the test first. Define output, then figure out input.",
 	},
 	{
 		text: "Remove the most obvious solution",
 		category: "action",
-		loreContext: "Raider's cunning: 'The obvious path is where the traps are waiting.'",
+		loreContext: "Constraint: No if/else, no loops, no mutation - what's left?",
 	},
 	{
 		text: "Make it smaller, then smaller again",
 		category: "action",
-		loreContext: "Undercity rule: 'Big problems fit through small cracks.'",
+		loreContext: "Split: one function → two, one file → module, one task → subtasks",
 	},
 	{
 		text: "Change your time horizon",
 		category: "action",
-		loreContext: "Temporal scout: 'What matters in an hour vs. what matters in a year.'",
+		loreContext: "Shift: what matters for this PR vs this quarter vs this year?",
 	},
 
 	// Perspective Cards - Shift viewpoints
 	{
 		text: "What would this look like to an outsider?",
 		category: "perspective",
-		loreContext: "Surface dweller's view: 'They see what we can't, because they've never been here.'",
+		loreContext: "Test: Can someone new understand this in 5 minutes? If not, simplify.",
 	},
 	{
 		text: "Pretend you're explaining it to your past self",
 		category: "perspective",
-		loreContext: "Memory keeper's trick: 'The you from before knew things the you now forgot.'",
+		loreContext: "Document: Write the comment you wish existed when you started.",
 	},
 	{
 		text: "What would the system do without human intervention?",
 		category: "perspective",
-		loreContext: "Machine whisperer: 'Code wants to be simple. Humans make it complicated.'",
+		loreContext: "Default: What happens if config missing? If user absent? If empty?",
 	},
 	{
 		text: "View it as a gift to your future self",
 		category: "perspective",
-		loreContext: "Long-game thinking: 'Today's pain is tomorrow's power-up.'",
+		loreContext: "Quality: Clear names, helpful errors, good tests save future debugging.",
 	},
 	{
 		text: "What would a child notice first?",
 		category: "perspective",
-		loreContext: "Young survivor's clarity: 'Kids see the world before the rules teach them not to.'",
+		loreContext: "Fresh eyes: The obvious question nobody asks. The weird name. The gap.",
 	},
 	{
 		text: "Zoom out to see the larger pattern",
 		category: "perspective",
-		loreContext: "Cartographer's vision: 'The path only makes sense from above.'",
+		loreContext: "Context: This bug in context of system. This task in context of goal.",
 	},
 
 	// Disruption Cards - Break patterns
 	{
 		text: "Introduce controlled chaos",
 		category: "disruption",
-		loreContext: "Saboteur's principle: 'Sometimes you have to break it to understand it.'",
+		loreContext: "Fuzz: Random input, network jitter, concurrent requests, kill -9",
 	},
 	{
 		text: "What's the laziest solution that would work?",
 		category: "disruption",
-		loreContext: "Efficient raider: 'Energy is currency. Spend it wisely.'",
+		loreContext: "YAGNI: Hardcode it. Use a library. Copy-paste. Ship and iterate.",
 	},
 	{
 		text: "Combine two unrelated solutions",
 		category: "disruption",
-		loreContext: "Hybrid inventor: 'The best salvage comes from mixing incompatible parts.'",
+		loreContext: "Mashup: Cache + queue, ORM + raw SQL, sync + async in same flow",
 	},
 	{
 		text: "Make the implicit explicit",
 		category: "disruption",
-		loreContext: "Truth seeker: 'The danger is in what nobody talks about.'",
+		loreContext: "Expose: Hidden config, magic numbers, assumed state, silent failures",
 	},
 	{
 		text: "What rule can you break?",
 		category: "disruption",
-		loreContext: "Rebel's code: 'Rules are just suggestions from people who got there first.'",
+		loreContext: "Question: DRY, single responsibility, no globals - which helps here?",
 	},
 	{
 		text: "Do the opposite of best practices",
 		category: "disruption",
-		loreContext: "Heretic's wisdom: 'Best practices are just yesterday's experiments.'",
+		loreContext: "Heresy: Global state, God object, tight coupling - sometimes right",
 	},
 
 	// Exploration Cards - Discover possibilities
 	{
 		text: "Follow the energy in the room",
 		category: "exploration",
-		loreContext: "Empath navigator: 'People's excitement points to hidden treasure.'",
+		loreContext: "Signal: Which file gets edited most? Which test fails often? Start there.",
 	},
 	{
 		text: "What wants to emerge?",
 		category: "exploration",
-		loreContext: "Oracle's question: 'Listen for what's trying to be born.'",
+		loreContext: "Refactor: When you keep adding params, a new abstraction is forming.",
 	},
 	{
 		text: "Look for the pattern that connects everything",
 		category: "exploration",
-		loreContext: "System mystic: 'All raids are the same raid. All code is the same code.'",
+		loreContext: "Abstract: Same shape in 3 places = extract. Same bug twice = systemic.",
 	},
 	{
 		text: "What's the story this problem is trying to tell?",
 		category: "exploration",
-		loreContext: "Lore keeper: 'Every bug is a message from the machine spirits.'",
+		loreContext: "Diagnose: Symptom points to cause. Trace the chain of events.",
 	},
 	{
 		text: "Find the edge case that breaks the model",
 		category: "exploration",
-		loreContext: "Boundary rider: 'The real world lives in the exceptions.'",
+		loreContext: "Boundary: Zero, one, many. Empty, null, undefined. Min, max, overflow.",
 	},
 	{
 		text: "What would happen if this were easy?",
 		category: "exploration",
-		loreContext: "Simplicity seeker: 'Hard problems often have embarrassingly simple solutions.'",
+		loreContext: "Simplify: What if one file? What if no state? What if no network?",
 	},
 
 	// Additional unique cards
 	{
 		text: "What are you optimizing for that you shouldn't be?",
 		category: "questioning",
-		loreContext: "Meta-raider insight: 'Sometimes the score you're chasing isn't worth winning.'",
+		loreContext: "Metrics: Lines of code, test coverage, performance - are these the goal?",
 	},
 	{
 		text: "Imagine you have infinite resources. Now what?",
 		category: "exploration",
-		loreContext: "Resource abundance thought: 'Constraints shape creativity. Remove them and see what emerges.'",
+		loreContext: "Ideal: Design without constraints first, then add them back strategically.",
 	},
 	{
 		text: "What would you do if this was your only chance?",
 		category: "action",
-		loreContext: "Final run mentality: 'When the stakes are highest, the vision becomes clearest.'",
+		loreContext: "Focus: Which one change matters most? Do that. Skip the rest.",
 	},
 	{
 		text: "Look for what everyone else is ignoring",
 		category: "perspective",
-		loreContext: "Contrarian's edge: 'The obvious answers are already taken. Find the ignored ones.'",
+		loreContext: "Blind spots: Logging, monitoring, cleanup, error messages, docs.",
 	},
 ];
 

@@ -588,6 +588,9 @@ const MODEL_SUCCESS_THRESHOLDS = {
 /**
  * Check historical metrics and potentially upgrade model tier
  * Returns adjusted model if historical success rate is too low
+ *
+ * Uses learned routing profile if available, otherwise falls back to
+ * raw metrics analysis with hardcoded thresholds.
  */
 export async function adjustModelFromMetrics(
 	recommendedModel: "haiku" | "sonnet" | "opus",
@@ -595,6 +598,49 @@ export async function adjustModelFromMetrics(
 	minSamples: number = 3,
 ): Promise<"haiku" | "sonnet" | "opus"> {
 	try {
+		// First, try using learned routing profile
+		const { loadRoutingProfile, shouldSkipModel, getThreshold } = await import("./self-tuning.js");
+		const profile = loadRoutingProfile();
+
+		if (profile && profile.taskCount >= minSamples) {
+			// Check if we should skip this model entirely
+			if (shouldSkipModel(profile, recommendedModel, complexityLevel)) {
+				const upgraded = upgradeModel(recommendedModel);
+				sessionLogger.info(
+					{
+						originalModel: recommendedModel,
+						upgradedModel: upgraded,
+						complexity: complexityLevel,
+						reason: "learned_skip",
+					},
+					"Upgrading model based on learned routing profile",
+				);
+				return upgraded;
+			}
+
+			// Check learned threshold
+			const threshold = getThreshold(profile, recommendedModel, complexityLevel);
+			const successRate = profile.modelSuccessRates[recommendedModel];
+
+			if (successRate < threshold.minSuccessRate && profile.taskCount >= threshold.minSamples) {
+				const upgraded = upgradeModel(recommendedModel);
+				sessionLogger.info(
+					{
+						originalModel: recommendedModel,
+						upgradedModel: upgraded,
+						successRate,
+						threshold: threshold.minSuccessRate,
+						profileTaskCount: profile.taskCount,
+					},
+					"Upgrading model due to learned low success rate",
+				);
+				return upgraded;
+			}
+
+			return recommendedModel;
+		}
+
+		// Fall back to raw metrics analysis
 		const { getMetricsAnalysis } = await import("./feedback-metrics.js");
 		const analysis = getMetricsAnalysis();
 

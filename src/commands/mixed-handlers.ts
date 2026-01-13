@@ -64,6 +64,11 @@ export interface StatusOptions {
 	events?: boolean;
 }
 
+export interface TuningOptions {
+	rebuild?: boolean;
+	clear?: boolean;
+}
+
 /**
  * Handle the grind command
  *
@@ -1401,4 +1406,60 @@ export async function handleIntrospect(options: IntrospectOptions): Promise<void
 			console.log(`  ${path}: ${stats.count} times (${successRate}% success)`);
 		}
 	}
+}
+
+/**
+ * Handle the tuning command
+ * View and manage the learned model routing profile
+ */
+export async function handleTuning(options: TuningOptions): Promise<void> {
+	const { loadRoutingProfile, saveRoutingProfile, computeOptimalThresholds, formatProfileSummary } = await import(
+		"../self-tuning.js"
+	);
+	const { unlinkSync } = await import("node:fs");
+
+	const profilePath = join(process.cwd(), ".undercity/routing-profile.json");
+
+	// Clear profile if requested
+	if (options.clear) {
+		try {
+			unlinkSync(profilePath);
+			console.log(chalk.green("Routing profile cleared. Defaults will be used."));
+		} catch {
+			console.log(chalk.yellow("No routing profile to clear."));
+		}
+		return;
+	}
+
+	// Rebuild profile if requested
+	if (options.rebuild) {
+		console.log(chalk.blue("Rebuilding routing profile from metrics..."));
+		const profile = computeOptimalThresholds();
+
+		if (profile.taskCount === 0) {
+			console.log(chalk.yellow("No metrics found. Run some tasks first."));
+			return;
+		}
+
+		saveRoutingProfile(profile);
+		console.log(chalk.green(`Profile rebuilt from ${profile.taskCount} tasks.`));
+		console.log("");
+		console.log(formatProfileSummary(profile));
+		return;
+	}
+
+	// Default: show current profile
+	const profile = loadRoutingProfile();
+
+	if (!profile) {
+		console.log(chalk.yellow("No routing profile found."));
+		console.log("");
+		console.log("The routing profile is automatically created after completing tasks.");
+		console.log("It learns optimal model thresholds from your task history.");
+		console.log("");
+		console.log("Use --rebuild to create from existing metrics, or run more tasks.");
+		return;
+	}
+
+	console.log(formatProfileSummary(profile));
 }

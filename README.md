@@ -17,7 +17,7 @@
 | Model Routing | Complexity-based model selection | `.undercity/metrics.json` |
 | Crash Recovery | Auto-resume batch | `.undercity/recovery.json` |
 | Rate Limiting | Exponential backoff | `.undercity/rate-limit.json` |
-| Merge Pipeline | Serial git merge | `.undercity/elevator.json` |
+| Merge Pipeline | Serial git merge | In-memory (MergeQueue) |
 
 ## Quick Setup
 
@@ -127,9 +127,8 @@ ln -sf $(pwd)/bin/undercity.js ~/.local/bin/undercity
 | File | Purpose | Persistence |
 |------|---------|-------------|
 | `tasks.json` | Task board | Git tracked |
-| `worktrees.json` | Active worktrees | Runtime |
-| `elevator.json` | Merge queue | Runtime |
-| `recovery.json` | Crash recovery | Runtime |
+| `worktree-state.json` | Active worktrees | Runtime |
+| `parallel-recovery.json` | Crash recovery | Runtime |
 | `rate-limit.json` | Rate limit state | Persistent |
 | `metrics.json` | Token usage/cost | Persistent |
 | `grind-events.jsonl` | Event log | Append-only |

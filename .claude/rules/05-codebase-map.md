@@ -48,6 +48,8 @@
 | **task-planner.ts** | [plan] prefix → subtask expansion | TaskPlanner |
 | **capability-ledger.ts** | Track model success by keyword patterns | updateLedger, getRecommendedModel, getLedgerStats |
 | **experiment.ts** | A/B testing framework for grind | ExperimentManager, getExperimentManager |
+| **feedback-metrics.ts** | Historical metrics analysis, success rates | analyzeMetrics, suggestModelTier, analyzeTaskPatterns |
+| **self-tuning.ts** | Learned routing profile from historical data | loadRoutingProfile, computeOptimalThresholds, maybeUpdateProfile |
 | **index.ts** | Public API exports | - |
 
 ## Task → File Mapping
@@ -64,6 +66,8 @@
 - Track live token usage → `live-metrics.ts`
 - Parse markdown plans → `plan-parser.ts`
 - Check task complexity → `complexity.ts` or `task-decomposer.ts`
+- Analyze historical metrics → `feedback-metrics.ts`
+- View/tune model routing → `self-tuning.ts` (or `undercity tuning`)
 - Analyze task board → `task-board-analyzer.ts`
 - Schedule compatible tasks → `task-scheduler.ts`
 - Generate codebase context → `context.ts`
