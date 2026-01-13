@@ -6,8 +6,8 @@ bash ./scripts/security-scan.sh || exit 1
 
 echo "Running Biome on staged files..."
 
-# Check and fix staged files
-pnpm exec biome check --write --staged --no-errors-on-unmatched --files-ignore-unknown=true
+# Check and fix staged files (--unsafe applies all fixable issues)
+pnpm exec biome check --write --unsafe --staged --no-errors-on-unmatched --files-ignore-unknown=true
 
 # Re-stage any files that were modified
 git update-index --again
