@@ -758,6 +758,73 @@ export interface ParallelRecoveryState {
 	lastUpdated: Date;
 }
 
+// ============== Atomic Recovery Types ==============
+// Directory-based recovery for crash safety
+
+/**
+ * Batch metadata stored separately from per-task state.
+ * Lives at .undercity/batch-meta.json
+ */
+export interface BatchMetadata {
+	/** Unique batch ID */
+	batchId: string;
+	/** When the batch started */
+	startedAt: Date;
+	/** Model tier for this batch */
+	model: ModelChoice;
+	/** Options used for this batch */
+	options: {
+		maxConcurrent: number;
+		autoCommit: boolean;
+		reviewPasses: boolean;
+		annealingAtOpus: boolean;
+	};
+}
+
+/**
+ * Per-task state file stored atomically.
+ * Lives at .undercity/active/{taskId}.state
+ */
+export interface ActiveTaskState {
+	/** Task ID */
+	taskId: string;
+	/** Task description/objective */
+	task: string;
+	/** Worktree path */
+	worktreePath: string;
+	/** Branch name */
+	branch: string;
+	/** Task status */
+	status: "pending" | "running";
+	/** Batch ID this task belongs to */
+	batchId: string;
+	/** Started timestamp */
+	startedAt?: Date;
+	/** Checkpoint from previous run (for crash recovery) */
+	previousCheckpoint?: TaskCheckpoint;
+}
+
+/**
+ * Completed task state file.
+ * Lives at .undercity/completed/{taskId}.done
+ */
+export interface CompletedTaskState {
+	/** Task ID */
+	taskId: string;
+	/** Task description/objective */
+	task: string;
+	/** Final status */
+	status: "complete" | "failed" | "merged";
+	/** Batch ID this task belonged to */
+	batchId: string;
+	/** Completed timestamp */
+	completedAt: Date;
+	/** Error message if failed */
+	error?: string;
+	/** Modified files if completed */
+	modifiedFiles?: string[];
+}
+
 // ============== Error Recovery Types ==============
 
 // Self-Improvement Loop Types

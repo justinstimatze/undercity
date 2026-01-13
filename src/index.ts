@@ -111,10 +111,13 @@ export {
 } from "./squad.js";
 // Core types
 export type {
+	ActiveTaskState,
 	Agent,
 	AgentDefinition,
 	AgentStatus,
 	AgentType,
+	BatchMetadata,
+	CompletedTaskState,
 	Experiment,
 	ExperimentStorage,
 	ExperimentTaskResult,

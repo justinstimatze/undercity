@@ -570,9 +570,11 @@
     {
       "id": "task-atomic-recovery-state",
       "objective": "[recovery] Implement atomic recovery state - replace fragile recovery.json with directory structure: .undercity/active/{taskId}.state and .undercity/completed/{taskId}.done. On crash, scan active/ to resume. Atomic file ops prevent corruption",
-      "status": "pending",
+      "status": "complete",
       "priority": 9,
       "createdAt": "2026-01-12T04:10:00.000Z",
+      "completedAt": "2026-01-13T01:27:00.000Z",
+      "resolution": "Added BatchMetadata, ActiveTaskState, CompletedTaskState types. Implemented atomic directory-based recovery in persistence.ts. Updated orchestrator to use initializeBatch(), per-task state writes, and directory scanning for recovery.",
       "tags": [
         "recovery",
         "gastown-pattern",

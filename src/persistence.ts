@@ -9,12 +9,15 @@
  * All state is stored as JSON files in .undercity/
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { persistenceLogger } from "./logger.js";
 import type {
+	ActiveTaskState,
 	Agent,
 	AgentType,
+	BatchMetadata,
+	CompletedTaskState,
 	FileTrackingState,
 	Inventory,
 	Loadout,
@@ -723,6 +726,287 @@ export class Persistence {
 		if (existsSync(path)) {
 			unlinkSync(path);
 		}
+	}
+
+	// ============== Atomic Recovery System ==============
+	// Directory-based per-task state for crash-safe recovery
+
+	private get activeDir(): string {
+		return join(this.stateDir, "active");
+	}
+
+	private get completedDir(): string {
+		return join(this.stateDir, "completed");
+	}
+
+	private ensureRecoveryDirs(): void {
+		for (const dir of [this.activeDir, this.completedDir]) {
+			if (!existsSync(dir)) {
+				mkdirSync(dir, { recursive: true });
+			}
+		}
+	}
+
+	/**
+	 * Save batch metadata (once per batch)
+	 */
+	saveBatchMetadata(metadata: BatchMetadata): void {
+		this.writeJson("batch-meta.json", metadata);
+	}
+
+	/**
+	 * Get batch metadata
+	 */
+	getBatchMetadata(): BatchMetadata | null {
+		try {
+			return this.readJson<BatchMetadata | null>("batch-meta.json", null);
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Clear batch metadata
+	 */
+	clearBatchMetadata(): void {
+		const path = this.getPath("batch-meta.json");
+		if (existsSync(path)) {
+			unlinkSync(path);
+		}
+	}
+
+	/**
+	 * Write active task state atomically
+	 */
+	writeActiveTask(state: ActiveTaskState): void {
+		this.ensureRecoveryDirs();
+		const filePath = join(this.activeDir, `${state.taskId}.state`);
+		const tempPath = `${filePath}.tmp`;
+
+		try {
+			writeFileSync(tempPath, JSON.stringify(state, null, 2), "utf-8");
+			renameSync(tempPath, filePath);
+			persistenceLogger.debug({ taskId: state.taskId }, "Wrote active task state");
+		} catch (error) {
+			if (existsSync(tempPath)) {
+				unlinkSync(tempPath);
+			}
+			throw error;
+		}
+	}
+
+	/**
+	 * Read active task state
+	 */
+	readActiveTask(taskId: string): ActiveTaskState | null {
+		const filePath = join(this.activeDir, `${taskId}.state`);
+		if (!existsSync(filePath)) {
+			return null;
+		}
+
+		try {
+			const content = readFileSync(filePath, "utf-8");
+			return JSON.parse(content) as ActiveTaskState;
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Update active task status
+	 */
+	updateActiveTaskStatus(taskId: string, status: "pending" | "running", startedAt?: Date): void {
+		const state = this.readActiveTask(taskId);
+		if (!state) return;
+
+		state.status = status;
+		if (startedAt) {
+			state.startedAt = startedAt;
+		}
+		this.writeActiveTask(state);
+	}
+
+	/**
+	 * Mark task as completed (moves from active/ to completed/)
+	 */
+	markTaskCompleted(
+		taskId: string,
+		status: "complete" | "failed" | "merged",
+		extra?: { error?: string; modifiedFiles?: string[] },
+	): void {
+		this.ensureRecoveryDirs();
+		const activeTask = this.readActiveTask(taskId);
+		if (!activeTask) {
+			persistenceLogger.warn({ taskId }, "No active task found to complete");
+			return;
+		}
+
+		// Create completed state
+		const completedState: CompletedTaskState = {
+			taskId: activeTask.taskId,
+			task: activeTask.task,
+			status,
+			batchId: activeTask.batchId,
+			completedAt: new Date(),
+			error: extra?.error,
+			modifiedFiles: extra?.modifiedFiles,
+		};
+
+		// Write to completed dir
+		const completedPath = join(this.completedDir, `${taskId}.done`);
+		const tempPath = `${completedPath}.tmp`;
+		try {
+			writeFileSync(tempPath, JSON.stringify(completedState, null, 2), "utf-8");
+			renameSync(tempPath, completedPath);
+		} catch (error) {
+			if (existsSync(tempPath)) {
+				unlinkSync(tempPath);
+			}
+			throw error;
+		}
+
+		// Remove from active dir
+		const activePath = join(this.activeDir, `${taskId}.state`);
+		if (existsSync(activePath)) {
+			unlinkSync(activePath);
+		}
+
+		persistenceLogger.debug({ taskId, status }, "Marked task completed");
+	}
+
+	/**
+	 * Scan active directory for all active tasks
+	 */
+	scanActiveTasks(): ActiveTaskState[] {
+		this.ensureRecoveryDirs();
+		const tasks: ActiveTaskState[] = [];
+
+		try {
+			const files = readdirSync(this.activeDir);
+			for (const file of files) {
+				if (file.endsWith(".state")) {
+					const filePath = join(this.activeDir, file);
+					try {
+						const content = readFileSync(filePath, "utf-8");
+						const state = JSON.parse(content) as ActiveTaskState;
+						tasks.push(state);
+					} catch {
+						// Skip corrupt files
+						persistenceLogger.warn({ file }, "Skipping corrupt active task file");
+					}
+				}
+			}
+		} catch {
+			// Directory doesn't exist or can't be read
+		}
+
+		return tasks;
+	}
+
+	/**
+	 * Check if there are active tasks
+	 */
+	hasActiveTasks(): boolean {
+		try {
+			if (!existsSync(this.activeDir)) {
+				return false;
+			}
+			const files = readdirSync(this.activeDir);
+			return files.some((f) => f.endsWith(".state"));
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * Clear all active and completed tasks for a batch
+	 */
+	clearBatch(batchId: string): void {
+		this.ensureRecoveryDirs();
+
+		// Clear active tasks
+		try {
+			const activeFiles = readdirSync(this.activeDir);
+			for (const file of activeFiles) {
+				if (file.endsWith(".state")) {
+					const filePath = join(this.activeDir, file);
+					try {
+						const content = readFileSync(filePath, "utf-8");
+						const state = JSON.parse(content) as ActiveTaskState;
+						if (state.batchId === batchId) {
+							unlinkSync(filePath);
+						}
+					} catch {
+						// Skip if can't read
+					}
+				}
+			}
+		} catch {
+			// Directory doesn't exist
+		}
+
+		// Clear completed tasks
+		try {
+			const completedFiles = readdirSync(this.completedDir);
+			for (const file of completedFiles) {
+				if (file.endsWith(".done")) {
+					const filePath = join(this.completedDir, file);
+					try {
+						const content = readFileSync(filePath, "utf-8");
+						const state = JSON.parse(content) as CompletedTaskState;
+						if (state.batchId === batchId) {
+							unlinkSync(filePath);
+						}
+					} catch {
+						// Skip if can't read
+					}
+				}
+			}
+		} catch {
+			// Directory doesn't exist
+		}
+
+		// Clear batch metadata
+		this.clearBatchMetadata();
+
+		persistenceLogger.debug({ batchId }, "Cleared batch");
+	}
+
+	/**
+	 * Get all completed tasks for a batch
+	 */
+	getCompletedTasks(batchId: string): CompletedTaskState[] {
+		this.ensureRecoveryDirs();
+		const tasks: CompletedTaskState[] = [];
+
+		try {
+			const files = readdirSync(this.completedDir);
+			for (const file of files) {
+				if (file.endsWith(".done")) {
+					const filePath = join(this.completedDir, file);
+					try {
+						const content = readFileSync(filePath, "utf-8");
+						const state = JSON.parse(content) as CompletedTaskState;
+						if (state.batchId === batchId) {
+							tasks.push(state);
+						}
+					} catch {
+						// Skip corrupt files
+					}
+				}
+			}
+		} catch {
+			// Directory doesn't exist
+		}
+
+		return tasks;
+	}
+
+	/**
+	 * Check if batch is complete (no active tasks remain)
+	 */
+	isBatchComplete(): boolean {
+		return !this.hasActiveTasks();
 	}
 
 	// ============== Prompt Knowledge ==============

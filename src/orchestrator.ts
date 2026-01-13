@@ -27,9 +27,10 @@ import { RateLimitTracker } from "./rate-limit.js";
 import { addTask, loadTaskBoard, removeTasks, saveTaskBoard } from "./task.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
 import type {
+	ActiveTaskState,
+	BatchMetadata,
 	MetaTaskRecommendation,
 	MetaTaskResult,
-	ParallelRecoveryState,
 	ParallelTaskState,
 	TaskAssignment,
 	TaskCheckpoint,
@@ -791,11 +792,24 @@ export class Orchestrator {
 
 			allPreparedTasks.push(...preparedTasks);
 
-			// Save recovery state before running tasks (on first batch, include all prepared so far)
-			if (batchStart === 0 && allPreparedTasks.length > 0) {
-				const recoveryState = this.createRecoveryState(batchId, allPreparedTasks);
-				this.persistence.saveParallelRecoveryState(recoveryState);
-				output.debug(`Recovery state saved: ${batchId}`);
+			// Save recovery state before running tasks (atomic per-task)
+			if (batchStart === 0 && preparedTasks.length > 0) {
+				// First batch: initialize batch metadata
+				this.initializeBatch(batchId, preparedTasks);
+				output.debug(`Batch initialized: ${batchId}`);
+			} else if (preparedTasks.length > 0) {
+				// Subsequent batches: just write each task state
+				for (const t of preparedTasks) {
+					const activeState: ActiveTaskState = {
+						taskId: t.taskId,
+						task: t.task,
+						worktreePath: t.worktreePath,
+						branch: t.branch,
+						status: "pending",
+						batchId,
+					};
+					this.persistence.writeActiveTask(activeState);
+				}
 			}
 
 			// Phase 2: Run this batch in parallel
@@ -1204,6 +1218,11 @@ export class Orchestrator {
 	 * Check if there's an active recovery batch
 	 */
 	hasActiveRecovery(): boolean {
+		// Check new atomic system first
+		if (this.persistence.hasActiveTasks()) {
+			return true;
+		}
+		// Fall back to legacy system for backward compatibility
 		return this.persistence.hasActiveParallelBatch();
 	}
 
@@ -1218,6 +1237,31 @@ export class Orchestrator {
 		tasksFailed: number;
 		tasksPending: number;
 	} | null {
+		// Try new atomic system first
+		const metadata = this.persistence.getBatchMetadata();
+		if (metadata) {
+			const activeTasks = this.persistence.scanActiveTasks();
+			const completedTasks = this.persistence.getCompletedTasks(metadata.batchId);
+
+			if (activeTasks.length === 0 && completedTasks.length === 0) {
+				return null;
+			}
+
+			const tasksPending = activeTasks.filter((t) => t.status === "pending" || t.status === "running").length;
+			const tasksComplete = completedTasks.filter((t) => t.status === "complete" || t.status === "merged").length;
+			const tasksFailed = completedTasks.filter((t) => t.status === "failed").length;
+
+			return {
+				batchId: metadata.batchId,
+				startedAt: new Date(metadata.startedAt),
+				tasksTotal: activeTasks.length + completedTasks.length,
+				tasksComplete,
+				tasksFailed,
+				tasksPending,
+			};
+		}
+
+		// Fall back to legacy system
 		const state = this.persistence.getParallelRecoveryState();
 		if (!state || state.isComplete) {
 			return null;
@@ -1242,15 +1286,63 @@ export class Orchestrator {
 	 * Returns the pending tasks that need to be re-run
 	 */
 	async resumeRecovery(): Promise<string[]> {
+		// Clear recovered checkpoints from any previous recovery
+		this.recoveredCheckpoints.clear();
+
+		// Try new atomic system first
+		const activeTasks = this.persistence.scanActiveTasks();
+		if (activeTasks.length > 0) {
+			const metadata = this.persistence.getBatchMetadata();
+			output.progress(`Resuming interrupted batch: ${metadata?.batchId ?? "unknown"}`);
+
+			// Extract checkpoints from worktrees before cleaning them up
+			for (const task of activeTasks) {
+				if (task.status === "running" && task.worktreePath) {
+					try {
+						// Read the assignment file to get checkpoint data
+						const assignment = readTaskAssignment(task.worktreePath);
+						if (assignment?.checkpoint) {
+							// Store checkpoint keyed by task objective for use in runParallel
+							this.recoveredCheckpoints.set(task.task, assignment.checkpoint);
+							output.debug(`Recovered checkpoint for: ${task.task.substring(0, 40)}...`);
+						}
+					} catch {
+						// Ignore read errors - checkpoint recovery is best-effort
+					}
+
+					// Clean up the stale worktree
+					try {
+						this.worktreeManager.removeWorktree(task.taskId, true);
+						output.debug(`Cleaned up stale worktree: ${task.taskId}`);
+					} catch {
+						// Ignore cleanup errors
+					}
+				}
+			}
+
+			// Get tasks that need to be re-run
+			const pendingTasks = activeTasks.map((t) => t.task);
+
+			const checkpointsRecovered = this.recoveredCheckpoints.size;
+			output.info(
+				`${pendingTasks.length} tasks to resume${checkpointsRecovered > 0 ? ` (${checkpointsRecovered} with checkpoints)` : ""}`,
+			);
+
+			// Clear the active tasks - runParallel will create new state
+			if (metadata) {
+				this.persistence.clearBatch(metadata.batchId);
+			}
+
+			return pendingTasks;
+		}
+
+		// Fall back to legacy system
 		const state = this.persistence.getParallelRecoveryState();
 		if (!state || state.isComplete) {
 			return [];
 		}
 
 		output.progress(`Resuming interrupted batch: ${state.batchId}`);
-
-		// Clear recovered checkpoints from any previous recovery
-		this.recoveredCheckpoints.clear();
 
 		// Extract checkpoints from worktrees before cleaning them up
 		for (const task of state.tasks) {
@@ -1295,6 +1387,29 @@ export class Orchestrator {
 	 * Abandon an interrupted batch without resuming
 	 */
 	abandonRecovery(): void {
+		// Try new atomic system first
+		const metadata = this.persistence.getBatchMetadata();
+		if (metadata) {
+			output.warning(`Abandoning batch: ${metadata.batchId}`);
+
+			// Clean up any worktrees
+			const activeTasks = this.persistence.scanActiveTasks();
+			for (const task of activeTasks) {
+				if (task.worktreePath) {
+					try {
+						this.worktreeManager.removeWorktree(task.taskId, true);
+					} catch {
+						// Ignore cleanup errors
+					}
+				}
+			}
+
+			this.persistence.clearBatch(metadata.batchId);
+			output.info("Batch abandoned and cleaned up");
+			return;
+		}
+
+		// Fall back to legacy system
 		const state = this.persistence.getParallelRecoveryState();
 		if (!state) {
 			return;
@@ -1318,24 +1433,16 @@ export class Orchestrator {
 	}
 
 	/**
-	 * Create initial recovery state for a new batch
+	 * Save batch metadata and initial task states (atomic per-task)
 	 */
-	private createRecoveryState(
+	private initializeBatch(
 		batchId: string,
 		tasks: Array<{ task: string; taskId: string; worktreePath: string; branch: string }>,
-	): ParallelRecoveryState {
-		const taskStates: ParallelTaskState[] = tasks.map((t) => ({
-			taskId: t.taskId,
-			task: t.task,
-			worktreePath: t.worktreePath,
-			branch: t.branch,
-			status: "pending",
-		}));
-
-		return {
+	): void {
+		// Save batch metadata once
+		const metadata: BatchMetadata = {
 			batchId,
 			startedAt: new Date(),
-			tasks: taskStates,
 			model: this.startingModel,
 			options: {
 				maxConcurrent: this.maxConcurrent,
@@ -1343,54 +1450,51 @@ export class Orchestrator {
 				reviewPasses: this.reviewPasses,
 				annealingAtOpus: this.annealingAtOpus,
 			},
-			isComplete: false,
-			lastUpdated: new Date(),
 		};
+		this.persistence.saveBatchMetadata(metadata);
+
+		// Write each task state atomically
+		for (const t of tasks) {
+			const activeState: ActiveTaskState = {
+				taskId: t.taskId,
+				task: t.task,
+				worktreePath: t.worktreePath,
+				branch: t.branch,
+				status: "pending",
+				batchId,
+			};
+			this.persistence.writeActiveTask(activeState);
+		}
 	}
 
 	/**
-	 * Update task status in recovery state
+	 * Update task status atomically
 	 */
 	private updateTaskStatus(
 		taskId: string,
 		status: ParallelTaskState["status"],
 		extra?: { error?: string; modifiedFiles?: string[] },
 	): void {
-		const state = this.persistence.getParallelRecoveryState();
-		if (!state) return;
-
-		const task = state.tasks.find((t) => t.taskId === taskId);
-		if (task) {
-			task.status = status;
-			if (status === "running") {
-				task.startedAt = new Date();
-			}
-			if (status === "complete" || status === "failed" || status === "merged") {
-				task.completedAt = new Date();
-			}
-			if (extra?.error) {
-				task.error = extra.error;
-			}
-			if (extra?.modifiedFiles) {
-				task.modifiedFiles = extra.modifiedFiles;
-			}
+		if (status === "running") {
+			// Update active task status
+			this.persistence.updateActiveTaskStatus(taskId, "running", new Date());
+		} else if (status === "complete" || status === "failed" || status === "merged") {
+			// Move from active/ to completed/
+			this.persistence.markTaskCompleted(taskId, status, extra);
 		}
-
-		// Check if batch is complete
-		const allDone = state.tasks.every((t) => t.status === "complete" || t.status === "failed" || t.status === "merged");
-		state.isComplete = allDone;
-
-		this.persistence.saveParallelRecoveryState(state);
 	}
 
 	/**
-	 * Mark batch as complete
+	 * Mark batch as complete (cleanup)
 	 */
 	private markBatchComplete(): void {
-		const state = this.persistence.getParallelRecoveryState();
-		if (state) {
-			state.isComplete = true;
-			this.persistence.saveParallelRecoveryState(state);
+		// Batch is complete when no active tasks remain
+		// Clear batch metadata to signal completion
+		if (this.persistence.isBatchComplete()) {
+			const metadata = this.persistence.getBatchMetadata();
+			if (metadata) {
+				this.persistence.clearBatch(metadata.batchId);
+			}
 		}
 	}
 }
