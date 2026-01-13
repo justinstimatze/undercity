@@ -1020,6 +1020,56 @@ export interface MetaTaskResult {
 	};
 }
 
+// ============== Task Assignment (Work Hook) ==============
+
+/**
+ * Task assignment written to worktree before worker starts.
+ * Survives crashes and enables worker identity detection.
+ */
+export interface TaskAssignment {
+	/** Unique identifier for this task */
+	taskId: string;
+	/** The task objective */
+	objective: string;
+	/** Git branch for this task */
+	branch: string;
+	/** Model tier to use */
+	model: ModelChoice;
+	/** Absolute path to the worktree */
+	worktreePath: string;
+	/** When the assignment was created */
+	assignedAt: Date;
+	/** Maximum attempts allowed */
+	maxAttempts: number;
+	/** Whether review passes are enabled */
+	reviewPasses: boolean;
+	/** Whether to auto-commit on success */
+	autoCommit: boolean;
+	/** Experiment variant ID if assigned */
+	experimentVariantId?: string;
+	/** Current checkpoint (for crash recovery) */
+	checkpoint?: TaskCheckpoint;
+}
+
+/**
+ * Checkpoint for crash recovery within a task
+ */
+export interface TaskCheckpoint {
+	/** Last known phase */
+	phase: "starting" | "context" | "executing" | "verifying" | "reviewing" | "committing";
+	/** Model at time of checkpoint */
+	model: ModelChoice;
+	/** Number of attempts so far */
+	attempts: number;
+	/** When checkpoint was saved */
+	savedAt: Date;
+	/** Last verification result if any */
+	lastVerification?: {
+		passed: boolean;
+		errors?: string[];
+	};
+}
+
 /**
  * Check if a task objective indicates a meta-task
  * Meta-tasks are prefixed with [meta:type]

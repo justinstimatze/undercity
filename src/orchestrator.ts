@@ -22,11 +22,17 @@ import { updateLedger } from "./capability-ledger.js";
 import { type ExperimentManager, getExperimentManager } from "./experiment.js";
 import { FileTracker } from "./file-tracker.js";
 import * as output from "./output.js";
-import { Persistence } from "./persistence.js";
+import { Persistence, writeTaskAssignment } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
 import { addTask, loadTaskBoard, removeTasks, saveTaskBoard } from "./task.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
-import type { MetaTaskRecommendation, MetaTaskResult, ParallelRecoveryState, ParallelTaskState } from "./types.js";
+import type {
+	MetaTaskRecommendation,
+	MetaTaskResult,
+	ParallelRecoveryState,
+	ParallelTaskState,
+	TaskAssignment,
+} from "./types.js";
 import { type TaskResult, TaskWorker } from "./worker.js";
 import { WorktreeManager } from "./worktree-manager.js";
 
@@ -809,19 +815,38 @@ export class Orchestrator {
 
 					// Create TaskWorker that runs in the worktree directory
 					// Experiment variant overrides default settings if present
+					const effectiveModel = experimentModel ?? this.startingModel;
+					const effectiveReview = experimentReview ?? this.reviewPasses;
+
 					const worker = new TaskWorker({
-						startingModel: experimentModel ?? this.startingModel,
+						startingModel: effectiveModel,
 						autoCommit: this.autoCommit,
 						stream: this.stream,
 						verbose: this.verbose,
 						workingDirectory: worktreePath,
-						reviewPasses: experimentReview ?? this.reviewPasses,
+						reviewPasses: effectiveReview,
 						annealingAtOpus: this.annealingAtOpus,
 						maxAttempts: this.maxAttempts,
 						maxRetriesPerTier: this.maxRetriesPerTier,
 						maxReviewPassesPerTier: this.maxReviewPassesPerTier,
 						maxOpusReviewPasses: this.maxOpusReviewPasses,
 					});
+
+					// Write task assignment to worktree (work hook)
+					// This enables crash recovery and worker identity detection
+					const assignment: TaskAssignment = {
+						taskId,
+						objective: task,
+						branch,
+						model: effectiveModel,
+						worktreePath,
+						assignedAt: new Date(),
+						maxAttempts: this.maxAttempts,
+						reviewPasses: effectiveReview,
+						autoCommit: this.autoCommit,
+						experimentVariantId: variant?.id,
+					};
+					writeTaskAssignment(assignment);
 
 					const result = await worker.runTask(task);
 

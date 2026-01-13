@@ -81,7 +81,14 @@ export {
 	warning,
 } from "./output.js";
 // Persistence layer
-export { Persistence } from "./persistence.js";
+export {
+	deleteTaskAssignment,
+	detectAssignmentFromCwd,
+	Persistence,
+	readTaskAssignment,
+	updateTaskCheckpoint,
+	writeTaskAssignment,
+} from "./persistence.js";
 // HTTP Server
 export {
 	clearDaemonState,
@@ -120,6 +127,8 @@ export type {
 	SessionStatus,
 	Step,
 	StepStatus,
+	TaskAssignment,
+	TaskCheckpoint,
 	UndercityConfig,
 	VariantMetrics,
 } from "./types.js";

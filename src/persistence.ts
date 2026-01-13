@@ -870,3 +870,95 @@ export class Persistence {
 		this.writeJson("experiment-storage.json", data);
 	}
 }
+
+// ============== Task Assignment (Work Hook) ==============
+// Standalone functions that write to worktree, not .undercity/
+
+import type { TaskAssignment, TaskCheckpoint } from "./types.js";
+
+const ASSIGNMENT_FILENAME = ".undercity-assignment.json";
+
+/**
+ * Write task assignment to worktree root.
+ * This file lives in the worktree (not .undercity/) so agents can detect their identity.
+ */
+export function writeTaskAssignment(assignment: TaskAssignment): void {
+	const assignmentPath = join(assignment.worktreePath, ASSIGNMENT_FILENAME);
+
+	try {
+		// Ensure worktree directory exists
+		const dir = dirname(assignmentPath);
+		if (!existsSync(dir)) {
+			mkdirSync(dir, { recursive: true });
+		}
+
+		// Atomic write via temp file
+		const tempPath = `${assignmentPath}.tmp`;
+		writeFileSync(tempPath, JSON.stringify(assignment, null, 2), "utf-8");
+		renameSync(tempPath, assignmentPath);
+
+		persistenceLogger.debug({ taskId: assignment.taskId, path: assignmentPath }, "Wrote task assignment");
+	} catch (error) {
+		persistenceLogger.error({ error: String(error), taskId: assignment.taskId }, "Failed to write task assignment");
+		throw error;
+	}
+}
+
+/**
+ * Read task assignment from a worktree.
+ * Returns null if no assignment exists.
+ */
+export function readTaskAssignment(worktreePath: string): TaskAssignment | null {
+	const assignmentPath = join(worktreePath, ASSIGNMENT_FILENAME);
+
+	if (!existsSync(assignmentPath)) {
+		return null;
+	}
+
+	try {
+		const content = readFileSync(assignmentPath, "utf-8");
+		return JSON.parse(content) as TaskAssignment;
+	} catch (error) {
+		persistenceLogger.warn({ error: String(error), path: assignmentPath }, "Failed to read task assignment");
+		return null;
+	}
+}
+
+/**
+ * Update checkpoint in an existing assignment.
+ * Used for crash recovery - saves progress without rewriting entire assignment.
+ */
+export function updateTaskCheckpoint(worktreePath: string, checkpoint: TaskCheckpoint): void {
+	const assignment = readTaskAssignment(worktreePath);
+	if (!assignment) {
+		persistenceLogger.warn({ worktreePath }, "No assignment found for checkpoint update");
+		return;
+	}
+
+	assignment.checkpoint = checkpoint;
+	writeTaskAssignment(assignment);
+}
+
+/**
+ * Delete task assignment from worktree (cleanup after completion).
+ */
+export function deleteTaskAssignment(worktreePath: string): void {
+	const assignmentPath = join(worktreePath, ASSIGNMENT_FILENAME);
+
+	if (existsSync(assignmentPath)) {
+		try {
+			unlinkSync(assignmentPath);
+			persistenceLogger.debug({ path: assignmentPath }, "Deleted task assignment");
+		} catch (error) {
+			persistenceLogger.warn({ error: String(error), path: assignmentPath }, "Failed to delete task assignment");
+		}
+	}
+}
+
+/**
+ * Detect if current working directory is a worktree with an assignment.
+ * Useful for worker identity detection from path.
+ */
+export function detectAssignmentFromCwd(): TaskAssignment | null {
+	return readTaskAssignment(process.cwd());
+}

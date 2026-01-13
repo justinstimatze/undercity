@@ -31,9 +31,10 @@ import { sessionLogger } from "./logger.js";
 import { getMetaTaskPrompt, parseMetaTaskResult } from "./meta-tasks.js";
 import { MetricsTracker } from "./metrics.js";
 import * as output from "./output.js";
+import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
 import { type ModelTier, runEscalatingReview, type UnresolvedTicket } from "./review.js";
 import { extractMetaTaskType, isMetaTask } from "./task-schema.js";
-import type { AttemptRecord, ErrorCategory, TokenUsage } from "./types.js";
+import type { AttemptRecord, ErrorCategory, TaskCheckpoint, TokenUsage } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
 
 /**
@@ -208,6 +209,72 @@ export class TaskWorker {
 	}
 
 	/**
+	 * Save a checkpoint to the assignment file for crash recovery.
+	 * Fails silently if no assignment exists (e.g., running outside orchestrator).
+	 */
+	private saveCheckpoint(
+		phase: TaskCheckpoint["phase"],
+		lastVerification?: { passed: boolean; errors?: string[] },
+	): void {
+		try {
+			const checkpoint: TaskCheckpoint = {
+				phase,
+				model: this.currentModel,
+				attempts: this.attempts,
+				savedAt: new Date(),
+				lastVerification,
+			};
+			updateTaskCheckpoint(this.workingDirectory, checkpoint);
+		} catch {
+			// Silent failure - checkpoints are optional
+		}
+	}
+
+	/**
+	 * Build assignment context for agent priming.
+	 * Returns context about the agent's identity and task assignment.
+	 */
+	private buildAssignmentContext(): string {
+		const assignment = readTaskAssignment(this.workingDirectory);
+		if (!assignment) {
+			return "";
+		}
+
+		const lines: string[] = [
+			"WORKER ASSIGNMENT:",
+			`Task ID: ${assignment.taskId}`,
+			`Branch: ${assignment.branch}`,
+			`Model: ${assignment.model}`,
+			`Max Attempts: ${assignment.maxAttempts}`,
+		];
+
+		if (assignment.experimentVariantId) {
+			lines.push(`Experiment: ${assignment.experimentVariantId}`);
+		}
+
+		// Add checkpoint recovery context if resuming
+		if (assignment.checkpoint) {
+			const cp = assignment.checkpoint;
+			lines.push("");
+			lines.push("RECOVERY CONTEXT:");
+			lines.push(`Last Phase: ${cp.phase}`);
+			lines.push(`Attempts So Far: ${cp.attempts}`);
+			if (cp.lastVerification) {
+				lines.push(`Last Verification: ${cp.lastVerification.passed ? "PASSED" : "FAILED"}`);
+				if (cp.lastVerification.errors && cp.lastVerification.errors.length > 0) {
+					lines.push("Previous Errors:");
+					for (const err of cp.lastVerification.errors) {
+						lines.push(`  - ${err}`);
+					}
+				}
+			}
+		}
+
+		lines.push("");
+		return lines.join("\n");
+	}
+
+	/**
 	 * Run a single task with verification and potential escalation
 	 */
 	async runTask(task: string): Promise<TaskResult> {
@@ -217,6 +284,9 @@ export class TaskWorker {
 		this.tokenUsageThisTask = [];
 		this.sameModelRetries = 0;
 		this.pendingTickets = []; // Clear tickets from previous task
+
+		// Checkpoint: starting
+		this.saveCheckpoint("starting");
 
 		// Ensure clean state before starting (in case previous task left dirty state)
 		this.cleanupDirtyState();
@@ -260,6 +330,9 @@ export class TaskWorker {
 			this.log("Context preparation failed", { error: String(error) });
 			// Continue without briefing - agent will explore
 		}
+
+		// Checkpoint: context gathered
+		this.saveCheckpoint("context");
 
 		// Assess complexity using quantitative metrics when we have target files
 		// If task mentions specific files, prioritize those for metrics (more accurate)
@@ -338,6 +411,9 @@ export class TaskWorker {
 			});
 
 			try {
+				// Checkpoint: executing
+				this.saveCheckpoint("executing");
+
 				// Run the agent
 				output.workerPhase(taskId, "executing", { model: this.currentModel });
 				const agentOutput = await this.executeAgent(task);
@@ -382,6 +458,9 @@ export class TaskWorker {
 				}
 
 				// Standard implementation tasks: verify code changes
+				// Checkpoint: verifying
+				this.saveCheckpoint("verifying");
+
 				output.workerPhase(taskId, "verifying");
 				const verification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory, baseCommit);
 
@@ -393,6 +472,9 @@ export class TaskWorker {
 					// Run review passes if enabled (auto-selected or user-specified)
 					let finalVerification = verification;
 					if (reviewLevel.review) {
+						// Checkpoint: reviewing (with verification status)
+						this.saveCheckpoint("reviewing", { passed: true });
+
 						output.workerPhase(taskId, "reviewing");
 						const reviewResult = await runEscalatingReview(task, {
 							useAnnealing: reviewLevel.annealing,
@@ -435,6 +517,9 @@ export class TaskWorker {
 
 					let commitSha: string | undefined;
 					if (this.autoCommit && finalVerification.filesChanged > 0) {
+						// Checkpoint: committing
+						this.saveCheckpoint("committing", { passed: true });
+
 						output.workerPhase(taskId, "committing");
 						commitSha = await this.commitWork(task);
 					}
@@ -468,6 +553,12 @@ export class TaskWorker {
 					errorCategories,
 				});
 				this.lastFeedback = verification.feedback;
+
+				// Checkpoint: verification failed with errors
+				this.saveCheckpoint("verifying", {
+					passed: false,
+					errors: verification.issues.slice(0, 5), // Keep first 5 errors
+				});
 
 				const errorSummary = errorCategories.length > 0 ? errorCategories.join(", ") : verification.issues.join(", ");
 				output.workerVerification(taskId, false, [errorSummary]);
@@ -747,9 +838,15 @@ Return your analysis as JSON in the format specified above.`;
 		} else {
 			// Standard implementation task: build prompt with context
 			let contextSection = "";
+
+			// Add assignment context for worker identity and recovery
+			const assignmentContext = this.buildAssignmentContext();
+			if (assignmentContext) {
+				contextSection += `${assignmentContext}\n---\n\n`;
+			}
+
 			if (this.currentBriefing?.briefingDoc) {
-				contextSection = `
-${this.currentBriefing.briefingDoc}
+				contextSection += `${this.currentBriefing.briefingDoc}
 
 ---
 
