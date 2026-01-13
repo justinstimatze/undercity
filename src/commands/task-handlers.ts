@@ -735,6 +735,10 @@ export interface PruneOptions {
 	force?: boolean;
 }
 
+export interface CompleteOptions {
+	resolution?: string;
+}
+
 interface TriageIssue {
 	type: "test_cruft" | "duplicate" | "stale" | "status_bug" | "overly_granular" | "vague";
 	taskId: string;
@@ -1044,4 +1048,32 @@ export function handlePrune(options: PruneOptions): void {
 			console.log(chalk.green(`Fixed ${fixed} task status(es)`));
 		}
 	}
+}
+
+/**
+ * Handle the complete command - mark a task as complete
+ */
+export function handleComplete(taskId: string, options: CompleteOptions): void {
+	const board = loadTaskBoard();
+	const task = board.tasks.find((t: { id: string }) => t.id === taskId);
+
+	if (!task) {
+		console.log(chalk.red(`Task not found: ${taskId}`));
+		console.log(chalk.dim("Use 'undercity tasks --all' to see all task IDs"));
+		process.exit(1);
+	}
+
+	if (task.status === "complete") {
+		console.log(chalk.yellow(`Task already complete: ${taskId}`));
+		return;
+	}
+
+	task.status = "complete";
+	task.completedAt = new Date();
+	if (options.resolution) {
+		task.resolution = options.resolution;
+	}
+
+	saveTaskBoard(board);
+	console.log(chalk.green(`Marked complete: ${task.objective.slice(0, 60)}...`));
 }

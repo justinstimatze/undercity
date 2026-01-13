@@ -5,7 +5,9 @@
 
 import {
 	type AddOptions,
+	type CompleteOptions,
 	handleAdd,
+	handleComplete,
 	handleImportPlan,
 	handleLoad,
 	handlePlan,
@@ -117,5 +119,12 @@ export const taskCommands: CommandModule = {
 			.option("--dry-run", "Show what would be removed without making changes")
 			.option("--force", "Remove without confirmation")
 			.action((options: PruneOptions) => handlePrune(options));
+
+		// Complete command - mark a task as complete
+		program
+			.command("complete <taskId>")
+			.description("Mark a task as complete")
+			.option("-r, --resolution <text>", "Resolution notes describing how the task was completed")
+			.action((taskId: string, options: CompleteOptions) => handleComplete(taskId, options));
 	},
 };
