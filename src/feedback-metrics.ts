@@ -535,3 +535,328 @@ export function formatAnalysisSummary(analysis: MetricsAnalysis): string {
 
 	return lines.join("\n");
 }
+
+// ============================================================================
+// Pattern Learning - Cluster similar tasks by objective keywords
+// ============================================================================
+
+/**
+ * Common stop words to ignore when extracting keywords
+ */
+const STOP_WORDS = new Set([
+	"a",
+	"an",
+	"the",
+	"and",
+	"or",
+	"but",
+	"in",
+	"on",
+	"at",
+	"to",
+	"for",
+	"of",
+	"with",
+	"by",
+	"from",
+	"is",
+	"are",
+	"was",
+	"were",
+	"be",
+	"been",
+	"being",
+	"have",
+	"has",
+	"had",
+	"do",
+	"does",
+	"did",
+	"will",
+	"would",
+	"could",
+	"should",
+	"may",
+	"might",
+	"must",
+	"can",
+	"this",
+	"that",
+	"these",
+	"those",
+	"it",
+	"its",
+	"if",
+	"then",
+	"else",
+	"when",
+	"where",
+	"which",
+	"who",
+	"what",
+	"how",
+	"why",
+	"all",
+	"each",
+	"every",
+	"both",
+	"few",
+	"more",
+	"most",
+	"other",
+	"some",
+	"such",
+	"no",
+	"not",
+	"only",
+	"same",
+	"so",
+	"than",
+	"too",
+	"very",
+	"just",
+	"also",
+]);
+
+/**
+ * Task cluster with related tasks and success stats
+ */
+export interface TaskCluster {
+	keyword: string;
+	count: number;
+	successCount: number;
+	failCount: number;
+	successRate: number;
+	avgDurationMs: number;
+	avgTokens: number;
+	examples: string[]; // Sample objectives
+}
+
+/**
+ * Pattern learning analysis result
+ */
+export interface PatternAnalysis {
+	clusters: TaskCluster[];
+	topSuccessfulPatterns: TaskCluster[];
+	strugglingPatterns: TaskCluster[];
+	recommendations: string[];
+}
+
+/**
+ * Extract meaningful keywords from task objective
+ */
+export function extractKeywords(objective: string): string[] {
+	// Convert to lowercase and split on non-word characters
+	const words = objective
+		.toLowerCase()
+		.replace(/[^a-z0-9\s-]/g, " ")
+		.split(/\s+/)
+		.filter((w) => w.length > 2); // Min 3 chars
+
+	// Remove stop words
+	const keywords = words.filter((w) => !STOP_WORDS.has(w));
+
+	// Return unique keywords
+	return [...new Set(keywords)];
+}
+
+/**
+ * Analyze task patterns and cluster by keywords
+ */
+export function analyzeTaskPatterns(options?: LoadMetricsOptions): PatternAnalysis {
+	const records = loadMetrics(options);
+
+	// Extract keywords from all objectives and build clusters
+	const clusterMap = new Map<
+		string,
+		{
+			count: number;
+			successCount: number;
+			failCount: number;
+			durations: number[];
+			tokens: number[];
+			examples: Set<string>;
+		}
+	>();
+
+	for (const record of records) {
+		const keywords = extractKeywords(record.objective);
+
+		for (const keyword of keywords) {
+			if (!clusterMap.has(keyword)) {
+				clusterMap.set(keyword, {
+					count: 0,
+					successCount: 0,
+					failCount: 0,
+					durations: [],
+					tokens: [],
+					examples: new Set(),
+				});
+			}
+
+			const cluster = clusterMap.get(keyword)!;
+			cluster.count++;
+			if (record.success) cluster.successCount++;
+			else cluster.failCount++;
+			cluster.durations.push(record.durationMs);
+			cluster.tokens.push(record.totalTokens);
+			if (cluster.examples.size < 3) {
+				cluster.examples.add(record.objective.slice(0, 60));
+			}
+		}
+	}
+
+	// Convert to sorted array (by count descending)
+	const clusters: TaskCluster[] = Array.from(clusterMap.entries())
+		.map(([keyword, data]) => ({
+			keyword,
+			count: data.count,
+			successCount: data.successCount,
+			failCount: data.failCount,
+			successRate: data.count > 0 ? data.successCount / data.count : 0,
+			avgDurationMs: data.durations.length > 0 ? data.durations.reduce((a, b) => a + b, 0) / data.durations.length : 0,
+			avgTokens: data.tokens.length > 0 ? data.tokens.reduce((a, b) => a + b, 0) / data.tokens.length : 0,
+			examples: Array.from(data.examples),
+		}))
+		.filter((c) => c.count >= 2) // Only clusters with 2+ tasks
+		.sort((a, b) => b.count - a.count);
+
+	// Find top successful patterns (high success rate, enough samples)
+	const topSuccessful = clusters
+		.filter((c) => c.count >= 3 && c.successRate >= 0.8)
+		.sort((a, b) => b.successRate - a.successRate)
+		.slice(0, 5);
+
+	// Find struggling patterns (low success rate, enough samples)
+	const struggling = clusters
+		.filter((c) => c.count >= 3 && c.successRate < 0.6)
+		.sort((a, b) => a.successRate - b.successRate)
+		.slice(0, 5);
+
+	// Generate recommendations
+	const recommendations: string[] = [];
+
+	if (struggling.length > 0) {
+		recommendations.push(
+			`Tasks with "${struggling[0].keyword}" keywords have ${(struggling[0].successRate * 100).toFixed(0)}% success. Consider manual review or decomposition.`,
+		);
+	}
+
+	if (topSuccessful.length > 0) {
+		recommendations.push(
+			`"${topSuccessful[0].keyword}" tasks succeed ${(topSuccessful[0].successRate * 100).toFixed(0)}% of the time - good candidate for haiku tier.`,
+		);
+	}
+
+	// Check for high-volume keywords with mixed results
+	const highVolumeMixed = clusters.filter((c) => c.count >= 5 && c.successRate > 0.4 && c.successRate < 0.7);
+	if (highVolumeMixed.length > 0) {
+		recommendations.push(
+			`"${highVolumeMixed[0].keyword}" has inconsistent results (${(highVolumeMixed[0].successRate * 100).toFixed(0)}%). May need better task decomposition.`,
+		);
+	}
+
+	return {
+		clusters: clusters.slice(0, 20), // Top 20 clusters
+		topSuccessfulPatterns: topSuccessful,
+		strugglingPatterns: struggling,
+		recommendations,
+	};
+}
+
+/**
+ * Format pattern analysis as human-readable summary
+ */
+export function formatPatternSummary(analysis: PatternAnalysis): string {
+	const lines: string[] = [];
+
+	lines.push("Task Pattern Analysis");
+	lines.push("".padEnd(40, "="));
+	lines.push("");
+
+	if (analysis.clusters.length === 0) {
+		lines.push("No patterns detected yet. Need more task history.");
+		return lines.join("\n");
+	}
+
+	lines.push("Top Keywords by Frequency:");
+	for (const cluster of analysis.clusters.slice(0, 10)) {
+		const rate = (cluster.successRate * 100).toFixed(0);
+		lines.push(`  ${cluster.keyword}: ${cluster.count} tasks (${rate}% success)`);
+	}
+	lines.push("");
+
+	if (analysis.topSuccessfulPatterns.length > 0) {
+		lines.push("High-Success Patterns:");
+		for (const cluster of analysis.topSuccessfulPatterns) {
+			lines.push(`  ${cluster.keyword}: ${(cluster.successRate * 100).toFixed(0)}% (${cluster.count} tasks)`);
+		}
+		lines.push("");
+	}
+
+	if (analysis.strugglingPatterns.length > 0) {
+		lines.push("Struggling Patterns:");
+		for (const cluster of analysis.strugglingPatterns) {
+			lines.push(`  ${cluster.keyword}: ${(cluster.successRate * 100).toFixed(0)}% (${cluster.count} tasks)`);
+		}
+		lines.push("");
+	}
+
+	if (analysis.recommendations.length > 0) {
+		lines.push("Recommendations:");
+		for (const rec of analysis.recommendations) {
+			lines.push(`  - ${rec}`);
+		}
+	}
+
+	return lines.join("\n");
+}
+
+/**
+ * Find similar tasks based on keyword overlap
+ */
+export function findSimilarTasks(
+	objective: string,
+	options?: LoadMetricsOptions,
+): Array<{
+	objective: string;
+	similarity: number;
+	success: boolean;
+	model: ModelTier;
+}> {
+	const records = loadMetrics(options);
+	const targetKeywords = new Set(extractKeywords(objective));
+
+	if (targetKeywords.size === 0) {
+		return [];
+	}
+
+	const similarities: Array<{
+		objective: string;
+		similarity: number;
+		success: boolean;
+		model: ModelTier;
+	}> = [];
+
+	for (const record of records) {
+		const recordKeywords = new Set(extractKeywords(record.objective));
+
+		// Calculate Jaccard similarity
+		const intersection = [...targetKeywords].filter((k) => recordKeywords.has(k)).length;
+		const union = new Set([...targetKeywords, ...recordKeywords]).size;
+		const similarity = union > 0 ? intersection / union : 0;
+
+		if (similarity > 0.2) {
+			// Only include if at least 20% similar
+			similarities.push({
+				objective: record.objective,
+				similarity,
+				success: record.success,
+				model: record.finalModel || "sonnet",
+			});
+		}
+	}
+
+	// Sort by similarity descending
+	return similarities.sort((a, b) => b.similarity - a.similarity).slice(0, 5);
+}

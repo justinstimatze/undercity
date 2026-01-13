@@ -1164,13 +1164,16 @@ export interface IntrospectOptions {
 	json?: boolean;
 	limit?: string;
 	since?: string;
+	patterns?: boolean;
 }
 
 /**
  * Handle the introspect command - analyze own metrics and performance
  */
 export async function handleIntrospect(options: IntrospectOptions): Promise<void> {
-	const { getMetricsAnalysis, formatAnalysisSummary } = await import("../feedback-metrics.js");
+	const { getMetricsAnalysis, formatAnalysisSummary, analyzeTaskPatterns, formatPatternSummary } = await import(
+		"../feedback-metrics.js"
+	);
 
 	const loadOptions: { limit?: number; since?: Date } = {};
 
@@ -1183,6 +1186,20 @@ export async function handleIntrospect(options: IntrospectOptions): Promise<void
 		if (!Number.isNaN(date.getTime())) {
 			loadOptions.since = date;
 		}
+	}
+
+	// Pattern analysis mode
+	if (options.patterns) {
+		const patterns = analyzeTaskPatterns(loadOptions);
+
+		if (options.json) {
+			console.log(JSON.stringify(patterns, null, 2));
+			return;
+		}
+
+		console.log(chalk.bold.cyan("\n🧠 Task Pattern Analysis\n"));
+		console.log(formatPatternSummary(patterns));
+		return;
 	}
 
 	const analysis = getMetricsAnalysis(loadOptions);

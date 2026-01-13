@@ -142,6 +142,7 @@ export const mixedCommands: CommandModule = {
 			.option("-j, --json", "Output raw JSON for agent consumption")
 			.option("-n, --limit <n>", "Only analyze last N task records")
 			.option("--since <date>", "Only analyze records since date (YYYY-MM-DD)")
+			.option("-p, --patterns", "Show task pattern analysis (keyword clustering)")
 			.action((options: IntrospectOptions) => handleIntrospect(options));
 	},
 };
