@@ -9,6 +9,17 @@
  * 2. .undercityrc in current directory
  * 3. .undercityrc in home directory
  * 4. Built-in defaults
+ *
+ * The configuration supports various options to control:
+ * - Output behavior (stream, verbose)
+ * - Model selection (AI model tiers)
+ * - Execution options (auto-commit, local mode)
+ * - Review and verification settings
+ * - Parallel task processing
+ * - Retry and escalation strategies
+ *
+ * Provides type-safe configuration validation, caching,
+ * and flexible merging of configuration sources.
  */
 
 import * as fs from "node:fs";
