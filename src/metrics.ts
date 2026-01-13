@@ -1,8 +1,14 @@
 /**
  * Efficiency Metrics Tracker
  *
- * Tracks token usage, execution time, and success metrics for task completion analysis.
- * Provides tokens-per-completion ratios and historical analytics.
+ * Tracks task execution metrics for analytics and cost optimization.
+ *
+ * | Metric               | Description                           |
+ * |----------------------|---------------------------------------|
+ * | Token usage          | Input/output/total per task           |
+ * | Execution time       | Duration in milliseconds              |
+ * | Success rates        | By model, complexity, agent type      |
+ * | Escalation tracking  | Model upgrades and their outcomes     |
  */
 
 import fs from "node:fs/promises";

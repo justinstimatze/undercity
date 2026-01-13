@@ -1,8 +1,15 @@
 /**
  * Task Board Module
  *
- * Manages the task board - a queue of tasks for undercity to work through.
- * Tasks are processed sequentially in full-auto mode.
+ * Task queue management for undercity with file-based persistence.
+ *
+ * | Operation        | Function                                   |
+ * |------------------|--------------------------------------------|
+ * | Add              | addTask(), addTasks()                      |
+ * | Query            | getNextTask(), getAllTasks(), getTaskById()|
+ * | Status update    | markTaskInProgress/Complete/Failed/...     |
+ * | Decomposition    | decomposeTaskIntoSubtasks()                |
+ * | Reconciliation   | reconcileTasks() - sync with git history   |
  */
 
 import { randomBytes } from "node:crypto";
@@ -247,6 +254,160 @@ export interface AddTaskOptions {
 }
 
 /**
+ * Parameters for marking a task in progress
+ */
+export interface MarkTaskInProgressParams {
+	id: string;
+	sessionId: string;
+	path?: string;
+}
+
+/**
+ * Parameters for marking a task as failed
+ */
+export interface MarkTaskFailedParams {
+	id: string;
+	error: string;
+	path?: string;
+}
+
+/**
+ * Parameters for marking a task as duplicate
+ */
+export interface MarkTaskDuplicateParams {
+	id: string;
+	commitSha: string;
+	resolution: string;
+	path?: string;
+}
+
+/**
+ * Parameters for marking a task as canceled
+ */
+export interface MarkTaskCanceledParams {
+	id: string;
+	reason: string;
+	path?: string;
+}
+
+/**
+ * Parameters for marking a task as obsolete
+ */
+export interface MarkTaskObsoleteParams {
+	id: string;
+	reason: string;
+	path?: string;
+}
+
+/**
+ * Parameters for marking a task as complete
+ */
+export interface MarkTaskCompleteParams {
+	id: string;
+	path?: string;
+}
+
+/**
+ * Parameters for blocking/unblocking a task
+ */
+export interface BlockTaskParams {
+	id: string;
+	path?: string;
+}
+
+/**
+ * Parameters for removing a task
+ */
+export interface RemoveTaskParams {
+	id: string;
+	path?: string;
+}
+
+/**
+ * Parameters for removing multiple tasks
+ */
+export interface RemoveTasksParams {
+	ids: string[];
+	path?: string;
+}
+
+/**
+ * Parameters for checking subtask completion
+ */
+export interface SubtaskCheckParams {
+	parentTaskId: string;
+	path?: string;
+}
+
+/**
+ * Parameters for getting a task by ID
+ */
+export interface GetTaskByIdParams {
+	taskId: string;
+	path?: string;
+}
+
+/**
+ * Parameters for getting ready tasks for batch execution
+ */
+export interface GetReadyTasksParams {
+	count?: number;
+	path?: string;
+}
+
+/**
+ * Parameters for updating task analysis
+ */
+export interface UpdateTaskAnalysisParams {
+	taskId: string;
+	analysis: {
+		computedPackages?: string[];
+		riskScore?: number;
+		estimatedFiles?: string[];
+		tags?: string[];
+	};
+	path?: string;
+}
+
+/**
+ * Parameters for marking a set of tasks as in progress
+ */
+export interface MarkTaskSetInProgressParams {
+	taskIds: string[];
+	sessionIds: string[];
+	path?: string;
+}
+
+/**
+ * Parameters for finding similar in-progress tasks
+ */
+export interface FindSimilarTaskParams {
+	objective: string;
+	threshold?: number;
+	path?: string;
+}
+
+/**
+ * Parameters for decomposing a task into subtasks
+ */
+export interface DecomposeTaskParams {
+	parentTaskId: string;
+	subtasks: Array<{
+		objective: string;
+		estimatedFiles?: string[];
+		order: number;
+	}>;
+	path?: string;
+}
+
+/**
+ * Parameters for clearing completed tasks
+ */
+export interface ClearCompletedTasksParams {
+	path?: string;
+}
+
+/**
  * Add a task to the board
  */
 export function addTask(
@@ -383,98 +544,191 @@ function updateTask(id: string, updates: (task: Task) => void, path: string = DE
 /**
  * Mark a task as in progress
  */
-export function markTaskInProgress(id: string, sessionId: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+export function markTaskInProgress(params: MarkTaskInProgressParams): void;
+export function markTaskInProgress(id: string, sessionId: string, path?: string): void;
+export function markTaskInProgress(
+	paramsOrId: MarkTaskInProgressParams | string,
+	sessionId?: string,
+	path?: string,
+): void {
+	let id: string;
+	let actualSessionId: string;
+	let actualPath: string;
+
+	if (typeof paramsOrId === "object") {
+		({ id, sessionId: actualSessionId, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrId);
+	} else {
+		id = paramsOrId;
+		actualSessionId = sessionId!;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
 	updateTask(
 		id,
 		(task) => {
 			task.status = "in_progress";
 			task.startedAt = new Date();
-			task.sessionId = sessionId;
+			task.sessionId = actualSessionId;
 		},
-		path,
+		actualPath,
 	);
 }
 
 /**
  * Mark a task as complete
  */
-export function markTaskComplete(id: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+export function markTaskComplete(params: MarkTaskCompleteParams): void;
+export function markTaskComplete(id: string, path?: string): void;
+export function markTaskComplete(paramsOrId: MarkTaskCompleteParams | string, path?: string): void {
+	let id: string;
+	let actualPath: string;
+
+	if (typeof paramsOrId === "object") {
+		({ id, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrId);
+	} else {
+		id = paramsOrId;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
 	updateTask(
 		id,
 		(task) => {
 			task.status = "complete";
 			task.completedAt = new Date();
 		},
-		path,
+		actualPath,
 	);
 }
 
 /**
  * Mark a task as failed
  */
-export function markTaskFailed(id: string, error: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+export function markTaskFailed(params: MarkTaskFailedParams): void;
+export function markTaskFailed(id: string, error: string, path?: string): void;
+export function markTaskFailed(paramsOrId: MarkTaskFailedParams | string, error?: string, path?: string): void {
+	let id: string;
+	let actualError: string;
+	let actualPath: string;
+
+	if (typeof paramsOrId === "object") {
+		({ id, error: actualError, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrId);
+	} else {
+		id = paramsOrId;
+		actualError = error!;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
 	updateTask(
 		id,
 		(task) => {
 			task.status = "failed";
 			task.completedAt = new Date();
-			task.error = error;
+			task.error = actualError;
 		},
-		path,
+		actualPath,
 	);
 }
 
 /**
  * Mark a task as duplicate (work already done)
  */
+export function markTaskDuplicate(params: MarkTaskDuplicateParams): void;
+export function markTaskDuplicate(id: string, commitSha: string, resolution: string, path?: string): void;
 export function markTaskDuplicate(
-	id: string,
-	commitSha: string,
-	resolution: string,
-	path: string = DEFAULT_TASK_BOARD_PATH,
+	paramsOrId: MarkTaskDuplicateParams | string,
+	commitSha?: string,
+	resolution?: string,
+	path?: string,
 ): void {
+	let id: string;
+	let actualCommitSha: string;
+	let actualResolution: string;
+	let actualPath: string;
+
+	if (typeof paramsOrId === "object") {
+		({
+			id,
+			commitSha: actualCommitSha,
+			resolution: actualResolution,
+			path: actualPath = DEFAULT_TASK_BOARD_PATH,
+		} = paramsOrId);
+	} else {
+		id = paramsOrId;
+		actualCommitSha = commitSha!;
+		actualResolution = resolution!;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
 	updateTask(
 		id,
 		(task) => {
 			task.status = "duplicate";
 			task.completedAt = new Date();
-			task.duplicateOfCommit = commitSha;
-			task.resolution = resolution;
+			task.duplicateOfCommit = actualCommitSha;
+			task.resolution = actualResolution;
 			delete task.error; // Clear any error since this isn't a failure
 		},
-		path,
+		actualPath,
 	);
 }
 
 /**
  * Mark a task as canceled (won't do)
  */
-export function markTaskCanceled(id: string, reason: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+export function markTaskCanceled(params: MarkTaskCanceledParams): void;
+export function markTaskCanceled(id: string, reason: string, path?: string): void;
+export function markTaskCanceled(paramsOrId: MarkTaskCanceledParams | string, reason?: string, path?: string): void {
+	let id: string;
+	let actualReason: string;
+	let actualPath: string;
+
+	if (typeof paramsOrId === "object") {
+		({ id, reason: actualReason, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrId);
+	} else {
+		id = paramsOrId;
+		actualReason = reason!;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
 	updateTask(
 		id,
 		(task) => {
 			task.status = "canceled";
 			task.completedAt = new Date();
-			task.resolution = reason;
+			task.resolution = actualReason;
 			delete task.error;
 		},
-		path,
+		actualPath,
 	);
 }
 
 /**
  * Mark a task as obsolete (no longer needed)
  */
-export function markTaskObsolete(id: string, reason: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+export function markTaskObsolete(params: MarkTaskObsoleteParams): void;
+export function markTaskObsolete(id: string, reason: string, path?: string): void;
+export function markTaskObsolete(paramsOrId: MarkTaskObsoleteParams | string, reason?: string, path?: string): void {
+	let id: string;
+	let actualReason: string;
+	let actualPath: string;
+
+	if (typeof paramsOrId === "object") {
+		({ id, reason: actualReason, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrId);
+	} else {
+		id = paramsOrId;
+		actualReason = reason!;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
 	updateTask(
 		id,
 		(task) => {
 			task.status = "obsolete";
 			task.completedAt = new Date();
-			task.resolution = reason;
+			task.resolution = actualReason;
 			delete task.error;
 		},
-		path,
+		actualPath,
 	);
 }
 
@@ -507,7 +761,19 @@ export function getTaskBoardSummary(): {
 /**
  * Block a task (prevent it from being picked up)
  */
-export function blockTask(id: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+export function blockTask(params: BlockTaskParams): void;
+export function blockTask(id: string, path?: string): void;
+export function blockTask(paramsOrId: BlockTaskParams | string, path?: string): void {
+	let id: string;
+	let actualPath: string;
+
+	if (typeof paramsOrId === "object") {
+		({ id, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrId);
+	} else {
+		id = paramsOrId;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
 	updateTask(
 		id,
 		(task) => {
@@ -515,14 +781,26 @@ export function blockTask(id: string, path: string = DEFAULT_TASK_BOARD_PATH): v
 				task.status = "blocked";
 			}
 		},
-		path,
+		actualPath,
 	);
 }
 
 /**
  * Unblock a task (allow it to be picked up again)
  */
-export function unblockTask(id: string, path: string = DEFAULT_TASK_BOARD_PATH): void {
+export function unblockTask(params: BlockTaskParams): void;
+export function unblockTask(id: string, path?: string): void;
+export function unblockTask(paramsOrId: BlockTaskParams | string, path?: string): void {
+	let id: string;
+	let actualPath: string;
+
+	if (typeof paramsOrId === "object") {
+		({ id, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrId);
+	} else {
+		id = paramsOrId;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
 	updateTask(
 		id,
 		(task) => {
@@ -530,19 +808,29 @@ export function unblockTask(id: string, path: string = DEFAULT_TASK_BOARD_PATH):
 				task.status = "pending";
 			}
 		},
-		path,
+		actualPath,
 	);
 }
 
 /**
  * Clear completed tasks from the board
  */
-export function clearCompletedTasks(path: string = DEFAULT_TASK_BOARD_PATH): number {
-	return withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
+export function clearCompletedTasks(params: ClearCompletedTasksParams): number;
+export function clearCompletedTasks(path?: string): number;
+export function clearCompletedTasks(paramsOrPath?: ClearCompletedTasksParams | string): number {
+	let actualPath: string;
+
+	if (typeof paramsOrPath === "object") {
+		actualPath = paramsOrPath.path ?? DEFAULT_TASK_BOARD_PATH;
+	} else {
+		actualPath = paramsOrPath ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
+	return withLock(getLockPath(actualPath), () => {
+		const board = loadTaskBoard(actualPath);
 		const before = board.tasks.length;
 		board.tasks = board.tasks.filter((q) => q.status !== "complete");
-		saveTaskBoard(board, path);
+		saveTaskBoard(board, actualPath);
 		return before - board.tasks.length;
 	});
 }
@@ -550,13 +838,25 @@ export function clearCompletedTasks(path: string = DEFAULT_TASK_BOARD_PATH): num
 /**
  * Remove a task by ID (permanent deletion)
  */
-export function removeTask(id: string, path: string = DEFAULT_TASK_BOARD_PATH): boolean {
-	return withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
+export function removeTask(params: RemoveTaskParams): boolean;
+export function removeTask(id: string, path?: string): boolean;
+export function removeTask(paramsOrId: RemoveTaskParams | string, path?: string): boolean {
+	let id: string;
+	let actualPath: string;
+
+	if (typeof paramsOrId === "object") {
+		({ id, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrId);
+	} else {
+		id = paramsOrId;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
+	return withLock(getLockPath(actualPath), () => {
+		const board = loadTaskBoard(actualPath);
 		const before = board.tasks.length;
 		board.tasks = board.tasks.filter((t) => t.id !== id);
 		if (board.tasks.length < before) {
-			saveTaskBoard(board, path);
+			saveTaskBoard(board, actualPath);
 			return true;
 		}
 		return false;
@@ -566,15 +866,27 @@ export function removeTask(id: string, path: string = DEFAULT_TASK_BOARD_PATH): 
 /**
  * Remove multiple tasks by ID (permanent deletion)
  */
-export function removeTasks(ids: string[], path: string = DEFAULT_TASK_BOARD_PATH): number {
-	return withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
+export function removeTasks(params: RemoveTasksParams): number;
+export function removeTasks(ids: string[], path?: string): number;
+export function removeTasks(paramsOrIds: RemoveTasksParams | string[], path?: string): number {
+	let ids: string[];
+	let actualPath: string;
+
+	if (Array.isArray(paramsOrIds)) {
+		ids = paramsOrIds;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	} else {
+		({ ids, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrIds);
+	}
+
+	return withLock(getLockPath(actualPath), () => {
+		const board = loadTaskBoard(actualPath);
 		const before = board.tasks.length;
 		const idSet = new Set(ids);
 		board.tasks = board.tasks.filter((t) => !idSet.has(t.id));
 		const removed = before - board.tasks.length;
 		if (removed > 0) {
-			saveTaskBoard(board, path);
+			saveTaskBoard(board, actualPath);
 		}
 		return removed;
 	});
@@ -591,8 +903,21 @@ export function getAllTasks(): Task[] {
  * Get ready tasks for parallel execution
  * Returns pending tasks sorted by priority, limited to the specified count
  */
-export function getReadyTasksForBatch(count: number = 3): Task[] {
-	const board = loadTaskBoard();
+export function getReadyTasksForBatch(params: GetReadyTasksParams): Task[];
+export function getReadyTasksForBatch(count?: number): Task[];
+export function getReadyTasksForBatch(paramsOrCount?: GetReadyTasksParams | number): Task[] {
+	let count: number;
+	let actualPath: string;
+
+	if (typeof paramsOrCount === "object") {
+		count = paramsOrCount.count ?? 3;
+		actualPath = paramsOrCount.path ?? DEFAULT_TASK_BOARD_PATH;
+	} else {
+		count = paramsOrCount ?? 3;
+		actualPath = DEFAULT_TASK_BOARD_PATH;
+	}
+
+	const board = loadTaskBoard(actualPath);
 	const pendingTasks = board.tasks.filter(
 		(task) =>
 			task.status === "pending" &&
@@ -662,16 +987,30 @@ export function getReadyTasksForBatch(count: number = 3): Task[] {
 /**
  * Mark multiple tasks as in progress
  */
+export function markTaskSetInProgress(params: MarkTaskSetInProgressParams): void;
+export function markTaskSetInProgress(taskIds: string[], sessionIds: string[], path?: string): void;
 export function markTaskSetInProgress(
-	taskIds: string[],
-	sessionIds: string[],
-	path: string = DEFAULT_TASK_BOARD_PATH,
+	paramsOrTaskIds: MarkTaskSetInProgressParams | string[],
+	sessionIds?: string[],
+	path?: string,
 ): void {
-	withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
+	let taskIds: string[];
+	let actualSessionIds: string[];
+	let actualPath: string;
+
+	if (Array.isArray(paramsOrTaskIds)) {
+		taskIds = paramsOrTaskIds;
+		actualSessionIds = sessionIds!;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	} else {
+		({ taskIds, sessionIds: actualSessionIds, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrTaskIds);
+	}
+
+	withLock(getLockPath(actualPath), () => {
+		const board = loadTaskBoard(actualPath);
 		for (let i = 0; i < taskIds.length; i++) {
 			const taskId = taskIds[i];
-			const sessionId = sessionIds[i];
+			const sessionId = actualSessionIds[i];
 			const task = board.tasks.find((q) => q.id === taskId);
 			if (task) {
 				task.status = "in_progress";
@@ -679,7 +1018,7 @@ export function markTaskSetInProgress(
 				task.sessionId = sessionId;
 			}
 		}
-		saveTaskBoard(board, path);
+		saveTaskBoard(board, actualPath);
 	});
 }
 
@@ -758,6 +1097,7 @@ export function getTaskBoardAnalytics(): {
 /**
  * Update task with computed analysis results
  */
+export function updateTaskAnalysis(params: UpdateTaskAnalysisParams): void;
 export function updateTaskAnalysis(
 	taskId: string,
 	analysis: {
@@ -766,17 +1106,44 @@ export function updateTaskAnalysis(
 		estimatedFiles?: string[];
 		tags?: string[];
 	},
-	path: string = DEFAULT_TASK_BOARD_PATH,
+	path?: string,
+): void;
+export function updateTaskAnalysis(
+	paramsOrTaskId: UpdateTaskAnalysisParams | string,
+	analysis?: {
+		computedPackages?: string[];
+		riskScore?: number;
+		estimatedFiles?: string[];
+		tags?: string[];
+	},
+	path?: string,
 ): void {
-	withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
+	let taskId: string;
+	let actualAnalysis: {
+		computedPackages?: string[];
+		riskScore?: number;
+		estimatedFiles?: string[];
+		tags?: string[];
+	};
+	let actualPath: string;
+
+	if (typeof paramsOrTaskId === "object") {
+		({ taskId, analysis: actualAnalysis, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrTaskId);
+	} else {
+		taskId = paramsOrTaskId;
+		actualAnalysis = analysis!;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
+	withLock(getLockPath(actualPath), () => {
+		const board = loadTaskBoard(actualPath);
 		const task = board.tasks.find((q) => q.id === taskId);
 		if (task) {
-			if (analysis.computedPackages) task.computedPackages = analysis.computedPackages;
-			if (analysis.riskScore !== undefined) task.riskScore = analysis.riskScore;
-			if (analysis.estimatedFiles) task.estimatedFiles = analysis.estimatedFiles;
-			if (analysis.tags) task.tags = analysis.tags;
-			saveTaskBoard(board, path);
+			if (actualAnalysis.computedPackages) task.computedPackages = actualAnalysis.computedPackages;
+			if (actualAnalysis.riskScore !== undefined) task.riskScore = actualAnalysis.riskScore;
+			if (actualAnalysis.estimatedFiles) task.estimatedFiles = actualAnalysis.estimatedFiles;
+			if (actualAnalysis.tags) task.tags = actualAnalysis.tags;
+			saveTaskBoard(board, actualPath);
 		}
 	});
 }
@@ -789,6 +1156,7 @@ export function updateTaskAnalysis(
  *
  * @returns Array of created subtask IDs
  */
+export function decomposeTaskIntoSubtasks(params: DecomposeTaskParams): string[];
 export function decomposeTaskIntoSubtasks(
 	parentTaskId: string,
 	subtasks: Array<{
@@ -796,10 +1164,34 @@ export function decomposeTaskIntoSubtasks(
 		estimatedFiles?: string[];
 		order: number;
 	}>,
-	path: string = DEFAULT_TASK_BOARD_PATH,
+	path?: string,
+): string[];
+export function decomposeTaskIntoSubtasks(
+	paramsOrParentTaskId: DecomposeTaskParams | string,
+	subtasks?: Array<{
+		objective: string;
+		estimatedFiles?: string[];
+		order: number;
+	}>,
+	path?: string,
 ): string[] {
-	return withLock(getLockPath(path), () => {
-		const board = loadTaskBoard(path);
+	let parentTaskId: string;
+	let actualSubtasks: Array<{
+		objective: string;
+		estimatedFiles?: string[];
+		order: number;
+	}>;
+	let actualPath: string;
+
+	if (typeof paramsOrParentTaskId === "object") {
+		({ parentTaskId, subtasks: actualSubtasks, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrParentTaskId);
+	} else {
+		parentTaskId = paramsOrParentTaskId;
+		actualSubtasks = subtasks!;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+	return withLock(getLockPath(actualPath), () => {
+		const board = loadTaskBoard(actualPath);
 		const parentTask = board.tasks.find((t) => t.id === parentTaskId);
 
 		if (!parentTask) {
@@ -814,7 +1206,7 @@ export function decomposeTaskIntoSubtasks(
 		const subtaskIds: string[] = [];
 		const basePriority = parentTask.priority ?? 999;
 
-		for (const subtask of subtasks) {
+		for (const subtask of actualSubtasks) {
 			const subtaskId = generateTaskId();
 			const newTask: Task = {
 				id: subtaskId,
@@ -835,7 +1227,7 @@ export function decomposeTaskIntoSubtasks(
 		// Update parent with subtask references
 		parentTask.subtaskIds = subtaskIds;
 
-		saveTaskBoard(board, path);
+		saveTaskBoard(board, actualPath);
 		return subtaskIds;
 	});
 }
@@ -843,8 +1235,20 @@ export function decomposeTaskIntoSubtasks(
 /**
  * Check if all subtasks of a parent are complete
  */
-export function areAllSubtasksComplete(parentTaskId: string, path: string = DEFAULT_TASK_BOARD_PATH): boolean {
-	const board = loadTaskBoard(path);
+export function areAllSubtasksComplete(params: SubtaskCheckParams): boolean;
+export function areAllSubtasksComplete(parentTaskId: string, path?: string): boolean;
+export function areAllSubtasksComplete(paramsOrParentTaskId: SubtaskCheckParams | string, path?: string): boolean {
+	let parentTaskId: string;
+	let actualPath: string;
+
+	if (typeof paramsOrParentTaskId === "object") {
+		({ parentTaskId, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrParentTaskId);
+	} else {
+		parentTaskId = paramsOrParentTaskId;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
+	const board = loadTaskBoard(actualPath);
 	const parentTask = board.tasks.find((t) => t.id === parentTaskId);
 
 	if (!parentTask || !parentTask.subtaskIds || parentTask.subtaskIds.length === 0) {
@@ -860,9 +1264,24 @@ export function areAllSubtasksComplete(parentTaskId: string, path: string = DEFA
 /**
  * Mark a decomposed parent task as complete if all subtasks are done
  */
-export function completeParentIfAllSubtasksDone(parentTaskId: string, path: string = DEFAULT_TASK_BOARD_PATH): boolean {
-	if (areAllSubtasksComplete(parentTaskId, path)) {
-		markTaskComplete(parentTaskId, path);
+export function completeParentIfAllSubtasksDone(params: SubtaskCheckParams): boolean;
+export function completeParentIfAllSubtasksDone(parentTaskId: string, path?: string): boolean;
+export function completeParentIfAllSubtasksDone(
+	paramsOrParentTaskId: SubtaskCheckParams | string,
+	path?: string,
+): boolean {
+	let parentTaskId: string;
+	let actualPath: string;
+
+	if (typeof paramsOrParentTaskId === "object") {
+		({ parentTaskId, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrParentTaskId);
+	} else {
+		parentTaskId = paramsOrParentTaskId;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
+	if (areAllSubtasksComplete(parentTaskId, actualPath)) {
+		markTaskComplete(parentTaskId, actualPath);
 		return true;
 	}
 	return false;
@@ -871,8 +1290,20 @@ export function completeParentIfAllSubtasksDone(parentTaskId: string, path: stri
 /**
  * Get task by ID
  */
-export function getTaskById(taskId: string, path: string = DEFAULT_TASK_BOARD_PATH): Task | undefined {
-	const board = loadTaskBoard(path);
+export function getTaskById(params: GetTaskByIdParams): Task | undefined;
+export function getTaskById(taskId: string, path?: string): Task | undefined;
+export function getTaskById(paramsOrTaskId: GetTaskByIdParams | string, path?: string): Task | undefined {
+	let taskId: string;
+	let actualPath: string;
+
+	if (typeof paramsOrTaskId === "object") {
+		({ taskId, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrTaskId);
+	} else {
+		taskId = paramsOrTaskId;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
+	const board = loadTaskBoard(actualPath);
 	return board.tasks.find((t) => t.id === taskId);
 }
 
@@ -880,12 +1311,29 @@ export function getTaskById(taskId: string, path: string = DEFAULT_TASK_BOARD_PA
  * Check if a task is too similar to any in-progress tasks
  * Returns the similar task if similarity > threshold, null otherwise
  */
+export function findSimilarInProgressTask(params: FindSimilarTaskParams): { task: Task; similarity: number } | null;
 export function findSimilarInProgressTask(
 	objective: string,
-	threshold = 0.7,
-	path: string = DEFAULT_TASK_BOARD_PATH,
+	threshold?: number,
+	path?: string,
+): { task: Task; similarity: number } | null;
+export function findSimilarInProgressTask(
+	paramsOrObjective: FindSimilarTaskParams | string,
+	threshold?: number,
+	path?: string,
 ): { task: Task; similarity: number } | null {
-	const board = loadTaskBoard(path);
+	let objective: string;
+	let actualThreshold: number;
+	let actualPath: string;
+
+	if (typeof paramsOrObjective === "object") {
+		({ objective, threshold: actualThreshold = 0.7, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrObjective);
+	} else {
+		objective = paramsOrObjective;
+		actualThreshold = threshold ?? 0.7;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+	const board = loadTaskBoard(actualPath);
 	const inProgress = board.tasks.filter((t) => t.status === "in_progress");
 
 	if (inProgress.length === 0) {
@@ -969,7 +1417,7 @@ export function findSimilarInProgressTask(
 		const union = new Set([...targetKeywords, ...taskKeywords]).size;
 		const similarity = union > 0 ? intersection / union : 0;
 
-		if (similarity >= threshold) {
+		if (similarity >= actualThreshold) {
 			return { task, similarity };
 		}
 	}
@@ -1049,12 +1497,12 @@ export async function reconcileTasks(options: { lookbackCommits?: number; dryRun
 				});
 
 				if (!dryRun) {
-					markTaskDuplicate(
-						task.id,
-						commit.sha,
-						`Auto-detected (${confidenceLabel} confidence): work completed in commit ${commit.sha}`,
+					markTaskDuplicate({
+						id: task.id,
+						commitSha: commit.sha,
+						resolution: `Auto-detected (${confidenceLabel} confidence): work completed in commit ${commit.sha}`,
 						path,
-					);
+					});
 				}
 				break; // Found match, move to next task
 			}

@@ -1,12 +1,13 @@
 /**
  * Annealing Review System
  *
- * Reviews as simulated annealing: start hot (wild perspectives),
- * cool down (focused refinement). Tarot-inspired framing for
- * genuinely different review passes.
+ * Temperature-based code review using Tarot-inspired archetypes.
  *
- * Philosophy: "It doesn't need to make sense to anyone but Claude
- * as long as it produces high quality output in a token efficient way"
+ * | Phase     | Temperature | Source       | Focus                    |
+ * |-----------|-------------|--------------|--------------------------|
+ * | Hot       | >0.6        | Major Arcana | Wild, radical exploration|
+ * | Cooling   | 0.3-0.6     | Both         | Balanced perspectives    |
+ * | Cold      | <0.3        | Minor Arcana | Focused refinement       |
  */
 
 import { UndercityOracle } from "./oracle.js";
@@ -286,28 +287,25 @@ const DEFAULT_CONFIG: Required<AnnealingConfig> = {
 };
 
 /**
- * Annealing Review: A sophisticated code review system inspired by simulated annealing
+ * Annealing Review: Temperature-based code review system
  *
- * This class generates systematic, multi-perspective review passes that simulate
- * the cooling process in metallurgy. By drawing from Tarot-inspired archetypes,
- * it creates a dynamic review process that explores code from various analytical angles.
- *
- * Key features:
- * - Progressive refinement through temperature-based review passes
- * - Major and Minor Arcana provide diverse review perspectives
- * - Supports customizable review configurations
- * - Ensures comprehensive, multi-lens code analysis
+ * Features:
+ * - Progressive refinement via temperature-controlled passes
+ * - Diverse perspectives from Tarot-inspired archetypes
+ * - Customizable review configurations
+ * - Multi-lens analytical coverage
  */
 export class AnnealingReview {
 	/**
-	 * Temperature parameter controls the randomness and depth of review passes
-	 * - High temperature (>0.6): Broad, unconventional perspectives from Major Arcana
-	 * - Medium temperature (0.3-0.6): Mixed perspectives, balanced exploration
-	 * - Low temperature (<0.3): Focused, tactical Minor Arcana reviews
+	 * Temperature Control System
 	 *
-	 * Analogous to simulated annealing in optimization, where:
-	 * - High temperatures allow more radical exploration
-	 * - Low temperatures converge on specific, refined insights
+	 * | Range   | Perspective | Source       | Purpose |
+	 * |---------|-------------|--------------|---------|
+	 * | >0.6    | Broad       | Major Arcana | Radical exploration |
+	 * | 0.3-0.6 | Mixed       | Both         | Balanced exploration |
+	 * | <0.3    | Focused     | Minor Arcana | Refined insights |
+	 *
+	 * Simulated annealing analogy: High temp = exploration, Low temp = convergence
 	 */
 	private oracle: UndercityOracle;
 	private config: Required<AnnealingConfig>;

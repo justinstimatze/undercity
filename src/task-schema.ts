@@ -1,8 +1,13 @@
 /**
  * Task Schema
  *
- * Type definitions for task validation and type-safe task routing.
- * Formalizes the informal prefix conventions used in objectives.
+ * Type-safe task validation and routing with prefix conventions.
+ *
+ * | Prefix Format   | Task Type       | Example                    |
+ * |-----------------|-----------------|----------------------------|
+ * | [meta:*]        | Board operation | [meta:triage], [meta:plan] |
+ * | [plan]          | Planning task   | [plan] Add auth system     |
+ * | [category]      | Implementation  | [refactor], [test], [docs] |
  */
 
 // =============================================================================
@@ -16,8 +21,7 @@ export type MetaTaskType = "triage" | "prune" | "plan" | "prioritize" | "generat
 const META_TASK_TYPES: MetaTaskType[] = ["triage", "prune", "plan", "prioritize", "generate"];
 
 /**
- * Category prefixes used in task objectives
- * These are informal tags in brackets at the start of objectives
+ * Category prefixes: informal tags in brackets at objective start
  */
 export type TaskCategory =
 	// Meta-tasks (operate on task board)
@@ -82,9 +86,9 @@ const TASK_CATEGORIES: TaskCategory[] = [
 ];
 
 /**
- * Task type classification
- * Meta-tasks operate on the task board (triage, prune, plan, etc.)
- * Implementation tasks make code changes
+ * Task type classification:
+ * - Meta: operate on task board (triage, prune, plan, etc.)
+ * - Implementation: make code changes
  */
 export type TaskType = "meta" | "implementation";
 

@@ -1,17 +1,16 @@
 /**
- * Orchestrator
+ * Orchestrator: Parallel TaskWorker execution with worktree isolation
  *
- * Runs multiple TaskWorkers concurrently in isolated git worktrees.
- * Each task gets its own worktree branched from local main, runs independently,
- * then merges back into local main via serial MergeQueue.
+ * Architecture: Each task → isolated worktree → independent execution → serial merge
  *
- * Flow:
- * 1. Create worktrees from local main HEAD (includes unpushed commits)
- * 2. Run TaskWorkers in parallel (one per worktree)
- * 3. Collect results
- * 4. Merge successful branches serially (rebase onto local main → verify → fast-forward merge)
- * 5. Cleanup worktrees
- * 6. User pushes local main to origin when ready
+ * | Step | Action                                          |
+ * |------|-------------------------------------------------|
+ * | 1    | Create worktrees from local main HEAD           |
+ * | 2    | Run TaskWorkers in parallel (one per worktree)  |
+ * | 3    | Collect results                                 |
+ * | 4    | Merge successful branches (rebase → verify → ff)|
+ * | 5    | Cleanup worktrees                               |
+ * | 6    | User pushes local main when ready               |
  */
 
 import { execFileSync, execSync } from "node:child_process";

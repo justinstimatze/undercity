@@ -1,19 +1,19 @@
 /**
  * Task Board Analyzer Module
  *
- * High-level analysis of the entire task board. Combines TaskAnalyzer and TaskScheduler
- * to provide board-wide insights: parallelization opportunities, conflict detection,
- * and recommendations for optimal task execution.
+ * Board-wide analysis combining TaskAnalyzer + TaskScheduler.
  *
- * Key exports:
- * - TaskBoardAnalyzer: Main class for board analysis
- * - getBoardInsights(): Returns parallelization opportunities and recommendations
- * - buildCompatibilityMatrix(): Shows which tasks can run together
+ * | Export                     | Purpose                            |
+ * |----------------------------|------------------------------------|
+ * | TaskBoardAnalyzer          | Main analysis class                |
+ * | getBoardInsights()         | Parallelization + recommendations  |
+ * | buildCompatibilityMatrix() | Task compatibility mapping         |
  *
- * Related modules:
- * - task-analyzer.ts: Per-task analysis (used internally)
- * - task-scheduler.ts: Matchmaking engine (used internally)
- * - task-planner.ts: Different concern - [plan] prefix task expansion via AI
+ * | Dependency          | Role                              |
+ * |---------------------|-----------------------------------|
+ * | task-analyzer.ts    | Per-task analysis (internal)      |
+ * | task-scheduler.ts   | Matchmaking engine (internal)     |
+ * | task-planner.ts     | [plan] prefix expansion           |
  */
 
 import { FileTracker } from "./file-tracker.js";

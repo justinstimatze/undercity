@@ -1,11 +1,14 @@
 /**
  * Feedback Metrics Reader
  *
- * Loads historical metrics from metrics.jsonl and computes success rates
- * by model tier, complexity level, and other dimensions.
+ * Reads metrics.jsonl for data-driven routing decisions.
  *
- * Used by the feedback loop to adjust routing decisions based on
- * actual outcomes rather than heuristics alone.
+ * | Output               | Description                              |
+ * |----------------------|------------------------------------------|
+ * | Success rates        | By model tier, complexity, combinations  |
+ * | Escalation stats     | Paths, costs, success after escalation   |
+ * | Error patterns       | Categorized failure modes                |
+ * | Recommendations      | Actionable routing adjustments           |
  */
 
 import { existsSync, readFileSync } from "node:fs";

@@ -1,14 +1,14 @@
 /**
  * File Tracker Module
  *
- * Tracks which files each agent is touching during a session.
- * This enables conflict detection when running parallel fabricators.
+ * Tracks file operations per agent for conflict detection during parallel execution.
  *
- * Key features:
- * - Track file operations (read, write, edit, delete) per agent
- * - Detect conflicts when multiple agents touch the same file
- * - Support for checking conflicts before spawning parallel agents
- * - Persisted state for crash recovery
+ * | Feature               | Description                                |
+ * |-----------------------|--------------------------------------------|
+ * | Operation tracking    | read, write, edit, delete per agent        |
+ * | Conflict detection    | multi-agent file overlap identification    |
+ * | Pre-spawn checking    | verify file availability before assignment |
+ * | Crash recovery        | persisted state in .undercity/             |
  */
 
 import { relative, resolve } from "node:path";
@@ -25,14 +25,13 @@ import type {
 const trackerLogger = logger.child({ module: "file-tracker" });
 
 /**
- * FileTracker manages file access tracking for parallel agent coordination.
+ * FileTracker: Parallel agent coordination via file access tracking
  *
- * When multiple fabricators work in parallel, they may attempt to modify
- * the same files, leading to merge conflicts. This tracker:
- *
- * 1. Records every file operation per agent
- * 2. Detects potential conflicts before they happen
- * 3. Enables smart step assignment to avoid overlapping file access
+ * | Problem         | Solution                                 |
+ * |-----------------|------------------------------------------|
+ * | Merge conflicts | Record file ops per agent                |
+ * | Race conditions | Detect conflicts before they occur       |
+ * | Poor assignment | Enable smart task distribution           |
  */
 export class FileTracker {
 	private state: FileTrackingState;

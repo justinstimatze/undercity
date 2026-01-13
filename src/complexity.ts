@@ -1,18 +1,17 @@
 /**
  * Complexity Assessment Module
  *
- * Estimates task complexity to determine:
- * - Which model to use (haiku/sonnet/opus)
- * - Whether to use solo mode or full agent chain
- * - How much verification is needed
+ * | Output          | Description                        |
+ * |-----------------|------------------------------------|
+ * | Model routing   | haiku / sonnet / opus selection    |
+ * | Execution mode  | solo vs full chain                 |
+ * | Verification    | review requirements                |
  *
- * Uses quantitative code analysis when possible:
- * - File metrics (line count, function count)
- * - CodeScene code health scores
- * - Git history (change frequency, bug density)
- * - Cross-package detection
- *
- * Falls back to heuristics + LLM for uncertain cases.
+ * | Method       | Signals                                          |
+ * |--------------|--------------------------------------------------|
+ * | Quantitative | file metrics, code health, git history, packages |
+ * | Heuristics   | keywords, patterns, scope indicators             |
+ * | LLM fallback | low-confidence fast assessment → Haiku analysis  |
  */
 
 import { execSync } from "node:child_process";
@@ -27,17 +26,17 @@ import { sessionLogger } from "./logger.js";
 export type ComplexityLevel = "trivial" | "simple" | "standard" | "complex" | "critical";
 
 /**
- * Team composition based on complexity (inspired by Zeroshot)
+ * Team Composition by Complexity Level
  *
- * Complexity determines how many validators review the work:
- * - trivial: Single agent, no validation (fast path)
- * - simple: Worker + 1 validator
- * - standard: Planner + worker + 2 validators
- * - complex: Planner + worker + 3 validators
- * - critical: Planner (opus) + worker + 5 validators
+ * | Level     | Planning | Workers | Validators | Model    | Validation Strategy |
+ * |-----------|----------|---------|------------|----------|---------------------|
+ * | Trivial   | None     | 1       | 0          | Haiku    | Fast path, no extra review |
+ * | Simple    | None     | 1       | 1          | Sonnet   | Basic independent review |
+ * | Standard  | Sonnet   | 1       | 2          | Sonnet   | Thorough independent review |
+ * | Complex   | Opus     | 1       | 3          | Sonnet   | Comprehensive independent review |
+ * | Critical  | Opus     | 1       | 5          | Sonnet   | Extensive independent review |
  *
- * Key insight from Zeroshot: validators who didn't write the code
- * can't lie about whether tests pass. Independent review catches more bugs.
+ * Key insight: Independent validators can't hide test failures, ensuring higher quality.
  */
 export interface TeamComposition {
 	/** Whether planning phase is needed */
@@ -493,8 +492,8 @@ export function getTeamComposition(
 }
 
 /**
- * Shared complexity level configuration with explicit review and model escalation rules
- * Ensures simple tasks (docs, cleanup, refactors) do not escalate to Opus
+ * Shared complexity level configuration
+ * Purpose: explicit review + model escalation rules, prevent simple task over-escalation
  */
 function getLevelConfig(
 	level: ComplexityLevel,
@@ -587,10 +586,8 @@ const MODEL_SUCCESS_THRESHOLDS = {
 
 /**
  * Check historical metrics and potentially upgrade model tier
- * Returns adjusted model if historical success rate is too low
- *
- * Uses learned routing profile if available, otherwise falls back to
- * raw metrics analysis with hardcoded thresholds.
+ * Returns: adjusted model if success rate too low
+ * Strategy: learned routing profile → fallback to raw metrics + thresholds
  */
 export async function adjustModelFromMetrics(
 	recommendedModel: "haiku" | "sonnet" | "opus",
@@ -725,8 +722,7 @@ function upgradeModel(model: "haiku" | "sonnet" | "opus"): "haiku" | "sonnet" | 
 /**
  * Keywords and patterns that indicate complexity
  */
-// Complexity signals with refined categorization
-// Explicitly distinguishes simple, non-escalating tasks from those requiring deeper review
+// Complexity signals: refined categorization distinguishing simple vs review-requiring tasks
 const COMPLEXITY_SIGNALS = {
 	// Absolutely minimal changes - guaranteed haiku, no review
 	trivial: {
@@ -836,9 +832,8 @@ const SCOPE_SIGNALS = {
 };
 
 /**
- * Assess complexity of a task using heuristics
- *
- * Fast, no API calls, good for initial triage
+ * Assess complexity via heuristics
+ * Characteristics: fast, no API calls, initial triage
  */
 export function assessComplexityFast(task: string): ComplexityAssessment {
 	if (!task) {
@@ -994,10 +989,36 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 }
 
 /**
- * Get a more accurate complexity assessment using Haiku for analysis
- *
- * Use when fast assessment confidence is low
+ * Get accurate complexity assessment via Haiku analysis
+ * Use case: when fast assessment confidence is low
  */
+export const COMPLEXITY_LEVELS_GUIDE = {
+	trivial: {
+		description: "Minimal changes with low impact",
+		examples: ["typos", "comments", "trivial fixes"],
+	},
+	simple: {
+		description: "Small, localized changes",
+		examples: ["add a log", "small changes", "single function updates"],
+	},
+	standard: {
+		description: "Typical feature work or bug fixes",
+		examples: ["feature implementation", "bug fix", "add tests"],
+	},
+	complex: {
+		description: "Significant architectural or structural changes",
+		examples: ["refactoring", "multi-file changes", "architectural redesign"],
+	},
+	critical: {
+		description: "High-risk, sensitive, or potentially disruptive changes",
+		examples: ["security updates", "authentication", "breaking changes", "production data handling"],
+	},
+};
+
+const COMPLEXITY_GUIDE_TEXT = Object.entries(COMPLEXITY_LEVELS_GUIDE)
+	.map(([level, details]) => `- ${level}: ${details.examples.join(", ")}`)
+	.join("\n");
+
 export async function assessComplexityDeep(task: string): Promise<ComplexityAssessment> {
 	// Start with fast assessment
 	const fastAssessment = assessComplexityFast(task);
@@ -1024,11 +1045,7 @@ Respond with this exact JSON format:
 }
 
 Complexity guide:
-- trivial: typos, comments, trivial fixes
-- simple: add a log, small changes, single function
-- standard: typical feature, bug fix, add tests
-- complex: refactoring, multi-file changes, architecture
-- critical: security, auth, breaking changes, production data`,
+${COMPLEXITY_GUIDE_TEXT}`,
 			options: {
 				model: "claude-3-5-haiku-20241022",
 				allowedTools: [],
@@ -1084,13 +1101,13 @@ Complexity guide:
 }
 
 /**
- * Assess complexity using quantitative code analysis
+ * Assess complexity via quantitative code analysis (preferred method)
  *
- * This is the preferred method - uses actual code metrics instead of keyword matching.
- * Requires target files to be identified first (via prepareContext or explicit list).
+ * Method: actual code metrics vs keyword matching
+ * Prerequisite: target files identified (via prepareContext or explicit list)
  *
  * @param task - Task description
- * @param targetFiles - Files likely to be affected (from context briefing)
+ * @param targetFiles - Files likely affected (from context briefing)
  * @param repoRoot - Repository root directory
  */
 export function assessComplexityQuantitative(
@@ -1184,11 +1201,12 @@ export function assessComplexityQuantitative(
 /**
  * Full complexity assessment pipeline
  *
- * 1. Run prepareContext to identify target files
- * 2. Get quantitative metrics from those files
- * 3. Combine with keyword signals for critical detection
+ * Steps:
+ * 1. prepareContext → identify target files
+ * 2. getQuantitativeMetrics → analyze files
+ * 3. combineWithKeywordSignals → critical detection
  *
- * This is async because prepareContext may do file I/O
+ * Note: async due to prepareContext file I/O
  */
 export async function assessComplexityFull(
 	task: string,
@@ -1226,9 +1244,8 @@ export async function assessComplexityFull(
 }
 
 /**
- * Recommend whether to escalate from solo to full chain
- *
- * Called after initial work is done to see if more review is needed
+ * Recommend escalation from solo to full chain
+ * Timing: after initial work, before finalizing
  */
 export function shouldEscalateToFullChain(
 	assessment: ComplexityAssessment,

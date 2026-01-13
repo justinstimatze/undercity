@@ -1,6 +1,21 @@
 /**
  * Task-related commands
- * Command handlers extracted to task-handlers.ts for maintainability
+ *
+ * | Command      | Purpose                                      |
+ * |--------------|----------------------------------------------|
+ * | tasks        | Show/filter task board                       |
+ * | add          | Add goal to backlog                          |
+ * | complete     | Mark task as complete                        |
+ * | load         | Bulk load goals from file                    |
+ * | import-plan  | Parse plan file into discrete tasks          |
+ * | plan         | Execute plan file with judgment              |
+ * | work         | Process backlog continuously                 |
+ * | task-analyze | Parallelization opportunities                |
+ * | reconcile    | Sync completed tasks with git history        |
+ * | triage       | Analyze board health                         |
+ * | prune        | Remove stale/test/duplicate tasks            |
+ *
+ * Handlers: task-handlers.ts (extracted for maintainability)
  */
 
 import {
