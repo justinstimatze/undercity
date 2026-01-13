@@ -8,6 +8,7 @@
  * Auto-detects TTY to choose mode, but can be overridden with --human flag.
  */
 
+// Handles flexible output for human and agent environments
 import chalk from "chalk";
 
 export type OutputMode = "human" | "agent";
