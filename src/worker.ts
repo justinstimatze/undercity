@@ -1317,6 +1317,8 @@ RULES:
 			sonnet: 15,
 			opus: 25,
 		};
+		const maxTurns = maxTurnsPerModel[this.currentModel];
+		sessionLogger.debug({ model: this.currentModel, maxTurns }, `Agent maxTurns: ${maxTurns}`);
 
 		// Build query parameters - use resume if we have a session to continue
 		const queryOptions = {
@@ -1327,7 +1329,7 @@ RULES:
 			// CRITICAL: Use workingDirectory so agent edits files in the correct location (worktree)
 			cwd: this.workingDirectory,
 			// Limit turns to prevent runaway exploration - simple tasks don't need 20+ turns
-			maxTurns: maxTurnsPerModel[this.currentModel],
+			maxTurns,
 			// Defense-in-depth: explicitly block git push even if settings fail to load
 			disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
 			// Stop hook: prevent agent from finishing without making changes (disabled for meta-tasks)
