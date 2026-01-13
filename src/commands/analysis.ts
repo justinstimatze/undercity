@@ -315,10 +315,26 @@ export const analysisCommands: CommandModule = {
 			.description("Analyze historical metrics and get routing recommendations")
 			.option("--json", "Output as JSON for programmatic use")
 			.option("--path <file>", "Path to metrics.jsonl file")
+			.option("--since <date>", "Only analyze records after this date (ISO format or 'today')")
+			.option("--last <n>", "Only analyze the last N records")
 			.action(async (options) => {
 				const { getMetricsAnalysis, formatAnalysisSummary } = await import("../feedback-metrics.js");
 
-				const analysis = getMetricsAnalysis(options.path);
+				// Build options
+				const analysisOptions: { path?: string; since?: Date; limit?: number } = {};
+				if (options.path) analysisOptions.path = options.path;
+				if (options.since) {
+					if (options.since === "today") {
+						const today = new Date();
+						today.setHours(0, 0, 0, 0);
+						analysisOptions.since = today;
+					} else {
+						analysisOptions.since = new Date(options.since);
+					}
+				}
+				if (options.last) analysisOptions.limit = parseInt(options.last, 10);
+
+				const analysis = getMetricsAnalysis(analysisOptions);
 
 				if (options.json) {
 					console.log(JSON.stringify(analysis, null, 2));

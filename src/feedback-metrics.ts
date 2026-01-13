@@ -96,10 +96,21 @@ interface ParsedMetricsRecord {
 }
 
 /**
+ * Options for loading metrics
+ */
+export interface LoadMetricsOptions {
+	path?: string;
+	since?: Date; // Only include records after this date
+	limit?: number; // Only include last N records
+}
+
+/**
  * Load and parse metrics from the JSONL file
  */
-export function loadMetrics(path?: string): ParsedMetricsRecord[] {
-	const metricsPath = path ?? join(process.cwd(), METRICS_FILE);
+export function loadMetrics(options?: LoadMetricsOptions | string): ParsedMetricsRecord[] {
+	// Handle backward compatibility with string path
+	const opts: LoadMetricsOptions = typeof options === "string" ? { path: options } : (options ?? {});
+	const metricsPath = opts.path ?? join(process.cwd(), METRICS_FILE);
 
 	if (!existsSync(metricsPath)) {
 		return [];
@@ -107,7 +118,7 @@ export function loadMetrics(path?: string): ParsedMetricsRecord[] {
 
 	const content = readFileSync(metricsPath, "utf-8");
 	const lines = content.split("\n").filter((line) => line.trim());
-	const records: ParsedMetricsRecord[] = [];
+	let records: ParsedMetricsRecord[] = [];
 
 	for (const line of lines) {
 		try {
@@ -136,6 +147,16 @@ export function loadMetrics(path?: string): ParsedMetricsRecord[] {
 		} catch {
 			// Skip malformed lines
 		}
+	}
+
+	// Apply date filter
+	if (opts.since) {
+		records = records.filter((r) => r.startedAt >= opts.since!);
+	}
+
+	// Apply limit (most recent N)
+	if (opts.limit && records.length > opts.limit) {
+		records = records.slice(-opts.limit);
 	}
 
 	return records;
@@ -451,8 +472,8 @@ export function suggestModelTier(
 /**
  * Load metrics and return full analysis
  */
-export function getMetricsAnalysis(path?: string): MetricsAnalysis {
-	const records = loadMetrics(path);
+export function getMetricsAnalysis(options?: LoadMetricsOptions | string): MetricsAnalysis {
+	const records = loadMetrics(options);
 	return analyzeMetrics(records);
 }
 
