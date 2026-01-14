@@ -42,6 +42,8 @@ interface KeywordFileCorrelation {
 	taskCount: number;
 	/** Successful tasks with this keyword */
 	successCount: number;
+	/** When this correlation was last updated */
+	lastUpdated?: string;
 }
 
 /**
@@ -54,6 +56,8 @@ interface CoModificationPattern {
 	coModified: Record<string, number>;
 	/** Total modifications of this file */
 	modificationCount: number;
+	/** When this pattern was last updated */
+	lastUpdated?: string;
 }
 
 /**
@@ -184,6 +188,27 @@ const STOP_WORDS = new Set([
 	"file",
 	"code",
 ]);
+
+// Decay configuration
+const DECAY_HALF_LIFE_DAYS = 14; // Pattern weight halves every 14 days of inactivity
+
+/**
+ * Calculate decay factor based on age
+ * Uses exponential decay: factor = 0.5^(days/halfLife)
+ * @returns A value between 0 and 1, where 1 = no decay, 0 = fully decayed
+ */
+function calculateDecayFactor(lastUpdated: string | undefined): number {
+	if (!lastUpdated) {
+		// Old patterns without timestamp get moderate decay (equivalent to 7 days old)
+		return 0.5;
+	}
+
+	const ageMs = Date.now() - new Date(lastUpdated).getTime();
+	const ageDays = ageMs / (1000 * 60 * 60 * 24);
+
+	// Exponential decay: halves every DECAY_HALF_LIFE_DAYS
+	return Math.pow(0.5, ageDays / DECAY_HALF_LIFE_DAYS);
+}
 
 /**
  * Get the store file path
@@ -324,6 +349,7 @@ export function recordTaskFiles(
 
 		const correlation = store.keywordCorrelations[keyword];
 		correlation.taskCount++;
+		correlation.lastUpdated = new Date().toISOString();
 		if (success) {
 			correlation.successCount++;
 		}
@@ -349,6 +375,7 @@ export function recordTaskFiles(
 
 			const pattern = store.coModificationPatterns[file];
 			pattern.modificationCount++;
+			pattern.lastUpdated = new Date().toISOString();
 
 			// Record co-modifications (other files changed in same task)
 			for (const otherFile of normalizedFiles) {
@@ -380,16 +407,17 @@ export function findRelevantFiles(
 		const correlation = store.keywordCorrelations[keyword];
 		if (!correlation) continue;
 
-		// Weight by how often this keyword leads to these files
+		// Weight by success rate and recency (decay factor)
 		const keywordWeight = correlation.successCount / Math.max(correlation.taskCount, 1);
+		const decayFactor = calculateDecayFactor(correlation.lastUpdated);
 
 		for (const [file, count] of Object.entries(correlation.files)) {
 			if (!fileScores[file]) {
 				fileScores[file] = { score: 0, keywords: [] };
 			}
 
-			// Score = count * keyword success rate
-			fileScores[file].score += count * keywordWeight;
+			// Score = count * success rate * recency decay
+			fileScores[file].score += count * keywordWeight * decayFactor;
 			if (!fileScores[file].keywords.includes(keyword)) {
 				fileScores[file].keywords.push(keyword);
 			}
@@ -419,12 +447,16 @@ export function findCoModifiedFiles(
 		return [];
 	}
 
+	// Apply decay based on pattern recency
+	const decayFactor = calculateDecayFactor(pattern.lastUpdated);
+
 	return Object.entries(pattern.coModified)
 		.filter(([, count]) => count >= minCoModifications)
 		.map(([coFile, count]) => ({
 			file: coFile,
 			count,
-			probability: count / pattern.modificationCount,
+			// Weighted probability: raw probability * recency decay
+			probability: (count / pattern.modificationCount) * decayFactor,
 		}))
 		.sort((a, b) => b.probability - a.probability);
 }
@@ -663,6 +695,7 @@ export async function primeFromGitHistory(
 			if (keywords.length === 0 || files.length === 0) continue;
 
 			// Update keyword correlations
+			const now = new Date().toISOString();
 			for (const keyword of keywords) {
 				if (!store.keywordCorrelations[keyword]) {
 					store.keywordCorrelations[keyword] = {
@@ -675,6 +708,7 @@ export async function primeFromGitHistory(
 				const correlation = store.keywordCorrelations[keyword];
 				correlation.taskCount++;
 				correlation.successCount++;
+				correlation.lastUpdated = now;
 				for (const file of files) {
 					correlation.files[file] = (correlation.files[file] || 0) + 1;
 					patternsAdded++;
@@ -692,6 +726,7 @@ export async function primeFromGitHistory(
 				}
 				const pattern = store.coModificationPatterns[file];
 				pattern.modificationCount++;
+				pattern.lastUpdated = now;
 				for (const otherFile of files) {
 					if (otherFile !== file) {
 						pattern.coModified[otherFile] = (pattern.coModified[otherFile] || 0) + 1;
