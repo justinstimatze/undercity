@@ -53,7 +53,55 @@ Claude Code can't run continuously, but it can **delegate to a system that can**
 
 ## New Commands to Build
 
-### 1. `undercity brief` - The Morning Report
+### 1. `undercity pulse` - Quick State Check
+
+**Purpose:** "What's happening right now?" - fast, glanceable, anytime.
+
+**Output:**
+```
+$ undercity pulse
+
+⚡ Undercity Pulse
+
+ACTIVE (2 workers)
+  🔄 task-a3f: "Add rate limiting" (sonnet, 4m elapsed, src/api/*)
+  🔄 task-b72: "Fix login bug" (haiku, 1m elapsed, src/auth/*)
+
+QUEUE (5 pending)
+  1. "Improve error messages" (standard)
+  2. "Add caching layer" (complex)
+  3. "Update docs" (simple)
+  ...
+
+HEALTH
+  Rate limit: 42% used (58% remaining)
+  Last hour: 3 completed, 0 failed
+  Merge queue: 2 waiting
+
+ATTENTION (1)
+  ⚠️ Decision pending: auth refactor approach
+```
+
+**Design principles:**
+- Fits in one screen
+- No scrolling needed
+- Actionable items highlighted
+- Numbers over prose
+
+**Flags:**
+- `--json` - Machine-readable for programmatic use
+- `--watch` - Live updating (like `htop`)
+
+**Implementation:**
+- Query active workers from worktree-state.json
+- Query pending from tasks.json
+- Query rate limits from rate-limit-state.json
+- Query decisions from decision-tracker
+- Format as compact dashboard
+
+---
+
+### 2. `undercity brief` - The Morning Report
 
 **Purpose:** "What should I know since last time?"
 
@@ -267,26 +315,33 @@ undercity://knowledge/auth → Query learnings about auth
 
 ## Implementation Plan
 
-### Phase 1: Brief Command
+### Phase 1: Pulse Command (do this first - highest immediate value)
+1. Add `undercity pulse` command
+2. Query active workers, queue, health, attention items
+3. Format as compact single-screen dashboard
+4. Add `--json` flag for programmatic use
+5. Add `--watch` flag for live updates
+
+### Phase 2: Brief Command
 1. Add `undercity brief` command
 2. Query tasks, decisions, knowledge
 3. Format readable report
 4. Add `--since` flag for time range
 5. Add `--json` flag for programmatic use
 
-### Phase 2: Decide Command
+### Phase 3: Decide Command
 1. Add `undercity decide` command
 2. Interactive decision flow
 3. Record decisions to decision-tracker
 4. Signal workers to continue
 
-### Phase 3: Context Passing
+### Phase 4: Context Passing
 1. Extend task schema with context fields
 2. Add `--context` and `--files` flags to `undercity add`
 3. Inject context into worker prompts
 4. Pass context through decomposition
 
-### Phase 4: Knowledge Query
+### Phase 5: Knowledge Query
 1. Add `undercity knowledge search "query"` command
 2. Semantic search over learnings
 3. Surface relevant learnings in brief
@@ -329,8 +384,10 @@ undercity://knowledge/auth → Query learnings about auth
 The Mayor Model transforms Undercity from "a separate batch tool" into "Claude Code's autonomous arm." The mayor (Claude Code) sets direction and makes judgment calls; the city (Undercity) executes continuously and reports back.
 
 **Key commands:**
-- `undercity brief` - Morning report
+- `undercity pulse` - Quick state check (anytime, one screen)
+- `undercity brief` - Detailed morning report
 - `undercity decide` - Handle escalated decisions
 - `undercity add --context` - Delegate with context
+- `undercity knowledge search` - Query what the city learned
 
 **Core principle:** Maximize value per unit of mayor attention. The city should run autonomously 80%+ of the time, only surfacing what truly needs human/mayor judgment.
