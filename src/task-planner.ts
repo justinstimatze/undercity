@@ -250,6 +250,8 @@ export interface TieredPlanResult {
 	proceedWithExecution: boolean;
 	/** Reason if not proceeding */
 	skipReason?: string;
+	/** Number of plan-review iterations (1 = no revisions needed) */
+	iterations?: number;
 }
 
 /**
@@ -265,6 +267,9 @@ function getReviewerTier(plannerTier: ModelTier): ModelTier {
 			return "opus";
 	}
 }
+
+/** Maximum iterations for plan revision (create + N revisions) */
+const MAX_PLAN_ITERATIONS = 3;
 
 /**
  * Create an execution plan using the specified model
@@ -341,6 +346,95 @@ RULES:
 			risks: ["Plan parsing failed - proceeding with minimal plan"],
 			expectedOutcome: "Task completion",
 		};
+	}
+}
+
+/**
+ * Revise a plan based on review feedback
+ *
+ * The planner model receives the original plan and reviewer feedback,
+ * then creates an improved version addressing the issues raised.
+ */
+async function revisePlan(
+	task: string,
+	currentPlan: ExecutionPlan,
+	feedback: PlanReview,
+	model: ModelTier,
+	cwd: string,
+): Promise<ExecutionPlan> {
+	const issuesText = feedback.issues.length > 0 ? feedback.issues.join("\n- ") : "None specified";
+	const suggestionsText = feedback.suggestions.length > 0 ? feedback.suggestions.join("\n- ") : "None specified";
+
+	const prompt = `You are a planning assistant. Your previous plan was reviewed and needs revision.
+
+TASK: ${task}
+
+YOUR PREVIOUS PLAN:
+${JSON.stringify(currentPlan, null, 2)}
+
+REVIEWER FEEDBACK:
+Issues found:
+- ${issuesText}
+
+Suggestions:
+- ${suggestionsText}
+
+Please revise your plan to address this feedback. Explore the codebase again if needed to verify files exist and understand the correct approach.
+
+Output your REVISED plan in this exact JSON format:
+
+\`\`\`json
+{
+  "objective": "clear restatement of the task",
+  "filesToRead": ["files to read for context"],
+  "filesToModify": ["files that will be changed"],
+  "filesToCreate": ["new files to create, if any"],
+  "steps": ["step 1", "step 2", ...],
+  "risks": ["potential issues to watch for"],
+  "expectedOutcome": "what success looks like",
+  "alreadyComplete": {"likely": false, "reason": "if already done, explain"},
+  "needsDecomposition": {"needed": false, "suggestedSubtasks": ["if too big, list subtasks"]}
+}
+\`\`\`
+
+Address ALL issues raised by the reviewer. If a file doesn't exist, either remove it or change the approach.`;
+
+	logger.debug({ task: task.substring(0, 50), model, iteration: "revision" }, "Revising execution plan");
+
+	let planJson = "";
+
+	for await (const message of query({
+		prompt,
+		options: {
+			model: MODEL_NAMES[model],
+			permissionMode: "bypassPermissions",
+			allowDangerouslySkipPermissions: true,
+			maxTurns: 10,
+			cwd,
+		},
+	})) {
+		if (message.type === "result" && message.subtype === "success") {
+			planJson = message.result;
+		}
+	}
+
+	// Extract JSON from response
+	const jsonMatch = planJson.match(/```json\s*([\s\S]*?)\s*```/);
+	if (jsonMatch) {
+		try {
+			return JSON.parse(jsonMatch[1]) as ExecutionPlan;
+		} catch (e) {
+			logger.warn({ error: String(e) }, "Failed to parse revised plan JSON");
+		}
+	}
+
+	// Fallback: try to parse the whole response as JSON
+	try {
+		return JSON.parse(planJson) as ExecutionPlan;
+	} catch {
+		// Return original plan if revision parsing fails
+		logger.warn("Revision failed to parse, keeping original plan");
+		return currentPlan;
 	}
 }
 
@@ -428,6 +522,9 @@ Verify file existence by checking the filesystem.`;
 /**
  * Run tiered planning: cheaper model creates plan, expensive model reviews
  *
+ * Iterates on feedback: if reviewer has issues, planner revises and resubmits.
+ * Similar to code review - iterate until approved or max iterations reached.
+ *
  * @param task - The task objective
  * @param cwd - Working directory for exploration
  * @param plannerModel - Model for planning (default: haiku)
@@ -445,40 +542,41 @@ export async function planTaskWithReview(
 			task: task.substring(0, 100),
 			plannerModel,
 			reviewerModel,
+			maxIterations: MAX_PLAN_ITERATIONS,
 		},
 		"Starting tiered planning phase",
 	);
 
-	// Phase 1: Create plan with cheaper model
-	const plan = await createExecutionPlan(task, plannerModel, cwd);
+	// Phase 1: Create initial plan with cheaper model
+	let currentPlan = await createExecutionPlan(task, plannerModel, cwd);
 
 	// Early exit: already complete
-	if (plan.alreadyComplete?.likely) {
+	if (currentPlan.alreadyComplete?.likely) {
 		return {
 			success: true,
-			plan,
+			plan: currentPlan,
 			review: {
 				approved: true,
 				issues: [],
 				suggestions: [],
-				skipExecution: { skip: true, reason: plan.alreadyComplete.reason },
+				skipExecution: { skip: true, reason: currentPlan.alreadyComplete.reason },
 			},
 			plannerModel,
 			reviewerModel,
 			proceedWithExecution: false,
-			skipReason: `Task already complete: ${plan.alreadyComplete.reason}`,
+			skipReason: `Task already complete: ${currentPlan.alreadyComplete.reason}`,
 		};
 	}
 
 	// Early exit: needs decomposition
-	if (plan.needsDecomposition?.needed) {
+	if (currentPlan.needsDecomposition?.needed) {
 		return {
 			success: true,
-			plan,
+			plan: currentPlan,
 			review: {
 				approved: false,
 				issues: ["Task requires decomposition"],
-				suggestions: plan.needsDecomposition.suggestedSubtasks || [],
+				suggestions: currentPlan.needsDecomposition.suggestedSubtasks || [],
 			},
 			plannerModel,
 			reviewerModel,
@@ -487,21 +585,88 @@ export async function planTaskWithReview(
 		};
 	}
 
-	// Phase 2: Review plan with higher-tier model
-	const review = await reviewExecutionPlan(task, plan, reviewerModel, cwd);
+	// Phase 2: Review loop - iterate until approved or max iterations
+	let review: PlanReview;
+	let iteration = 0;
 
-	// Merge revisions
-	const finalPlan: ExecutionPlan = review.revisedPlan ? { ...plan, ...review.revisedPlan } : plan;
+	while (iteration < MAX_PLAN_ITERATIONS) {
+		iteration++;
 
-	const shouldSkip = review.skipExecution?.skip || false;
-	const proceedWithExecution = review.approved && !shouldSkip;
+		logger.info(
+			{
+				task: task.substring(0, 50),
+				iteration,
+				maxIterations: MAX_PLAN_ITERATIONS,
+			},
+			"Plan review iteration",
+		);
+
+		// Get review from higher-tier model
+		review = await reviewExecutionPlan(task, currentPlan, reviewerModel, cwd);
+
+		// If approved or should skip, we're done
+		if (review.approved || review.skipExecution?.skip) {
+			break;
+		}
+
+		// Not approved - check if we have feedback to act on
+		const hasFeedback = review.issues.length > 0 || review.suggestions.length > 0;
+
+		if (!hasFeedback) {
+			// Rejected without feedback - can't improve, exit loop
+			logger.warn({ iteration }, "Plan rejected without actionable feedback");
+			break;
+		}
+
+		// Check if this is the last iteration
+		if (iteration >= MAX_PLAN_ITERATIONS) {
+			logger.info({ iteration }, "Max plan iterations reached, using current plan");
+			break;
+		}
+
+		// Revise plan based on feedback
+		logger.info(
+			{
+				iteration,
+				issues: review.issues.length,
+				suggestions: review.suggestions.length,
+			},
+			"Revising plan based on feedback",
+		);
+
+		currentPlan = await revisePlan(task, currentPlan, review, plannerModel, cwd);
+
+		// Check if revision triggered decomposition
+		if (currentPlan.needsDecomposition?.needed) {
+			return {
+				success: true,
+				plan: currentPlan,
+				review: {
+					approved: false,
+					issues: ["Task requires decomposition after revision"],
+					suggestions: currentPlan.needsDecomposition.suggestedSubtasks || [],
+				},
+				plannerModel,
+				reviewerModel,
+				proceedWithExecution: false,
+				skipReason: "Task needs decomposition into smaller subtasks",
+			};
+		}
+	}
+
+	// Apply any direct revisions from reviewer
+	const finalPlan: ExecutionPlan = review!.revisedPlan ? { ...currentPlan, ...review!.revisedPlan } : currentPlan;
+
+	const shouldSkip = review!.skipExecution?.skip || false;
+	const proceedWithExecution = review!.approved && !shouldSkip;
 
 	logger.info(
 		{
 			task: task.substring(0, 50),
-			approved: review.approved,
+			approved: review!.approved,
 			proceedWithExecution,
-			skipReason: review.skipExecution?.reason,
+			iterations: iteration,
+			skipReason: review!.skipExecution?.reason,
 		},
 		"Tiered planning complete",
 	);
@@ -509,11 +674,12 @@ export async function planTaskWithReview(
 	return {
 		success: true,
 		plan: finalPlan,
-		review,
+		review: review!,
 		plannerModel,
 		reviewerModel,
 		proceedWithExecution,
-		skipReason: shouldSkip ? review.skipExecution?.reason : undefined,
+		skipReason: shouldSkip ? review!.skipExecution?.reason : undefined,
+		iterations: iteration,
 	};
 }
 
