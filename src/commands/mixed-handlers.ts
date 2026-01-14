@@ -128,8 +128,8 @@ interface PulseData {
 			isPaused: boolean;
 			resumeAt?: string;
 		};
-		/** Mayor's observed rate limits (from Claude Code status bar) */
-		mayorUsage?: {
+		/** Live usage from claude.ai scraping */
+		liveUsage?: {
 			fiveHourPercent?: number;
 			weeklyPercent?: number;
 			observedAt?: string;
@@ -171,13 +171,13 @@ export async function handlePulse(options: PulseOptions): Promise<void> {
 	const tracker = new RateLimitTracker(savedState ?? undefined);
 
 	// Auto-fetch Claude Max usage from claude.ai (see claude-usage.ts for the sketchy details)
-	let mayorUsage: { fiveHourPercent?: number; weeklyPercent?: number; observedAt?: string } | null = null;
-	const liveUsage = await fetchClaudeUsage();
-	if (liveUsage.success) {
-		mayorUsage = {
-			fiveHourPercent: liveUsage.fiveHourPercent,
-			weeklyPercent: liveUsage.weeklyPercent,
-			observedAt: liveUsage.fetchedAt,
+	let liveUsage: { fiveHourPercent?: number; weeklyPercent?: number; observedAt?: string } | null = null;
+	const fetchedUsage = await fetchClaudeUsage();
+	if (fetchedUsage.success) {
+		liveUsage = {
+			fiveHourPercent: fetchedUsage.fiveHourPercent,
+			weeklyPercent: fetchedUsage.weeklyPercent,
+			observedAt: fetchedUsage.fetchedAt,
 		};
 	}
 
@@ -202,7 +202,8 @@ export async function handlePulse(options: PulseOptions): Promise<void> {
 	const pendingCount = summary.pending + summary.inProgress;
 
 	// Use live percentages if available, otherwise fall back to local tracking
-	const fiveHourPercentUsed = mayorUsage?.fiveHourPercent ?? Math.round((usage.current.last5HoursSonnet / tokenBudget) * 100);
+	const fiveHourPercentUsed =
+		liveUsage?.fiveHourPercent ?? Math.round((usage.current.last5HoursSonnet / tokenBudget) * 100);
 	const tokensUsed = Math.round((fiveHourPercentUsed / 100) * tokenBudget);
 	const remaining = tokenBudget - tokensUsed;
 
@@ -291,13 +292,13 @@ export async function handlePulse(options: PulseOptions): Promise<void> {
 		health: {
 			// Plan limits from live claude.ai scraping (source of truth for rate limiting)
 			rateLimit: {
-				fiveHourPercent: mayorUsage?.fiveHourPercent ?? Math.round(usage.percentages.fiveHour * 100),
-				weeklyPercent: mayorUsage?.weeklyPercent ?? Math.round(usage.percentages.weekly * 100),
+				fiveHourPercent: liveUsage?.fiveHourPercent ?? Math.round(usage.percentages.fiveHour * 100),
+				weeklyPercent: liveUsage?.weeklyPercent ?? Math.round(usage.percentages.weekly * 100),
 				isPaused: tracker.isPaused(),
 				resumeAt: resumeAtDate?.toISOString(),
 			},
 			// Raw live data with fetch timestamp (for debugging/transparency)
-			mayorUsage: mayorUsage ?? undefined,
+			liveUsage: liveUsage ?? undefined,
 			recentActivity: {
 				completedLastHour,
 				failedLastHour,
@@ -352,13 +353,13 @@ export async function handlePulse(options: PulseOptions): Promise<void> {
 
 	// Health section
 	console.log(chalk.bold("HEALTH"));
-	if (mayorUsage?.fiveHourPercent !== undefined) {
-		// Mayor (Claude Code) provided its observed rate limits
+	if (liveUsage?.fiveHourPercent !== undefined) {
+		// Live data from claude.ai
 		const fiveHrColor =
-			mayorUsage.fiveHourPercent >= 80 ? chalk.red : mayorUsage.fiveHourPercent >= 50 ? chalk.yellow : chalk.green;
-		console.log(`  Claude Max: ${fiveHrColor(`${mayorUsage.fiveHourPercent}%`)} of 5hr budget`);
-		if (mayorUsage.weeklyPercent !== undefined) {
-			console.log(`  Weekly: ${mayorUsage.weeklyPercent}%`);
+			liveUsage.fiveHourPercent >= 80 ? chalk.red : liveUsage.fiveHourPercent >= 50 ? chalk.yellow : chalk.green;
+		console.log(`  Claude Max: ${fiveHrColor(`${liveUsage.fiveHourPercent}%`)} of 5hr budget`);
+		if (liveUsage.weeklyPercent !== undefined) {
+			console.log(`  Weekly: ${liveUsage.weeklyPercent}%`);
 		}
 	} else {
 		// Fall back to local tracking
@@ -446,10 +447,10 @@ interface BriefData {
 }
 
 /**
- * Handle the brief command - narrative summary for the mayor
+ * Handle the brief command - narrative summary
  *
  * Provides a story-like summary of what Undercity has accomplished,
- * issues encountered, and recommendations for the mayor.
+ * issues encountered, and recommendations.
  */
 export async function handleBrief(options: BriefOptions): Promise<void> {
 	const { getAllTasks, getTaskBoardSummary } = await import("../task.js");
@@ -461,13 +462,13 @@ export async function handleBrief(options: BriefOptions): Promise<void> {
 	const tracker = new RateLimitTracker(savedState ?? undefined);
 
 	// Auto-fetch Claude Max usage from claude.ai (see claude-usage.ts for the sketchy details)
-	let mayorUsage: { fiveHourPercent?: number; weeklyPercent?: number; observedAt?: string } | null = null;
-	const liveUsage = await fetchClaudeUsage();
-	if (liveUsage.success) {
-		mayorUsage = {
-			fiveHourPercent: liveUsage.fiveHourPercent,
-			weeklyPercent: liveUsage.weeklyPercent,
-			observedAt: liveUsage.fetchedAt,
+	let liveUsage: { fiveHourPercent?: number; weeklyPercent?: number; observedAt?: string } | null = null;
+	const fetchedUsage = await fetchClaudeUsage();
+	if (fetchedUsage.success) {
+		liveUsage = {
+			fiveHourPercent: fetchedUsage.fiveHourPercent,
+			weeklyPercent: fetchedUsage.weeklyPercent,
+			observedAt: fetchedUsage.fetchedAt,
 		};
 	}
 
@@ -533,10 +534,10 @@ export async function handleBrief(options: BriefOptions): Promise<void> {
 	}
 
 	// Claude Max weekly budget blocker
-	if (mayorUsage?.weeklyPercent !== undefined && mayorUsage.weeklyPercent >= 95) {
+	if (liveUsage?.weeklyPercent !== undefined && liveUsage.weeklyPercent >= 95) {
 		blockers.push({
 			type: "rate_limit",
-			message: `Weekly Claude Max budget nearly exhausted (${mayorUsage.weeklyPercent}%)`,
+			message: `Weekly Claude Max budget nearly exhausted (${liveUsage.weeklyPercent}%)`,
 		});
 	}
 
@@ -561,18 +562,18 @@ export async function handleBrief(options: BriefOptions): Promise<void> {
 		});
 	}
 
-	// Recommend rate limit awareness (prefer mayor usage if available)
-	if (mayorUsage?.weeklyPercent !== undefined && mayorUsage.weeklyPercent >= 80) {
+	// Recommend rate limit awareness (prefer live usage if available)
+	if (liveUsage?.weeklyPercent !== undefined && liveUsage.weeklyPercent >= 80) {
 		recommendations.push({
 			priority: "high",
 			action: "Weekly rate limit critical - pause or reduce task volume",
-			reason: `${mayorUsage.weeklyPercent}% of weekly Claude Max budget used`,
+			reason: `${liveUsage.weeklyPercent}% of weekly Claude Max budget used`,
 		});
-	} else if (mayorUsage?.fiveHourPercent !== undefined && mayorUsage.fiveHourPercent >= 70) {
+	} else if (liveUsage?.fiveHourPercent !== undefined && liveUsage.fiveHourPercent >= 70) {
 		recommendations.push({
 			priority: "medium",
 			action: "Consider pacing - session budget getting low",
-			reason: `${mayorUsage.fiveHourPercent}% of 5-hour Claude Max budget used`,
+			reason: `${liveUsage.fiveHourPercent}% of 5-hour Claude Max budget used`,
 		});
 	} else if (usage.percentages.fiveHour >= 0.7) {
 		recommendations.push({
@@ -2390,7 +2391,7 @@ interface DecideData {
  * Handle the decide command - view and resolve pending decisions
  *
  * Decisions are captured during task execution when agents need guidance.
- * This command lets Claude Code (the mayor) review and resolve them.
+ * This command lets Claude Code review and resolve them.
  */
 export async function handleDecide(options: DecideOptions): Promise<void> {
 	const { getPendingDecisions, getDecisionsByCategory, resolveDecision, getDecisionStats } = await import(
