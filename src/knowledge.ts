@@ -148,6 +148,13 @@ function saveKnowledge(kb: KnowledgeBase, stateDir: string = DEFAULT_STATE_DIR):
  * Processes natural language text to extract meaningful keywords that can be used
  * for learning retrieval. Filters out common stop words and punctuation, then
  * returns the top 20 unique keywords for efficient matching against stored learnings.
+ *
+ * Used by findRelevantLearnings() to match task objectives against stored knowledge.
+ * The extracted keywords enable fast similarity scoring between new tasks and existing
+ * learnings to surface relevant past experience.
+ *
+ * @param text - The input text to extract keywords from (typically a task objective)
+ * @returns Array of up to 20 unique, meaningful keywords (lowercase, deduplicated)
  */
 function extractKeywords(text: string): string[] {
 	// Common words to filter out
