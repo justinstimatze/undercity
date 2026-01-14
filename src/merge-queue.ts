@@ -8,10 +8,9 @@
  * 4. Merge if tests pass
  * 5. Delete the branch
  *
- * Supports auto-conflict resolution using git merge strategies:
- * - "theirs": Auto-resolve conflicts by accepting incoming changes
- * - "ours": Auto-resolve conflicts by keeping current changes
- * - "default": No auto-resolution, conflicts require manual intervention
+ * Supports auto-conflict resolution using:
+ * - AI-powered resolution: Uses Claude to intelligently merge conflicting changes
+ * - Git merge strategies: "theirs", "ours", "default" as fallbacks
  *
  * Retry functionality:
  * - Failed merges are retried after successful merges complete
@@ -19,6 +18,9 @@
  * - Conflicts may resolve after other branches are merged
  */
 
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import {
 	checkoutBranch,
 	deleteBranch,
@@ -33,6 +35,8 @@ import {
 } from "./git.js";
 import { gitLogger } from "./logger.js";
 import type { MergeQueueConflict, MergeQueueItem, MergeQueueRetryConfig } from "./types.js";
+
+const MODEL_HAIKU = "claude-3-5-haiku-20241022";
 
 /**
  * Default retry configuration
@@ -109,12 +113,172 @@ async function autoDetectCompletedTasks(): Promise<number> {
 	}
 }
 
+// ============================================================================
+// AI-Powered Conflict Resolution
+// ============================================================================
+
+/**
+ * Get list of files with unresolved conflicts
+ */
+function getConflictedFiles(worktreePath: string): string[] {
+	try {
+		const output = execGit(["diff", "--name-only", "--diff-filter=U"], worktreePath);
+		return output
+			.split("\n")
+			.map((f) => f.trim())
+			.filter(Boolean);
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Read file content with conflict markers
+ */
+function readConflictedFile(worktreePath: string, filePath: string): string | null {
+	try {
+		const fullPath = join(worktreePath, filePath);
+		return readFileSync(fullPath, "utf-8");
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Prompt for AI conflict resolution
+ */
+const CONFLICT_RESOLUTION_PROMPT = `You are resolving a git merge conflict. Analyze both versions and produce the FINAL merged content.
+
+FILE: {filePath}
+
+CONFLICTED CONTENT:
+{content}
+
+RULES:
+1. Output ONLY the final resolved file content - no explanations, no markdown code blocks
+2. Remove ALL conflict markers (<<<<<<, ======, >>>>>>)
+3. Preserve both changes where they don't overlap
+4. For overlapping changes, intelligently merge them or pick the more complete version
+5. Maintain proper syntax and formatting
+6. If unsure, prefer the incoming changes (after ======)
+
+OUTPUT THE RESOLVED FILE CONTENT:`;
+
+/**
+ * Use AI to resolve a single conflict
+ */
+async function resolveConflictWithAI(
+	worktreePath: string,
+	filePath: string,
+	content: string,
+): Promise<{ success: boolean; resolved?: string; error?: string }> {
+	const prompt = CONFLICT_RESOLUTION_PROMPT.replace("{filePath}", filePath).replace("{content}", content);
+
+	try {
+		let result = "";
+		for await (const message of query({
+			prompt,
+			options: {
+				model: MODEL_HAIKU,
+				maxTurns: 1,
+				permissionMode: "bypassPermissions",
+			},
+		})) {
+			if (message.type === "result" && message.subtype === "success") {
+				result = message.result;
+			}
+		}
+
+		if (!result) {
+			return { success: false, error: "Empty response from model" };
+		}
+
+		// Clean up any markdown code blocks the model might have added
+		let resolved = result;
+		if (resolved.startsWith("```")) {
+			resolved = resolved.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "");
+		}
+
+		// Verify no conflict markers remain
+		if (resolved.includes("<<<<<<<") || resolved.includes(">>>>>>>") || resolved.includes("=======")) {
+			return { success: false, error: "Model output still contains conflict markers" };
+		}
+
+		return { success: true, resolved };
+	} catch (error) {
+		return { success: false, error: String(error) };
+	}
+}
+
+/**
+ * Attempt to resolve all conflicts in a worktree using AI
+ */
+async function resolveConflictsWithAI(
+	worktreePath: string,
+): Promise<{ success: boolean; resolved: string[]; failed: string[] }> {
+	const conflictedFiles = getConflictedFiles(worktreePath);
+
+	if (conflictedFiles.length === 0) {
+		return { success: true, resolved: [], failed: [] };
+	}
+
+	gitLogger.info({ files: conflictedFiles, count: conflictedFiles.length }, "Attempting AI conflict resolution");
+
+	const resolved: string[] = [];
+	const failed: string[] = [];
+
+	for (const filePath of conflictedFiles) {
+		const content = readConflictedFile(worktreePath, filePath);
+		if (!content) {
+			failed.push(filePath);
+			continue;
+		}
+
+		const result = await resolveConflictWithAI(worktreePath, filePath, content);
+
+		if (result.success && result.resolved) {
+			try {
+				// Write resolved content
+				const fullPath = join(worktreePath, filePath);
+				writeFileSync(fullPath, result.resolved, "utf-8");
+
+				// Stage the resolved file
+				execGit(["add", filePath], worktreePath);
+
+				resolved.push(filePath);
+				gitLogger.info({ filePath }, "AI resolved conflict");
+			} catch (writeError) {
+				gitLogger.warn({ filePath, error: String(writeError) }, "Failed to write resolved file");
+				failed.push(filePath);
+			}
+		} else {
+			gitLogger.warn({ filePath, error: result.error }, "AI conflict resolution failed");
+			failed.push(filePath);
+		}
+	}
+
+	const success = failed.length === 0;
+
+	if (success) {
+		gitLogger.info({ resolved: resolved.length }, "All conflicts resolved by AI");
+	} else {
+		gitLogger.warn({ resolved: resolved.length, failed: failed.length }, "Some conflicts could not be resolved");
+	}
+
+	return { success, resolved, failed };
+}
+
+// ============================================================================
+// MergeQueue Class
+// ============================================================================
+
 export class MergeQueue {
 	private queue: MergeQueueItem[] = [];
 	private processing = false;
 	private mainBranch: string;
 	private mergeStrategy: MergeStrategy;
 	private retryConfig: MergeQueueRetryConfig;
+	private useAIResolution: boolean = true;
 
 	/**
 	 * Create a new MergeQueue
@@ -384,20 +548,55 @@ export class MergeQueue {
 	}
 
 	/**
-	 * Rebase a branch in its worktree
+	 * Rebase a branch in its worktree, with AI conflict resolution
 	 */
-	private rebaseInWorktree(branch: string, worktreePath: string): { success: boolean; error?: string } {
+	private async rebaseInWorktree(branch: string, worktreePath: string): Promise<{ success: boolean; error?: string }> {
 		gitLogger.debug({ branch, worktreePath, onto: this.mainBranch }, "Rebasing in worktree");
 		try {
 			execGit(["rebase", this.mainBranch], worktreePath);
 			return { success: true };
 		} catch (_rebaseError) {
-			try {
-				execGit(["rebase", "--abort"], worktreePath);
-			} catch {
-				// Ignore abort errors
+			// Rebase failed - check if it's due to conflicts
+			const conflictedFiles = getConflictedFiles(worktreePath);
+
+			if (conflictedFiles.length === 0 || !this.useAIResolution) {
+				// No conflicts or AI resolution disabled - abort and fail
+				try {
+					execGit(["rebase", "--abort"], worktreePath);
+				} catch {
+					// Ignore abort errors
+				}
+				return { success: false, error: "Rebase failed - manual resolution required" };
 			}
-			return { success: false, error: "Rebase failed - manual resolution required" };
+
+			// Try AI-powered conflict resolution
+			gitLogger.info({ branch, conflictCount: conflictedFiles.length }, "Attempting AI conflict resolution");
+
+			const aiResult = await resolveConflictsWithAI(worktreePath);
+
+			if (!aiResult.success) {
+				// AI resolution failed - abort and return error
+				try {
+					execGit(["rebase", "--abort"], worktreePath);
+				} catch {
+					// Ignore abort errors
+				}
+				return {
+					success: false,
+					error: `AI conflict resolution failed for: ${aiResult.failed.join(", ")}`,
+				};
+			}
+
+			// AI resolved all conflicts - continue the rebase
+			try {
+				execGit(["rebase", "--continue"], worktreePath);
+				gitLogger.info({ branch, resolved: aiResult.resolved }, "Rebase continued after AI resolution");
+				return { success: true };
+			} catch (continueError) {
+				// Continuing failed - there may be more conflicts in the next commit
+				// Try resolving again (recursive)
+				return this.rebaseInWorktree(branch, worktreePath);
+			}
 		}
 	}
 
@@ -454,9 +653,9 @@ export class MergeQueue {
 			return this.handleMergeFailure(item, "Could not find worktree path for branch");
 		}
 
-		// Step 1: Rebase in the worktree
+		// Step 1: Rebase in the worktree (with AI conflict resolution)
 		item.status = "rebasing";
-		const rebaseResult = this.rebaseInWorktree(item.branch, worktreePath);
+		const rebaseResult = await this.rebaseInWorktree(item.branch, worktreePath);
 		if (!rebaseResult.success) {
 			return this.handleMergeFailure(item, rebaseResult.error!);
 		}

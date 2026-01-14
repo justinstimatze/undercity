@@ -1,12 +1,19 @@
 /**
  * Knowledge Extractor
  *
- * Heuristic patterns to extract learnings from agent conversations.
+ * Extracts learnings from agent conversations using:
+ * 1. Model-based extraction (haiku) - more accurate, handles nuance
+ * 2. Pattern matching fallback - fast, no API call
+ *
  * Runs on task completion to identify reusable insights.
  */
 
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Learning, LearningCategory } from "./knowledge.js";
 import { addLearning } from "./knowledge.js";
+import { sessionLogger } from "./logger.js";
+
+const MODEL_HAIKU = "claude-3-5-haiku-20241022";
 
 /**
  * Pattern definition for extracting learnings
@@ -28,6 +35,9 @@ const LEARNING_PATTERNS: ExtractionPattern[] = [
 	{ pattern: /I found that (.+?)(?:\.|$)/gi, category: "fact" },
 	{ pattern: /I discovered that (.+?)(?:\.|$)/gi, category: "fact" },
 	{ pattern: /It turns out (?:that )?(.+?)(?:\.|$)/gi, category: "fact" },
+	{ pattern: /I noticed (?:that )?(.+?)(?:\.|$)/gi, category: "fact" },
+	{ pattern: /I see (?:that )?(.+?)(?:\.|$)/gi, category: "fact" },
+	{ pattern: /Looking at (?:the )?(?:code|file|function),?\s*(.+?)(?:\.|$)/gi, category: "fact" },
 
 	// Problem resolution patterns
 	{ pattern: /The issue was (.+?)(?:\.|$)/gi, category: "gotcha" },
@@ -35,6 +45,9 @@ const LEARNING_PATTERNS: ExtractionPattern[] = [
 	{ pattern: /The fix (?:was|is) to (.+?)(?:\.|$)/gi, category: "gotcha" },
 	{ pattern: /The solution (?:was|is) to (.+?)(?:\.|$)/gi, category: "gotcha" },
 	{ pattern: /This failed because (.+?)(?:\.|$)/gi, category: "gotcha" },
+	{ pattern: /The error (?:was|is) (?:caused by |due to )?(.+?)(?:\.|$)/gi, category: "gotcha" },
+	{ pattern: /(?:To fix|Fixed) (?:this|it) by (.+?)(?:\.|$)/gi, category: "gotcha" },
+	{ pattern: /The root cause (?:was|is) (.+?)(?:\.|$)/gi, category: "gotcha" },
 
 	// Codebase patterns - how this project works
 	{ pattern: /This codebase uses (.+?)(?:\.|$)/gi, category: "pattern" },
@@ -42,17 +55,29 @@ const LEARNING_PATTERNS: ExtractionPattern[] = [
 	{ pattern: /The pattern here is (.+?)(?:\.|$)/gi, category: "pattern" },
 	{ pattern: /The convention (?:here )?is (.+?)(?:\.|$)/gi, category: "pattern" },
 	{ pattern: /Files in this project (.+?)(?:\.|$)/gi, category: "pattern" },
+	{ pattern: /This (?:file|module|function) (?:is responsible for|handles) (.+?)(?:\.|$)/gi, category: "pattern" },
+	{ pattern: /The (?:file|module) exports (.+?)(?:\.|$)/gi, category: "pattern" },
+	{ pattern: /(?:It|This) imports (?:from )?(.+?)(?:\.|$)/gi, category: "pattern" },
+
+	// Reasoning patterns - why something works
+	{ pattern: /This works because (.+?)(?:\.|$)/gi, category: "fact" },
+	{ pattern: /The reason (?:is|was) (?:that )?(.+?)(?:\.|$)/gi, category: "fact" },
+	{ pattern: /This approach (.+?)(?:\.|$)/gi, category: "fact" },
+	{ pattern: /(?:I|We) need(?:ed)? to (.+?) because (.+?)(?:\.|$)/gi, category: "fact" },
 
 	// Important notes
 	{ pattern: /Note: (.+?)(?:\.|$)/gi, category: "fact" },
 	{ pattern: /Important: (.+?)(?:\.|$)/gi, category: "fact" },
 	{ pattern: /Remember: (.+?)(?:\.|$)/gi, category: "fact" },
+	{ pattern: /(?:Be )?careful (?:to |about |with )?(.+?)(?:\.|$)/gi, category: "gotcha" },
+	{ pattern: /(?:Make sure|Ensure) (?:to |that )?(.+?)(?:\.|$)/gi, category: "gotcha" },
 
 	// Preference patterns - user/project preferences
 	{ pattern: /(?:The )?preferred (?:way|approach|method) is (.+?)(?:\.|$)/gi, category: "preference" },
 	{ pattern: /(?:This|The) project prefers (.+?)(?:\.|$)/gi, category: "preference" },
 	{ pattern: /Always (.+?) in this (?:codebase|project)/gi, category: "preference" },
 	{ pattern: /Never (.+?) in this (?:codebase|project)/gi, category: "preference" },
+	{ pattern: /(?:Should|Must) (?:always )?(.+?) when (.+?)(?:\.|$)/gi, category: "preference" },
 ];
 
 /**
@@ -267,14 +292,111 @@ export function extractLearnings(text: string): ExtractedLearning[] {
 }
 
 /**
- * Extract and store learnings from a completed task
+ * Model-based extraction prompt
  */
-export function extractAndStoreLearnings(
+const EXTRACTION_PROMPT = `Analyze this agent conversation and extract reusable learnings.
+
+Return a JSON array of learnings. Each learning should have:
+- category: "pattern" (codebase conventions), "gotcha" (pitfalls/fixes), "fact" (discoveries), or "preference" (user/project preferences)
+- content: The actual insight (15-200 chars, actionable and specific)
+- file: Optional file path if the learning is file-specific
+
+Focus on:
+1. Codebase patterns discovered (how things work in this project)
+2. Gotchas and fixes (problems encountered and how they were resolved)
+3. Facts learned (specific discoveries about the code)
+4. Preferences (conventions or approaches preferred in this project)
+
+Skip trivial observations. Only extract learnings that would help future tasks.
+
+If there are no meaningful learnings, return an empty array: []
+
+CONVERSATION:
+`;
+
+/**
+ * Schema for model-extracted learning
+ */
+interface ModelExtractedLearning {
+	category: LearningCategory;
+	content: string;
+	file?: string;
+}
+
+/**
+ * Extract learnings using a model (haiku)
+ * More accurate than pattern matching, handles nuance better
+ */
+async function extractLearningsWithModel(text: string): Promise<ExtractedLearning[]> {
+	// Skip if text is too short or too long
+	if (text.length < 100) {
+		return [];
+	}
+
+	// Truncate very long texts to avoid token limits
+	const truncatedText = text.length > 15000 ? text.slice(0, 15000) + "\n[truncated]" : text;
+
+	const prompt = EXTRACTION_PROMPT + truncatedText;
+
+	try {
+		let result = "";
+		for await (const message of query({
+			prompt,
+			options: {
+				model: MODEL_HAIKU,
+				maxTurns: 1,
+				permissionMode: "bypassPermissions",
+			},
+		})) {
+			if (message.type === "result" && message.subtype === "success") {
+				result = message.result;
+			}
+		}
+
+		// Parse the JSON response
+		const jsonMatch = result.match(/\[[\s\S]*\]/);
+		if (!jsonMatch) {
+			sessionLogger.debug("Model extraction returned no JSON array");
+			return [];
+		}
+
+		const parsed = JSON.parse(jsonMatch[0]) as ModelExtractedLearning[];
+		if (!Array.isArray(parsed)) {
+			return [];
+		}
+
+		// Convert to ExtractedLearning format
+		return parsed
+			.filter((l) => l.category && l.content && l.content.length >= MIN_CONTENT_LENGTH)
+			.map((l) => ({
+				category: l.category,
+				content: cleanContent(l.content),
+				keywords: extractKeywords(l.content),
+				structured: l.file ? { file: l.file } : undefined,
+			}));
+	} catch (error) {
+		sessionLogger.debug({ error: String(error) }, "Model-based extraction failed, falling back to patterns");
+		return [];
+	}
+}
+
+/**
+ * Extract and store learnings from a completed task
+ * Uses model-based extraction with pattern matching fallback
+ */
+export async function extractAndStoreLearnings(
 	taskId: string,
 	conversationText: string,
 	stateDir: string = ".undercity",
-): Learning[] {
-	const extracted = extractLearnings(conversationText);
+): Promise<Learning[]> {
+	// Try model-based extraction first
+	let extracted = await extractLearningsWithModel(conversationText);
+
+	// Fall back to pattern matching if model extraction found nothing
+	if (extracted.length === 0) {
+		extracted = extractLearnings(conversationText);
+	}
+
 	const stored: Learning[] = [];
 
 	for (const learning of extracted) {
@@ -291,13 +413,17 @@ export function extractAndStoreLearnings(
 		stored.push(result);
 	}
 
+	if (stored.length > 0) {
+		sessionLogger.info({ taskId, count: stored.length }, "Extracted and stored learnings");
+	}
+
 	return stored;
 }
 
 /**
  * Extract learnings from structured task result
  */
-export function extractFromTaskResult(
+export async function extractFromTaskResult(
 	taskId: string,
 	result: {
 		output?: string;
@@ -305,7 +431,7 @@ export function extractFromTaskResult(
 		files?: string[];
 	},
 	stateDir: string = ".undercity",
-): Learning[] {
+): Promise<Learning[]> {
 	const textParts: string[] = [];
 
 	if (result.output) {

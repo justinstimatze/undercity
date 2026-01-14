@@ -923,7 +923,7 @@ export class TaskWorker {
 					// Knowledge compounding: extract learnings from successful task
 					// Use this.stateDir (main repo) for knowledge storage, not worktree
 					try {
-						const extracted = extractAndStoreLearnings(taskId, this.lastAgentOutput, this.stateDir);
+						const extracted = await extractAndStoreLearnings(taskId, this.lastAgentOutput, this.stateDir);
 						if (extracted.length > 0) {
 							output.debug(`Extracted ${extracted.length} learnings from task`, { taskId });
 						}
