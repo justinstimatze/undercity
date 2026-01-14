@@ -69,6 +69,19 @@ export const DecisionSignature = AxSignature.create(
 	escalate:boolean "Should this go to human?"`,
 );
 
+/**
+ * Complexity assessment signature
+ * Input: task description
+ * Output: complexity level, scope, and reasoning
+ */
+export const ComplexitySignature = AxSignature.create(
+	`task:string "The coding task to assess for complexity" ->
+	reasoning:string "Step-by-step analysis of task complexity",
+	level:string "trivial, simple, standard, complex, or critical",
+	scope:string "single-file, few-files, many-files, or cross-package",
+	confidence:number "Confidence in assessment (0-1)"`,
+);
+
 // ============================================================================
 // Program Instances
 // ============================================================================
@@ -148,6 +161,32 @@ SET escalate=true ONLY if:
 - Breaking backwards compatibility
 
 Think through your analysis in the reasoning field before making a decision.`);
+	return gen;
+}
+
+/**
+ * Complexity assessor program
+ * Uses reasoning field for chain-of-thought analysis
+ */
+export function createComplexityAssessor(): AxGen {
+	const gen = new AxGen(ComplexitySignature);
+	gen.setInstruction(`You assess the complexity of coding tasks.
+
+COMPLEXITY LEVELS:
+- trivial: Minimal changes - typos, comments, version bumps
+- simple: Small localized changes - add a log, single function updates
+- standard: Typical feature work - bug fixes, new features, tests
+- complex: Significant changes - refactoring, multi-file architectural changes
+- critical: High-risk changes - security, auth, payments, breaking changes
+
+SCOPE:
+- single-file: Change affects only one file
+- few-files: 2-5 related files
+- many-files: More than 5 files
+- cross-package: Changes span multiple packages/modules
+
+Think step by step in the reasoning field before giving your assessment.
+Be conservative - err on the side of higher complexity when uncertain.`);
 	return gen;
 }
 
@@ -387,6 +426,61 @@ export async function makeDecisionAx(
 	}
 }
 
+/**
+ * Run complexity assessment using Ax program
+ * Loads successful examples as few-shot demos for self-improvement
+ */
+export async function checkComplexityAx(
+	task: string,
+	stateDir: string = ".undercity",
+): Promise<{
+	level: "trivial" | "simple" | "standard" | "complex" | "critical";
+	scope: "single-file" | "few-files" | "many-files" | "cross-package";
+	reasoning: string;
+	confidence: number;
+}> {
+	try {
+		const ai = createAxAI();
+		// Load program with examples from past successful runs
+		const assessor = createComplexityAssessorWithExamples(stateDir);
+
+		const result = await assessor.forward(ai, { task });
+
+		// Normalize level
+		const validLevels = ["trivial", "simple", "standard", "complex", "critical"] as const;
+		const rawLevel = String(result.level || "standard").toLowerCase();
+		const level = validLevels.includes(rawLevel as (typeof validLevels)[number])
+			? (rawLevel as (typeof validLevels)[number])
+			: "standard";
+
+		// Normalize scope
+		const validScopes = ["single-file", "few-files", "many-files", "cross-package"] as const;
+		const rawScope = String(result.scope || "few-files").toLowerCase();
+		const scope = validScopes.includes(rawScope as (typeof validScopes)[number])
+			? (rawScope as (typeof validScopes)[number])
+			: "few-files";
+
+		const output = {
+			level,
+			scope,
+			reasoning: String(result.reasoning || ""),
+			confidence: Number(result.confidence) || 0.5,
+		};
+
+		logger.debug({ task: task.slice(0, 50), output }, "Ax complexity assessment complete");
+
+		return output;
+	} catch (error) {
+		logger.warn({ error: String(error) }, "Ax complexity assessment failed, using defaults");
+		return {
+			level: "standard",
+			scope: "few-files",
+			reasoning: `Ax assessment failed: ${error}`,
+			confidence: 0.3,
+		};
+	}
+}
+
 // ============================================================================
 // Example Recording Helpers
 // ============================================================================
@@ -451,6 +545,23 @@ export function recordDecisionOutcome(
 	saveExample("decision", input, output, outcomeGood ? "success" : "failure", stateDir);
 }
 
+/**
+ * Record complexity assessment outcome for training
+ */
+export function recordComplexityOutcome(
+	task: string,
+	result: {
+		level: string;
+		scope: string;
+		reasoning: string;
+		confidence: number;
+	},
+	taskSucceeded: boolean,
+	stateDir: string = ".undercity",
+): void {
+	saveExample("complexity", { task }, result, taskSucceeded ? "success" : "failure", stateDir);
+}
+
 // ============================================================================
 // Stats
 // ============================================================================
@@ -462,8 +573,9 @@ export function getAxProgramStats(stateDir: string = ".undercity"): {
 	atomicity: { total: number; successful: number };
 	decomposition: { total: number; successful: number };
 	decision: { total: number; successful: number };
+	complexity: { total: number; successful: number };
 } {
-	const programs = ["atomicity", "decomposition", "decision"] as const;
+	const programs = ["atomicity", "decomposition", "decision", "complexity"] as const;
 	const stats: Record<string, { total: number; successful: number }> = {};
 
 	for (const prog of programs) {
@@ -478,6 +590,7 @@ export function getAxProgramStats(stateDir: string = ".undercity"): {
 		atomicity: { total: number; successful: number };
 		decomposition: { total: number; successful: number };
 		decision: { total: number; successful: number };
+		complexity: { total: number; successful: number };
 	};
 }
 
@@ -490,13 +603,16 @@ export function getAxProgramStats(stateDir: string = ".undercity"): {
  */
 export function createAtomicityCheckerWithExamples(stateDir: string = ".undercity"): AxGen {
 	const gen = createAtomicityChecker();
-	const examples = getTrainingExamples<{ task: string }, {
-		isAtomic: boolean;
-		confidence: number;
-		estimatedFiles: number;
-		recommendedModel: string;
-		reasoning: string;
-	}>("atomicity", 10, stateDir);
+	const examples = getTrainingExamples<
+		{ task: string },
+		{
+			isAtomic: boolean;
+			confidence: number;
+			estimatedFiles: number;
+			recommendedModel: string;
+			reasoning: string;
+		}
+	>("atomicity", 10, stateDir);
 
 	if (examples.length > 0) {
 		gen.setExamples(examples);
@@ -511,10 +627,13 @@ export function createAtomicityCheckerWithExamples(stateDir: string = ".undercit
  */
 export function createTaskDecomposerWithExamples(stateDir: string = ".undercity"): AxGen {
 	const gen = createTaskDecomposer();
-	const examples = getTrainingExamples<{ task: string }, {
-		subtasks: string[];
-		reasoning: string;
-	}>("decomposition", 10, stateDir);
+	const examples = getTrainingExamples<
+		{ task: string },
+		{
+			subtasks: string[];
+			reasoning: string;
+		}
+	>("decomposition", 10, stateDir);
 
 	if (examples.length > 0) {
 		gen.setExamples(examples);
@@ -529,22 +648,48 @@ export function createTaskDecomposerWithExamples(stateDir: string = ".undercity"
  */
 export function createDecisionMakerWithExamples(stateDir: string = ".undercity"): AxGen {
 	const gen = createDecisionMaker();
-	const examples = getTrainingExamples<{
-		question: string;
-		context: string;
-		options: string;
-		similarDecisions: string;
-		relevantKnowledge: string;
-	}, {
-		decision: string;
-		reasoning: string;
-		confidence: string;
-		escalate: boolean;
-	}>("decision", 10, stateDir);
+	const examples = getTrainingExamples<
+		{
+			question: string;
+			context: string;
+			options: string;
+			similarDecisions: string;
+			relevantKnowledge: string;
+		},
+		{
+			decision: string;
+			reasoning: string;
+			confidence: string;
+			escalate: boolean;
+		}
+	>("decision", 10, stateDir);
 
 	if (examples.length > 0) {
 		gen.setExamples(examples);
 		logger.info({ count: examples.length }, "Loaded decision examples for few-shot learning");
+	}
+
+	return gen;
+}
+
+/**
+ * Create complexity assessor with few-shot examples loaded
+ */
+export function createComplexityAssessorWithExamples(stateDir: string = ".undercity"): AxGen {
+	const gen = createComplexityAssessor();
+	const examples = getTrainingExamples<
+		{ task: string },
+		{
+			level: string;
+			scope: string;
+			reasoning: string;
+			confidence: number;
+		}
+	>("complexity", 10, stateDir);
+
+	if (examples.length > 0) {
+		gen.setExamples(examples);
+		logger.info({ count: examples.length }, "Loaded complexity examples for few-shot learning");
 	}
 
 	return gen;

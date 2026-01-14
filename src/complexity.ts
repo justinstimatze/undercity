@@ -17,7 +17,7 @@
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { checkComplexityAx } from "./ax-programs.js";
 import { sessionLogger } from "./logger.js";
 
 /**
@@ -1086,10 +1086,6 @@ export const COMPLEXITY_LEVELS_GUIDE = {
 	},
 };
 
-const COMPLEXITY_GUIDE_TEXT = Object.entries(COMPLEXITY_LEVELS_GUIDE)
-	.map(([level, details]) => `- ${level}: ${details.examples.join(", ")}`)
-	.join("\n");
-
 export async function assessComplexityDeep(task: string): Promise<ComplexityAssessment> {
 	// Start with fast assessment
 	const fastAssessment = assessComplexityFast(task);
@@ -1099,75 +1095,41 @@ export async function assessComplexityDeep(task: string): Promise<ComplexityAsse
 		return fastAssessment;
 	}
 
-	// TODO: Add prompt caching when Agent SDK supports cache_control
-	// See: https://github.com/anthropics/claude-agent-sdk-typescript/issues
-	// The raw @anthropic-ai/sdk supports cache_control but requires API key auth,
-	// which doesn't work with Claude Max OAuth login.
-
+	// Use Ax/DSPy for self-improving complexity assessment
 	try {
-		let result = "";
+		const axResult = await checkComplexityAx(task);
 
-		// Use Haiku for quick, cheap assessment
-		for await (const message of query({
-			prompt: `Assess the complexity of this coding task. Respond with ONLY a JSON object, no other text.
+		const level = axResult.level;
+		const scope = axResult.scope;
 
-Task: ${task}
+		// Use shared level configuration
+		const config = getLevelConfig(level);
 
-Respond with this exact JSON format:
-{
-  "level": "trivial|simple|standard|complex|critical",
-  "scope": "single-file|few-files|many-files|cross-package",
-  "reasoning": "brief explanation"
-}
+		const assessment = {
+			level,
+			confidence: axResult.confidence,
+			model: config.model,
+			useFullChain: config.useFullChain,
+			needsReview: config.needsReview,
+			estimatedScope: scope,
+			signals: [...fastAssessment.signals, `ax:${axResult.reasoning}`],
+			score: fastAssessment.score,
+			team: getTeamComposition(level),
+		};
 
-Complexity guide:
-${COMPLEXITY_GUIDE_TEXT}`,
-			options: {
-				model: "claude-3-5-haiku-20241022",
-				allowedTools: [],
-			},
-		})) {
-			if (message.type === "result" && message.subtype === "success") {
-				result = message.result;
-			}
-		}
-
-		// Parse the response
-		const jsonMatch = result.match(/\{[\s\S]*\}/);
-		if (jsonMatch) {
-			const parsed = JSON.parse(jsonMatch[0]);
-			const level = parsed.level as ComplexityLevel;
-			const scope = parsed.scope as ComplexityAssessment["estimatedScope"];
-
-			// Use shared level configuration
-			const config = getLevelConfig(level);
-
-			const assessment = {
+		sessionLogger.info(
+			{
+				task: task.slice(0, 50),
+				assessmentType: "ax_assessment",
 				level,
-				confidence: 0.85,
-				model: config.model,
-				useFullChain: config.useFullChain,
-				needsReview: config.needsReview,
-				estimatedScope: scope,
-				signals: [...fastAssessment.signals, `llm:${parsed.reasoning}`],
-				score: fastAssessment.score,
-				team: getTeamComposition(level),
-			};
+				recommendedModel: assessment.model,
+				axReasoning: axResult.reasoning,
+				scope,
+			},
+			"Complexity determined by Ax analysis",
+		);
 
-			sessionLogger.info(
-				{
-					task: task.slice(0, 50),
-					assessmentType: "llm_assessment",
-					level,
-					recommendedModel: assessment.model,
-					llmReasoning: parsed.reasoning,
-					scope,
-				},
-				"Complexity determined by LLM analysis",
-			);
-
-			return assessment;
-		}
+		return assessment;
 	} catch (error) {
 		sessionLogger.warn({ error: String(error) }, "Deep complexity assessment failed, using fast assessment");
 	}
