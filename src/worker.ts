@@ -699,10 +699,7 @@ export class TaskWorker {
 				);
 				this.currentModel = checkpoint.model;
 			}
-			sessionLogger.info(
-				{ phase: checkpoint.phase, attempts: checkpoint.attempts },
-				"Resuming from checkpoint",
-			);
+			sessionLogger.info({ phase: checkpoint.phase, attempts: checkpoint.attempts }, "Resuming from checkpoint");
 		} else {
 			this.attempts = 0;
 		}

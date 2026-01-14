@@ -20,6 +20,7 @@ import { isAbsolute, normalize } from "node:path";
 import { updateLedger } from "./capability-ledger.js";
 import { type ExperimentManager, getExperimentManager } from "./experiment.js";
 import { FileTracker } from "./file-tracker.js";
+import { checkAndFixBareRepo } from "./git.js";
 import * as output from "./output.js";
 import { Persistence, readTaskAssignment, writeTaskAssignment } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
@@ -236,6 +237,9 @@ export class Orchestrator {
 		this.maxRecoveryAttempts = healthConfig.maxRecoveryAttempts ?? 2;
 
 		this.worktreeManager = new WorktreeManager();
+
+		// Check and fix bare repo (can happen due to worktree race conditions)
+		checkAndFixBareRepo();
 
 		// Initialize persistence and trackers
 		this.persistence = new Persistence();
@@ -1405,6 +1409,12 @@ export class Orchestrator {
 				execGitInDir(["clean", "-fd"], worktreePath);
 			}
 		} catch (cleanError) {
+			// If git status fails, the worktree is likely corrupted or deleted
+			const errorStr = String(cleanError);
+			if (errorStr.includes("not a work tree") || errorStr.includes("must be run in a work tree")) {
+				throw new Error(`Worktree for ${taskId} was deleted or corrupted before merge could complete. ` +
+					`This may be a race condition - try running with lower parallelism.`);
+			}
 			output.warning(`Failed to clean worktree for ${taskId}: ${cleanError}`);
 		}
 
@@ -1454,6 +1464,17 @@ export class Orchestrator {
 			// Detach HEAD in worktree to release the branch lock
 			// This prevents "refusing to fetch into branch checked out" error
 			execGitInDir(["checkout", "--detach"], worktreePath);
+
+			// Check if main repo has uncommitted changes that would block merge
+			const mainStatus = execGitInDir(["status", "--porcelain"], mainRepo);
+			if (mainStatus.trim()) {
+				output.warning(`Main repo has uncommitted changes, stashing before merge for ${taskId}`);
+				try {
+					execGitInDir(["stash", "push", "-m", `Auto-stash before merging ${taskId}`], mainRepo);
+				} catch (stashError) {
+					throw new Error(`Cannot merge: main repo has uncommitted changes and stash failed: ${stashError}`);
+				}
+			}
 
 			// Checkout main and fast-forward merge the worktree branch
 			execGitInDir(["checkout", mainBranch], mainRepo);

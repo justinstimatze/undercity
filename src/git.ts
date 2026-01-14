@@ -44,6 +44,26 @@ export function execGit(args: string[], cwd?: string): string {
 }
 
 /**
+ * Check if repo is incorrectly marked as bare and fix it.
+ * This can happen due to race conditions during worktree operations.
+ * Returns true if fix was applied.
+ */
+export function checkAndFixBareRepo(cwd?: string): boolean {
+	try {
+		const isBare = execGit(["config", "--get", "core.bare"], cwd);
+		if (isBare === "true") {
+			gitLogger.warn({ cwd }, "Repository incorrectly marked as bare, fixing...");
+			execGit(["config", "core.bare", "false"], cwd);
+			gitLogger.info({ cwd }, "Fixed bare repository setting");
+			return true;
+		}
+	} catch {
+		// core.bare not set or other error, that's fine
+	}
+	return false;
+}
+
+/**
  * Get the current branch name
  */
 export function getCurrentBranch(): string {
