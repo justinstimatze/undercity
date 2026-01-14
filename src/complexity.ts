@@ -989,6 +989,33 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 		signals.push("very-long-description");
 	}
 
+	// Check for risky keywords from operational learning
+	// Keywords with historically low success rates indicate higher complexity
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const patterns = require("./task-file-patterns.js") as typeof import("./task-file-patterns.js");
+		const store = patterns.loadTaskFileStore();
+		const taskKeywords = patterns.extractTaskKeywords(task);
+
+		for (const keyword of taskKeywords) {
+			const correlation = store.keywordCorrelations[keyword];
+			if (correlation && correlation.taskCount >= 3) {
+				const successRate = correlation.successCount / correlation.taskCount;
+				if (successRate < 0.5) {
+					// Very risky keyword - add 2 to score
+					score += 2;
+					signals.push(`risky-keyword:${keyword}(${Math.round(successRate * 100)}%)`);
+				} else if (successRate < 0.7) {
+					// Moderately risky - add 1 to score
+					score += 1;
+					signals.push(`caution-keyword:${keyword}(${Math.round(successRate * 100)}%)`);
+				}
+			}
+		}
+	} catch {
+		// Task-file patterns unavailable - continue without
+	}
+
 	// Determine level from score
 	let level: ComplexityLevel;
 	if (score <= 1) {
