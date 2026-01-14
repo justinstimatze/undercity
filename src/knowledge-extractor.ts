@@ -333,7 +333,7 @@ async function extractLearningsWithModel(text: string): Promise<ExtractedLearnin
 	}
 
 	// Truncate very long texts to avoid token limits
-	const truncatedText = text.length > 15000 ? text.slice(0, 15000) + "\n[truncated]" : text;
+	const truncatedText = text.length > 15000 ? `${text.slice(0, 15000)}\n[truncated]` : text;
 
 	const prompt = EXTRACTION_PROMPT + truncatedText;
 

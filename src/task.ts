@@ -483,10 +483,7 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
  *    - Requires at least 3 keywords in each set, or 2+ keywords in intersection
  *    - This prevents false positives on short tasks like "Task 1" vs "Task 2"
  */
-export function findDuplicateTask(
-	objective: string,
-	board: TaskBoard,
-): Task | undefined {
+export function findDuplicateTask(objective: string, board: TaskBoard): Task | undefined {
 	const normalized = normalizeObjective(objective);
 	const keywords = extractKeywords(objective);
 

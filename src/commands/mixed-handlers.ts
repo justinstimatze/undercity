@@ -2558,7 +2558,7 @@ export async function handleKnowledge(query: string | undefined, options: Knowle
 		if (options.human) {
 			console.log(chalk.bold("\n📚 Knowledge Base Stats\n"));
 			console.log(`  Total learnings: ${chalk.cyan(stats.totalLearnings)}`);
-			console.log(`  Average confidence: ${chalk.cyan((stats.avgConfidence * 100).toFixed(1) + "%")}`);
+			console.log(`  Average confidence: ${chalk.cyan(`${(stats.avgConfidence * 100).toFixed(1)}%`)}`);
 			console.log();
 			console.log(chalk.bold("  By category:"));
 			console.log(`    Patterns: ${stats.byCategory.pattern}`);
@@ -2592,7 +2592,7 @@ export async function handleKnowledge(query: string | undefined, options: Knowle
 				console.log(`  ${chalk.cyan(`[${learning.category}]`)} ${learning.content}`);
 				console.log(
 					chalk.dim(
-						`    ID: ${learning.id} | Confidence: ${confidenceColor((learning.confidence * 100).toFixed(0) + "%")} | Used: ${learning.usedCount}x`,
+						`    ID: ${learning.id} | Confidence: ${confidenceColor(`${(learning.confidence * 100).toFixed(0)}%`)} | Used: ${learning.usedCount}x`,
 					),
 				);
 				console.log();
@@ -2632,7 +2632,7 @@ export async function handleKnowledge(query: string | undefined, options: Knowle
 				console.log(`  ${chalk.cyan(`[${learning.category}]`)} ${learning.content}`);
 				console.log(
 					chalk.dim(
-						`    Confidence: ${confidenceColor((learning.confidence * 100).toFixed(0) + "%")} | Keywords: ${learning.keywords.slice(0, 5).join(", ")}`,
+						`    Confidence: ${confidenceColor(`${(learning.confidence * 100).toFixed(0)}%`)} | Keywords: ${learning.keywords.slice(0, 5).join(", ")}`,
 					),
 				);
 				console.log();
