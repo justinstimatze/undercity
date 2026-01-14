@@ -504,6 +504,23 @@ export const analysisCommands: CommandModule = {
 
 				console.log(chalk.dim("\nUse patterns to predict relevant files and suggest fixes for errors.\n"));
 			});
+
+		// Prime patterns from git history
+		program
+			.command("prime-patterns")
+			.description("Seed operational learning patterns from git history")
+			.option("-n, --commits <n>", "Number of commits to analyze", "100")
+			.action(async (options) => {
+				const { primeFromGitHistory } = await import("../task-file-patterns.js");
+				const maxCommits = Number.parseInt(options.commits, 10);
+
+				console.log(chalk.cyan(`Analyzing last ${maxCommits} commits...`));
+				const result = await primeFromGitHistory(maxCommits);
+
+				console.log(chalk.green(`✓ Processed ${result.commitsProcessed} commits`));
+				console.log(chalk.green(`✓ Added ${result.patternsAdded} pattern entries`));
+				console.log(chalk.dim("\nRun 'undercity patterns' to see the results."));
+			});
 	},
 };
 

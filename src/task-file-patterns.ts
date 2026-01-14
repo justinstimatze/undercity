@@ -560,3 +560,99 @@ export function pruneStalePatterns(
 
 	return { prunedKeywords, prunedFiles };
 }
+
+/**
+ * Prime patterns from git history
+ * Analyzes recent commits to seed task-file and co-modification patterns
+ */
+export async function primeFromGitHistory(
+	maxCommits: number = 50,
+	stateDir: string = DEFAULT_STATE_DIR,
+): Promise<{ commitsProcessed: number; patternsAdded: number }> {
+	const { execSync } = await import("node:child_process");
+
+	const store = loadTaskFileStore(stateDir);
+	let patternsAdded = 0;
+
+	try {
+		// Get recent commits with files changed
+		const logOutput = execSync(
+			`git log --oneline --name-only --no-merges -n ${maxCommits} 2>/dev/null`,
+			{ encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 },
+		);
+
+		const lines = logOutput.trim().split("\n");
+		let currentCommit: { hash: string; message: string; files: string[] } | null = null;
+		const commits: Array<{ hash: string; message: string; files: string[] }> = [];
+
+		for (const line of lines) {
+			if (line.match(/^[a-f0-9]{7,} /)) {
+				// New commit line
+				if (currentCommit && currentCommit.files.length > 0) {
+					commits.push(currentCommit);
+				}
+				const [hash, ...messageParts] = line.split(" ");
+				currentCommit = { hash, message: messageParts.join(" "), files: [] };
+			} else if (line.trim() && currentCommit) {
+				// File line
+				const file = line.trim();
+				if (file.match(/\.(ts|js|tsx|jsx|py|go|rs|java|rb)$/)) {
+					currentCommit.files.push(file);
+				}
+			}
+		}
+		if (currentCommit && currentCommit.files.length > 0) {
+			commits.push(currentCommit);
+		}
+
+		// Process commits to extract patterns
+		for (const commit of commits) {
+			const keywords = extractTaskKeywords(commit.message);
+			const files = commit.files.map(normalizeFilePath);
+
+			if (keywords.length === 0 || files.length === 0) continue;
+
+			// Update keyword correlations
+			for (const keyword of keywords) {
+				if (!store.keywordCorrelations[keyword]) {
+					store.keywordCorrelations[keyword] = {
+						keyword,
+						files: {},
+						taskCount: 0,
+						successCount: 0,
+					};
+				}
+				const correlation = store.keywordCorrelations[keyword];
+				correlation.taskCount++;
+				correlation.successCount++;
+				for (const file of files) {
+					correlation.files[file] = (correlation.files[file] || 0) + 1;
+					patternsAdded++;
+				}
+			}
+
+			// Update co-modification patterns
+			for (const file of files) {
+				if (!store.coModificationPatterns[file]) {
+					store.coModificationPatterns[file] = {
+						file,
+						coModified: {},
+						modificationCount: 0,
+					};
+				}
+				const pattern = store.coModificationPatterns[file];
+				pattern.modificationCount++;
+				for (const otherFile of files) {
+					if (otherFile !== file) {
+						pattern.coModified[otherFile] = (pattern.coModified[otherFile] || 0) + 1;
+					}
+				}
+			}
+		}
+
+		saveTaskFileStore(store, stateDir);
+		return { commitsProcessed: commits.length, patternsAdded };
+	} catch {
+		return { commitsProcessed: 0, patternsAdded: 0 };
+	}
+}
