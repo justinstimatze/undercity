@@ -196,11 +196,15 @@ export async function handlePulse(options: PulseOptions): Promise<void> {
 	const failedLastHour = recentTasks.filter((t) => t.status === "failed").length;
 
 	// Calculate pacing info
+	// Prefer live Claude Max data over stale local tracking
 	const config = tracker.getState().config;
-	const tokensUsed = usage.current.last5HoursSonnet;
 	const tokenBudget = config.maxTokensPer5Hours;
-	const remaining = tokenBudget - tokensUsed;
 	const pendingCount = summary.pending + summary.inProgress;
+
+	// Use live percentages if available, otherwise fall back to local tracking
+	const fiveHourPercentUsed = mayorUsage?.fiveHourPercent ?? Math.round((usage.current.last5HoursSonnet / tokenBudget) * 100);
+	const tokensUsed = Math.round((fiveHourPercentUsed / 100) * tokenBudget);
+	const remaining = tokenBudget - tokensUsed;
 
 	// Estimate tokens per task from historical data (default 50k if no data)
 	const totalTasks = Object.values(usage.modelBreakdown).reduce((sum, m) => sum + m.totalTasks, 0);
@@ -285,12 +289,14 @@ export async function handlePulse(options: PulseOptions): Promise<void> {
 			blocked: summary.blocked,
 		},
 		health: {
+			// Plan limits from live claude.ai scraping (source of truth for rate limiting)
 			rateLimit: {
-				fiveHourPercent: Math.round(usage.percentages.fiveHour * 100),
-				weeklyPercent: Math.round(usage.percentages.weekly * 100),
+				fiveHourPercent: mayorUsage?.fiveHourPercent ?? Math.round(usage.percentages.fiveHour * 100),
+				weeklyPercent: mayorUsage?.weeklyPercent ?? Math.round(usage.percentages.weekly * 100),
 				isPaused: tracker.isPaused(),
 				resumeAt: resumeAtDate?.toISOString(),
 			},
+			// Raw live data with fetch timestamp (for debugging/transparency)
 			mayorUsage: mayorUsage ?? undefined,
 			recentActivity: {
 				completedLastHour,
@@ -2506,10 +2512,7 @@ export async function handleDecide(options: DecideOptions): Promise<void> {
 /**
  * Handle the knowledge command - search or list accumulated learnings
  */
-export async function handleKnowledge(
-	query: string | undefined,
-	options: KnowledgeOptions,
-): Promise<void> {
+export async function handleKnowledge(query: string | undefined, options: KnowledgeOptions): Promise<void> {
 	const { findRelevantLearnings, getKnowledgeStats, loadKnowledge } = await import("../knowledge.js");
 
 	// Stats mode - show knowledge base statistics
@@ -2547,9 +2550,14 @@ export async function handleKnowledge(
 		if (options.human) {
 			console.log(chalk.bold(`\n📚 All Learnings (${learnings.length}/${kb.learnings.length})\n`));
 			for (const learning of learnings) {
-				const confidenceColor = learning.confidence >= 0.7 ? chalk.green : learning.confidence >= 0.4 ? chalk.yellow : chalk.red;
+				const confidenceColor =
+					learning.confidence >= 0.7 ? chalk.green : learning.confidence >= 0.4 ? chalk.yellow : chalk.red;
 				console.log(`  ${chalk.cyan(`[${learning.category}]`)} ${learning.content}`);
-				console.log(chalk.dim(`    ID: ${learning.id} | Confidence: ${confidenceColor((learning.confidence * 100).toFixed(0) + "%")} | Used: ${learning.usedCount}x`));
+				console.log(
+					chalk.dim(
+						`    ID: ${learning.id} | Confidence: ${confidenceColor((learning.confidence * 100).toFixed(0) + "%")} | Used: ${learning.usedCount}x`,
+					),
+				);
 				console.log();
 			}
 			if (kb.learnings.length > limit) {
@@ -2582,9 +2590,14 @@ export async function handleKnowledge(
 			console.log(chalk.dim("  No relevant learnings found."));
 		} else {
 			for (const learning of relevant) {
-				const confidenceColor = learning.confidence >= 0.7 ? chalk.green : learning.confidence >= 0.4 ? chalk.yellow : chalk.red;
+				const confidenceColor =
+					learning.confidence >= 0.7 ? chalk.green : learning.confidence >= 0.4 ? chalk.yellow : chalk.red;
 				console.log(`  ${chalk.cyan(`[${learning.category}]`)} ${learning.content}`);
-				console.log(chalk.dim(`    Confidence: ${confidenceColor((learning.confidence * 100).toFixed(0) + "%")} | Keywords: ${learning.keywords.slice(0, 5).join(", ")}`));
+				console.log(
+					chalk.dim(
+						`    Confidence: ${confidenceColor((learning.confidence * 100).toFixed(0) + "%")} | Keywords: ${learning.keywords.slice(0, 5).join(", ")}`,
+					),
+				);
 				console.log();
 			}
 		}

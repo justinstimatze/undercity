@@ -883,15 +883,15 @@ export class TaskWorker {
 					);
 
 					// Knowledge compounding: extract learnings from successful task
-					// Use process.cwd() (main repo) for knowledge storage, not worktree
+					// Use this.stateDir (main repo) for knowledge storage, not worktree
 					try {
-						const extracted = extractAndStoreLearnings(taskId, this.lastAgentOutput);
+						const extracted = extractAndStoreLearnings(taskId, this.lastAgentOutput, this.stateDir);
 						if (extracted.length > 0) {
 							output.debug(`Extracted ${extracted.length} learnings from task`, { taskId });
 						}
 						// Mark injected learnings as successfully used
 						if (this.injectedLearningIds.length > 0) {
-							markLearningsUsed(this.injectedLearningIds, true);
+							markLearningsUsed(this.injectedLearningIds, true, this.stateDir);
 							output.debug(`Marked ${this.injectedLearningIds.length} learnings as used (success)`, { taskId });
 						}
 					} catch (error) {
@@ -1065,7 +1065,7 @@ export class TaskWorker {
 		// This decreases confidence in learnings that didn't help
 		if (this.injectedLearningIds.length > 0) {
 			try {
-				markLearningsUsed(this.injectedLearningIds, false);
+				markLearningsUsed(this.injectedLearningIds, false, this.stateDir);
 			} catch {
 				// Non-critical
 			}
@@ -1439,8 +1439,8 @@ The file MUST be created at ${outputPath} for this task to succeed.`;
 			}
 
 			// Add relevant learnings from previous tasks
-			// Use process.cwd() (main repo) for knowledge, not worktree
-			const relevantLearnings = findRelevantLearnings(task, 5);
+			// Use this.stateDir (main repo) for knowledge, not worktree
+			const relevantLearnings = findRelevantLearnings(task, 5, this.stateDir);
 			if (relevantLearnings.length > 0) {
 				const learningsPrompt = formatLearningsForPrompt(relevantLearnings);
 				contextSection += `${learningsPrompt}

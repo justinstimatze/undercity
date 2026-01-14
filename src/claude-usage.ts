@@ -23,7 +23,7 @@
  * Maintains a persistent browser context so you only need to log in once.
  */
 
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type BrowserContext, chromium } from "playwright";
 
@@ -34,10 +34,57 @@ export interface ClaudeUsage {
 	success: boolean;
 	error?: string;
 	needsLogin?: boolean;
+	cached?: boolean;
 }
 
 const USAGE_URL = "https://claude.ai/settings/usage";
 const BROWSER_DATA_DIR = ".undercity/browser-data";
+const USAGE_CACHE_FILE = ".undercity/usage-cache.json";
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Get cached usage data if still valid
+ */
+function getCachedUsage(): ClaudeUsage | null {
+	const cachePath = join(process.cwd(), USAGE_CACHE_FILE);
+	if (!existsSync(cachePath)) {
+		return null;
+	}
+
+	try {
+		const content = readFileSync(cachePath, "utf-8");
+		const cached = JSON.parse(content) as ClaudeUsage;
+
+		// Check if cache is still valid
+		const fetchedAt = new Date(cached.fetchedAt).getTime();
+		const age = Date.now() - fetchedAt;
+		if (age < CACHE_TTL_MS && cached.success) {
+			return { ...cached, cached: true };
+		}
+	} catch {
+		// Cache corrupted or unreadable
+	}
+
+	return null;
+}
+
+/**
+ * Save usage data to cache
+ */
+function cacheUsage(usage: ClaudeUsage): void {
+	const cachePath = join(process.cwd(), USAGE_CACHE_FILE);
+	const dir = join(process.cwd(), ".undercity");
+
+	if (!existsSync(dir)) {
+		mkdirSync(dir, { recursive: true });
+	}
+
+	try {
+		writeFileSync(cachePath, JSON.stringify(usage, null, 2));
+	} catch {
+		// Cache write failure is non-critical
+	}
+}
 
 /**
  * Get the browser data directory path
@@ -56,8 +103,19 @@ function getBrowserDataPath(): string {
  * Uses a persistent browser context so login persists across calls.
  * If not logged in, returns needsLogin: true and you should call
  * fetchClaudeUsageInteractive() to open a visible browser for login.
+ *
+ * Results are cached for 5 minutes to avoid hammering claude.ai with Playwright.
+ * Use forceRefresh=true to bypass cache.
  */
-export async function fetchClaudeUsage(): Promise<ClaudeUsage> {
+export async function fetchClaudeUsage(forceRefresh = false): Promise<ClaudeUsage> {
+	// Check cache first (unless forced refresh)
+	if (!forceRefresh) {
+		const cached = getCachedUsage();
+		if (cached) {
+			return cached;
+		}
+	}
+
 	const browserDataPath = getBrowserDataPath();
 
 	let context: BrowserContext | null = null;
@@ -150,12 +208,17 @@ export async function fetchClaudeUsage(): Promise<ClaudeUsage> {
 			};
 		}
 
-		return {
+		const result: ClaudeUsage = {
 			fiveHourPercent: usage.fiveHour ?? 0,
 			weeklyPercent: usage.weekly ?? 0,
 			fetchedAt: new Date().toISOString(),
 			success: true,
 		};
+
+		// Cache successful result for 5 minutes
+		cacheUsage(result);
+
+		return result;
 	} catch (error) {
 		if (context) {
 			await context.close().catch(() => {});
