@@ -277,6 +277,13 @@ export class ASTIndexManager {
 		};
 	}
 
+	/**
+	 * Get the repository root this index is associated with
+	 */
+	getRepoRoot(): string {
+		return this.repoRoot;
+	}
+
 	// ==========================================================================
 	// Updating
 	// ==========================================================================
@@ -798,8 +805,10 @@ let indexInstance: ASTIndexManager | null = null;
  * Get or create AST index manager singleton
  */
 export function getASTIndex(repoRoot?: string): ASTIndexManager {
-	if (!indexInstance) {
-		indexInstance = new ASTIndexManager(repoRoot);
+	const targetRoot = repoRoot || process.cwd();
+	// Create new instance if repoRoot differs (e.g., worktree vs main repo)
+	if (!indexInstance || indexInstance.getRepoRoot() !== targetRoot) {
+		indexInstance = new ASTIndexManager(targetRoot);
 	}
 	return indexInstance;
 }
