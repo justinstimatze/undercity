@@ -82,6 +82,21 @@ export const ComplexitySignature = AxSignature.create(
 	confidence:number "Confidence in assessment (0-1)"`,
 );
 
+/**
+ * Review triage signature
+ * Input: task and diff
+ * Output: review strategy recommendations
+ */
+export const ReviewTriageSignature = AxSignature.create(
+	`task:string "The coding task that was implemented",
+	diff:string "Git diff of the changes" ->
+	reasoning:string "Analysis of the changes and potential issues",
+	riskLevel:string "low, medium, high, or critical",
+	focusAreas:string[] "Specific areas to focus review on",
+	suggestedTier:string "haiku, sonnet, or opus - starting review tier",
+	confidence:number "Confidence in assessment (0-1)"`,
+);
+
 // ============================================================================
 // Program Instances
 // ============================================================================
@@ -187,6 +202,37 @@ SCOPE:
 
 Think step by step in the reasoning field before giving your assessment.
 Be conservative - err on the side of higher complexity when uncertain.`);
+	return gen;
+}
+
+/**
+ * Review triage program
+ * Analyzes code changes to recommend review strategy
+ */
+export function createReviewTriager(): AxGen {
+	const gen = new AxGen(ReviewTriageSignature);
+	gen.setInstruction(`You triage code changes to recommend an appropriate review strategy.
+
+RISK LEVELS:
+- low: Trivial changes, typos, comments, style-only
+- medium: Standard bug fixes, small features, localized changes
+- high: Security-related, auth, data handling, cross-cutting changes
+- critical: Breaking changes, production data, payments, compliance
+
+REVIEW TIERS:
+- haiku: Fast, cheap - good for low-risk, style, trivial issues
+- sonnet: Balanced - good for standard features, bugs, medium complexity
+- opus: Thorough - for security, architectural, high-stakes changes
+
+FOCUS AREAS to identify:
+- Security vulnerabilities (injection, auth bypass, etc.)
+- Error handling gaps
+- Edge cases not covered
+- Missing validation
+- Breaking API changes
+- Performance regressions
+
+Analyze the diff carefully and think step by step before recommending a strategy.`);
 	return gen;
 }
 
@@ -481,6 +527,71 @@ export async function checkComplexityAx(
 	}
 }
 
+/**
+ * Run review triage using Ax program
+ * Loads successful examples as few-shot demos for self-improvement
+ */
+export async function triageReviewAx(
+	task: string,
+	diff: string,
+	stateDir: string = ".undercity",
+): Promise<{
+	riskLevel: "low" | "medium" | "high" | "critical";
+	focusAreas: string[];
+	suggestedTier: "haiku" | "sonnet" | "opus";
+	reasoning: string;
+	confidence: number;
+}> {
+	try {
+		const ai = createAxAI();
+		// Load program with examples from past successful runs
+		const triager = createReviewTriagerWithExamples(stateDir);
+
+		// Truncate diff to avoid token limits
+		const truncatedDiff = diff.length > 8000 ? `${diff.slice(0, 8000)}\n... (truncated)` : diff;
+
+		const result = await triager.forward(ai, { task, diff: truncatedDiff });
+
+		// Normalize risk level
+		const validRiskLevels = ["low", "medium", "high", "critical"] as const;
+		const rawRiskLevel = String(result.riskLevel || "medium").toLowerCase();
+		const riskLevel = validRiskLevels.includes(rawRiskLevel as (typeof validRiskLevels)[number])
+			? (rawRiskLevel as (typeof validRiskLevels)[number])
+			: "medium";
+
+		// Normalize suggested tier
+		const validTiers = ["haiku", "sonnet", "opus"] as const;
+		const rawTier = String(result.suggestedTier || "sonnet").toLowerCase();
+		const suggestedTier = validTiers.includes(rawTier as (typeof validTiers)[number])
+			? (rawTier as (typeof validTiers)[number])
+			: "sonnet";
+
+		// Normalize focus areas
+		const focusAreas = Array.isArray(result.focusAreas) ? result.focusAreas.map(String) : [];
+
+		const output = {
+			riskLevel,
+			focusAreas,
+			suggestedTier,
+			reasoning: String(result.reasoning || ""),
+			confidence: Number(result.confidence) || 0.5,
+		};
+
+		logger.debug({ task: task.slice(0, 50), output }, "Ax review triage complete");
+
+		return output;
+	} catch (error) {
+		logger.warn({ error: String(error) }, "Ax review triage failed, using defaults");
+		return {
+			riskLevel: "medium",
+			focusAreas: [],
+			suggestedTier: "sonnet",
+			reasoning: `Ax triage failed: ${error}`,
+			confidence: 0.3,
+		};
+	}
+}
+
 // ============================================================================
 // Example Recording Helpers
 // ============================================================================
@@ -562,6 +673,27 @@ export function recordComplexityOutcome(
 	saveExample("complexity", { task }, result, taskSucceeded ? "success" : "failure", stateDir);
 }
 
+/**
+ * Record review triage outcome for training
+ */
+export function recordReviewTriageOutcome(
+	input: {
+		task: string;
+		diff: string;
+	},
+	result: {
+		riskLevel: string;
+		focusAreas: string[];
+		suggestedTier: string;
+		reasoning: string;
+		confidence: number;
+	},
+	reviewSucceeded: boolean,
+	stateDir: string = ".undercity",
+): void {
+	saveExample("reviewTriage", input, result, reviewSucceeded ? "success" : "failure", stateDir);
+}
+
 // ============================================================================
 // Stats
 // ============================================================================
@@ -574,8 +706,9 @@ export function getAxProgramStats(stateDir: string = ".undercity"): {
 	decomposition: { total: number; successful: number };
 	decision: { total: number; successful: number };
 	complexity: { total: number; successful: number };
+	reviewTriage: { total: number; successful: number };
 } {
-	const programs = ["atomicity", "decomposition", "decision", "complexity"] as const;
+	const programs = ["atomicity", "decomposition", "decision", "complexity", "reviewTriage"] as const;
 	const stats: Record<string, { total: number; successful: number }> = {};
 
 	for (const prog of programs) {
@@ -591,6 +724,7 @@ export function getAxProgramStats(stateDir: string = ".undercity"): {
 		decomposition: { total: number; successful: number };
 		decision: { total: number; successful: number };
 		complexity: { total: number; successful: number };
+		reviewTriage: { total: number; successful: number };
 	};
 }
 
@@ -690,6 +824,30 @@ export function createComplexityAssessorWithExamples(stateDir: string = ".underc
 	if (examples.length > 0) {
 		gen.setExamples(examples);
 		logger.info({ count: examples.length }, "Loaded complexity examples for few-shot learning");
+	}
+
+	return gen;
+}
+
+/**
+ * Create review triager with few-shot examples loaded
+ */
+export function createReviewTriagerWithExamples(stateDir: string = ".undercity"): AxGen {
+	const gen = createReviewTriager();
+	const examples = getTrainingExamples<
+		{ task: string; diff: string },
+		{
+			riskLevel: string;
+			focusAreas: string[];
+			suggestedTier: string;
+			reasoning: string;
+			confidence: number;
+		}
+	>("reviewTriage", 10, stateDir);
+
+	if (examples.length > 0) {
+		gen.setExamples(examples);
+		logger.info({ count: examples.length }, "Loaded review triage examples for few-shot learning");
 	}
 
 	return gen;
