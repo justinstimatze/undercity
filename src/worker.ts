@@ -53,6 +53,7 @@ import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
 import { runEscalatingReview, type UnresolvedTicket } from "./review.js";
 import type { HandoffContext } from "./task.js";
 import { formatCoModificationHints, formatFileSuggestionsForPrompt, recordTaskFiles } from "./task-file-patterns.js";
+import { formatExecutionPlanAsContext, planTaskWithReview, type TieredPlanResult } from "./task-planner.js";
 import { extractMetaTaskType, isMetaTask, isResearchTask, parseResearchResult } from "./task-schema.js";
 import {
 	type AttemptRecord,
@@ -266,6 +267,12 @@ export interface TaskResult {
 	researchResult?: import("./task-schema.js").ResearchResultSchemaType;
 	/** Task was already complete (no changes needed, content was correct) */
 	taskAlreadyComplete?: boolean;
+	/** Task needs decomposition - agent couldn't act on it (too vague) */
+	needsDecomposition?: {
+		reason: string;
+		/** Suggested subtasks from the agent */
+		suggestedSubtasks?: string[];
+	};
 }
 
 /**
@@ -313,6 +320,12 @@ export interface SoloOptions {
 	 * Default: 7
 	 */
 	maxOpusRetries?: number;
+	/**
+	 * Enable pre-execution planning phase.
+	 * Haiku creates plan, sonnet reviews - catches issues before execution.
+	 * Default: true
+	 */
+	enablePlanning?: boolean;
 }
 
 /**
@@ -399,6 +412,15 @@ export class TaskWorker {
 	/** Agent reported invalid target - file/function doesn't exist */
 	private invalidTargetReason: string | null = null;
 
+	/** Agent reported task needs decomposition - too vague to act on */
+	private needsDecompositionReason: string | null = null;
+
+	/** Result from pre-execution planning phase */
+	private executionPlan: TieredPlanResult | null = null;
+
+	/** Whether to run pre-execution planning (tiered: haiku plans, sonnet reviews) */
+	private enablePlanning: boolean;
+
 	constructor(options: SoloOptions = {}) {
 		// Default 7 attempts allows full escalation: 2 haiku + 2 sonnet + 3 opus
 		this.maxAttempts = options.maxAttempts ?? 7;
@@ -418,6 +440,8 @@ export class TaskWorker {
 		// 2 retries per tier before escalating (was 3, but that's too slow)
 		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
 		this.maxOpusRetries = options.maxOpusRetries ?? 7;
+		// Enable planning by default - haiku plans, sonnet reviews
+		this.enablePlanning = options.enablePlanning ?? true;
 		this.currentModel = this.startingModel;
 		this.metricsTracker = new MetricsTracker();
 	}
@@ -581,6 +605,13 @@ export class TaskWorker {
 			if (fastResult) return fastResult;
 		}
 
+		// Pre-execution planning phase: haiku plans, sonnet reviews
+		if (this.enablePlanning && !this.isCurrentTaskMeta && !this.isCurrentTaskResearch) {
+			output.workerPhase(taskId, "planning");
+			const planResult = await this.runPlanningPhase(task, taskId);
+			if (planResult) return planResult;
+		}
+
 		// Prepare context and assess complexity
 		const { reviewLevel, phaseTimings } = await this.prepareContextAndAssessComplexity(task, taskId);
 
@@ -653,6 +684,7 @@ export class TaskWorker {
 		this.pendingTickets = [];
 		this.currentHandoffContext = handoffContext;
 		this.currentAgentSessionId = undefined;
+		this.executionPlan = null;
 
 		this.saveCheckpoint("starting");
 		this.cleanupDirtyState();
@@ -760,6 +792,100 @@ export class TaskWorker {
 		}
 
 		return null;
+	}
+
+	/**
+	 * Run pre-execution planning phase
+	 *
+	 * Tiered planning: haiku creates plan, sonnet reviews.
+	 * Catches issues before expensive execution:
+	 * - Task already complete
+	 * - Task needs decomposition
+	 * - Invalid targets
+	 * - Missing context
+	 *
+	 * Returns TaskResult if task should be skipped, null to continue execution.
+	 */
+	private async runPlanningPhase(task: string, taskId: string): Promise<TaskResult | null> {
+		const startTime = Date.now();
+
+		try {
+			sessionLogger.info({ taskId, task: task.substring(0, 50) }, "Starting planning phase");
+			this.executionPlan = await planTaskWithReview(task, this.workingDirectory, "haiku");
+
+			const planDuration = Date.now() - startTime;
+			sessionLogger.info(
+				{
+					taskId,
+					approved: this.executionPlan.review.approved,
+					proceedWithExecution: this.executionPlan.proceedWithExecution,
+					plannerModel: this.executionPlan.plannerModel,
+					reviewerModel: this.executionPlan.reviewerModel,
+					durationMs: planDuration,
+				},
+				"Planning phase complete",
+			);
+
+			// If plan says skip execution, return early
+			if (!this.executionPlan.proceedWithExecution) {
+				const skipReason = this.executionPlan.skipReason || "Plan not approved";
+
+				// Check for decomposition signal
+				if (this.executionPlan.plan.needsDecomposition?.needed) {
+					output.info(`Task needs decomposition: ${skipReason}`, { taskId });
+					return {
+						task,
+						status: "failed",
+						model: this.currentModel,
+						attempts: 0,
+						error: "NEEDS_DECOMPOSITION",
+						durationMs: planDuration,
+						needsDecomposition: {
+							reason: skipReason,
+							suggestedSubtasks: this.executionPlan.plan.needsDecomposition.suggestedSubtasks,
+						},
+					};
+				}
+
+				// Check for already complete signal
+				if (this.executionPlan.plan.alreadyComplete?.likely) {
+					output.success(`Task already complete: ${skipReason}`, { taskId });
+					return {
+						task,
+						status: "complete",
+						model: this.currentModel,
+						attempts: 0,
+						durationMs: planDuration,
+						tokenUsage: { attempts: [], total: 0 },
+					};
+				}
+
+				// Plan rejected for other reasons
+				output.warning(`Plan not approved: ${skipReason}`, { taskId });
+				const issues = this.executionPlan.review.issues?.join("; ") || "Unknown";
+				return {
+					task,
+					status: "failed",
+					model: this.currentModel,
+					attempts: 0,
+					error: `PLAN_REJECTED: ${issues}`,
+					durationMs: planDuration,
+				};
+			}
+
+			// Plan approved - execution will continue
+			output.success("Plan approved, proceeding with execution", {
+				taskId,
+				filesToModify: this.executionPlan.plan.filesToModify.length,
+				steps: this.executionPlan.plan.steps.length,
+			});
+
+			return null; // Continue with execution
+		} catch (error) {
+			sessionLogger.warn({ error: String(error), taskId }, "Planning phase failed, proceeding without plan");
+			this.executionPlan = null;
+			return null; // Continue with execution even if planning fails
+		}
 	}
 
 	/**
@@ -1006,6 +1132,40 @@ export class TaskWorker {
 				tokenUsage: {
 					attempts: this.tokenUsageThisTask,
 					total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
+				},
+			};
+		}
+
+		// Check for needs decomposition - return to orchestrator for decomposition
+		if (this.needsDecompositionReason !== null) {
+			sessionLogger.info(
+				{ taskId, reason: this.needsDecompositionReason },
+				"Task needs decomposition - returning to orchestrator",
+			);
+			// Parse suggested subtasks from the reason if present
+			// Format: "NEEDS_DECOMPOSITION: subtask1; subtask2; subtask3" or just a description
+			const suggestedSubtasks = this.needsDecompositionReason.includes(";")
+				? this.needsDecompositionReason
+						.split(";")
+						.map((s) => s.trim())
+						.filter(Boolean)
+				: undefined;
+
+			return {
+				task,
+				status: "failed", // Mark as failed so orchestrator handles it
+				model: this.currentModel,
+				attempts: this.attempts,
+				verification,
+				error: `NEEDS_DECOMPOSITION: ${this.needsDecompositionReason}`,
+				durationMs: Date.now() - startTime,
+				tokenUsage: {
+					attempts: this.tokenUsageThisTask,
+					total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
+				},
+				needsDecomposition: {
+					reason: this.needsDecompositionReason,
+					suggestedSubtasks,
 				},
 			};
 		}
@@ -1873,6 +2033,16 @@ ${alreadyDoneHint}
 `;
 			}
 
+			// Add execution plan from planning phase (if available)
+			if (this.executionPlan?.proceedWithExecution) {
+				const planContext = formatExecutionPlanAsContext(this.executionPlan.plan);
+				contextSection += `${planContext}
+
+---
+
+`;
+			}
+
 			// For first attempt after escalation, include post-mortem
 			let postMortemContext = "";
 			if (this.lastPostMortem) {
@@ -1896,7 +2066,8 @@ RULES:
 1. First verify the task isn't already complete - check git log, read target files
 2. If task is already done, output exactly: TASK_ALREADY_COMPLETE: <reason>
 3. If the target file/function/class doesn't exist and this isn't a create task, output: INVALID_TARGET: <reason>
-4. If the task requires creating new files, create them (Write tool creates parent directories)
+4. If the task is too vague to act on (no specific targets, unclear what to change), output: NEEDS_DECOMPOSITION: <what specific subtasks are needed>
+5. If the task requires creating new files, create them (Write tool creates parent directories)
 5. If editing existing files, read them first before editing
 6. Minimal changes only - nothing beyond task scope
 7. No questions - decide and proceed`;
@@ -1909,6 +2080,7 @@ RULES:
 		this.noOpEditCount = 0;
 		this.taskAlreadyCompleteReason = null;
 		this.invalidTargetReason = null;
+		this.needsDecompositionReason = null;
 
 		// Build hooks - meta-tasks don't need the "must write files" check
 		// Research tasks now write to .undercity/research/*.md so they use the normal hook
@@ -2087,6 +2259,13 @@ RULES:
 			sessionLogger.warn({ reason: this.invalidTargetReason }, "Agent reported invalid target");
 		}
 
+		// Check if agent reported task needs decomposition
+		const needsDecompMatch = result.match(/NEEDS_DECOMPOSITION:\s*(.+?)(?:\n|$)/i);
+		if (needsDecompMatch) {
+			this.needsDecompositionReason = needsDecompMatch[1].trim();
+			sessionLogger.info({ reason: this.needsDecompositionReason }, "Agent reported task needs decomposition");
+		}
+
 		// Parse agent output for decision points and capture them
 		try {
 			const decisions = parseAgentOutputForDecisions(result, this.currentTaskId);
@@ -2162,6 +2341,15 @@ RULES:
 						if (invalidMatch && !this.invalidTargetReason) {
 							this.invalidTargetReason = invalidMatch[1].trim();
 							sessionLogger.warn({ reason: this.invalidTargetReason }, "Agent reported invalid target (streaming)");
+						}
+						// Check for NEEDS_DECOMPOSITION marker in text blocks
+						const decompMatch = block.text.match(/NEEDS_DECOMPOSITION:\s*(.+?)(?:\n|$)/i);
+						if (decompMatch && !this.needsDecompositionReason) {
+							this.needsDecompositionReason = decompMatch[1].trim();
+							sessionLogger.info(
+								{ reason: this.needsDecompositionReason },
+								"Agent reported needs decomposition (streaming)",
+							);
 						}
 					}
 					// Track write tool requests

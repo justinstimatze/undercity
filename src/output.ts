@@ -283,10 +283,11 @@ export function debug(message: string, data?: Record<string, unknown>): void {
  */
 export function workerPhase(
 	taskId: string,
-	phase: "analyzing" | "executing" | "verifying" | "committing" | "reviewing" | "parsing",
+	phase: "planning" | "analyzing" | "executing" | "verifying" | "committing" | "reviewing" | "parsing",
 	data?: Record<string, unknown>,
 ): void {
 	const phaseMessages: Record<string, string> = {
+		planning: "Planning execution...",
 		analyzing: "Analyzing task complexity...",
 		executing: "Executing with agent...",
 		verifying: "Running verification...",
