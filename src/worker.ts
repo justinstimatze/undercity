@@ -20,6 +20,8 @@
  */
 
 import { execFileSync, execSync } from "node:child_process";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
 import {
@@ -134,6 +136,61 @@ function extractExplicitFiles(task: string): string[] {
 	}
 
 	return [...new Set(files)];
+}
+
+/**
+ * Result of pre-flight task validation
+ */
+interface TaskValidationResult {
+	valid: boolean;
+	reason?: string;
+	missingFiles?: string[];
+	suggestion?: string;
+}
+
+/**
+ * Pre-validate task targets before executing
+ * Catches impossible tasks early to avoid wasting tokens
+ */
+function validateTaskTargets(task: string, cwd: string): TaskValidationResult {
+	const taskLower = task.toLowerCase();
+
+	// Skip validation for create/new tasks - they're supposed to create files
+	const isCreateTask =
+		taskLower.includes("create ") ||
+		taskLower.includes("add new ") ||
+		taskLower.includes("implement new ") ||
+		taskLower.includes("write new ");
+
+	if (isCreateTask) {
+		return { valid: true };
+	}
+
+	// Extract full file paths mentioned in task
+	const fullPathPattern = /\b(src\/[\w\-/]+\.(?:ts|tsx|js|jsx|json|md))\b/g;
+	const fullPaths: string[] = [];
+	for (const match of task.matchAll(fullPathPattern)) {
+		fullPaths.push(match[1]);
+	}
+
+	// Check if these paths exist
+	const missingFiles: string[] = [];
+	for (const filePath of fullPaths) {
+		if (!existsSync(join(cwd, filePath))) {
+			missingFiles.push(filePath);
+		}
+	}
+
+	if (missingFiles.length > 0) {
+		return {
+			valid: false,
+			reason: `Referenced files do not exist: ${missingFiles.join(", ")}`,
+			missingFiles,
+			suggestion: "Update task to reference existing files or change to a 'create' task",
+		};
+	}
+
+	return { valid: true };
 }
 
 /**
@@ -339,6 +396,9 @@ export class TaskWorker {
 	/** Agent reported task is already complete (with reason) */
 	private taskAlreadyCompleteReason: string | null = null;
 
+	/** Agent reported invalid target - file/function doesn't exist */
+	private invalidTargetReason: string | null = null;
+
 	constructor(options: SoloOptions = {}) {
 		// Default 7 attempts allows full escalation: 2 haiku + 2 sonnet + 3 opus
 		this.maxAttempts = options.maxAttempts ?? 7;
@@ -489,6 +549,31 @@ export class TaskWorker {
 		const startTime = Date.now();
 		const context = this.initializeTaskContext(task, handoffContext);
 		const { taskId, sessionId, metaType, baseCommit } = context;
+
+		// Pre-validate task targets to catch impossible tasks early
+		if (!this.isCurrentTaskMeta && !this.isCurrentTaskResearch) {
+			const validation = validateTaskTargets(task, this.workingDirectory);
+			if (!validation.valid) {
+				sessionLogger.warn(
+					{
+						taskId,
+						reason: validation.reason,
+						missingFiles: validation.missingFiles,
+						suggestion: validation.suggestion,
+					},
+					"Task validation failed - target files do not exist",
+				);
+				output.error(`Task ${taskId} validation failed: ${validation.reason}`);
+				return {
+					task,
+					status: "failed",
+					model: this.currentModel,
+					attempts: 0,
+					error: `INVALID_TARGET: ${validation.reason}`,
+					durationMs: Date.now() - startTime,
+				};
+			}
+		}
 
 		// Fast-path: Try ast-grep for trivial mechanical tasks
 		if (!this.isCurrentTaskMeta && !this.isCurrentTaskResearch) {
@@ -904,6 +989,27 @@ export class TaskWorker {
 
 		const errorCategories = categorizeErrors(verification);
 
+		// Check for invalid target - fail immediately, no retries
+		if (this.invalidTargetReason !== null) {
+			sessionLogger.warn(
+				{ taskId, reason: this.invalidTargetReason },
+				"Task failed: invalid target (file/function doesn't exist)",
+			);
+			return {
+				task,
+				status: "failed",
+				model: this.currentModel,
+				attempts: this.attempts,
+				verification,
+				error: `INVALID_TARGET: ${this.invalidTargetReason}`,
+				durationMs: Date.now() - startTime,
+				tokenUsage: {
+					attempts: this.tokenUsageThisTask,
+					total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
+				},
+			};
+		}
+
 		// Check for task already complete
 		const taskAlreadyComplete =
 			this.taskAlreadyCompleteReason !== null ||
@@ -1300,9 +1406,44 @@ export class TaskWorker {
 	}
 
 	/**
+	 * Save debug information for a failed task to help with debugging
+	 */
+	private saveFailedTaskDebug(task: string, taskId: string): void {
+		try {
+			const failedDir = join(this.stateDir, "failed-tasks");
+			if (!existsSync(failedDir)) {
+				mkdirSync(failedDir, { recursive: true });
+			}
+
+			const debugInfo = {
+				taskId,
+				task,
+				timestamp: new Date().toISOString(),
+				model: this.currentModel,
+				attempts: this.attempts,
+				attemptRecords: this.attemptRecords,
+				tokenUsage: this.tokenUsageThisTask,
+				lastAgentOutput: this.lastAgentOutput.slice(-5000), // Last 5000 chars
+				taskAlreadyCompleteReason: this.taskAlreadyCompleteReason,
+				invalidTargetReason: this.invalidTargetReason,
+				noOpEditCount: this.noOpEditCount,
+				workingDirectory: this.workingDirectory,
+			};
+
+			const filename = `${taskId.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
+			writeFileSync(join(failedDir, filename), JSON.stringify(debugInfo, null, 2));
+			sessionLogger.info({ taskId, debugFile: join(failedDir, filename) }, "Saved failed task debug info");
+		} catch (error) {
+			sessionLogger.warn({ taskId, error: String(error) }, "Failed to save debug info for failed task");
+		}
+	}
+
+	/**
 	 * Build failure result after all attempts exhausted
 	 */
 	private buildFailureResult(task: string, taskId: string, startTime: number): TaskResult {
+		// Save debug info for analysis
+		this.saveFailedTaskDebug(task, taskId);
 		this.metricsTracker.recordAttempts(this.attemptRecords);
 		this.metricsTracker.completeTask(false);
 		this.cleanupDirtyState();
@@ -1754,10 +1895,11 @@ ${task}${postMortemContext}${exampleSection}
 RULES:
 1. First verify the task isn't already complete - check git log, read target files
 2. If task is already done, output exactly: TASK_ALREADY_COMPLETE: <reason>
-3. If the task requires creating new files, create them (Write tool creates parent directories)
-4. If editing existing files, read them first before editing
-5. Minimal changes only - nothing beyond task scope
-6. No questions - decide and proceed`;
+3. If the target file/function/class doesn't exist and this isn't a create task, output: INVALID_TARGET: <reason>
+4. If the task requires creating new files, create them (Write tool creates parent directories)
+5. If editing existing files, read them first before editing
+6. Minimal changes only - nothing beyond task scope
+7. No questions - decide and proceed`;
 		}
 
 		// Token usage will be accumulated in this.tokenUsageThisTask
@@ -1766,6 +1908,7 @@ RULES:
 		this.writeCountThisExecution = 0;
 		this.noOpEditCount = 0;
 		this.taskAlreadyCompleteReason = null;
+		this.invalidTargetReason = null;
 
 		// Build hooks - meta-tasks don't need the "must write files" check
 		// Research tasks now write to .undercity/research/*.md so they use the normal hook
@@ -1937,6 +2080,13 @@ RULES:
 			sessionLogger.info({ reason: this.taskAlreadyCompleteReason }, "Agent reported task already complete");
 		}
 
+		// Check if agent reported invalid target
+		const invalidTargetMatch = result.match(/INVALID_TARGET:\s*(.+?)(?:\n|$)/i);
+		if (invalidTargetMatch) {
+			this.invalidTargetReason = invalidTargetMatch[1].trim();
+			sessionLogger.warn({ reason: this.invalidTargetReason }, "Agent reported invalid target");
+		}
+
 		// Parse agent output for decision points and capture them
 		try {
 			const decisions = parseAgentOutputForDecisions(result, this.currentTaskId);
@@ -2006,6 +2156,12 @@ RULES:
 								{ reason: this.taskAlreadyCompleteReason },
 								"Agent reported task already complete (streaming)",
 							);
+						}
+						// Check for INVALID_TARGET marker in text blocks
+						const invalidMatch = block.text.match(/INVALID_TARGET:\s*(.+?)(?:\n|$)/i);
+						if (invalidMatch && !this.invalidTargetReason) {
+							this.invalidTargetReason = invalidMatch[1].trim();
+							sessionLogger.warn({ reason: this.invalidTargetReason }, "Agent reported invalid target (streaming)");
 						}
 					}
 					// Track write tool requests
