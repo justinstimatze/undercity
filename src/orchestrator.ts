@@ -713,21 +713,9 @@ export class Orchestrator {
 	 */
 	async runParallel(tasks: Array<string | Task>): Promise<ParallelBatchResult> {
 		// Extract objectives and store handoff contexts
-		const objectives: string[] = [];
-		for (const t of tasks) {
-			if (typeof t === "string") {
-				objectives.push(t);
-			} else {
-				objectives.push(t.objective);
-				// Store handoff context if present
-				if (t.handoffContext) {
-					this.handoffContexts.set(t.objective, t.handoffContext);
-				}
-			}
-		}
+		const objectives = this.extractObjectivesAndContexts(tasks);
 
 		// Separate plan tasks from implementation tasks
-		// Plan tasks are processed first since they generate new tasks
 		const planTasks = objectives.filter(isPlanTask);
 		const implTasks = objectives.filter((t) => !isPlanTask(t));
 
@@ -751,13 +739,63 @@ export class Orchestrator {
 			};
 		}
 
-		// Always use worktrees for isolation (even single tasks)
-		// This prevents agents from modifying the main repo directly
 		const startTime = Date.now();
-		const results: ParallelTaskResult[] = [];
-		const tasks_to_run = implTasks; // Use implementation tasks only
 
-		// Check if rate limited - try to auto-resume first
+		// Check rate limits and setup
+		if (!this.checkRateLimits(startTime)) {
+			return {
+				results: [],
+				successful: 0,
+				failed: 0,
+				merged: 0,
+				mergeFailed: 0,
+				durationMs: Date.now() - startTime,
+			};
+		}
+
+		this.displayExecutionHeader(implTasks.length);
+		const mainBranch = this.setupFileTracking();
+
+		// Process all task batches
+		const batchId = generateBatchId();
+		const results = await this.processBatches(implTasks, batchId, mainBranch);
+
+		// Post-processing
+		this.recordTokenUsage(results);
+		await this.mergeSuccessfulTasks(results);
+		await this.cleanupWorktrees(results);
+
+		// Finalization
+		const durationMs = Date.now() - startTime;
+		this.displaySummary(results, durationMs);
+		await this.finalizeExecution();
+		this.stopHealthMonitoring();
+
+		return this.buildBatchResult(results, durationMs);
+	}
+
+	/**
+	 * Extract task objectives and store handoff contexts
+	 */
+	private extractObjectivesAndContexts(tasks: Array<string | Task>): string[] {
+		const objectives: string[] = [];
+		for (const t of tasks) {
+			if (typeof t === "string") {
+				objectives.push(t);
+			} else {
+				objectives.push(t.objective);
+				if (t.handoffContext) {
+					this.handoffContexts.set(t.objective, t.handoffContext);
+				}
+			}
+		}
+		return objectives;
+	}
+
+	/**
+	 * Check rate limits and return whether execution can proceed
+	 */
+	private checkRateLimits(_startTime: number): boolean {
 		this.rateLimitTracker.checkAutoResume();
 
 		if (this.rateLimitTracker.isPaused()) {
@@ -769,31 +807,33 @@ export class Orchestrator {
 				resumeAt: pauseState.resumeAt?.toISOString() || "unknown",
 			});
 			output.info("Run 'undercity limits' to check rate limit state");
-
-			return {
-				results: [],
-				successful: 0,
-				failed: 0,
-				merged: 0,
-				mergeFailed: 0,
-				durationMs: Date.now() - startTime,
-			};
+			return false;
 		}
 
+		return true;
+	}
+
+	/**
+	 * Display execution header with task and rate limit info
+	 */
+	private displayExecutionHeader(taskCount: number): void {
 		output.header(
 			"Parallel Mode",
-			`${tasks_to_run.length} tasks (max ${this.maxConcurrent} concurrent) • Model: ${this.startingModel} → escalate if needed`,
+			`${taskCount} tasks (max ${this.maxConcurrent} concurrent) • Model: ${this.startingModel} → escalate if needed`,
 		);
 
-		// Show rate limit usage if approaching threshold
 		const usageSummary = this.rateLimitTracker.getUsageSummary();
 		if (usageSummary.percentages.fiveHour > 0.5 || usageSummary.percentages.weekly > 0.5) {
 			output.warning(
 				`Rate limit usage: ${(usageSummary.percentages.fiveHour * 100).toFixed(0)}% (5h) / ${(usageSummary.percentages.weekly * 100).toFixed(0)}% (week)`,
 			);
 		}
+	}
 
-		// Get main branch for file tracking (with error boundary)
+	/**
+	 * Setup file tracking and return main branch name
+	 */
+	private setupFileTracking(): string {
 		let mainBranch: string;
 		try {
 			mainBranch = this.worktreeManager.getMainBranch();
@@ -802,271 +842,305 @@ export class Orchestrator {
 			mainBranch = "main";
 		}
 
-		// Clear completed file tracking entries from previous runs (with error boundary)
 		try {
 			this.fileTracker.clearCompleted();
 		} catch (clearError) {
 			output.debug(`File tracker cleanup failed (non-fatal): ${clearError}`);
 		}
 
-		// Process tasks in batches of maxConcurrent
-		const batchId = generateBatchId();
-		const allPreparedTasks: Array<{
+		return mainBranch;
+	}
+
+	/**
+	 * Process all task batches and return aggregated results
+	 */
+	private async processBatches(tasks: string[], batchId: string, mainBranch: string): Promise<ParallelTaskResult[]> {
+		const results: ParallelTaskResult[] = [];
+		const totalBatches = Math.ceil(tasks.length / this.maxConcurrent);
+
+		this.startHealthMonitoring();
+
+		for (let batchStart = 0; batchStart < tasks.length; batchStart += this.maxConcurrent) {
+			const batchEnd = Math.min(batchStart + this.maxConcurrent, tasks.length);
+			const batchTasks = tasks.slice(batchStart, batchEnd);
+			const batchNum = Math.floor(batchStart / this.maxConcurrent) + 1;
+
+			output.section(`Batch ${batchNum}/${totalBatches}: Processing ${batchTasks.length} tasks`);
+
+			const preparedTasks = await this.scheduleBatchTasks(batchTasks, results);
+
+			if (batchStart === 0 && preparedTasks.length > 0) {
+				this.initializeBatch(batchId, preparedTasks);
+				output.debug(`Batch initialized: ${batchId}`);
+			} else if (preparedTasks.length > 0) {
+				this.saveBatchTaskStates(preparedTasks, batchId);
+			}
+
+			const batchResults = await this.executeBatchWorkers(preparedTasks, mainBranch);
+			results.push(...batchResults);
+		}
+
+		return results;
+	}
+
+	/**
+	 * Schedule tasks for a batch by creating worktrees
+	 */
+	private async scheduleBatchTasks(
+		batchTasks: string[],
+		existingResults: ParallelTaskResult[],
+	): Promise<Array<{ task: string; taskId: string; worktreePath: string; branch: string }>> {
+		const preparedTasks: Array<{
 			task: string;
 			taskId: string;
 			worktreePath: string;
 			branch: string;
 		}> = [];
 
-		const totalBatches = Math.ceil(tasks_to_run.length / this.maxConcurrent);
+		for (const task of batchTasks) {
+			const taskId = generateTaskId();
 
-		// Start health monitoring for this batch
-		this.startHealthMonitoring();
-
-		for (let batchStart = 0; batchStart < tasks_to_run.length; batchStart += this.maxConcurrent) {
-			const batchEnd = Math.min(batchStart + this.maxConcurrent, tasks_to_run.length);
-			const batchTasks = tasks_to_run.slice(batchStart, batchEnd);
-			const batchNum = Math.floor(batchStart / this.maxConcurrent) + 1;
-
-			output.section(`Batch ${batchNum}/${totalBatches}: Processing ${batchTasks.length} tasks`);
-
-			// Phase 1: Create worktrees for this batch
-			const preparedTasks: Array<{
-				task: string;
-				taskId: string;
-				worktreePath: string;
-				branch: string;
-			}> = [];
-
-			for (const task of batchTasks) {
-				const taskId = generateTaskId();
-
-				// Check for similar in-progress tasks to avoid duplication
-				const similarTask = findSimilarInProgressTask(task, 0.7);
-				if (similarTask) {
-					output.warning(
-						`Skipping task (${(similarTask.similarity * 100).toFixed(0)}% similar to in-progress): ${task.substring(0, 50)}`,
-					);
-					results.push({
-						task,
-						taskId,
-						result: null,
-						worktreePath: "",
-						branch: "",
-						merged: false,
-						mergeError: `Skipped: too similar to in-progress task "${similarTask.task.objective.substring(0, 50)}"`,
-					});
-					continue;
-				}
-
-				try {
-					const worktreeInfo = this.worktreeManager.createWorktree(taskId);
-					preparedTasks.push({
-						task,
-						taskId,
-						worktreePath: worktreeInfo.path,
-						branch: worktreeInfo.branch,
-					});
-					output.success(`Created worktree: ${taskId}`);
-				} catch (err) {
-					output.error(`Failed to create worktree: ${err}`);
-					results.push({
-						task,
-						taskId,
-						result: null,
-						worktreePath: "",
-						branch: "",
-						merged: false,
-						mergeError: `Worktree creation failed: ${err}`,
-					});
-				}
+			// Check for similar in-progress tasks to avoid duplication
+			const similarTask = findSimilarInProgressTask(task, 0.7);
+			if (similarTask) {
+				output.warning(
+					`Skipping task (${(similarTask.similarity * 100).toFixed(0)}% similar to in-progress): ${task.substring(0, 50)}`,
+				);
+				existingResults.push({
+					task,
+					taskId,
+					result: null,
+					worktreePath: "",
+					branch: "",
+					merged: false,
+					mergeError: `Skipped: too similar to in-progress task "${similarTask.task.objective.substring(0, 50)}"`,
+				});
+				continue;
 			}
 
-			allPreparedTasks.push(...preparedTasks);
-
-			// Save recovery state before running tasks (atomic per-task)
-			if (batchStart === 0 && preparedTasks.length > 0) {
-				// First batch: initialize batch metadata
-				this.initializeBatch(batchId, preparedTasks);
-				output.debug(`Batch initialized: ${batchId}`);
-			} else if (preparedTasks.length > 0) {
-				// Subsequent batches: just write each task state
-				for (const t of preparedTasks) {
-					const activeState: ActiveTaskState = {
-						taskId: t.taskId,
-						task: t.task,
-						worktreePath: t.worktreePath,
-						branch: t.branch,
-						status: "pending",
-						batchId,
-					};
-					this.persistence.writeActiveTask(activeState);
-				}
+			try {
+				const worktreeInfo = this.worktreeManager.createWorktree(taskId);
+				preparedTasks.push({
+					task,
+					taskId,
+					worktreePath: worktreeInfo.path,
+					branch: worktreeInfo.branch,
+				});
+				output.success(`Created worktree: ${taskId}`);
+			} catch (err) {
+				output.error(`Failed to create worktree: ${err}`);
+				existingResults.push({
+					task,
+					taskId,
+					result: null,
+					worktreePath: "",
+					branch: "",
+					merged: false,
+					mergeError: `Worktree creation failed: ${err}`,
+				});
 			}
-
-			// Phase 2: Run this batch in parallel
-			const taskPromises = preparedTasks.map(async (prepared) => {
-				const { task, taskId, worktreePath, branch } = prepared;
-
-				// Start file tracking for this task
-				this.fileTracker.startTaskTracking(taskId, taskId);
-
-				// Mark task as running
-				this.updateTaskStatus(taskId, "running");
-
-				try {
-					output.taskStart(taskId, task.substring(0, 50));
-
-					// Check for active experiment and get variant settings
-					const variant = this.experimentManager.selectVariant();
-					const experimentModel = variant?.model as "haiku" | "sonnet" | "opus" | undefined;
-					const experimentReview = variant?.reviewEnabled;
-
-					// Create TaskWorker that runs in the worktree directory
-					// Experiment variant overrides default settings if present
-					const effectiveModel = experimentModel ?? this.startingModel;
-					const effectiveReview = experimentReview ?? this.reviewPasses;
-
-					const worker = new TaskWorker({
-						startingModel: effectiveModel,
-						autoCommit: this.autoCommit,
-						stream: this.stream,
-						verbose: this.verbose,
-						workingDirectory: worktreePath,
-						reviewPasses: effectiveReview,
-						annealingAtOpus: this.annealingAtOpus,
-						maxAttempts: this.maxAttempts,
-						maxRetriesPerTier: this.maxRetriesPerTier,
-						maxReviewPassesPerTier: this.maxReviewPassesPerTier,
-						maxOpusReviewPasses: this.maxOpusReviewPasses,
-					});
-
-					// Write task assignment to worktree (work hook)
-					// This enables crash recovery and worker identity detection
-					const assignment: TaskAssignment = {
-						taskId,
-						objective: task,
-						branch,
-						model: effectiveModel,
-						worktreePath,
-						assignedAt: new Date(),
-						maxAttempts: this.maxAttempts,
-						reviewPasses: effectiveReview,
-						autoCommit: this.autoCommit,
-						experimentVariantId: variant?.id,
-						// Inject recovered checkpoint if resuming from crash
-						checkpoint: this.recoveredCheckpoints.get(task),
-					};
-					writeTaskAssignment(assignment);
-
-					// Clear the recovered checkpoint after use (one-time injection)
-					this.recoveredCheckpoints.delete(task);
-
-					// Get handoff context if available
-					const handoffContext = this.handoffContexts.get(task);
-
-					const result = await worker.runTask(task, handoffContext);
-
-					// Get modified files from git diff
-					const modifiedFiles = getModifiedFilesInWorktree(worktreePath, mainBranch);
-
-					// Record file operations in tracker
-					for (const file of modifiedFiles) {
-						this.fileTracker.recordFileAccess(taskId, file, "edit", taskId, worktreePath);
-					}
-
-					// Stop tracking for this task
-					this.fileTracker.stopTaskTracking(taskId);
-
-					if (result.status === "complete") {
-						output.taskComplete(taskId, "Task completed", { modifiedFiles: modifiedFiles.length });
-
-						// Process meta-task recommendations if present
-						if (result.metaTaskResult) {
-							this.processMetaTaskResult(result.metaTaskResult, taskId);
-						}
-					} else {
-						output.taskFailed(taskId, "Task failed", result.error);
-					}
-
-					if (modifiedFiles.length > 0 && this.verbose) {
-						output.debug(`[${taskId}] Modified ${modifiedFiles.length} files`);
-					}
-
-					// Update recovery state
-					const taskStatus = result.status === "complete" ? "complete" : "failed";
-					this.updateTaskStatus(taskId, taskStatus, { modifiedFiles });
-
-					// Update capability ledger with task outcome (including cost metrics)
-					try {
-						const escalated = result.model !== this.startingModel;
-						updateLedger({
-							objective: task,
-							model: result.model,
-							success: result.status === "complete",
-							escalated,
-							tokenCost: result.tokenUsage?.total,
-							durationMs: result.durationMs,
-							attempts: result.attempts,
-						});
-					} catch {
-						// Silent failure - ledger is optional
-					}
-
-					// Record experiment result if variant was assigned
-					if (variant) {
-						try {
-							this.experimentManager.recordResult({
-								taskId,
-								variantId: variant.id,
-								success: result.status === "complete",
-								durationMs: result.durationMs,
-								tokensUsed: result.tokenUsage?.total ?? 0,
-								attempts: result.attempts,
-							});
-						} catch {
-							// Silent failure - experiments are optional
-						}
-					}
-
-					return {
-						task,
-						taskId,
-						result,
-						worktreePath,
-						branch,
-						merged: false,
-						modifiedFiles,
-					};
-				} catch (err) {
-					// Stop tracking even on error
-					this.fileTracker.stopTaskTracking(taskId);
-
-					// Update recovery state
-					this.updateTaskStatus(taskId, "failed", { error: String(err) });
-
-					output.taskFailed(taskId, "Task error", String(err));
-					return {
-						task,
-						taskId,
-						result: null,
-						worktreePath,
-						branch,
-						merged: false,
-						mergeError: String(err),
-					};
-				}
-			});
-
-			const batchResults = await Promise.all(taskPromises);
-			results.push(...batchResults);
 		}
 
-		// Record token usage for rate limit tracking (with error boundary)
+		return preparedTasks;
+	}
+
+	/**
+	 * Save task states for a batch
+	 */
+	private saveBatchTaskStates(
+		preparedTasks: Array<{ task: string; taskId: string; worktreePath: string; branch: string }>,
+		batchId: string,
+	): void {
+		for (const t of preparedTasks) {
+			const activeState: ActiveTaskState = {
+				taskId: t.taskId,
+				task: t.task,
+				worktreePath: t.worktreePath,
+				branch: t.branch,
+				status: "pending",
+				batchId,
+			};
+			this.persistence.writeActiveTask(activeState);
+		}
+	}
+
+	/**
+	 * Execute workers for a batch of prepared tasks
+	 */
+	private async executeBatchWorkers(
+		preparedTasks: Array<{ task: string; taskId: string; worktreePath: string; branch: string }>,
+		mainBranch: string,
+	): Promise<ParallelTaskResult[]> {
+		const taskPromises = preparedTasks.map((prepared) => this.spawnWorker(prepared, mainBranch));
+		return Promise.all(taskPromises);
+	}
+
+	/**
+	 * Spawn a worker for a single task
+	 */
+	private async spawnWorker(
+		prepared: { task: string; taskId: string; worktreePath: string; branch: string },
+		mainBranch: string,
+	): Promise<ParallelTaskResult> {
+		const { task, taskId, worktreePath, branch } = prepared;
+
+		this.fileTracker.startTaskTracking(taskId, taskId);
+		this.updateTaskStatus(taskId, "running");
+
+		try {
+			output.taskStart(taskId, task.substring(0, 50));
+
+			const variant = this.experimentManager.selectVariant();
+			const effectiveModel = (variant?.model as "haiku" | "sonnet" | "opus" | undefined) ?? this.startingModel;
+			const effectiveReview = variant?.reviewEnabled ?? this.reviewPasses;
+
+			const worker = new TaskWorker({
+				startingModel: effectiveModel,
+				autoCommit: this.autoCommit,
+				stream: this.stream,
+				verbose: this.verbose,
+				workingDirectory: worktreePath,
+				reviewPasses: effectiveReview,
+				annealingAtOpus: this.annealingAtOpus,
+				maxAttempts: this.maxAttempts,
+				maxRetriesPerTier: this.maxRetriesPerTier,
+				maxReviewPassesPerTier: this.maxReviewPassesPerTier,
+				maxOpusReviewPasses: this.maxOpusReviewPasses,
+			});
+
+			const assignment: TaskAssignment = {
+				taskId,
+				objective: task,
+				branch,
+				model: effectiveModel,
+				worktreePath,
+				assignedAt: new Date(),
+				maxAttempts: this.maxAttempts,
+				reviewPasses: effectiveReview,
+				autoCommit: this.autoCommit,
+				experimentVariantId: variant?.id,
+				checkpoint: this.recoveredCheckpoints.get(task),
+			};
+			writeTaskAssignment(assignment);
+			this.recoveredCheckpoints.delete(task);
+
+			const handoffContext = this.handoffContexts.get(task);
+			const result = await worker.runTask(task, handoffContext);
+
+			return this.processWorkerResult(task, taskId, worktreePath, branch, result, mainBranch, variant);
+		} catch (err) {
+			return this.handleWorkerError(task, taskId, worktreePath, branch, err);
+		}
+	}
+
+	/**
+	 * Process successful worker result
+	 */
+	private async processWorkerResult(
+		task: string,
+		taskId: string,
+		worktreePath: string,
+		branch: string,
+		result: TaskResult,
+		mainBranch: string,
+		variant: { id: string; model: string; reviewEnabled?: boolean } | null,
+	): Promise<ParallelTaskResult> {
+		const modifiedFiles = getModifiedFilesInWorktree(worktreePath, mainBranch);
+
+		for (const file of modifiedFiles) {
+			this.fileTracker.recordFileAccess(taskId, file, "edit", taskId, worktreePath);
+		}
+		this.fileTracker.stopTaskTracking(taskId);
+
+		if (result.status === "complete") {
+			output.taskComplete(taskId, "Task completed", { modifiedFiles: modifiedFiles.length });
+			if (result.metaTaskResult) {
+				this.processMetaTaskResult(result.metaTaskResult, taskId);
+			}
+		} else {
+			output.taskFailed(taskId, "Task failed", result.error);
+		}
+
+		if (modifiedFiles.length > 0 && this.verbose) {
+			output.debug(`[${taskId}] Modified ${modifiedFiles.length} files`);
+		}
+
+		const taskStatus = result.status === "complete" ? "complete" : "failed";
+		this.updateTaskStatus(taskId, taskStatus, { modifiedFiles });
+
+		try {
+			const escalated = result.model !== this.startingModel;
+			updateLedger({
+				objective: task,
+				model: result.model,
+				success: result.status === "complete",
+				escalated,
+				tokenCost: result.tokenUsage?.total,
+				durationMs: result.durationMs,
+				attempts: result.attempts,
+			});
+		} catch {
+			// Silent failure - ledger is optional
+		}
+
+		if (variant) {
+			try {
+				this.experimentManager.recordResult({
+					taskId,
+					variantId: variant.id,
+					success: result.status === "complete",
+					durationMs: result.durationMs,
+					tokensUsed: result.tokenUsage?.total ?? 0,
+					attempts: result.attempts,
+				});
+			} catch {
+				// Silent failure - experiments are optional
+			}
+		}
+
+		return {
+			task,
+			taskId,
+			result,
+			worktreePath,
+			branch,
+			merged: false,
+			modifiedFiles,
+		};
+	}
+
+	/**
+	 * Handle worker execution error
+	 */
+	private handleWorkerError(
+		task: string,
+		taskId: string,
+		worktreePath: string,
+		branch: string,
+		err: unknown,
+	): ParallelTaskResult {
+		this.fileTracker.stopTaskTracking(taskId);
+		this.updateTaskStatus(taskId, "failed", { error: String(err) });
+		output.taskFailed(taskId, "Task error", String(err));
+
+		return {
+			task,
+			taskId,
+			result: null,
+			worktreePath,
+			branch,
+			merged: false,
+			mergeError: String(err),
+		};
+	}
+
+	/**
+	 * Record token usage for rate limit tracking
+	 */
+	private recordTokenUsage(results: ParallelTaskResult[]): void {
 		try {
 			for (const taskResult of results) {
 				if (taskResult.result?.tokenUsage) {
-					// Record each attempt's usage
 					for (const attemptUsage of taskResult.result.tokenUsage.attempts) {
 						const model = (attemptUsage.model as "haiku" | "sonnet" | "opus") || this.startingModel;
 						this.rateLimitTracker.recordTask(
@@ -1081,7 +1155,6 @@ export class Orchestrator {
 					}
 				}
 
-				// Check for rate limit errors
 				if (taskResult.mergeError?.includes("429") || taskResult.result?.error?.includes("429")) {
 					this.rateLimitTracker.recordRateLimitHit(
 						this.startingModel,
@@ -1092,72 +1165,81 @@ export class Orchestrator {
 		} catch (tokenRecordingError) {
 			output.warning(`Token recording failed (non-fatal): ${tokenRecordingError}`);
 		}
+	}
 
-		// Phase 3: Merge successful branches serially
-		// TODO: Serial merge strategy explained
-		// We process merges one at a time to avoid conflicts and maintain consistency:
-		// 1. Each task rebases onto the current local main HEAD before merging
-		// 2. Fast-forward merge ensures clean history without merge commits
-		// 3. If conflicts occur during rebase, the task fails gracefully
-		// 4. Later tasks automatically get the latest state from earlier merges
-		// 5. This serial approach prevents race conditions in parallel merges
+	/**
+	 * Merge successful tasks serially
+	 */
+	private async mergeSuccessfulTasks(results: ParallelTaskResult[]): Promise<void> {
 		const successfulTasks = results.filter((r) => r.result?.status === "complete" && r.branch);
 
-		if (successfulTasks.length > 0) {
-			// Detect file conflicts between tasks before merging
-			const fileConflicts = this.detectFileConflicts(successfulTasks);
-			if (fileConflicts.size > 0) {
-				const conflictMap: Record<string, string[]> = {};
-				for (const [file, taskIds] of fileConflicts) {
-					conflictMap[file] = taskIds;
-				}
-				output.warning("Potential file conflicts detected", { conflicts: conflictMap });
-				output.info("Serial merge will handle these (later tasks may need rebase)");
+		if (successfulTasks.length === 0) {
+			return;
+		}
+
+		const fileConflicts = this.detectFileConflicts(successfulTasks);
+		if (fileConflicts.size > 0) {
+			const conflictMap: Record<string, string[]> = {};
+			for (const [file, taskIds] of fileConflicts) {
+				conflictMap[file] = taskIds;
 			}
+			output.warning("Potential file conflicts detected", { conflicts: conflictMap });
+			output.info("Serial merge will handle these (later tasks may need rebase)");
+		}
 
-			output.section(`Merging ${successfulTasks.length} successful branches`);
+		output.section(`Merging ${successfulTasks.length} successful branches`);
 
-			for (const taskResult of successfulTasks) {
-				try {
-					// Check if worktree still exists
-					const { existsSync } = await import("node:fs");
-					const worktreeExists = existsSync(taskResult.worktreePath);
-					if (this.verbose) {
-						output.debug(`Worktree exists: ${worktreeExists} at ${taskResult.worktreePath}`);
-					}
-					if (!worktreeExists) {
-						throw new Error(`Worktree directory missing: ${taskResult.worktreePath}`);
-					}
-					await this.mergeBranch(taskResult.branch, taskResult.taskId, taskResult.worktreePath);
-					taskResult.merged = true;
-					this.updateTaskStatus(taskResult.taskId, "merged");
-					output.success(`Merged: ${taskResult.taskId}`);
-				} catch (err) {
-					taskResult.mergeError = String(err);
-					output.error(`Merge failed: ${taskResult.taskId}`, { error: String(err) });
+		for (const taskResult of successfulTasks) {
+			try {
+				const { existsSync } = await import("node:fs");
+				const worktreeExists = existsSync(taskResult.worktreePath);
+				if (this.verbose) {
+					output.debug(`Worktree exists: ${worktreeExists} at ${taskResult.worktreePath}`);
 				}
-			}
-
-			// Push to remote if enabled and there were successful merges
-			if (this.pushOnSuccess) {
-				const mergedCount = successfulTasks.filter((t) => t.merged).length;
-				if (mergedCount > 0) {
-					output.progress("Pushing to remote...");
-					try {
-						const mainRepo = this.worktreeManager.getMainRepoPath();
-						const mainBranch = this.worktreeManager.getMainBranch();
-						validateGitRef(mainBranch);
-						execGitInDir(["push", "origin", mainBranch], mainRepo);
-						output.success(`Pushed ${mergedCount} merged commit(s) to origin/${mainBranch}`);
-					} catch (pushErr) {
-						output.error("Push to remote failed", { error: String(pushErr) });
-						output.info("Changes remain in local main. Push manually when ready.");
-					}
+				if (!worktreeExists) {
+					throw new Error(`Worktree directory missing: ${taskResult.worktreePath}`);
 				}
+				await this.mergeBranch(taskResult.branch, taskResult.taskId, taskResult.worktreePath);
+				taskResult.merged = true;
+				this.updateTaskStatus(taskResult.taskId, "merged");
+				output.success(`Merged: ${taskResult.taskId}`);
+			} catch (err) {
+				taskResult.mergeError = String(err);
+				output.error(`Merge failed: ${taskResult.taskId}`, { error: String(err) });
 			}
 		}
 
-		// Phase 4: Cleanup worktrees
+		if (this.pushOnSuccess) {
+			await this.pushMergedCommits(successfulTasks);
+		}
+	}
+
+	/**
+	 * Push merged commits to remote
+	 */
+	private async pushMergedCommits(successfulTasks: ParallelTaskResult[]): Promise<void> {
+		const mergedCount = successfulTasks.filter((t) => t.merged).length;
+		if (mergedCount === 0) {
+			return;
+		}
+
+		output.progress("Pushing to remote...");
+		try {
+			const mainRepo = this.worktreeManager.getMainRepoPath();
+			const mainBranch = this.worktreeManager.getMainBranch();
+			validateGitRef(mainBranch);
+			execGitInDir(["push", "origin", mainBranch], mainRepo);
+			output.success(`Pushed ${mergedCount} merged commit(s) to origin/${mainBranch}`);
+		} catch (pushErr) {
+			output.error("Push to remote failed", { error: String(pushErr) });
+			output.info("Changes remain in local main. Push manually when ready.");
+		}
+	}
+
+	/**
+	 * Cleanup worktrees after execution
+	 */
+	private async cleanupWorktrees(results: ParallelTaskResult[]): Promise<void> {
 		output.progress("Cleaning up worktrees...");
 		for (const r of results) {
 			if (r.taskId && r.worktreePath) {
@@ -1170,12 +1252,16 @@ export class Orchestrator {
 				}
 			}
 		}
+	}
 
-		// Summary
-		const durationMs = Date.now() - startTime;
+	/**
+	 * Display execution summary
+	 */
+	private displaySummary(results: ParallelTaskResult[], durationMs: number): void {
 		const successful = results.filter((r) => r.result?.status === "complete").length;
 		const failed = results.filter((r) => r.result?.status === "failed" || r.result === null).length;
 		const merged = results.filter((r) => r.merged).length;
+		const successfulTasks = results.filter((r) => r.result?.status === "complete" && r.branch);
 		const mergeFailed = successfulTasks.length - merged;
 
 		const summaryItems: Array<{ label: string; value: string | number; status?: "good" | "bad" | "neutral" }> = [
@@ -1189,8 +1275,12 @@ export class Orchestrator {
 		}
 
 		output.summary("Parallel Execution Summary", summaryItems);
+	}
 
-		// Save rate limit state and file tracking state (with error boundary)
+	/**
+	 * Finalize execution with state saves and profile updates
+	 */
+	private async finalizeExecution(): Promise<void> {
 		try {
 			this.persistence.saveRateLimitState(this.rateLimitTracker.getState());
 			this.persistence.saveFileTracking(this.fileTracker.getState());
@@ -1198,14 +1288,12 @@ export class Orchestrator {
 			output.warning(`State save failed (non-fatal): ${stateSaveError}`);
 		}
 
-		// Mark batch as complete (with error boundary)
 		try {
 			this.markBatchComplete();
 		} catch (batchCompleteError) {
 			output.warning(`Batch completion tracking failed (non-fatal): ${batchCompleteError}`);
 		}
 
-		// Update routing profile from accumulated metrics (with error boundary)
 		try {
 			const { maybeUpdateProfile } = await import("./self-tuning.js");
 			const updated = maybeUpdateProfile(process.cwd(), 5);
@@ -1216,7 +1304,6 @@ export class Orchestrator {
 			output.debug(`Self-tuning update failed (non-fatal): ${tuningError}`);
 		}
 
-		// Show updated rate limit usage (with error boundary)
 		try {
 			const finalUsage = this.rateLimitTracker.getUsageSummary();
 			output.metrics("Rate limit usage", {
@@ -1226,9 +1313,17 @@ export class Orchestrator {
 		} catch (metricsError) {
 			output.debug(`Metrics display failed (non-fatal): ${metricsError}`);
 		}
+	}
 
-		// Stop health monitoring
-		this.stopHealthMonitoring();
+	/**
+	 * Build the final batch result object
+	 */
+	private buildBatchResult(results: ParallelTaskResult[], durationMs: number): ParallelBatchResult {
+		const successful = results.filter((r) => r.result?.status === "complete").length;
+		const failed = results.filter((r) => r.result?.status === "failed" || r.result === null).length;
+		const merged = results.filter((r) => r.merged).length;
+		const successfulTasks = results.filter((r) => r.result?.status === "complete" && r.branch);
+		const mergeFailed = successfulTasks.length - merged;
 
 		return {
 			results,
