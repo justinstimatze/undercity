@@ -33,6 +33,8 @@ import { dualLogger } from "./dual-logger.js";
 import { generateToolsPrompt } from "./efficiency-tools.js";
 import { createAndCheckout } from "./git.js";
 import { logFastPathComplete, logFastPathFailed } from "./grind-events.js";
+import { findRelevantLearnings, formatLearningsForPrompt, markLearningsUsed } from "./knowledge.js";
+import { extractAndStoreLearnings } from "./knowledge-extractor.js";
 import { recordQueryResult } from "./live-metrics.js";
 import { sessionLogger } from "./logger.js";
 import { getMetaTaskPrompt, parseMetaTaskResult } from "./meta-tasks.js";
@@ -262,6 +264,12 @@ export class TaskWorker {
 
 	/** Turn count from last agent execution (for performance analysis) */
 	private lastAgentTurns: number = 0;
+
+	/** Learning IDs injected into current task prompt (for tracking success) */
+	private injectedLearningIds: string[] = [];
+
+	/** Last agent output for knowledge extraction */
+	private lastAgentOutput: string = "";
 
 	constructor(options: SoloOptions = {}) {
 		// Default 7 attempts allows full escalation: 2 haiku + 2 sonnet + 3 opus
@@ -837,6 +845,23 @@ export class TaskWorker {
 						{ taskId, phaseTimings, totalMs, turns: this.lastAgentTurns, msPerTurn },
 					);
 
+					// Knowledge compounding: extract learnings from successful task
+					// Use process.cwd() (main repo) for knowledge storage, not worktree
+					try {
+						const extracted = extractAndStoreLearnings(taskId, this.lastAgentOutput);
+						if (extracted.length > 0) {
+							output.debug(`Extracted ${extracted.length} learnings from task`, { taskId });
+						}
+						// Mark injected learnings as successfully used
+						if (this.injectedLearningIds.length > 0) {
+							markLearningsUsed(this.injectedLearningIds, true);
+							output.debug(`Marked ${this.injectedLearningIds.length} learnings as used (success)`, { taskId });
+						}
+					} catch (error) {
+						// Knowledge extraction is non-critical - don't fail task
+						sessionLogger.debug({ error: String(error) }, "Knowledge extraction failed");
+					}
+
 					return {
 						task,
 						status: "complete",
@@ -920,6 +945,16 @@ export class TaskWorker {
 		this.metricsTracker.recordAttempts(this.attemptRecords);
 		this.metricsTracker.completeTask(false);
 		this.cleanupDirtyState();
+
+		// Mark injected learnings as used (with failure)
+		// This decreases confidence in learnings that didn't help
+		if (this.injectedLearningIds.length > 0) {
+			try {
+				markLearningsUsed(this.injectedLearningIds, false);
+			} catch {
+				// Non-critical
+			}
+		}
 
 		return {
 			task,
@@ -1257,6 +1292,22 @@ The file MUST be created at ${outputPath} for this task to succeed.`;
 `;
 			}
 
+			// Add relevant learnings from previous tasks
+			// Use process.cwd() (main repo) for knowledge, not worktree
+			const relevantLearnings = findRelevantLearnings(task, 5);
+			if (relevantLearnings.length > 0) {
+				const learningsPrompt = formatLearningsForPrompt(relevantLearnings);
+				contextSection += `${learningsPrompt}
+
+---
+
+`;
+				// Track which learnings we're injecting (we'll mark them used after task completes)
+				this.injectedLearningIds = relevantLearnings.map((l) => l.id);
+			} else {
+				this.injectedLearningIds = [];
+			}
+
 			// For first attempt after escalation, include post-mortem
 			let postMortemContext = "";
 			if (this.lastPostMortem) {
@@ -1431,6 +1482,9 @@ RULES:
 				}
 			}
 		}
+
+		// Store output for knowledge extraction
+		this.lastAgentOutput = result;
 
 		return result;
 	}
