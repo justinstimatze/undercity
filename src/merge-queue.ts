@@ -168,7 +168,7 @@ OUTPUT THE RESOLVED FILE CONTENT:`;
  * Use AI to resolve a single conflict
  */
 async function resolveConflictWithAI(
-	worktreePath: string,
+	_worktreePath: string,
 	filePath: string,
 	content: string,
 ): Promise<{ success: boolean; resolved?: string; error?: string }> {
@@ -592,7 +592,7 @@ export class MergeQueue {
 				execGit(["rebase", "--continue"], worktreePath);
 				gitLogger.info({ branch, resolved: aiResult.resolved }, "Rebase continued after AI resolution");
 				return { success: true };
-			} catch (continueError) {
+			} catch (_continueError) {
 				// Continuing failed - there may be more conflicts in the next commit
 				// Try resolving again (recursive)
 				return this.rebaseInWorktree(branch, worktreePath);

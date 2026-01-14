@@ -1805,13 +1805,9 @@ export function handleInit(options: InitOptions): void {
  * Handle the setup command
  */
 export function handleSetup(): void {
-	const apiKey = process.env.ANTHROPIC_API_KEY;
-	if (apiKey) {
-		console.log(chalk.green("✓ ANTHROPIC_API_KEY is set"));
-	} else {
-		console.log(chalk.red("✗ ANTHROPIC_API_KEY not found"));
-		console.log("Set it with: export ANTHROPIC_API_KEY=your_api_key");
-	}
+	// Claude Max OAuth - no API key needed
+	console.log(chalk.green("✓ Using Claude Max OAuth (via Agent SDK)"));
+	console.log(chalk.dim("  Run 'undercity usage --login' for first-time auth"));
 
 	const config = loadConfig();
 	if (config) {

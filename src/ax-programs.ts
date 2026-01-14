@@ -18,7 +18,8 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { AxAI, AxGen, AxSignature } from "@ax-llm/ax";
+import { type AxAIService, AxGen, AxSignature } from "@ax-llm/ax";
+import { getAxAgentSDK } from "./ax-agent-sdk.js";
 import { sessionLogger } from "./logger.js";
 
 const logger = sessionLogger.child({ module: "ax-programs" });
@@ -102,13 +103,13 @@ export const ReviewTriageSignature = AxSignature.create(
 // ============================================================================
 
 /**
- * Create an Ax AI instance configured for Anthropic
+ * Get the Ax AI instance
+ *
+ * Uses AxAgentSDK which wraps the Claude Agent SDK for Claude Max OAuth auth.
+ * No API key required - uses the same auth as the rest of undercity.
  */
-export function createAxAI(): AxAI {
-	return new AxAI({
-		name: "anthropic",
-		apiKey: process.env.ANTHROPIC_API_KEY,
-	});
+export function createAxAI(): AxAIService {
+	return getAxAgentSDK();
 }
 
 /**
