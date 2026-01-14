@@ -28,7 +28,7 @@ import {
 	assessComplexityQuantitative,
 	type ComplexityAssessment,
 } from "./complexity.js";
-import { type ContextBriefing, prepareContext } from "./context.js";
+import { type ContextBriefing, type ContextMode, prepareContext } from "./context.js";
 import { captureDecision, parseAgentOutputForDecisions, updateDecisionOutcome } from "./decision-tracker.js";
 import { dualLogger } from "./dual-logger.js";
 import { generateToolsPrompt } from "./efficiency-tools.js";
@@ -569,7 +569,9 @@ export class TaskWorker {
 		let targetFiles: string[] = [];
 		try {
 			// CRITICAL: Must pass workingDirectory so context is prepared from worktree, not main repo
-			this.currentBriefing = await prepareContext(task, { cwd: this.workingDirectory });
+			// Use "full" context mode for opus tasks to give the most capable model maximum context
+			const contextMode: ContextMode = this.startingModel === "opus" ? "full" : "compact";
+			this.currentBriefing = await prepareContext(task, { cwd: this.workingDirectory, mode: contextMode });
 			targetFiles = this.currentBriefing.targetFiles;
 			const sigCount = this.currentBriefing.functionSignatures.length;
 			output.debug(`Found ${targetFiles.length} target files, ${sigCount} signatures`, { taskId });
@@ -1056,6 +1058,19 @@ export class TaskWorker {
 						// Get post-mortem from the failed tier before moving on
 						output.debug(`Getting post-mortem from ${previousModel}...`, { taskId });
 						this.lastPostMortem = await this.getPostMortem(task, verification.feedback, previousModel);
+
+						// If escalating to opus, re-prepare context with full mode
+						if (this.currentModel === "opus" && previousModel !== "opus") {
+							try {
+								output.debug("Re-preparing context with full mode for opus", { taskId });
+								this.currentBriefing = await prepareContext(task, {
+									cwd: this.workingDirectory,
+									mode: "full",
+								});
+							} catch {
+								// Non-critical - continue with existing briefing
+							}
+						}
 
 						// Update last attempt record with escalation info
 						const lastAttempt = this.attemptRecords[this.attemptRecords.length - 1];
