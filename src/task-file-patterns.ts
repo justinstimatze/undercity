@@ -311,28 +311,33 @@ export function recordTaskFiles(
 		store.recentTasks = store.recentTasks.slice(-100);
 	}
 
-	// Update keyword correlations (only for successful tasks)
-	if (success && normalizedFiles.length > 0) {
-		for (const keyword of keywords) {
-			if (!store.keywordCorrelations[keyword]) {
-				store.keywordCorrelations[keyword] = {
-					keyword,
-					files: {},
-					taskCount: 0,
-					successCount: 0,
-				};
-			}
+	// Update keyword correlations (track all tasks for success rate)
+	for (const keyword of keywords) {
+		if (!store.keywordCorrelations[keyword]) {
+			store.keywordCorrelations[keyword] = {
+				keyword,
+				files: {},
+				taskCount: 0,
+				successCount: 0,
+			};
+		}
 
-			const correlation = store.keywordCorrelations[keyword];
-			correlation.taskCount++;
+		const correlation = store.keywordCorrelations[keyword];
+		correlation.taskCount++;
+		if (success) {
 			correlation.successCount++;
+		}
 
+		// Only associate files with keywords for successful tasks
+		if (success && normalizedFiles.length > 0) {
 			for (const file of normalizedFiles) {
 				correlation.files[file] = (correlation.files[file] || 0) + 1;
 			}
 		}
+	}
 
-		// Update co-modification patterns
+	// Update co-modification patterns (only for successful tasks)
+	if (success && normalizedFiles.length > 0) {
 		for (const file of normalizedFiles) {
 			if (!store.coModificationPatterns[file]) {
 				store.coModificationPatterns[file] = {
@@ -501,17 +506,38 @@ export function formatCoModificationHints(filesBeingModified: string[], stateDir
  */
 export function getTaskFileStats(stateDir: string = DEFAULT_STATE_DIR): {
 	totalTasks: number;
+	successfulTasks: number;
+	failedTasks: number;
 	uniqueKeywords: number;
 	uniqueFiles: number;
-	topKeywords: Array<{ keyword: string; taskCount: number }>;
+	topKeywords: Array<{ keyword: string; taskCount: number; successRate: number }>;
 	topFiles: Array<{ file: string; modCount: number }>;
+	riskyKeywords: Array<{ keyword: string; taskCount: number; successRate: number }>;
 } {
 	const store = loadTaskFileStore(stateDir);
+
+	const successfulTasks = store.recentTasks.filter((t) => t.success).length;
+	const failedTasks = store.recentTasks.filter((t) => !t.success).length;
 
 	const topKeywords = Object.values(store.keywordCorrelations)
 		.sort((a, b) => b.taskCount - a.taskCount)
 		.slice(0, 5)
-		.map((k) => ({ keyword: k.keyword, taskCount: k.taskCount }));
+		.map((k) => ({
+			keyword: k.keyword,
+			taskCount: k.taskCount,
+			successRate: k.taskCount > 0 ? k.successCount / k.taskCount : 0,
+		}));
+
+	// Keywords with low success rate (at least 3 tasks, <70% success)
+	const riskyKeywords = Object.values(store.keywordCorrelations)
+		.filter((k) => k.taskCount >= 3 && k.successCount / k.taskCount < 0.7)
+		.sort((a, b) => a.successCount / a.taskCount - b.successCount / b.taskCount)
+		.slice(0, 5)
+		.map((k) => ({
+			keyword: k.keyword,
+			taskCount: k.taskCount,
+			successRate: k.successCount / k.taskCount,
+		}));
 
 	const topFiles = Object.values(store.coModificationPatterns)
 		.sort((a, b) => b.modificationCount - a.modificationCount)
@@ -520,10 +546,13 @@ export function getTaskFileStats(stateDir: string = DEFAULT_STATE_DIR): {
 
 	return {
 		totalTasks: store.recentTasks.length,
+		successfulTasks,
+		failedTasks,
 		uniqueKeywords: Object.keys(store.keywordCorrelations).length,
 		uniqueFiles: Object.keys(store.coModificationPatterns).length,
 		topKeywords,
 		topFiles,
+		riskyKeywords,
 	};
 }
 

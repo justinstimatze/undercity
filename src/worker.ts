@@ -1060,6 +1060,15 @@ export class TaskWorker {
 			this.pendingErrorSignature = null;
 		}
 
+		// Record failed task pattern (helps track which keywords are risky)
+		try {
+			const modifiedFiles = this.getModifiedFiles();
+			recordTaskFiles(taskId, task, modifiedFiles, false);
+			output.debug(`Recorded failed task pattern`, { taskId });
+		} catch {
+			// Non-critical
+		}
+
 		return {
 			task,
 			status: "failed",
