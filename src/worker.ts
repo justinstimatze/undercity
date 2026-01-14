@@ -22,6 +22,7 @@
 import { execFileSync, execSync } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
+import { quickDecision } from "./automated-pm.js";
 import {
 	adjustModelFromMetrics,
 	assessComplexityFast,
@@ -29,6 +30,13 @@ import {
 	type ComplexityAssessment,
 } from "./complexity.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
+import {
+	captureDecision,
+	getDecisionsByCategory,
+	parseAgentOutputForDecisions,
+	resolveDecision,
+	updateDecisionOutcome,
+} from "./decision-tracker.js";
 import { dualLogger } from "./dual-logger.js";
 import { generateToolsPrompt } from "./efficiency-tools.js";
 import {
@@ -283,6 +291,9 @@ export class TaskWorker {
 
 	/** Files modified before current attempt (for tracking what fixed the error) */
 	private filesBeforeAttempt: string[] = [];
+
+	/** State directory for decision tracking and other operational learning */
+	private stateDir: string = ".undercity";
 
 	constructor(options: SoloOptions = {}) {
 		// Default 7 attempts allows full escalation: 2 haiku + 2 sonnet + 3 opus
@@ -907,6 +918,23 @@ export class TaskWorker {
 						// Non-critical
 					}
 
+					// Update decision outcomes for this task (success)
+					try {
+						const { loadDecisionStore } = await import("./decision-tracker.js");
+						const store = loadDecisionStore(this.stateDir);
+						const taskDecisions = store.resolved.filter(
+							(d) => d.taskId === taskId && d.resolution.outcome === undefined,
+						);
+						for (const decision of taskDecisions) {
+							updateDecisionOutcome(decision.id, "success", this.stateDir);
+						}
+						if (taskDecisions.length > 0) {
+							output.debug(`Updated ${taskDecisions.length} decision outcomes to success`, { taskId });
+						}
+					} catch {
+						// Non-critical
+					}
+
 					return {
 						task,
 						status: "complete",
@@ -1065,6 +1093,18 @@ export class TaskWorker {
 			const modifiedFiles = this.getModifiedFiles();
 			recordTaskFiles(taskId, task, modifiedFiles, false);
 			output.debug(`Recorded failed task pattern`, { taskId });
+		} catch {
+			// Non-critical
+		}
+
+		// Update decision outcomes for this task (failure)
+		try {
+			const { loadDecisionStore } = await import("./decision-tracker.js");
+			const store = loadDecisionStore(this.stateDir);
+			const taskDecisions = store.resolved.filter((d) => d.taskId === taskId && d.resolution.outcome === undefined);
+			for (const decision of taskDecisions) {
+				updateDecisionOutcome(decision.id, "failure", this.stateDir);
+			}
 		} catch {
 			// Non-critical
 		}
@@ -1620,6 +1660,20 @@ RULES:
 
 		// Store output for knowledge extraction
 		this.lastAgentOutput = result;
+
+		// Parse agent output for decision points and capture them
+		try {
+			const decisions = parseAgentOutputForDecisions(result, this.currentTaskId);
+			for (const d of decisions) {
+				const captured = captureDecision(this.currentTaskId, d.question, d.context, d.options, this.stateDir);
+				sessionLogger.debug(
+					{ decisionId: captured.id, category: captured.category },
+					"Captured decision point from agent output",
+				);
+			}
+		} catch {
+			// Non-critical - continue without decision capture
+		}
 
 		return result;
 	}

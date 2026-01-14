@@ -543,6 +543,63 @@ export const analysisCommands: CommandModule = {
 				console.log(chalk.green(`✓ Added ${result.patternsAdded} pattern entries`));
 				console.log(chalk.dim("\nRun 'undercity patterns' to see the results."));
 			});
+
+		// Decision tracking stats and pending decisions
+		program
+			.command("decisions")
+			.description("View decision tracking stats and pending decisions needing attention")
+			.option("--pending", "Show only pending decisions")
+			.option("--process", "Have automated PM process pending PM-decidable decisions")
+			.action(async (options) => {
+				const { getDecisionStats, getPendingDecisions, loadDecisionStore } = await import("../decision-tracker.js");
+				const { processPendingDecisions } = await import("../automated-pm.js");
+
+				if (options.process) {
+					console.log(chalk.cyan("Processing pending decisions with automated PM..."));
+					const result = await processPendingDecisions();
+					console.log(chalk.green(`✓ Processed ${result.processed} decisions`));
+					if (result.escalated.length > 0) {
+						console.log(chalk.yellow(`⚠ ${result.escalated.length} decisions escalated to human:`));
+						for (const d of result.escalated) {
+							console.log(chalk.yellow(`  - ${d.question}`));
+						}
+					}
+					return;
+				}
+
+				const stats = getDecisionStats();
+
+				console.log(chalk.cyan("\nDecision Tracking Stats:"));
+				console.log(`  Pending: ${stats.pending}`);
+				console.log(`  Resolved: ${stats.resolved}`);
+				console.log(`  Human overrides: ${stats.overrides}`);
+
+				console.log(chalk.cyan("\nBy Category:"));
+				console.log(`  Auto-handle: ${stats.byCategory.auto_handle}`);
+				console.log(`  PM-decidable: ${stats.byCategory.pm_decidable}`);
+				console.log(`  Human-required: ${stats.byCategory.human_required}`);
+
+				console.log(chalk.cyan("\nBy Resolver:"));
+				console.log(`  Auto: ${stats.byResolver.auto} (${Math.round(stats.successRate.auto * 100)}% success)`);
+				console.log(`  PM: ${stats.byResolver.pm} (${Math.round(stats.successRate.pm * 100)}% success)`);
+				console.log(`  Human: ${stats.byResolver.human} (${Math.round(stats.successRate.human * 100)}% success)`);
+
+				if (options.pending || stats.pending > 0) {
+					const pending = getPendingDecisions();
+					if (pending.length > 0) {
+						console.log(chalk.cyan("\nPending Decisions:"));
+						for (const d of pending.slice(0, 10)) {
+							const categoryColor =
+								d.category === "human_required" ? chalk.red : d.category === "pm_decidable" ? chalk.yellow : chalk.dim;
+							console.log(`  [${categoryColor(d.category)}] ${d.question.slice(0, 60)}...`);
+						}
+						if (pending.length > 10) {
+							console.log(chalk.dim(`  ... and ${pending.length - 10} more`));
+						}
+						console.log(chalk.dim("\nRun 'undercity decisions --process' to have PM handle pending decisions."));
+					}
+				}
+			});
 	},
 };
 
