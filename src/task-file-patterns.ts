@@ -610,27 +610,53 @@ export function getTaskFileStats(stateDir: string = DEFAULT_STATE_DIR): {
 }
 
 /**
- * Prune stale patterns that haven't been seen recently
+ * Prune stale patterns that haven't been seen recently or have poor performance
+ * Removes patterns based on:
+ * - Low usage count (below minTaskCount)
+ * - Age + low success rate (>60 days old with <50% success)
+ * - Age + minimal usage (>30 days old with minimal usage)
  */
 export function pruneStalePatterns(
 	minTaskCount: number = 2,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): { prunedKeywords: number; prunedFiles: number } {
 	const store = loadTaskFileStore(stateDir);
+	const now = Date.now();
+	const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+	const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
+
 	let prunedKeywords = 0;
 	let prunedFiles = 0;
 
-	// Prune keywords with very low task counts
+	// Prune keywords
 	for (const [keyword, correlation] of Object.entries(store.keywordCorrelations)) {
-		if (correlation.taskCount < minTaskCount) {
+		const ageMs = correlation.lastUpdated ? now - new Date(correlation.lastUpdated).getTime() : Infinity;
+		const successRate = correlation.successCount / Math.max(correlation.taskCount, 1);
+
+		// Remove if:
+		// - Too few tasks, OR
+		// - Old with minimal usage, OR
+		// - Very old with low success rate
+		const shouldRemove =
+			correlation.taskCount < minTaskCount ||
+			(ageMs > THIRTY_DAYS_MS && correlation.taskCount < 3) ||
+			(ageMs > SIXTY_DAYS_MS && successRate < 0.5);
+
+		if (shouldRemove) {
 			delete store.keywordCorrelations[keyword];
 			prunedKeywords++;
 		}
 	}
 
-	// Prune files with very low modification counts
+	// Prune co-modification patterns
 	for (const [file, pattern] of Object.entries(store.coModificationPatterns)) {
-		if (pattern.modificationCount < minTaskCount) {
+		const ageMs = pattern.lastUpdated ? now - new Date(pattern.lastUpdated).getTime() : Infinity;
+
+		// Remove if low usage OR old with minimal usage
+		const shouldRemove =
+			pattern.modificationCount < minTaskCount || (ageMs > THIRTY_DAYS_MS && pattern.modificationCount < 3);
+
+		if (shouldRemove) {
 			delete store.coModificationPatterns[file];
 			prunedFiles++;
 		}
