@@ -87,7 +87,7 @@ export function generateErrorSignature(category: string, message: string): strin
 	// Normalize the message to group similar errors
 	const normalized = message
 		// Remove file paths (keep just filename)
-		.replace(/[\/\\][\w\-\.\/\\]+\.(ts|js|tsx|jsx)/g, "FILE")
+		.replace(/[/\\][\w./-]+\.(ts|js|tsx|jsx)/g, "FILE")
 		// Remove line:column numbers
 		.replace(/:\d+:\d+/g, ":N:N")
 		.replace(/line \d+/gi, "line N")
@@ -326,8 +326,7 @@ export function formatFixSuggestionsForPrompt(
 	}
 
 	const { pattern, suggestions } = result;
-	const successRate =
-		pattern.occurrences > 0 ? Math.round((pattern.fixSuccesses / pattern.occurrences) * 100) : 0;
+	const successRate = pattern.occurrences > 0 ? Math.round((pattern.fixSuccesses / pattern.occurrences) * 100) : 0;
 
 	const lines: string[] = [
 		`SIMILAR ERROR FIXED BEFORE (${pattern.occurrences} occurrences, ${successRate}% fix success rate):`,

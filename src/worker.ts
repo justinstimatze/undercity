@@ -49,6 +49,7 @@ import * as output from "./output.js";
 import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
 import { type ModelTier, runEscalatingReview, type UnresolvedTicket } from "./review.js";
 import type { HandoffContext } from "./task.js";
+import { formatFileSuggestionsForPrompt, recordTaskFiles } from "./task-file-patterns.js";
 import { extractMetaTaskType, isMetaTask, isResearchTask, parseResearchResult } from "./task-schema.js";
 import type { AttemptRecord, ErrorCategory, TaskCheckpoint, TokenUsage } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
@@ -894,6 +895,17 @@ export class TaskWorker {
 						sessionLogger.debug({ error: String(error) }, "Knowledge extraction failed");
 					}
 
+					// Record task-file patterns for future suggestions
+					try {
+						const modifiedFiles = this.getModifiedFiles();
+						if (modifiedFiles.length > 0) {
+							recordTaskFiles(taskId, task, modifiedFiles, true);
+							output.debug(`Recorded task-file pattern: ${modifiedFiles.length} files`, { taskId });
+						}
+					} catch {
+						// Non-critical
+					}
+
 					return {
 						task,
 						status: "complete",
@@ -944,9 +956,7 @@ export class TaskWorker {
 				}
 
 				// Combine feedback with fix suggestions
-				this.lastFeedback = fixSuggestion
-					? `${verification.feedback}\n\n${fixSuggestion}`
-					: verification.feedback;
+				this.lastFeedback = fixSuggestion ? `${verification.feedback}\n\n${fixSuggestion}` : verification.feedback;
 
 				// Checkpoint: verification failed with errors
 				this.saveCheckpoint("verifying", {
@@ -1378,6 +1388,16 @@ The file MUST be created at ${outputPath} for this task to succeed.`;
 				this.injectedLearningIds = relevantLearnings.map((l) => l.id);
 			} else {
 				this.injectedLearningIds = [];
+			}
+
+			// Add file suggestions based on task-file patterns
+			const fileSuggestions = formatFileSuggestionsForPrompt(task);
+			if (fileSuggestions) {
+				contextSection += `${fileSuggestions}
+
+---
+
+`;
 			}
 
 			// For first attempt after escalation, include post-mortem
