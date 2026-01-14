@@ -121,10 +121,11 @@ describe("complexity", () => {
 				expect(result.level).toBe("simple");
 			});
 
-			it("identifies typo fixes with context as simple (multiple signals)", () => {
-				// "fix typo in README" has multiple signals pushing it to simple
+			it("identifies typo fixes as trivial", () => {
+				// Typo fixes are trivial - negative weight counteracts other signals
 				const result = assessComplexityFast("fix typo in README");
-				expect(result.level).toBe("simple");
+				expect(result.level).toBe("trivial");
+				expect(result.model).toBe("haiku");
 			});
 		});
 

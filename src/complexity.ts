@@ -727,9 +727,18 @@ function upgradeModel(model: "haiku" | "sonnet" | "opus"): "haiku" | "sonnet" | 
 const COMPLEXITY_SIGNALS = {
 	// Absolutely minimal changes - guaranteed haiku, no review
 	trivial: {
-		keywords: ["typo", "comment", "rename", "fix typo", "update comment", "version bump"],
-		patterns: [/^fix\s+typo/i, /^update\s+comment/i, /^bump\s+version/i, /^correct\s+(spelling|grammar)/i],
-		weight: 0,
+		keywords: ["typo", "comment", "rename", "fix typo", "update comment", "version bump", "jsdoc"],
+		patterns: [
+			/^fix\s+typo/i,
+			/^update\s+comment/i,
+			/^bump\s+version/i,
+			/^correct\s+(spelling|grammar)/i,
+			/^add\s+(a\s+)?(simple\s+)?comment/i,
+			/^add\s+(a\s+)?jsdoc/i,
+			/^add\s+(a\s+)?(brief\s+)?inline\s+comment/i,
+			/^add\s+(a\s+)?todo\s+comment/i,
+		],
+		weight: -2, // Negative weight to counteract standard "add" pattern
 	},
 	// Simple, self-contained changes that don't require escalation
 	simple: {

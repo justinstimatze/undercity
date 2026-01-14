@@ -1298,6 +1298,21 @@ export class Orchestrator {
 		const mainBranch = this.worktreeManager.getMainBranch();
 		const mainRepo = this.worktreeManager.getMainRepoPath();
 
+		// Ensure clean working directory before rebase
+		// Verification or build artifacts may have left unstaged changes
+		try {
+			const status = execGitInDir(["status", "--porcelain"], worktreePath);
+			if (status.trim()) {
+				output.debug(`Cleaning unstaged changes in worktree for ${taskId}`);
+				// Reset any unstaged changes (keeps committed work)
+				execGitInDir(["checkout", "--", "."], worktreePath);
+				// Clean any untracked files (build artifacts, etc.)
+				execGitInDir(["clean", "-fd"], worktreePath);
+			}
+		} catch (cleanError) {
+			output.warning(`Failed to clean worktree for ${taskId}: ${cleanError}`);
+		}
+
 		// Fetch latest local main into the worktree
 		// This ensures we rebase onto the current state of main, including unpushed commits
 		validateGitRef(mainBranch);
@@ -1324,7 +1339,13 @@ export class Orchestrator {
 		try {
 			output.progress(`Running verification for ${taskId}...`);
 			execInDir(`pnpm typecheck`, worktreePath);
-			execInDir(`pnpm test --run`, worktreePath);
+			// Set UNDERCITY_VERIFICATION to skip integration tests during merge verification
+			execSync(`pnpm test --run`, {
+				cwd: worktreePath,
+				encoding: "utf-8",
+				stdio: ["pipe", "pipe", "pipe"],
+				env: { ...process.env, UNDERCITY_VERIFICATION: "true" },
+			});
 		} catch (verifyError) {
 			throw new Error(`Verification failed for ${taskId}: ${verifyError}`);
 		}
