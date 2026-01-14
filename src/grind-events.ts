@@ -184,7 +184,7 @@ export function categorizeFailure(error: string): FailureReason {
 	if (e.includes("rebase")) {
 		return "rebase_conflict";
 	}
-	if (e.includes("merge") && e.includes("conflict")) {
+	if (e.includes("merge") && (e.includes("conflict") || e.includes("failed") || e.includes("ff-only"))) {
 		return "merge_conflict";
 	}
 	if (e.includes("timeout")) {
