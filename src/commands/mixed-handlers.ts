@@ -108,6 +108,21 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 	// Process from task board (all tasks run in worktrees)
 	output.header("Undercity Grind Mode", "Autonomous operation • Rate limit handling • Infinite processing");
 
+	// Auto-prime patterns from git history if store is empty/small
+	try {
+		const { getTaskFileStats, primeFromGitHistory } = await import("../task-file-patterns.js");
+		const stats = getTaskFileStats();
+		if (stats.uniqueKeywords < 10) {
+			output.progress("Auto-priming patterns from git history...");
+			const primeResult = await primeFromGitHistory(100);
+			if (primeResult.patternsAdded > 0) {
+				output.info(`Primed ${primeResult.patternsAdded} patterns from ${primeResult.commitsProcessed} commits`);
+			}
+		}
+	} catch {
+		// Non-critical - continue without priming
+	}
+
 	// Track how many tasks we've processed (for -n flag)
 	let tasksProcessed = 0;
 
