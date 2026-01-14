@@ -566,6 +566,7 @@ export function getTaskFileStats(stateDir: string = DEFAULT_STATE_DIR): {
 	topKeywords: Array<{ keyword: string; taskCount: number; successRate: number }>;
 	topFiles: Array<{ file: string; modCount: number }>;
 	riskyKeywords: Array<{ keyword: string; taskCount: number; successRate: number }>;
+	patternHealth: { fresh: number; aging: number; stale: number };
 } {
 	const store = loadTaskFileStore(stateDir);
 
@@ -597,6 +598,26 @@ export function getTaskFileStats(stateDir: string = DEFAULT_STATE_DIR): {
 		.slice(0, 5)
 		.map((p) => ({ file: p.file, modCount: p.modificationCount }));
 
+	// Pattern health: count fresh (<7 days), aging (7-30 days), stale (>30 days)
+	const now = Date.now();
+	const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+	const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+
+	let fresh = 0;
+	let aging = 0;
+	let stale = 0;
+
+	for (const correlation of Object.values(store.keywordCorrelations)) {
+		if (!correlation.lastUpdated) {
+			stale++;
+			continue;
+		}
+		const ageMs = now - new Date(correlation.lastUpdated).getTime();
+		if (ageMs < SEVEN_DAYS) fresh++;
+		else if (ageMs < THIRTY_DAYS) aging++;
+		else stale++;
+	}
+
 	return {
 		totalTasks: store.recentTasks.length,
 		successfulTasks,
@@ -606,6 +627,7 @@ export function getTaskFileStats(stateDir: string = DEFAULT_STATE_DIR): {
 		topKeywords,
 		topFiles,
 		riskyKeywords,
+		patternHealth: { fresh, aging, stale },
 	};
 }
 

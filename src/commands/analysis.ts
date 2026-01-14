@@ -480,6 +480,17 @@ export const analysisCommands: CommandModule = {
 						console.log(`    - ${file} (${modCount}x)`);
 					}
 				}
+				// Pattern health (freshness)
+				const { fresh, aging, stale } = taskFileStats.patternHealth;
+				const total = fresh + aging + stale;
+				if (total > 0) {
+					const freshPct = Math.round((fresh / total) * 100);
+					const agingPct = Math.round((aging / total) * 100);
+					const stalePct = Math.round((stale / total) * 100);
+					const healthColor = freshPct >= 50 ? chalk.green : freshPct >= 25 ? chalk.yellow : chalk.red;
+					console.log(`  Pattern health: ${healthColor(`${fresh} fresh`)} / ${aging} aging / ${stale} stale`);
+					console.log(`    (${freshPct}% / ${agingPct}% / ${stalePct}%)`);
+				}
 
 				// Error-Fix Patterns
 				console.log(chalk.cyan("\nError → Fix Patterns:"));
