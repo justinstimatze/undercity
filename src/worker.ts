@@ -22,7 +22,6 @@
 import { execFileSync, execSync } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
-import { quickDecision } from "./automated-pm.js";
 import {
 	adjustModelFromMetrics,
 	assessComplexityFast,
@@ -30,13 +29,7 @@ import {
 	type ComplexityAssessment,
 } from "./complexity.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
-import {
-	captureDecision,
-	getDecisionsByCategory,
-	parseAgentOutputForDecisions,
-	resolveDecision,
-	updateDecisionOutcome,
-} from "./decision-tracker.js";
+import { captureDecision, parseAgentOutputForDecisions, updateDecisionOutcome } from "./decision-tracker.js";
 import { dualLogger } from "./dual-logger.js";
 import { generateToolsPrompt } from "./efficiency-tools.js";
 import {

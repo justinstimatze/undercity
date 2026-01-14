@@ -524,7 +524,7 @@ export function getDecisionStats(stateDir: string = DEFAULT_STATE_DIR): {
  */
 export function parseAgentOutputForDecisions(
 	output: string,
-	taskId: string,
+	_taskId: string,
 ): Array<{ question: string; context: string; options?: string[] }> {
 	const decisions: Array<{ question: string; context: string; options?: string[] }> = [];
 

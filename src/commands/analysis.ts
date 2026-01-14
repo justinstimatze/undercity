@@ -551,7 +551,7 @@ export const analysisCommands: CommandModule = {
 			.option("--pending", "Show only pending decisions")
 			.option("--process", "Have automated PM process pending PM-decidable decisions")
 			.action(async (options) => {
-				const { getDecisionStats, getPendingDecisions, loadDecisionStore } = await import("../decision-tracker.js");
+				const { getDecisionStats, getPendingDecisions } = await import("../decision-tracker.js");
 				const { processPendingDecisions } = await import("../automated-pm.js");
 
 				if (options.process) {
