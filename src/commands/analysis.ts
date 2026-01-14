@@ -439,6 +439,71 @@ export const analysisCommands: CommandModule = {
 			.action(() => {
 				launchMetricsDashboard();
 			});
+
+		// Operational learning patterns command
+		program
+			.command("patterns")
+			.description("Show operational learning patterns (task-file correlations, co-modifications, error fixes)")
+			.action(async () => {
+				const { getTaskFileStats } = await import("../task-file-patterns.js");
+				const { getErrorFixStats } = await import("../error-fix-patterns.js");
+				const { getKnowledgeStats } = await import("../knowledge.js");
+
+				console.log(chalk.bold("\n📊 Operational Learning Patterns\n"));
+
+				// Task-File Patterns
+				const taskFileStats = getTaskFileStats();
+				console.log(chalk.cyan("Task → File Correlations:"));
+				console.log(`  Tasks recorded: ${taskFileStats.totalTasks}`);
+				console.log(`  Unique keywords: ${taskFileStats.uniqueKeywords}`);
+				console.log(`  Unique files: ${taskFileStats.uniqueFiles}`);
+				if (taskFileStats.topKeywords.length > 0) {
+					console.log("  Top keywords:");
+					for (const { keyword, taskCount } of taskFileStats.topKeywords.slice(0, 5)) {
+						console.log(`    - ${keyword} (${taskCount} tasks)`);
+					}
+				}
+				if (taskFileStats.topFiles.length > 0) {
+					console.log("  Most modified files:");
+					for (const { file, modCount } of taskFileStats.topFiles.slice(0, 5)) {
+						console.log(`    - ${file} (${modCount}x)`);
+					}
+				}
+
+				// Error-Fix Patterns
+				console.log(chalk.cyan("\nError → Fix Patterns:"));
+				const errorStats = getErrorFixStats();
+				console.log(`  Patterns recorded: ${errorStats.totalPatterns}`);
+				console.log(`  Total occurrences: ${errorStats.totalOccurrences}`);
+				console.log(`  Fixes recorded: ${errorStats.totalFixes}`);
+				if (Object.keys(errorStats.byCategory).length > 0) {
+					console.log("  By category:");
+					for (const [cat, count] of Object.entries(errorStats.byCategory)) {
+						console.log(`    - ${cat}: ${count}`);
+					}
+				}
+
+				// Knowledge Learnings
+				console.log(chalk.cyan("\nKnowledge Compounding:"));
+				const knowledgeStats = getKnowledgeStats();
+				console.log(`  Total learnings: ${knowledgeStats.totalLearnings}`);
+				console.log(`  Average confidence: ${(knowledgeStats.avgConfidence * 100).toFixed(0)}%`);
+				const categories = Object.entries(knowledgeStats.byCategory).filter(([, count]) => count > 0);
+				if (categories.length > 0) {
+					console.log("  By category:");
+					for (const [cat, count] of categories) {
+						console.log(`    - ${cat}: ${count}`);
+					}
+				}
+				if (knowledgeStats.mostUsed.length > 0) {
+					console.log("  Most used learnings:");
+					for (const { content, usedCount } of knowledgeStats.mostUsed.slice(0, 3)) {
+						console.log(`    - "${content.slice(0, 50)}..." (${usedCount}x)`);
+					}
+				}
+
+				console.log(chalk.dim("\nUse patterns to predict relevant files and suggest fixes for errors.\n"));
+			});
 	},
 };
 
