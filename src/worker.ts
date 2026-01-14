@@ -1422,6 +1422,18 @@ The file MUST be created at ${outputPath} for this task to succeed.`;
 `;
 			}
 
+			// Add co-modification hints based on target files from context
+			if (this.currentBriefing?.targetFiles && this.currentBriefing.targetFiles.length > 0) {
+				const coModHints = formatCoModificationHints(this.currentBriefing.targetFiles);
+				if (coModHints) {
+					contextSection += `${coModHints}
+
+---
+
+`;
+				}
+			}
+
 			// For first attempt after escalation, include post-mortem
 			let postMortemContext = "";
 			if (this.lastPostMortem) {
