@@ -6,7 +6,7 @@
 |------|---------|-------------|
 | **cli.ts** | CLI entry, routes to command modules | - |
 | **commands/task.ts** | Task board commands (tasks, add, work, plan, import-plan, reconcile, triage, prune) | taskCommands |
-| **commands/mixed.ts** | Execution + learning commands (grind, pulse, brief, decide, knowledge, usage, tuning) | mixedCommands |
+| **commands/mixed.ts** | Execution + learning commands (grind, pm, usage, knowledge, decide, tuning, watch) | mixedCommands |
 | **commands/analysis.ts** | Metrics/analysis commands (patterns, decisions, ax) | analysisCommands |
 | **orchestrator.ts** | Main production orchestrator, parallel execution | Orchestrator |
 | **worker.ts** | Single-task executor, runs in worktree | TaskWorker |
@@ -56,7 +56,7 @@
 | **task-file-patterns.ts** | Task→file correlations, co-modification | recordTaskFiles, findRelevantFiles, findCoModifiedFiles |
 | **error-fix-patterns.ts** | Error→fix patterns for known issues | recordErrorFix, findMatchingFix, getErrorFixStats |
 | **ax-programs.ts** | Ax/DSPy self-improving prompts | getAxProgramStats |
-| **claude-usage.ts** | Fetch live Claude Max usage from claude.ai | fetchClaudeMaxUsage |
+| **claude-usage.ts** | Fetch live Claude Max usage from claude.ai | fetchClaudeUsage, loginToClaude |
 | **index.ts** | Public API exports | - |
 
 ## Task → File Mapping

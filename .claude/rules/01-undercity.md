@@ -70,18 +70,30 @@ undercity pm --propose                     # Generate tasks from codebase analys
 undercity pm "topic" --ideate --add        # Add proposals to board
 ```
 
-**Secondary commands** (debugging, human monitoring):
+**Secondary commands** (debugging, inspection):
 ```bash
-# Monitoring (data also available in .undercity/*.json files)
+# Monitoring
 undercity status                           # Current state (JSON)
 undercity watch                            # Live TUI dashboard
 undercity usage                            # Claude Max usage from claude.ai
 undercity usage --login                    # One-time browser auth setup
 
-# Learning (auto-used during grind, manual inspection)
+# Learning & intelligence
 undercity knowledge "query"                # Search accumulated learnings
 undercity decide                           # View/resolve pending decisions
 undercity patterns                         # Task→file correlations
+undercity tuning                           # View learned routing profile
+undercity introspect                       # Analyze own metrics
+
+# Analysis
+undercity metrics                          # Performance metrics
+undercity insights                         # Routing recommendations
+undercity semantic-check                   # Semantic density analysis
+
+# Task board management
+undercity reconcile                        # Mark done tasks as complete
+undercity triage                           # Analyze board for issues
+undercity prune                            # Remove stale/duplicate tasks
 ```
 
 **Auto-chained** (happens automatically, no command needed):
@@ -90,6 +102,7 @@ undercity patterns                         # Task→file correlations
 - Knowledge injection during planning
 - PM resolution of open questions in plans
 - Pattern/knowledge recording after completion
+- Empty board detection with PM suggestion
 
 **Daemon** (for overnight runs):
 ```bash
