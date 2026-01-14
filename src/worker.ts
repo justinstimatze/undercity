@@ -48,11 +48,18 @@ import { getMetaTaskPrompt, parseMetaTaskResult } from "./meta-tasks.js";
 import { MetricsTracker } from "./metrics.js";
 import * as output from "./output.js";
 import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
-import { type ModelTier, runEscalatingReview, type UnresolvedTicket } from "./review.js";
+import { runEscalatingReview, type UnresolvedTicket } from "./review.js";
 import type { HandoffContext } from "./task.js";
 import { formatCoModificationHints, formatFileSuggestionsForPrompt, recordTaskFiles } from "./task-file-patterns.js";
 import { extractMetaTaskType, isMetaTask, isResearchTask, parseResearchResult } from "./task-schema.js";
-import type { AttemptRecord, ErrorCategory, TaskCheckpoint, TokenUsage } from "./types.js";
+import {
+	type AttemptRecord,
+	type ErrorCategory,
+	MODEL_NAMES,
+	type ModelTier,
+	type TaskCheckpoint,
+	type TokenUsage,
+} from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
 
 /**
@@ -128,11 +135,46 @@ function extractExplicitFiles(task: string): string[] {
 	return [...new Set(files)];
 }
 
-const MODEL_NAMES: Record<ModelTier, string> = {
-	haiku: "claude-3-5-haiku-20241022",
-	sonnet: "claude-sonnet-4-20250514",
-	opus: "claude-opus-4-5-20251101",
-};
+/**
+ * Check if a task might already be complete by scanning recent commits
+ * Returns a hint if likely done, undefined otherwise
+ */
+function checkTaskMayBeComplete(task: string, cwd: string): string | undefined {
+	try {
+		// Extract keywords from task
+		const keywords = task
+			.toLowerCase()
+			.replace(/[[\]]/g, "")
+			.split(/\s+/)
+			.filter(
+				(word) =>
+					word.length > 3 && !["task", "this", "that", "with", "from", "should", "make", "ensure"].includes(word),
+			);
+
+		if (keywords.length === 0) return undefined;
+
+		// Check last 20 commits
+		const commits = execSync("git log --oneline -20", { cwd, encoding: "utf-8" })
+			.trim()
+			.split("\n")
+			.map((line) => {
+				const [sha, ...rest] = line.split(" ");
+				return { sha, message: rest.join(" ").toLowerCase() };
+			});
+
+		for (const commit of commits) {
+			const matches = keywords.filter((kw) => commit.message.includes(kw)).length;
+			const matchRatio = matches / keywords.length;
+
+			if (matchRatio > 0.5 && matches >= 2) {
+				return `Recent commit ${commit.sha} may have already addressed this: "${commit.message}". Verify before making changes.`;
+			}
+		}
+	} catch {
+		// Non-critical - continue without hint
+	}
+	return undefined;
+}
 
 /**
  * Task status for tracking
@@ -292,6 +334,9 @@ export class TaskWorker {
 
 	/** State directory for decision tracking and other operational learning */
 	private stateDir: string = ".undercity";
+
+	/** Agent reported task is already complete (with reason) */
+	private taskAlreadyCompleteReason: string | null = null;
 
 	constructor(options: SoloOptions = {}) {
 		// Default 7 attempts allows full escalation: 2 haiku + 2 sonnet + 3 opus
@@ -787,20 +832,20 @@ export class TaskWorker {
 				// Categorize errors for tracking
 				const errorCategories = categorizeErrors(verification);
 
-				// Check for "task already complete" scenario: no file changes but agent tried to edit
-				// and found content was already correct (no-op edits detected)
+				// Check for "task already complete" scenarios:
+				// 1. Agent explicitly said TASK_ALREADY_COMPLETE
+				// 2. No-op edits detected (agent tried to edit but content was already correct)
 				const taskAlreadyComplete =
-					!verification.passed &&
-					verification.filesChanged === 0 &&
-					this.noOpEditCount > 0 &&
-					errorCategories.includes("no_changes");
+					this.taskAlreadyCompleteReason !== null ||
+					(!verification.passed &&
+						verification.filesChanged === 0 &&
+						this.noOpEditCount > 0 &&
+						errorCategories.includes("no_changes"));
 
 				if (taskAlreadyComplete) {
+					const reason = this.taskAlreadyCompleteReason || "no-op edits detected";
 					output.workerVerification(taskId, true);
-					sessionLogger.info(
-						{ taskId, noOpEdits: this.noOpEditCount },
-						"Task already complete (no-op edits detected, content was correct)",
-					);
+					sessionLogger.info({ taskId, reason, noOpEdits: this.noOpEditCount }, "Task already complete");
 					// Treat as success - no commit needed since no changes
 					return {
 						task,
@@ -1527,6 +1572,17 @@ The file MUST be created at ${outputPath} for this task to succeed.`;
 				}
 			}
 
+			// Check if task might already be complete (pre-flight check)
+			const alreadyDoneHint = checkTaskMayBeComplete(task, this.workingDirectory);
+			if (alreadyDoneHint) {
+				contextSection += `⚠️ PRE-FLIGHT CHECK:
+${alreadyDoneHint}
+
+---
+
+`;
+			}
+
 			// For first attempt after escalation, include post-mortem
 			let postMortemContext = "";
 			if (this.lastPostMortem) {
@@ -1547,17 +1603,20 @@ Use this analysis to avoid repeating the same mistakes.`;
 			prompt = `${contextSection}TASK:
 ${task}${postMortemContext}${exampleSection}
 RULES:
-1. If the task requires creating new files, create them (Write tool creates parent directories)
-2. If editing existing files, read them first before editing
-3. Minimal changes only - nothing beyond task scope
-4. No questions - decide and proceed`;
+1. First verify the task isn't already complete - check git log, read target files
+2. If task is already done, output exactly: TASK_ALREADY_COMPLETE: <reason>
+3. If the task requires creating new files, create them (Write tool creates parent directories)
+4. If editing existing files, read them first before editing
+5. Minimal changes only - nothing beyond task scope
+6. No questions - decide and proceed`;
 		}
 
 		// Token usage will be accumulated in this.tokenUsageThisTask
 
-		// Reset write counter for this execution
+		// Reset counters for this execution
 		this.writeCountThisExecution = 0;
 		this.noOpEditCount = 0;
+		this.taskAlreadyCompleteReason = null;
 
 		// Build hooks - meta-tasks don't need the "must write files" check
 		// Research tasks now write to .undercity/research/*.md so they use the normal hook
@@ -1567,6 +1626,22 @@ RULES:
 					{
 						hooks: [
 							async () => {
+								// Allow stopping if agent reported task is already complete
+								if (this.taskAlreadyCompleteReason) {
+									sessionLogger.info(
+										{ reason: this.taskAlreadyCompleteReason },
+										"Stop hook accepted: task already complete",
+									);
+									return { continue: true };
+								}
+								// Allow stopping if we detected no-op edits (content was already correct)
+								if (this.noOpEditCount > 0 && this.writeCountThisExecution === 0) {
+									sessionLogger.info(
+										{ noOpEdits: this.noOpEditCount },
+										"Stop hook accepted: no-op edits detected (content already correct)",
+									);
+									return { continue: true };
+								}
 								if (this.writeCountThisExecution === 0) {
 									sessionLogger.info(
 										{ model: this.currentModel, writes: 0 },
@@ -1575,7 +1650,7 @@ RULES:
 									return {
 										continue: false,
 										reason:
-											"You haven't made any code changes yet. Your task requires creating or editing files. If the task specifies a new file path, use the Write tool to create it (parent directories are created automatically). Please implement the required changes before finishing.",
+											"You haven't made any code changes yet. If the task is already complete, output: TASK_ALREADY_COMPLETE: <reason>. Otherwise, implement the required changes.",
 									};
 								}
 								return { continue: true };
@@ -1706,6 +1781,13 @@ RULES:
 		// Store output for knowledge extraction
 		this.lastAgentOutput = result;
 
+		// Check if agent reported task is already complete
+		const alreadyCompleteMatch = result.match(/TASK_ALREADY_COMPLETE:\s*(.+?)(?:\n|$)/i);
+		if (alreadyCompleteMatch) {
+			this.taskAlreadyCompleteReason = alreadyCompleteMatch[1].trim();
+			sessionLogger.info({ reason: this.taskAlreadyCompleteReason }, "Agent reported task already complete");
+		}
+
 		// Parse agent output for decision points and capture them
 		try {
 			const decisions = parseAgentOutputForDecisions(result, this.currentTaskId);
@@ -1751,12 +1833,13 @@ RULES:
 	private trackWriteOperations(message: unknown): void {
 		const msg = message as Record<string, unknown>;
 
-		// Check assistant messages for tool use REQUESTS
+		// Check assistant messages for tool use REQUESTS and TASK_ALREADY_COMPLETE marker
 		if (msg.type === "assistant") {
 			const betaMessage = msg.message as
 				| {
 						content?: Array<{
 							type: string;
+							text?: string;
 							name?: string;
 							id?: string;
 							input?: { file_path?: string };
@@ -1765,6 +1848,18 @@ RULES:
 				| undefined;
 			if (betaMessage?.content) {
 				for (const block of betaMessage.content) {
+					// Check for TASK_ALREADY_COMPLETE marker in text blocks
+					if (block.type === "text" && block.text) {
+						const match = block.text.match(/TASK_ALREADY_COMPLETE:\s*(.+?)(?:\n|$)/i);
+						if (match && !this.taskAlreadyCompleteReason) {
+							this.taskAlreadyCompleteReason = match[1].trim();
+							sessionLogger.info(
+								{ reason: this.taskAlreadyCompleteReason },
+								"Agent reported task already complete (streaming)",
+							);
+						}
+					}
+					// Track write tool requests
 					if (block.type === "tool_use" && block.name && block.id) {
 						if (["Write", "Edit", "NotebookEdit"].includes(block.name)) {
 							const filePath = block.input?.file_path;

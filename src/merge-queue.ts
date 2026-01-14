@@ -34,9 +34,7 @@ import {
 	runTests,
 } from "./git.js";
 import { gitLogger } from "./logger.js";
-import type { MergeQueueConflict, MergeQueueItem, MergeQueueRetryConfig } from "./types.js";
-
-const MODEL_HAIKU = "claude-3-5-haiku-20241022";
+import { type MergeQueueConflict, type MergeQueueItem, type MergeQueueRetryConfig, MODEL_NAMES } from "./types.js";
 
 /**
  * Default retry configuration
@@ -179,7 +177,7 @@ async function resolveConflictWithAI(
 		for await (const message of query({
 			prompt,
 			options: {
-				model: MODEL_HAIKU,
+				model: MODEL_NAMES.haiku,
 				maxTurns: 1,
 				permissionMode: "bypassPermissions",
 			},

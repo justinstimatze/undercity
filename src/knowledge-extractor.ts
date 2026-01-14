@@ -12,8 +12,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Learning, LearningCategory } from "./knowledge.js";
 import { addLearning } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
-
-const MODEL_HAIKU = "claude-3-5-haiku-20241022";
+import { MODEL_NAMES } from "./types.js";
 
 /**
  * Pattern definition for extracting learnings
@@ -343,7 +342,7 @@ async function extractLearningsWithModel(text: string): Promise<ExtractedLearnin
 		for await (const message of query({
 			prompt,
 			options: {
-				model: MODEL_HAIKU,
+				model: MODEL_NAMES.haiku,
 				maxTurns: 1,
 				permissionMode: "bypassPermissions",
 			},

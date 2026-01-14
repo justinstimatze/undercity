@@ -40,6 +40,26 @@ export type SessionStatus =
 export type AgentType = "scout" | "planner" | "builder" | "reviewer";
 
 /**
+ * Model tier - the capability level for Claude models
+ */
+export type ModelTier = "haiku" | "sonnet" | "opus";
+
+/**
+ * Canonical model name mapping
+ * Single source of truth for model names - update here when new models release
+ *
+ * Current models (as of Jan 2026):
+ * - Haiku 4.5: Fast, cheap, good for simple tasks
+ * - Sonnet 4.5: Balanced, excellent for coding
+ * - Opus 4.5: Most capable, expensive
+ */
+export const MODEL_NAMES: Record<ModelTier, string> = {
+	haiku: "claude-haiku-4-5-20251001",
+	sonnet: "claude-sonnet-4-5-20250929",
+	opus: "claude-opus-4-5-20251101",
+} as const;
+
+/**
  * Step status within a session
  */
 export type StepStatus =

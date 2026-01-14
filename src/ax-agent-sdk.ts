@@ -21,19 +21,9 @@ import type {
 	AxModelConfig,
 } from "@ax-llm/ax";
 import { sessionLogger } from "./logger.js";
+import { MODEL_NAMES, type ModelTier } from "./types.js";
 
 const logger = sessionLogger.child({ module: "ax-agent-sdk" });
-
-/**
- * Model name mapping
- */
-type ModelTier = "haiku" | "sonnet" | "opus";
-
-const MODEL_NAMES: Record<ModelTier, string> = {
-	haiku: "claude-3-5-haiku-20241022",
-	sonnet: "claude-sonnet-4-20250514",
-	opus: "claude-opus-4-5-20251101",
-};
 
 /**
  * Convert Ax chat prompt to a string prompt for the Agent SDK

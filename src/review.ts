@@ -12,18 +12,11 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
 import { AnnealingReview } from "./annealing-review.js";
 import { sessionLogger } from "./logger.js";
+import { MODEL_NAMES, type ModelTier } from "./types.js";
 import { verifyWork } from "./verification.js";
 
-/**
- * Model tiers for escalation
- */
-export type ModelTier = "haiku" | "sonnet" | "opus";
-
-const MODEL_NAMES: Record<ModelTier, string> = {
-	haiku: "claude-3-5-haiku-20241022",
-	sonnet: "claude-sonnet-4-20250514",
-	opus: "claude-opus-4-5-20251101",
-};
+// Re-export ModelTier for backwards compatibility
+export type { ModelTier } from "./types.js";
 
 /**
  * Review pass result

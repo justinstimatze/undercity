@@ -21,6 +21,7 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { sessionLogger } from "./logger.js";
+import { MODEL_NAMES } from "./types.js";
 
 const logger = sessionLogger.child({ module: "task-planner" });
 
@@ -117,7 +118,7 @@ After exploring, respond with ONLY this JSON (no other text):
 
 Start by exploring the codebase, then provide your plan.`,
 			options: {
-				model: "claude-sonnet-4-20250514",
+				model: MODEL_NAMES.sonnet,
 				maxTurns: 15,
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,

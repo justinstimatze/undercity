@@ -14,14 +14,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ComplexityLevel } from "./complexity.js";
-import type { AttemptRecord } from "./types.js";
+import type { AttemptRecord, ModelTier } from "./types.js";
+
+// Re-export ModelTier for backwards compatibility
+export type { ModelTier } from "./types.js";
 
 const METRICS_FILE = ".undercity/metrics.jsonl";
-
-/**
- * Model tier for routing
- */
-export type ModelTier = "haiku" | "sonnet" | "opus";
 
 /**
  * Success rate statistics for a group
