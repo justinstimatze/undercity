@@ -6,10 +6,12 @@
 import {
 	type BriefOptions,
 	type ConfigOptions,
+	type DecideOptions,
 	type GrindOptions,
 	handleBrief,
 	handleConfig,
 	handleDaemon,
+	handleDecide,
 	handleDspyReadiness,
 	handleGrind,
 	handleIndex,
@@ -98,6 +100,18 @@ export const mixedCommands: CommandModule = {
 			.action((options: BriefOptions, cmd) => {
 				const parentOpts = cmd.parent?.opts() || {};
 				handleBrief({ ...options, human: parentOpts.human || options.human });
+			});
+
+		// Decide command - view and resolve pending decisions (Mayor Model integration)
+		program
+			.command("decide")
+			.description("View and resolve pending decisions from task execution (JSON default)")
+			.option("--resolve <id>", "Resolve a specific decision by ID")
+			.option("--decision <text>", "The decision made (required with --resolve)")
+			.option("--reasoning <text>", "Reasoning for the decision")
+			.action((options: DecideOptions, cmd) => {
+				const parentOpts = cmd.parent?.opts() || {};
+				handleDecide({ ...options, human: parentOpts.human || options.human });
 			});
 
 		// Tuning command - view/manage learned routing profile

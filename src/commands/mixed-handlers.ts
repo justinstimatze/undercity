@@ -77,6 +77,14 @@ export interface UsageOptions {
 	human?: boolean;
 }
 
+export interface DecideOptions {
+	human?: boolean;
+	resolve?: string; // Decision ID to resolve
+	decision?: string; // The decision made
+	reasoning?: string; // Reasoning for the decision
+	list?: boolean; // Just list pending decisions
+}
+
 export interface PulseOptions {
 	human?: boolean;
 	watch?: boolean;
@@ -2342,4 +2350,151 @@ export async function handleUsage(options: UsageOptions): Promise<void> {
 	console.log(`  5-hour session: ${fiveHrColor(`${usage.fiveHourPercent}%`)}`);
 	console.log(`  Weekly:         ${weeklyColor(`${usage.weeklyPercent}%`)}`);
 	console.log(chalk.dim(`\n  Fetched: ${new Date(usage.fetchedAt).toLocaleTimeString()}`));
+}
+
+/**
+ * Decision data for JSON output
+ */
+interface DecideData {
+	pending: Array<{
+		id: string;
+		taskId: string;
+		question: string;
+		options?: string[];
+		context: string;
+		category: string;
+		capturedAt: string;
+	}>;
+	stats: {
+		pendingCount: number;
+		humanRequired: number;
+		pmDecidable: number;
+		autoHandle: number;
+	};
+}
+
+/**
+ * Handle the decide command - view and resolve pending decisions
+ *
+ * Decisions are captured during task execution when agents need guidance.
+ * This command lets Claude Code (the mayor) review and resolve them.
+ */
+export async function handleDecide(options: DecideOptions): Promise<void> {
+	const {
+		getPendingDecisions,
+		getDecisionsByCategory,
+		resolveDecision,
+		getDecisionStats,
+	} = await import("../decision-tracker.js");
+
+	// Resolve a specific decision
+	if (options.resolve) {
+		if (!options.decision) {
+			console.log(chalk.red("Error: --decision is required when using --resolve"));
+			console.log(chalk.dim("Usage: undercity decide --resolve <id> --decision '<your decision>'"));
+			return;
+		}
+
+		const success = resolveDecision(options.resolve, {
+			resolvedBy: "human",
+			decision: options.decision,
+			reasoning: options.reasoning,
+		});
+
+		if (success) {
+			if (!options.human) {
+				console.log(JSON.stringify({ success: true, decisionId: options.resolve }));
+			} else {
+				console.log(chalk.green(`✓ Decision ${options.resolve} resolved`));
+			}
+		} else {
+			if (!options.human) {
+				console.log(JSON.stringify({ success: false, error: "Decision not found" }));
+			} else {
+				console.log(chalk.red(`✗ Decision ${options.resolve} not found`));
+			}
+		}
+		return;
+	}
+
+	// Get pending decisions
+	const allPending = getPendingDecisions();
+	const humanRequired = getDecisionsByCategory("human_required");
+	const pmDecidable = getDecisionsByCategory("pm_decidable");
+	const autoHandle = getDecisionsByCategory("auto_handle");
+	const stats = getDecisionStats();
+
+	const decideData: DecideData = {
+		pending: allPending.map((d) => ({
+			id: d.id,
+			taskId: d.taskId,
+			question: d.question,
+			options: d.options,
+			context: d.context,
+			category: d.category,
+			capturedAt: d.capturedAt,
+		})),
+		stats: {
+			pendingCount: allPending.length,
+			humanRequired: humanRequired.length,
+			pmDecidable: pmDecidable.length,
+			autoHandle: autoHandle.length,
+		},
+	};
+
+	// JSON output (default)
+	if (!options.human) {
+		console.log(JSON.stringify(decideData, null, 2));
+		return;
+	}
+
+	// Human-readable output
+	console.log(chalk.bold.cyan("\n⚖️  Pending Decisions\n"));
+
+	if (allPending.length === 0) {
+		console.log(chalk.dim("No pending decisions."));
+		console.log(chalk.dim(`Total resolved: ${stats.resolved}`));
+		return;
+	}
+
+	console.log(
+		chalk.bold(
+			`${allPending.length} pending: ${humanRequired.length} human-required, ${pmDecidable.length} PM-decidable, ${autoHandle.length} auto-handle`,
+		),
+	);
+	console.log();
+
+	// Show human-required first (most important)
+	if (humanRequired.length > 0) {
+		console.log(chalk.red.bold("🚨 Human Required:"));
+		for (const d of humanRequired.slice(0, 5)) {
+			console.log(chalk.red(`  [${d.id}] ${d.question}`));
+			console.log(chalk.dim(`    Task: ${d.taskId}`));
+			if (d.options?.length) {
+				console.log(chalk.dim(`    Options: ${d.options.join(" | ")}`));
+			}
+			console.log(chalk.dim(`    Context: ${d.context.substring(0, 100)}...`));
+			console.log();
+		}
+		if (humanRequired.length > 5) {
+			console.log(chalk.dim(`  ... and ${humanRequired.length - 5} more`));
+		}
+	}
+
+	// Show PM-decidable
+	if (pmDecidable.length > 0) {
+		console.log(chalk.yellow.bold("🤔 PM Decidable:"));
+		for (const d of pmDecidable.slice(0, 3)) {
+			console.log(chalk.yellow(`  [${d.id}] ${d.question}`));
+			console.log(chalk.dim(`    Task: ${d.taskId}`));
+		}
+		if (pmDecidable.length > 3) {
+			console.log(chalk.dim(`  ... and ${pmDecidable.length - 3} more`));
+		}
+		console.log();
+	}
+
+	// Show how to resolve
+	console.log(chalk.bold("To resolve a decision:"));
+	console.log(chalk.dim("  undercity decide --resolve <id> --decision '<your decision>' [--reasoning '<why>']"));
 }
