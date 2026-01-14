@@ -1,0 +1,336 @@
+# The Mayor Model: Claude Code + Undercity Integration
+
+## Vision
+
+Claude Code can't run continuously, but it can **delegate to a system that can** and **reconnect** when back. Undercity becomes an autonomous extension of Claude Code, not a separate tool.
+
+**The metaphor:** If Undercity is a small city and Claude Code is the mayor:
+- Mayor sets priorities and makes judgment calls
+- City runs autonomously, executing work
+- City reports back: what happened, what was learned, what needs the mayor's attention
+- Mayor benefits from everything the city discovers
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  CLAUDE CODE (The Mayor)                                    │
+│                                                             │
+│  Responsibilities:                                          │
+│  - Strategic direction (what to work on)                    │
+│  - Judgment calls (decisions workers can't make)            │
+│  - Context provision (what I know that workers need)        │
+│  - Knowledge consumption (learn from what city discovered)  │
+└─────────────────────────────────────────────────────────────┘
+        │                                          ▲
+        │ delegate tasks                           │ report outcomes
+        │ provide context                          │ surface decisions
+        │ set priorities                           │ share learnings
+        ▼                                          │
+┌─────────────────────────────────────────────────────────────┐
+│  UNDERCITY (The City)                                       │
+│                                                             │
+│  Responsibilities:                                          │
+│  - Autonomous execution (grind overnight)                   │
+│  - Parallel work (multiple worktrees)                       │
+│  - Verification (typecheck, test, lint)                     │
+│  - Knowledge accumulation (learn from outcomes)             │
+│  - Decision bubbling (escalate what needs the mayor)        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Current State vs Needed
+
+| Flow | Direction | Current | Status |
+|------|-----------|---------|--------|
+| Delegate tasks | Mayor → City | `undercity add "task"` | ✅ Works |
+| Run autonomously | City | `undercity grind` | ✅ Works |
+| Check status | City → Mayor | `undercity status` | ✅ Works |
+| Query learnings | City → Mayor | knowledge.ts exists | ❌ No query CLI |
+| See pending decisions | City → Mayor | decision-tracker exists | ❌ No inbox CLI |
+| Attach context | Mayor → City | - | ❌ Not implemented |
+| Get briefing | City → Mayor | - | ❌ Not implemented |
+
+## New Commands to Build
+
+### 1. `undercity brief` - The Morning Report
+
+**Purpose:** "What should I know since last time?"
+
+**Output:**
+```
+$ undercity brief
+
+📊 Undercity Status Report
+Since: 2024-01-12 18:00
+
+TASKS
+  ✅ Completed: 3
+     - Add caching to API endpoints (PR #234)
+     - Fix login redirect bug (PR #235)
+     - Update dependency versions (PR #236)
+
+  ❌ Failed: 1
+     - Refactor auth module
+       Reason: Verification failed after 3 attempts
+       Last error: Type error in src/auth/middleware.ts
+       Suggestion: May need architectural decision
+
+  🔄 In Progress: 2
+     - Add rate limiting (worker active)
+     - Improve error messages (queued)
+
+DECISIONS PENDING (2)
+  1. [architecture] Auth refactor: patch existing vs full rewrite?
+  2. [priority] Bug #567 blocks Feature #890 - proceed anyway?
+
+LEARNINGS (5 new)
+  - "This codebase uses barrel exports in src/index.ts"
+  - "API routes follow /api/v1/{resource} pattern"
+  - "Tests use factory functions in __tests__/helpers/"
+  ...
+
+Run 'undercity decide' to handle pending decisions.
+```
+
+**Implementation:**
+- Query tasks.json for completed/failed/in-progress since timestamp
+- Query decision-tracker for pending decisions
+- Query knowledge.ts for recent learnings
+- Format as human-readable report
+
+### 2. `undercity decide` - The Decision Inbox
+
+**Purpose:** Handle judgment calls that workers escalated.
+
+**Flow:**
+```
+$ undercity decide
+
+Decision 1 of 2:
+
+Task: Refactor auth module
+Worker encountered: Two valid approaches, need direction
+
+Context:
+  The auth module has grown complex. Worker identified two paths:
+
+  Option A: Patch existing
+    - Faster (estimated 2-3 files)
+    - Keeps backwards compatibility
+    - Tech debt remains
+
+  Option B: Full rewrite
+    - Cleaner architecture
+    - Breaking change for auth consumers
+    - 5-7 files affected
+
+Worker's assessment: "Option B is cleaner but Option A is safer.
+I don't have enough context on downstream consumers to decide."
+
+Your decision: [A/B/skip/context] > B
+
+Decision recorded. Worker will proceed with full rewrite.
+
+---
+
+Decision 2 of 2:
+...
+```
+
+**Implementation:**
+- Load pending decisions from decision-tracker
+- Display context and options
+- Record human choice
+- Mark decision as resolved so worker can continue
+
+### 3. `undercity add --context` - Context-Aware Delegation
+
+**Purpose:** Pass relevant context from current session to the task.
+
+**Usage:**
+```bash
+# Simple - just the task
+undercity add "implement caching"
+
+# With context - what the mayor knows
+undercity add "implement caching" --context "prefer Redis over in-memory, see src/config for connection setup"
+
+# With file context - attach relevant files
+undercity add "fix auth bug" --files src/auth/middleware.ts src/auth/types.ts
+```
+
+**Implementation:**
+- Store context alongside task in tasks.json
+- Worker receives context in initial prompt
+- Context survives task decomposition (passed to subtasks)
+
+**Task schema addition:**
+```typescript
+interface Task {
+  id: string;
+  objective: string;
+  status: TaskStatus;
+  // New fields
+  mayorContext?: string;        // Free-form context from mayor
+  relevantFiles?: string[];     // Files mayor was looking at
+  sessionId?: string;           // Which session created this
+  constraints?: string[];       // "must use Redis", "no breaking changes"
+}
+```
+
+## Daily Workflow
+
+### Morning Reconnect
+```bash
+# See what happened overnight
+undercity brief
+
+# Handle any decisions that need me
+undercity decide
+
+# Review and merge completed PRs
+gh pr list --author="undercity-worker"
+```
+
+### During the Day
+```bash
+# In Claude Code conversation, delegate work
+undercity add "implement feature X" --context "discussed approach with user, prefer option B"
+
+# Check on progress
+undercity status
+
+# If something needs immediate attention
+undercity grind --task task-123  # Run specific task now
+```
+
+### Before Disconnecting
+```bash
+# Queue up overnight work
+undercity add "comprehensive test coverage for auth module"
+undercity add "refactor database queries for performance"
+undercity add "update documentation for new API endpoints"
+
+# Set it running
+undercity grind --background
+
+# Or schedule for later
+undercity grind --after "22:00"
+```
+
+## Knowledge Flow
+
+### What the Mayor Shares → City
+1. **Task context** - "We discussed X, prefer Y approach"
+2. **Constraints** - "No breaking changes", "Must be backwards compatible"
+3. **Relevant files** - Files the mayor was examining
+4. **Session decisions** - Choices made in conversation
+
+### What the City Shares → Mayor
+1. **Outcomes** - What succeeded/failed
+2. **Learnings** - Patterns discovered, gotchas found
+3. **Decisions made** - What the city decided autonomously
+4. **Decisions needed** - What requires the mayor's judgment
+
+### Knowledge Persistence
+```
+.undercity/
+├── knowledge.json        # Accumulated learnings
+├── decisions.json        # Decision history
+├── tasks.json           # Task board
+└── mayor-context/       # Context from mayor sessions
+    ├── session-abc.json
+    └── session-def.json
+```
+
+## Integration with Claude Code
+
+### Option A: CLI Commands (Simple)
+Claude Code calls undercity CLI directly:
+```bash
+undercity brief
+undercity add "task" --context "..."
+undercity decide
+```
+
+### Option B: MCP Server (Rich)
+Undercity exposes MCP (Model Context Protocol) interface:
+```
+undercity://brief          → Get status report
+undercity://add            → Queue task with context
+undercity://decide/123     → Make decision on specific item
+undercity://knowledge/auth → Query learnings about auth
+```
+
+**Recommendation:** Start with CLI (Option A), add MCP later if needed.
+
+## Implementation Plan
+
+### Phase 1: Brief Command
+1. Add `undercity brief` command
+2. Query tasks, decisions, knowledge
+3. Format readable report
+4. Add `--since` flag for time range
+5. Add `--json` flag for programmatic use
+
+### Phase 2: Decide Command
+1. Add `undercity decide` command
+2. Interactive decision flow
+3. Record decisions to decision-tracker
+4. Signal workers to continue
+
+### Phase 3: Context Passing
+1. Extend task schema with context fields
+2. Add `--context` and `--files` flags to `undercity add`
+3. Inject context into worker prompts
+4. Pass context through decomposition
+
+### Phase 4: Knowledge Query
+1. Add `undercity knowledge search "query"` command
+2. Semantic search over learnings
+3. Surface relevant learnings in brief
+4. Auto-inject learnings into related tasks
+
+## Success Metrics
+
+| Metric | Target | How to Measure |
+|--------|--------|----------------|
+| Tasks completed overnight | >80% success | Track in capability-ledger |
+| Decisions needing mayor | <20% of tasks | Count bubbled decisions |
+| Knowledge reuse | Learnings cited in tasks | Track in worker output |
+| Morning review time | <10 minutes | Time to process brief + decide |
+
+## Open Questions
+
+1. **Decision timeout** - If mayor doesn't respond, should city:
+   - Wait indefinitely?
+   - Make best guess after N hours?
+   - Skip task and move on?
+
+2. **Context size** - How much context is too much?
+   - Token limits on worker prompts
+   - Diminishing returns on context volume
+
+3. **Knowledge pruning** - When learnings conflict or become stale:
+   - Manual curation?
+   - Confidence decay over time?
+   - Contradiction detection?
+
+4. **Multi-mayor** - If multiple Claude Code sessions interact:
+   - Merge contexts?
+   - Conflict resolution?
+   - Session isolation?
+
+---
+
+## Summary
+
+The Mayor Model transforms Undercity from "a separate batch tool" into "Claude Code's autonomous arm." The mayor (Claude Code) sets direction and makes judgment calls; the city (Undercity) executes continuously and reports back.
+
+**Key commands:**
+- `undercity brief` - Morning report
+- `undercity decide` - Handle escalated decisions
+- `undercity add --context` - Delegate with context
+
+**Core principle:** Maximize value per unit of mayor attention. The city should run autonomously 80%+ of the time, only surfacing what truly needs human/mayor judgment.
