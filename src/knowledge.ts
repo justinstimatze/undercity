@@ -72,6 +72,14 @@ function getKnowledgePath(stateDir: string = DEFAULT_STATE_DIR): string {
 
 /**
  * Generate a unique learning ID
+ *
+ * Creates a unique identifier for each learning by combining:
+ * - A base36 encoded timestamp (compact representation of current time)
+ * - A random 6-character base36 string (prevents collisions)
+ *
+ * Example output: 'learn-xxxxxx-xxxxxx'
+ *
+ * @returns A unique, URL-safe learning identifier
  */
 function generateLearningId(): string {
 	const timestamp = Date.now().toString(36);
