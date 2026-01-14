@@ -896,8 +896,9 @@ export class TaskWorker {
 					}
 
 					// Record task-file patterns for future suggestions
+					// Use getFilesFromLastCommit since we already committed
 					try {
-						const modifiedFiles = this.getModifiedFiles();
+						const modifiedFiles = this.getFilesFromLastCommit();
 						if (modifiedFiles.length > 0) {
 							recordTaskFiles(taskId, task, modifiedFiles, true);
 							output.debug(`Recorded task-file pattern: ${modifiedFiles.length} files`, { taskId });
@@ -1765,16 +1766,32 @@ RULES:
 	}
 
 	/**
-	 * Get list of modified files in the working directory
+	 * Get list of modified files in the working directory (uncommitted changes)
 	 */
 	private getModifiedFiles(): string[] {
 		try {
-			const output = execFileSync("git", ["diff", "--name-only", "HEAD"], {
+			const result = execFileSync("git", ["diff", "--name-only", "HEAD"], {
 				encoding: "utf-8",
 				cwd: this.workingDirectory,
 			}).trim();
-			if (!output) return [];
-			return output.split("\n").filter((f) => f.length > 0);
+			if (!result) return [];
+			return result.split("\n").filter((f) => f.length > 0);
+		} catch {
+			return [];
+		}
+	}
+
+	/**
+	 * Get list of files from the last commit (after commit has been made)
+	 */
+	private getFilesFromLastCommit(): string[] {
+		try {
+			const result = execFileSync("git", ["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"], {
+				encoding: "utf-8",
+				cwd: this.workingDirectory,
+			}).trim();
+			if (!result) return [];
+			return result.split("\n").filter((f) => f.length > 0);
 		} catch {
 			return [];
 		}
