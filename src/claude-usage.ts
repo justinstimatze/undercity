@@ -35,6 +35,10 @@ export interface ClaudeUsage {
 	error?: string;
 	needsLogin?: boolean;
 	cached?: boolean;
+	/** Extra usage enabled (pay-per-use beyond plan limits) */
+	extraUsageEnabled?: boolean;
+	/** Extra usage spend if enabled (e.g., "$5.23") */
+	extraUsageSpend?: string;
 }
 
 const USAGE_URL = "https://claude.ai/settings/usage";
@@ -194,7 +198,22 @@ export async function fetchClaudeUsage(forceRefresh = false): Promise<ClaudeUsag
 			}
 		}
 
-		const usage = { fiveHour, weekly };
+		// Check for extra usage (pay-per-use beyond plan limits)
+		// Look for patterns like "Extra usage", "Additional usage", or dollar amounts in usage context
+		let extraUsageEnabled = false;
+		let extraUsageSpend: string | undefined;
+
+		const extraUsageMatch = pageText.match(/(?:extra|additional)\s*usage/i);
+		if (extraUsageMatch) {
+			extraUsageEnabled = true;
+			// Try to find a dollar amount near extra usage mention
+			const spendMatch = pageText.match(/(?:extra|additional)\s*usage[\s\S]*?\$(\d+(?:\.\d{2})?)/i);
+			if (spendMatch) {
+				extraUsageSpend = `$${spendMatch[1]}`;
+			}
+		}
+
+		const usage = { fiveHour, weekly, extraUsageEnabled, extraUsageSpend };
 
 		await context.close();
 
@@ -213,6 +232,8 @@ export async function fetchClaudeUsage(forceRefresh = false): Promise<ClaudeUsag
 			weeklyPercent: usage.weekly ?? 0,
 			fetchedAt: new Date().toISOString(),
 			success: true,
+			extraUsageEnabled: usage.extraUsageEnabled || undefined,
+			extraUsageSpend: usage.extraUsageSpend,
 		};
 
 		// Cache successful result for 5 minutes

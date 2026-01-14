@@ -133,6 +133,8 @@ interface PulseData {
 			fiveHourPercent?: number;
 			weeklyPercent?: number;
 			observedAt?: string;
+			extraUsageEnabled?: boolean;
+			extraUsageSpend?: string;
 		};
 		recentActivity: {
 			completedLastHour: number;
@@ -171,13 +173,21 @@ export async function handlePulse(options: PulseOptions): Promise<void> {
 	const tracker = new RateLimitTracker(savedState ?? undefined);
 
 	// Auto-fetch Claude Max usage from claude.ai (see claude-usage.ts for the sketchy details)
-	let liveUsage: { fiveHourPercent?: number; weeklyPercent?: number; observedAt?: string } | null = null;
+	let liveUsage: {
+		fiveHourPercent?: number;
+		weeklyPercent?: number;
+		observedAt?: string;
+		extraUsageEnabled?: boolean;
+		extraUsageSpend?: string;
+	} | null = null;
 	const fetchedUsage = await fetchClaudeUsage();
 	if (fetchedUsage.success) {
 		liveUsage = {
 			fiveHourPercent: fetchedUsage.fiveHourPercent,
 			weeklyPercent: fetchedUsage.weeklyPercent,
 			observedAt: fetchedUsage.fetchedAt,
+			extraUsageEnabled: fetchedUsage.extraUsageEnabled,
+			extraUsageSpend: fetchedUsage.extraUsageSpend,
 		};
 	}
 
@@ -462,13 +472,21 @@ export async function handleBrief(options: BriefOptions): Promise<void> {
 	const tracker = new RateLimitTracker(savedState ?? undefined);
 
 	// Auto-fetch Claude Max usage from claude.ai (see claude-usage.ts for the sketchy details)
-	let liveUsage: { fiveHourPercent?: number; weeklyPercent?: number; observedAt?: string } | null = null;
+	let liveUsage: {
+		fiveHourPercent?: number;
+		weeklyPercent?: number;
+		observedAt?: string;
+		extraUsageEnabled?: boolean;
+		extraUsageSpend?: string;
+	} | null = null;
 	const fetchedUsage = await fetchClaudeUsage();
 	if (fetchedUsage.success) {
 		liveUsage = {
 			fiveHourPercent: fetchedUsage.fiveHourPercent,
 			weeklyPercent: fetchedUsage.weeklyPercent,
 			observedAt: fetchedUsage.fetchedAt,
+			extraUsageEnabled: fetchedUsage.extraUsageEnabled,
+			extraUsageSpend: fetchedUsage.extraUsageSpend,
 		};
 	}
 
