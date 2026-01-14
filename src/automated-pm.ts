@@ -2,13 +2,13 @@
  * Automated Product Manager
  *
  * Handles judgment calls that would otherwise require human attention.
- * Uses research, past decisions, and knowledge base to make informed choices.
+ * Uses Ax/DSPy for self-improving decisions based on past outcomes.
  * Only escalates truly ambiguous or high-stakes decisions to human.
  *
  * Designed for sustained autonomous operation.
  */
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { makeDecisionAx } from "./ax-programs.js";
 import {
 	type ConfidenceLevel,
 	type DecisionPoint,
@@ -109,109 +109,10 @@ async function gatherPMContext(decision: DecisionPoint, stateDir: string): Promi
 }
 
 /**
- * Build PM prompt with gathered context
- */
-function buildPMPrompt(decision: DecisionPoint, context: PMContext): string {
-	const lines: string[] = [];
-
-	lines.push("You are an automated Product Manager making a judgment call for an autonomous coding system.");
-	lines.push("Your goal: Make a decision that keeps the system running efficiently without human intervention.");
-	lines.push("");
-	lines.push("## Decision Needed");
-	lines.push(`Question: ${decision.question}`);
-	lines.push(`Context: ${decision.context}`);
-	if (decision.options && decision.options.length > 0) {
-		lines.push(`Options: ${decision.options.join(" OR ")}`);
-	}
-	lines.push("");
-
-	if (context.similarDecisions.length > 0) {
-		lines.push("## Similar Past Decisions");
-		for (const d of context.similarDecisions) {
-			lines.push(`- "${d.question}" → Decided: "${d.decision}" → Outcome: ${d.outcome}`);
-		}
-		lines.push("");
-	}
-
-	if (context.relevantKnowledge.length > 0) {
-		lines.push("## Relevant Knowledge");
-		for (const k of context.relevantKnowledge) {
-			lines.push(`- ${k}`);
-		}
-		lines.push("");
-	}
-
-	if (context.relevantFiles.length > 0) {
-		lines.push("## Files Typically Involved");
-		lines.push(context.relevantFiles.join(", "));
-		lines.push("");
-	}
-
-	if (context.projectPatterns.length > 0) {
-		lines.push("## Project Patterns");
-		for (const p of context.projectPatterns) {
-			lines.push(`- ${p}`);
-		}
-		lines.push("");
-	}
-
-	lines.push("## Decision Guidelines");
-	lines.push("- Favor the simpler, less risky approach when outcomes are similar");
-	lines.push("- If past similar decisions succeeded, follow that pattern");
-	lines.push("- If this could break things badly, recommend escalating to human");
-	lines.push("- Be decisive - avoid analysis paralysis");
-	lines.push("");
-	lines.push("## Response Format");
-	lines.push("Respond with JSON only:");
-	lines.push("```json");
-	lines.push("{");
-	lines.push('  "decision": "what to do",');
-	lines.push('  "reasoning": "brief explanation",');
-	lines.push('  "confidence": "high|medium|low",');
-	lines.push('  "escalate": false');
-	lines.push("}");
-	lines.push("```");
-	lines.push("");
-	lines.push("Set escalate=true ONLY if:");
-	lines.push("- This involves security/auth/payments");
-	lines.push("- This could cause data loss");
-	lines.push("- You genuinely can't decide (truly 50/50)");
-	lines.push("- Breaking backwards compatibility");
-
-	return lines.join("\n");
-}
-
-/**
- * Parse PM response
- */
-function parsePMResponse(response: string): PMDecisionResult | null {
-	try {
-		// Extract JSON from response
-		const jsonMatch = response.match(/\{[\s\S]*?\}/);
-		if (!jsonMatch) {
-			return null;
-		}
-
-		const parsed = JSON.parse(jsonMatch[0]);
-
-		return {
-			decision: parsed.decision || "proceed with default approach",
-			reasoning: parsed.reasoning || "no reasoning provided",
-			confidence: (parsed.confidence as ConfidenceLevel) || "medium",
-			escalateToHuman: parsed.escalate === true,
-			tokensUsed: 0, // Will be updated by caller
-		};
-	} catch {
-		return null;
-	}
-}
-
-/**
  * Have the automated PM make a decision
  */
 export async function pmDecide(decision: DecisionPoint, stateDir: string = ".undercity"): Promise<PMDecisionResult> {
 	const startTime = Date.now();
-	let tokensUsed = 0;
 
 	try {
 		// Gather context
@@ -233,57 +134,42 @@ export async function pmDecide(decision: DecisionPoint, stateDir: string = ".und
 			};
 		}
 
-		// Need LLM for nuanced decision
-		const prompt = buildPMPrompt(decision, context);
-		let result = "";
+		// Use Ax/DSPy for self-improving decision making
+		const similarDecisionsStr = context.similarDecisions
+			.map((d) => `Q: ${d.question}\nDecision: ${d.decision}\nOutcome: ${d.outcome}`)
+			.join("\n\n");
 
-		for await (const message of query({
-			prompt,
-			options: {
-				model: "claude-3-5-haiku-20241022", // Fast and cheap for PM decisions
-				allowedTools: [],
-			},
-		})) {
-			if (message.type === "result") {
-				const msg = message as Record<string, unknown>;
-				if (msg.subtype === "success") {
-					result = msg.result as string;
-				}
-				// Extract token usage from result message
-				const usage = msg.usage as { inputTokens?: number; outputTokens?: number } | undefined;
-				if (usage) {
-					tokensUsed = (usage.inputTokens || 0) + (usage.outputTokens || 0);
-				}
-			}
-		}
+		const relevantKnowledgeStr = context.relevantKnowledge.join("\n");
 
-		const parsed = parsePMResponse(result);
-		if (!parsed) {
-			// Couldn't parse - be safe, escalate
-			sessionLogger.warn({ decisionId: decision.id }, "PM couldn't parse response, escalating");
-			return {
-				decision: "unable to decide",
-				reasoning: "Failed to parse PM response",
-				confidence: "low",
-				escalateToHuman: true,
-				tokensUsed,
-			};
-		}
+		const axResult = await makeDecisionAx(
+			decision.question,
+			decision.context,
+			decision.options?.join(", ") || "No specific options provided",
+			similarDecisionsStr || "No similar past decisions",
+			relevantKnowledgeStr || "No relevant knowledge available",
+			stateDir,
+		);
 
-		parsed.tokensUsed = tokensUsed;
+		const pmResult: PMDecisionResult = {
+			decision: axResult.decision,
+			reasoning: axResult.reasoning,
+			confidence: axResult.confidence,
+			escalateToHuman: axResult.escalate,
+			tokensUsed: 0, // Ax doesn't expose token usage directly
+		};
 
 		sessionLogger.info(
 			{
 				decisionId: decision.id,
-				decision: parsed.decision,
-				confidence: parsed.confidence,
-				escalate: parsed.escalateToHuman,
+				decision: pmResult.decision,
+				confidence: pmResult.confidence,
+				escalate: pmResult.escalateToHuman,
 				durationMs: Date.now() - startTime,
 			},
-			"PM made decision",
+			"PM made decision via Ax",
 		);
 
-		return parsed;
+		return pmResult;
 	} catch (error) {
 		sessionLogger.error({ error: String(error), decisionId: decision.id }, "PM decision failed");
 
@@ -293,7 +179,7 @@ export async function pmDecide(decision: DecisionPoint, stateDir: string = ".und
 			reasoning: `PM error: ${String(error)}`,
 			confidence: "low",
 			escalateToHuman: true,
-			tokensUsed,
+			tokensUsed: 0,
 		};
 	}
 }
