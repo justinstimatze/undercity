@@ -31,6 +31,12 @@ import {
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { dualLogger } from "./dual-logger.js";
 import { generateToolsPrompt } from "./efficiency-tools.js";
+import {
+	clearPendingError,
+	formatFixSuggestionsForPrompt,
+	recordPendingError,
+	recordSuccessfulFix,
+} from "./error-fix-patterns.js";
 import { createAndCheckout } from "./git.js";
 import { logFastPathComplete, logFastPathFailed } from "./grind-events.js";
 import { findRelevantLearnings, formatLearningsForPrompt, markLearningsUsed } from "./knowledge.js";
@@ -270,6 +276,12 @@ export class TaskWorker {
 
 	/** Last agent output for knowledge extraction */
 	private lastAgentOutput: string = "";
+
+	/** Pending error signature (for tracking successful fixes) */
+	private pendingErrorSignature: string | null = null;
+
+	/** Files modified before current attempt (for tracking what fixed the error) */
+	private filesBeforeAttempt: string[] = [];
 
 	constructor(options: SoloOptions = {}) {
 		// Default 7 attempts allows full escalation: 2 haiku + 2 sonnet + 3 opus
@@ -766,6 +778,26 @@ export class TaskWorker {
 				if (verification.passed) {
 					output.workerVerification(taskId, true);
 
+					// Record successful fix if we had a pending error
+					if (this.pendingErrorSignature) {
+						try {
+							// Get list of files changed in this attempt
+							const currentFiles = this.getModifiedFiles();
+							const newFiles = currentFiles.filter((f) => !this.filesBeforeAttempt.includes(f));
+							const changedFiles = newFiles.length > 0 ? newFiles : currentFiles;
+
+							recordSuccessfulFix(
+								this.currentTaskId,
+								changedFiles,
+								`Fixed ${errorCategories.join(", ") || "verification"} error`,
+							);
+							output.debug(`Recorded fix for error pattern`, { taskId, files: changedFiles.length });
+						} catch {
+							// Non-critical
+						}
+						this.pendingErrorSignature = null;
+					}
+
 					// Warnings are logged but don't block success
 					// Cost-benefit: An extra agent call + verification for minor issues isn't worth it
 					// The warnings are in verification.feedback if someone wants to see them
@@ -884,7 +916,37 @@ export class TaskWorker {
 					success: false,
 					errorCategories,
 				});
-				this.lastFeedback = verification.feedback;
+
+				// Record error pattern for learning
+				const primaryCategory = errorCategories[0] || "unknown";
+				const errorMessage = verification.issues[0] || verification.feedback.slice(0, 200);
+				try {
+					this.pendingErrorSignature = recordPendingError(
+						this.currentTaskId,
+						primaryCategory,
+						errorMessage,
+						this.getModifiedFiles(),
+					);
+					this.filesBeforeAttempt = this.getModifiedFiles();
+				} catch {
+					// Non-critical
+				}
+
+				// Check for fix suggestions from previous similar errors
+				let fixSuggestion = "";
+				try {
+					fixSuggestion = formatFixSuggestionsForPrompt(primaryCategory, errorMessage);
+					if (fixSuggestion) {
+						output.debug("Found fix suggestions from previous errors", { taskId });
+					}
+				} catch {
+					// Non-critical
+				}
+
+				// Combine feedback with fix suggestions
+				this.lastFeedback = fixSuggestion
+					? `${verification.feedback}\n\n${fixSuggestion}`
+					: verification.feedback;
 
 				// Checkpoint: verification failed with errors
 				this.saveCheckpoint("verifying", {
@@ -954,6 +1016,16 @@ export class TaskWorker {
 			} catch {
 				// Non-critical
 			}
+		}
+
+		// Clear any pending error (we failed to fix it)
+		if (this.pendingErrorSignature) {
+			try {
+				clearPendingError(this.currentTaskId);
+			} catch {
+				// Non-critical
+			}
+			this.pendingErrorSignature = null;
 		}
 
 		return {
@@ -1670,6 +1742,22 @@ RULES:
 		}
 
 		return false;
+	}
+
+	/**
+	 * Get list of modified files in the working directory
+	 */
+	private getModifiedFiles(): string[] {
+		try {
+			const output = execFileSync("git", ["diff", "--name-only", "HEAD"], {
+				encoding: "utf-8",
+				cwd: this.workingDirectory,
+			}).trim();
+			if (!output) return [];
+			return output.split("\n").filter((f) => f.length > 0);
+		} catch {
+			return [];
+		}
 	}
 
 	/**
