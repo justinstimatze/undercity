@@ -1,14 +1,14 @@
 /**
  * Grind Event Logger
  *
- * Structured event logging for grind operations.
- * Writes to .undercity/grind-events.jsonl for easy consumption by Claude.
+ * Structured event logging optimized for post-grind analysis.
+ * Writes to .undercity/grind-events.jsonl.
  *
- * This module provides observability into grind runs:
- * - What tasks are being processed
- * - Why tasks succeed/fail
- * - Progress through batches
- * - Model routing decisions
+ * Design principles:
+ * - Events should be actionable (why did X happen?)
+ * - Failures include root cause and context
+ * - Minimal noise (no redundant fields)
+ * - Token usage tracked for cost analysis
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -16,12 +16,545 @@ import { join } from "node:path";
 
 const UNDERCITY_DIR = ".undercity";
 const EVENTS_FILE = "grind-events.jsonl";
-const MAX_EVENTS = 1000; // Keep last N events
+const MAX_EVENTS = 1000;
 
 /**
- * Event types for grind operations
+ * Failure reasons - categorized for easy filtering
+ */
+export type FailureReason =
+	| "no_changes" // Agent finished without modifying files
+	| "verification_typecheck" // TypeScript errors
+	| "verification_tests" // Test failures
+	| "verification_lint" // Lint errors
+	| "verification_build" // Build failed
+	| "max_attempts" // Exhausted all attempts
+	| "rebase_conflict" // Conflict during rebase
+	| "merge_conflict" // Conflict during merge
+	| "timeout" // Agent timed out
+	| "rate_limit" // Hit API rate limits
+	| "agent_error" // Agent threw an error
+	| "unknown"; // Uncategorized
+
+/**
+ * Event types - minimal set for what matters
  */
 export type GrindEventType =
+	| "grind_start"
+	| "grind_end"
+	| "task_start"
+	| "task_complete"
+	| "task_failed"
+	| "task_escalated"
+	| "rate_limit";
+
+/**
+ * Base event structure
+ */
+interface BaseEvent {
+	ts: string; // ISO timestamp
+	type: GrindEventType;
+	batch?: string; // Batch ID
+	task?: string; // Task ID
+}
+
+/**
+ * Grind session start
+ */
+interface GrindStartEvent extends BaseEvent {
+	type: "grind_start";
+	tasks: number;
+	parallelism: number;
+	models: Record<string, number>; // e.g., { haiku: 3, sonnet: 2 }
+}
+
+/**
+ * Grind session end
+ */
+interface GrindEndEvent extends BaseEvent {
+	type: "grind_end";
+	ok: number; // Successful
+	fail: number; // Failed
+	merged: number; // Merged to main
+	mins: number; // Duration in minutes
+	tokens?: number; // Total tokens used
+}
+
+/**
+ * Task started
+ */
+interface TaskStartEvent extends BaseEvent {
+	type: "task_start";
+	model: string;
+	obj: string; // Objective (truncated)
+}
+
+/**
+ * Task completed successfully
+ */
+interface TaskCompleteEvent extends BaseEvent {
+	type: "task_complete";
+	model: string;
+	attempts: number;
+	files: number;
+	tokens: number;
+	secs: number;
+	sha?: string;
+}
+
+/**
+ * Task failed
+ */
+interface TaskFailedEvent extends BaseEvent {
+	type: "task_failed";
+	reason: FailureReason;
+	model: string;
+	attempts: number;
+	escalations?: string[]; // e.g., ["haiku→sonnet@2"]
+	tokens: number;
+	secs: number;
+	error?: string; // First line of error
+}
+
+/**
+ * Model escalation during task
+ */
+interface TaskEscalatedEvent extends BaseEvent {
+	type: "task_escalated";
+	from: string;
+	to: string;
+	attempt: number;
+	why: string; // Escalation reason
+}
+
+/**
+ * Rate limit hit
+ */
+interface RateLimitEvent extends BaseEvent {
+	type: "rate_limit";
+	model: string;
+	wait?: number; // Wait time in seconds
+}
+
+type GrindEvent =
+	| GrindStartEvent
+	| GrindEndEvent
+	| TaskStartEvent
+	| TaskCompleteEvent
+	| TaskFailedEvent
+	| TaskEscalatedEvent
+	| RateLimitEvent;
+
+function getEventsPath(): string {
+	return join(process.cwd(), UNDERCITY_DIR, EVENTS_FILE);
+}
+
+function ensureDir(): void {
+	const dir = join(process.cwd(), UNDERCITY_DIR);
+	if (!existsSync(dir)) {
+		mkdirSync(dir, { recursive: true });
+	}
+}
+
+function writeEvent(event: GrindEvent): void {
+	ensureDir();
+	appendFileSync(getEventsPath(), `${JSON.stringify(event)}\n`);
+}
+
+/**
+ * Categorize an error string into a failure reason
+ */
+export function categorizeFailure(error: string): FailureReason {
+	const e = error.toLowerCase();
+
+	if (e.includes("0 writes") || e.includes("no changes") || e.includes("no_changes")) {
+		return "no_changes";
+	}
+	if (e.includes("typecheck") || e.includes("tsc") || e.includes("type error")) {
+		return "verification_typecheck";
+	}
+	if (e.includes("test") && (e.includes("fail") || e.includes("error"))) {
+		return "verification_tests";
+	}
+	if (e.includes("lint") || e.includes("biome")) {
+		return "verification_lint";
+	}
+	if (e.includes("build")) {
+		return "verification_build";
+	}
+	if (e.includes("rebase")) {
+		return "rebase_conflict";
+	}
+	if (e.includes("merge") && e.includes("conflict")) {
+		return "merge_conflict";
+	}
+	if (e.includes("timeout")) {
+		return "timeout";
+	}
+	if (e.includes("rate limit") || e.includes("429")) {
+		return "rate_limit";
+	}
+	if (e.includes("max attempts") || e.includes("exhausted")) {
+		return "max_attempts";
+	}
+
+	return "unknown";
+}
+
+/**
+ * Extract first meaningful line from error
+ */
+function firstLine(error: string): string {
+	const lines = error.split("\n").filter((l) => l.trim());
+	const first = lines[0] || error;
+	return first.length > 120 ? `${first.slice(0, 117)}...` : first;
+}
+
+// ============== Public API ==============
+
+export function logGrindStart(options: {
+	batchId: string;
+	taskCount: number;
+	parallelism: number;
+	modelDistribution?: Record<string, number>;
+}): void {
+	rotateIfNeeded();
+	writeEvent({
+		ts: new Date().toISOString(),
+		type: "grind_start",
+		batch: options.batchId,
+		tasks: options.taskCount,
+		parallelism: options.parallelism,
+		models: options.modelDistribution || {},
+	});
+}
+
+export function logGrindEnd(options: {
+	batchId: string;
+	successful: number;
+	failed: number;
+	merged: number;
+	durationMs: number;
+	totalTokens?: number;
+}): void {
+	writeEvent({
+		ts: new Date().toISOString(),
+		type: "grind_end",
+		batch: options.batchId,
+		ok: options.successful,
+		fail: options.failed,
+		merged: options.merged,
+		mins: Math.round(options.durationMs / 60000),
+		tokens: options.totalTokens,
+	});
+}
+
+export function logTaskStart(options: { batchId: string; taskId: string; objective: string; model: string }): void {
+	writeEvent({
+		ts: new Date().toISOString(),
+		type: "task_start",
+		batch: options.batchId,
+		task: options.taskId,
+		model: options.model,
+		obj: options.objective.length > 80 ? `${options.objective.slice(0, 77)}...` : options.objective,
+	});
+}
+
+export function logTaskComplete(options: {
+	batchId: string;
+	taskId: string;
+	model: string;
+	attempts: number;
+	fileCount: number;
+	tokens: number;
+	durationMs: number;
+	commitSha?: string;
+}): void {
+	writeEvent({
+		ts: new Date().toISOString(),
+		type: "task_complete",
+		batch: options.batchId,
+		task: options.taskId,
+		model: options.model,
+		attempts: options.attempts,
+		files: options.fileCount,
+		tokens: options.tokens,
+		secs: Math.round(options.durationMs / 1000),
+		sha: options.commitSha?.slice(0, 7),
+	});
+}
+
+export function logTaskFailed(options: {
+	batchId: string;
+	taskId: string;
+	error: string;
+	model: string;
+	attempts: number;
+	escalations?: string[];
+	tokens: number;
+	durationMs: number;
+}): void {
+	writeEvent({
+		ts: new Date().toISOString(),
+		type: "task_failed",
+		batch: options.batchId,
+		task: options.taskId,
+		reason: categorizeFailure(options.error),
+		model: options.model,
+		attempts: options.attempts,
+		escalations: options.escalations?.length ? options.escalations : undefined,
+		tokens: options.tokens,
+		secs: Math.round(options.durationMs / 1000),
+		error: firstLine(options.error),
+	});
+}
+
+export function logTaskEscalated(options: {
+	batchId: string;
+	taskId: string;
+	from: string;
+	to: string;
+	attempt: number;
+	reason: string;
+}): void {
+	writeEvent({
+		ts: new Date().toISOString(),
+		type: "task_escalated",
+		batch: options.batchId,
+		task: options.taskId,
+		from: options.from,
+		to: options.to,
+		attempt: options.attempt,
+		why: options.reason,
+	});
+}
+
+export function logRateLimit(options: { batchId?: string; model: string; waitSeconds?: number }): void {
+	writeEvent({
+		ts: new Date().toISOString(),
+		type: "rate_limit",
+		batch: options.batchId,
+		model: options.model,
+		wait: options.waitSeconds,
+	});
+}
+
+// ============== Reading Events ==============
+
+export function readRecentEvents(count = 50): GrindEvent[] {
+	const path = getEventsPath();
+	if (!existsSync(path)) return [];
+
+	const lines = readFileSync(path, "utf-8").trim().split("\n").filter(Boolean);
+	return lines.slice(-count).map((line) => {
+		try {
+			return JSON.parse(line) as GrindEvent;
+		} catch {
+			return { ts: new Date().toISOString(), type: "grind_end", ok: 0, fail: 0, merged: 0, mins: 0 } as GrindEndEvent;
+		}
+	});
+}
+
+export function getLastGrindSummary(): {
+	batchId?: string;
+	startedAt?: string;
+	endedAt?: string;
+	ok: number;
+	fail: number;
+	merged: number;
+	tokens: number;
+	failureBreakdown: Record<FailureReason, number>;
+} | null {
+	const events = readRecentEvents(500);
+	if (!events.length) return null;
+
+	// Find last grind_start
+	let startIdx = -1;
+	for (let i = events.length - 1; i >= 0; i--) {
+		if (events[i].type === "grind_start") {
+			startIdx = i;
+			break;
+		}
+	}
+	if (startIdx === -1) return null;
+
+	const session = events.slice(startIdx);
+	const start = session[0] as GrindStartEvent;
+	const end = session.find((e) => e.type === "grind_end") as GrindEndEvent | undefined;
+
+	const failures = session.filter((e) => e.type === "task_failed") as TaskFailedEvent[];
+	const completes = session.filter((e) => e.type === "task_complete") as TaskCompleteEvent[];
+
+	const failureBreakdown: Record<FailureReason, number> = {
+		no_changes: 0,
+		verification_typecheck: 0,
+		verification_tests: 0,
+		verification_lint: 0,
+		verification_build: 0,
+		max_attempts: 0,
+		rebase_conflict: 0,
+		merge_conflict: 0,
+		timeout: 0,
+		rate_limit: 0,
+		agent_error: 0,
+		unknown: 0,
+	};
+
+	for (const f of failures) {
+		failureBreakdown[f.reason]++;
+	}
+
+	const totalTokens =
+		completes.reduce((sum, c) => sum + c.tokens, 0) + failures.reduce((sum, f) => sum + f.tokens, 0);
+
+	return {
+		batchId: start.batch,
+		startedAt: start.ts,
+		endedAt: end?.ts,
+		ok: end?.ok ?? completes.length,
+		fail: end?.fail ?? failures.length,
+		merged: end?.merged ?? 0,
+		tokens: totalTokens,
+		failureBreakdown,
+	};
+}
+
+function rotateIfNeeded(): void {
+	const path = getEventsPath();
+	if (!existsSync(path)) return;
+
+	const lines = readFileSync(path, "utf-8").trim().split("\n").filter(Boolean);
+	if (lines.length > MAX_EVENTS) {
+		writeFileSync(path, `${lines.slice(-Math.floor(MAX_EVENTS / 2)).join("\n")}\n`);
+	}
+}
+
+export function clearEvents(): void {
+	const path = getEventsPath();
+	if (existsSync(path)) writeFileSync(path, "");
+}
+
+// ============== Legacy API (for backwards compatibility) ==============
+// These wrap the new API to avoid breaking existing callers
+
+export function startGrindSession(options: {
+	batchId: string;
+	taskCount: number;
+	maxCount?: number;
+	parallelism: number;
+	modelDistribution?: Record<string, number>;
+}): void {
+	logGrindStart(options);
+}
+
+export function endGrindSession(options: {
+	batchId: string;
+	successful: number;
+	failed: number;
+	merged: number;
+	durationMs: number;
+}): void {
+	logGrindEnd(options);
+}
+
+export function logTaskQueued(_options: {
+	batchId: string;
+	taskId: string;
+	objective: string;
+	recommendedModel: string;
+}): void {
+	// Removed - adds noise without value
+}
+
+export function logTaskDecomposed(_options: {
+	batchId: string;
+	taskId: string;
+	originalObjective: string;
+	subtaskCount: number;
+	subtasks: Array<{ objective: string }>;
+	reasoning: string;
+}): void {
+	// Removed - not useful for debugging
+}
+
+export function logTaskStarted(options: {
+	batchId: string;
+	taskId: string;
+	objective: string;
+	model: string;
+	worktreePath?: string;
+}): void {
+	logTaskStart({ batchId: options.batchId, taskId: options.taskId, objective: options.objective, model: options.model });
+}
+
+export function logTaskProgress(_options: { batchId: string; taskId: string; stage: string; details?: string }): void {
+	// Removed - too noisy, not actionable
+}
+
+// Legacy logTaskComplete is now the new format (same signature)
+
+// Legacy logTaskFailed - accept old format
+export function logTaskFailedLegacy(options: {
+	batchId: string;
+	taskId: string;
+	objective: string;
+	error: string;
+	durationMs?: number;
+	stage?: string;
+}): void {
+	logTaskFailed({
+		batchId: options.batchId,
+		taskId: options.taskId,
+		error: options.error,
+		model: "unknown",
+		attempts: 0,
+		tokens: 0,
+		durationMs: options.durationMs ?? 0,
+	});
+}
+
+export function logMergeStarted(_options: { batchId: string; taskId: string; branch: string }): void {
+	// Removed - merge is part of task lifecycle
+}
+
+export function logMergeComplete(_options: { batchId: string; taskId: string }): void {
+	// Removed - success logged in task_complete
+}
+
+export function logMergeFailed(_options: { batchId: string; taskId: string; error: string }): void {
+	// Removed - failure logged in task_failed with merge_conflict reason
+}
+
+export function logFastPathComplete(_options: {
+	batchId: string;
+	taskId: string;
+	objective: string;
+	durationMs: number;
+	modifiedFiles?: string[];
+	tool: string;
+}): void {
+	// Removed - fast path is rare and not useful for debugging
+}
+
+export function logFastPathFailed(_options: {
+	batchId: string;
+	taskId: string;
+	objective: string;
+	error: string;
+	tool: string;
+}): void {
+	// Removed - fast path fallback is expected behavior
+}
+
+export function logRateLimitHit(options: { batchId?: string; model: string; details?: string }): void {
+	logRateLimit({ batchId: options.batchId, model: options.model });
+}
+
+export function logError(_message: string, _options?: { batchId?: string; taskId?: string; error?: string }): void {
+	// Removed - errors are captured in task_failed
+}
+
+// Legacy types for backwards compat
+export type GrindEventType_Legacy =
 	| "grind_start"
 	| "grind_complete"
 	| "batch_start"
@@ -40,364 +573,6 @@ export type GrindEventType =
 	| "rate_limit_hit"
 	| "error";
 
-/**
- * A structured grind event
- */
-export interface GrindEvent {
-	timestamp: string;
-	type: GrindEventType;
-	batchId?: string;
-	taskId?: string;
-	message: string;
-	data?: Record<string, unknown>;
-}
-
-/**
- * Get the path to the events file
- */
-function getEventsPath(): string {
-	return join(process.cwd(), UNDERCITY_DIR, EVENTS_FILE);
-}
-
-/**
- * Ensure the .undercity directory exists
- */
-function ensureDir(): void {
-	const dir = join(process.cwd(), UNDERCITY_DIR);
-	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
-	}
-}
-
-/**
- * Log a grind event
- */
-export function logEvent(
-	type: GrindEventType,
-	message: string,
-	options?: {
-		batchId?: string;
-		taskId?: string;
-		data?: Record<string, unknown>;
-	},
-): void {
-	ensureDir();
-
-	const event: GrindEvent = {
-		timestamp: new Date().toISOString(),
-		type,
-		message,
-		...options,
-	};
-
-	const line = `${JSON.stringify(event)}\n`;
-	appendFileSync(getEventsPath(), line);
-}
-
-/**
- * Start a new grind session - clears old events and logs start
- */
-export function startGrindSession(options: {
-	batchId: string;
-	taskCount: number;
-	maxCount?: number;
-	parallelism: number;
-	modelDistribution?: Record<string, number>;
-}): void {
-	ensureDir();
-
-	// Rotate old events if file is too large
-	rotateEventsIfNeeded();
-
-	logEvent("grind_start", "Starting grind session", {
-		batchId: options.batchId,
-		data: {
-			taskCount: options.taskCount,
-			maxCount: options.maxCount,
-			parallelism: options.parallelism,
-			modelDistribution: options.modelDistribution,
-		},
-	});
-}
-
-/**
- * Log grind completion
- */
-export function endGrindSession(options: {
-	batchId: string;
-	successful: number;
-	failed: number;
-	merged: number;
-	durationMs: number;
-}): void {
-	logEvent("grind_complete", "Grind session complete", {
-		batchId: options.batchId,
-		data: {
-			successful: options.successful,
-			failed: options.failed,
-			merged: options.merged,
-			durationMs: options.durationMs,
-			durationMinutes: Math.round(options.durationMs / 60000),
-		},
-	});
-}
-
-/**
- * Log task being queued for processing
- */
-export function logTaskQueued(options: {
-	batchId: string;
-	taskId: string;
-	objective: string;
-	recommendedModel: string;
-}): void {
-	logEvent("task_queued", `Task queued: ${options.objective.substring(0, 60)}...`, {
-		batchId: options.batchId,
-		taskId: options.taskId,
-		data: {
-			objective: options.objective,
-			recommendedModel: options.recommendedModel,
-		},
-	});
-}
-
-/**
- * Log task decomposition
- */
-export function logTaskDecomposed(options: {
-	batchId: string;
-	taskId: string;
-	originalObjective: string;
-	subtaskCount: number;
-	subtasks: Array<{ objective: string }>;
-	reasoning: string;
-}): void {
-	logEvent("task_decomposed", `Task decomposed into ${options.subtaskCount} subtasks`, {
-		batchId: options.batchId,
-		taskId: options.taskId,
-		data: {
-			originalObjective: options.originalObjective,
-			subtaskCount: options.subtaskCount,
-			subtasks: options.subtasks.map((s) => s.objective.substring(0, 80)),
-			reasoning: options.reasoning,
-		},
-	});
-}
-
-/**
- * Log task execution started
- */
-export function logTaskStarted(options: {
-	batchId: string;
-	taskId: string;
-	objective: string;
-	model: string;
-	worktreePath?: string;
-}): void {
-	logEvent("task_started", `Task started with ${options.model}: ${options.objective.substring(0, 60)}...`, {
-		batchId: options.batchId,
-		taskId: options.taskId,
-		data: {
-			objective: options.objective,
-			model: options.model,
-			worktreePath: options.worktreePath,
-		},
-	});
-}
-
-/**
- * Log task progress (for long-running tasks)
- */
-export function logTaskProgress(options: { batchId: string; taskId: string; stage: string; details?: string }): void {
-	logEvent("task_progress", `Task progress: ${options.stage}`, {
-		batchId: options.batchId,
-		taskId: options.taskId,
-		data: {
-			stage: options.stage,
-			details: options.details,
-		},
-	});
-}
-
-/**
- * Log task completion
- */
-export function logTaskComplete(options: {
-	batchId: string;
-	taskId: string;
-	objective: string;
-	durationMs: number;
-	modifiedFiles?: string[];
-	commitSha?: string;
-}): void {
-	logEvent("task_complete", `Task complete: ${options.objective.substring(0, 60)}...`, {
-		batchId: options.batchId,
-		taskId: options.taskId,
-		data: {
-			objective: options.objective,
-			durationMs: options.durationMs,
-			durationSeconds: Math.round(options.durationMs / 1000),
-			modifiedFiles: options.modifiedFiles,
-			fileCount: options.modifiedFiles?.length ?? 0,
-			commitSha: options.commitSha,
-		},
-	});
-}
-
-/**
- * Log fast-path completion (task completed without LLM via ast-grep or similar)
- */
-export function logFastPathComplete(options: {
-	batchId: string;
-	taskId: string;
-	objective: string;
-	durationMs: number;
-	modifiedFiles?: string[];
-	tool: string; // e.g., "ast-grep", "jq", "simple-replace"
-}): void {
-	logEvent("fast_path_complete", `Fast-path complete: ${options.objective.substring(0, 60)}...`, {
-		batchId: options.batchId,
-		taskId: options.taskId,
-		data: {
-			objective: options.objective,
-			durationMs: options.durationMs,
-			durationSeconds: Math.round(options.durationMs / 1000),
-			modifiedFiles: options.modifiedFiles,
-			fileCount: options.modifiedFiles?.length ?? 0,
-			tool: options.tool,
-			tokensSaved: "~2000", // Rough estimate of tokens saved
-		},
-	});
-}
-
-/**
- * Log fast-path failure (attempted but failed, falling back to LLM)
- */
-export function logFastPathFailed(options: {
-	batchId: string;
-	taskId: string;
-	objective: string;
-	error: string;
-	tool: string;
-}): void {
-	logEvent("fast_path_failed", `Fast-path failed: ${options.error.substring(0, 80)}`, {
-		batchId: options.batchId,
-		taskId: options.taskId,
-		data: {
-			objective: options.objective,
-			error: options.error,
-			tool: options.tool,
-		},
-	});
-}
-
-/**
- * Log task failure
- */
-export function logTaskFailed(options: {
-	batchId: string;
-	taskId: string;
-	objective: string;
-	error: string;
-	durationMs?: number;
-	stage?: string;
-}): void {
-	logEvent("task_failed", `Task failed: ${options.error.substring(0, 100)}`, {
-		batchId: options.batchId,
-		taskId: options.taskId,
-		data: {
-			objective: options.objective,
-			error: options.error,
-			durationMs: options.durationMs,
-			stage: options.stage,
-		},
-	});
-}
-
-/**
- * Log merge started
- */
-export function logMergeStarted(options: { batchId: string; taskId: string; branch: string }): void {
-	logEvent("merge_started", `Merge started for ${options.taskId}`, {
-		batchId: options.batchId,
-		taskId: options.taskId,
-		data: { branch: options.branch },
-	});
-}
-
-/**
- * Log merge completion
- */
-export function logMergeComplete(options: { batchId: string; taskId: string }): void {
-	logEvent("merge_complete", `Merge complete for ${options.taskId}`, {
-		batchId: options.batchId,
-		taskId: options.taskId,
-	});
-}
-
-/**
- * Log merge failure
- */
-export function logMergeFailed(options: { batchId: string; taskId: string; error: string }): void {
-	logEvent("merge_failed", `Merge failed for ${options.taskId}: ${options.error.substring(0, 100)}`, {
-		batchId: options.batchId,
-		taskId: options.taskId,
-		data: { error: options.error },
-	});
-}
-
-/**
- * Log rate limit hit
- */
-export function logRateLimitHit(options: { batchId?: string; model: string; details?: string }): void {
-	logEvent("rate_limit_hit", `Rate limit hit for ${options.model}`, {
-		batchId: options.batchId,
-		data: { model: options.model, details: options.details },
-	});
-}
-
-/**
- * Log general error
- */
-export function logError(message: string, options?: { batchId?: string; taskId?: string; error?: string }): void {
-	logEvent("error", message, {
-		batchId: options?.batchId,
-		taskId: options?.taskId,
-		data: options?.error ? { error: options.error } : undefined,
-	});
-}
-
-/**
- * Read recent events from the log
- */
-export function readRecentEvents(count = 50): GrindEvent[] {
-	const eventsPath = getEventsPath();
-	if (!existsSync(eventsPath)) {
-		return [];
-	}
-
-	const content = readFileSync(eventsPath, "utf-8");
-	const lines = content.trim().split("\n").filter(Boolean);
-
-	// Get last N lines
-	const recentLines = lines.slice(-count);
-
-	return recentLines.map((line) => {
-		try {
-			return JSON.parse(line) as GrindEvent;
-		} catch {
-			return {
-				timestamp: new Date().toISOString(),
-				type: "error" as const,
-				message: `Failed to parse event: ${line.substring(0, 50)}`,
-			};
-		}
-	});
-}
-
-/**
- * Get current grind status from events
- */
 export function getCurrentGrindStatus(): {
 	isRunning: boolean;
 	batchId?: string;
@@ -410,8 +585,8 @@ export function getCurrentGrindStatus(): {
 	fastPathFailed: number;
 	lastEvent?: GrindEvent;
 } {
-	const events = readRecentEvents(200);
-	if (events.length === 0) {
+	const summary = getLastGrindSummary();
+	if (!summary) {
 		return {
 			isRunning: false,
 			tasksQueued: 0,
@@ -422,83 +597,16 @@ export function getCurrentGrindStatus(): {
 			fastPathFailed: 0,
 		};
 	}
-
-	// Find the most recent grind_start
-	let lastStartIdx = -1;
-	for (let i = events.length - 1; i >= 0; i--) {
-		if (events[i].type === "grind_start") {
-			lastStartIdx = i;
-			break;
-		}
-	}
-
-	if (lastStartIdx === -1) {
-		return {
-			isRunning: false,
-			tasksQueued: 0,
-			tasksStarted: 0,
-			tasksComplete: 0,
-			tasksFailed: 0,
-			fastPathComplete: 0,
-			fastPathFailed: 0,
-			lastEvent: events[events.length - 1],
-		};
-	}
-
-	const currentSessionEvents = events.slice(lastStartIdx);
-	const startEvent = currentSessionEvents[0];
-	const batchId = startEvent.batchId;
-
-	// Check if session completed
-	const isComplete = currentSessionEvents.some((e) => e.type === "grind_complete");
-
-	// Count events for this session
-	const tasksQueued = currentSessionEvents.filter((e) => e.type === "task_queued").length;
-	const tasksStarted = currentSessionEvents.filter((e) => e.type === "task_started").length;
-	const tasksComplete = currentSessionEvents.filter((e) => e.type === "task_complete").length;
-	const tasksFailed = currentSessionEvents.filter((e) => e.type === "task_failed").length;
-	const fastPathComplete = currentSessionEvents.filter((e) => e.type === "fast_path_complete").length;
-	const fastPathFailed = currentSessionEvents.filter((e) => e.type === "fast_path_failed").length;
 
 	return {
-		isRunning: !isComplete,
-		batchId,
-		startedAt: startEvent.timestamp,
-		tasksQueued,
-		tasksStarted,
-		tasksComplete,
-		tasksFailed,
-		fastPathComplete,
-		fastPathFailed,
-		lastEvent: currentSessionEvents[currentSessionEvents.length - 1],
+		isRunning: !summary.endedAt,
+		batchId: summary.batchId,
+		startedAt: summary.startedAt,
+		tasksQueued: 0,
+		tasksStarted: 0,
+		tasksComplete: summary.ok,
+		tasksFailed: summary.fail,
+		fastPathComplete: 0,
+		fastPathFailed: 0,
 	};
-}
-
-/**
- * Rotate events file if it's too large
- */
-function rotateEventsIfNeeded(): void {
-	const eventsPath = getEventsPath();
-	if (!existsSync(eventsPath)) {
-		return;
-	}
-
-	const content = readFileSync(eventsPath, "utf-8");
-	const lines = content.trim().split("\n").filter(Boolean);
-
-	if (lines.length > MAX_EVENTS) {
-		// Keep the last MAX_EVENTS/2 events
-		const keepLines = lines.slice(-Math.floor(MAX_EVENTS / 2));
-		writeFileSync(eventsPath, `${keepLines.join("\n")}\n`);
-	}
-}
-
-/**
- * Clear all events (for testing)
- */
-export function clearEvents(): void {
-	const eventsPath = getEventsPath();
-	if (existsSync(eventsPath)) {
-		writeFileSync(eventsPath, "");
-	}
 }

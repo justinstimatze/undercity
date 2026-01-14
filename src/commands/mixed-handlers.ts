@@ -1304,7 +1304,10 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 								logTaskComplete({
 									batchId,
 									taskId,
-									objective: taskResult.task,
+									model: taskResult.result?.model ?? modelTier,
+									attempts: taskResult.result?.attempts ?? 1,
+									fileCount: taskResult.modifiedFiles?.length ?? 0,
+									tokens: taskResult.result?.tokenUsage?.total ?? 0,
 									durationMs: batchDurationMs,
 									commitSha: taskResult.result?.commitSha,
 								});
@@ -1355,8 +1358,10 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 								logTaskFailed({
 									batchId,
 									taskId,
-									objective: taskResult.task,
 									error: errorMsg,
+									model: taskResult.result?.model ?? modelTier,
+									attempts: taskResult.result?.attempts ?? 1,
+									tokens: taskResult.result?.tokenUsage?.total ?? 0,
 									durationMs: batchDurationMs,
 								});
 
@@ -1411,8 +1416,10 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 						logTaskFailed({
 							batchId,
 							taskId,
-							objective: task.objective,
 							error: `Tier error: ${tierError}`,
+							model: modelTier,
+							attempts: 0,
+							tokens: 0,
 							durationMs: 0,
 						});
 
@@ -2105,9 +2112,24 @@ export async function handleStatus(options: StatusOptions): Promise<void> {
 
 		if (options.human) {
 			for (const event of events) {
-				const time = new Date(event.timestamp).toLocaleTimeString();
-				const taskPart = event.taskId ? ` [${event.taskId}]` : "";
-				console.log(`${chalk.dim(time)}${taskPart} ${chalk.bold(event.type)} ${event.message}`);
+				const time = new Date(event.ts).toLocaleTimeString();
+				const taskPart = event.task ? ` [${event.task.slice(0, 12)}]` : "";
+				// Construct message from event type and data
+				let msg = "";
+				if (event.type === "task_complete") {
+					const e = event as { model: string; attempts: number; secs: number };
+					msg = `${e.model} in ${e.attempts} attempts (${e.secs}s)`;
+				} else if (event.type === "task_failed") {
+					const e = event as { reason: string; model: string; error?: string };
+					msg = `${e.reason} [${e.model}] ${e.error || ""}`;
+				} else if (event.type === "grind_start") {
+					const e = event as { tasks: number; parallelism: number };
+					msg = `${e.tasks} tasks, parallelism ${e.parallelism}`;
+				} else if (event.type === "grind_end") {
+					const e = event as { ok: number; fail: number; mins: number };
+					msg = `${e.ok} ok, ${e.fail} fail in ${e.mins}m`;
+				}
+				console.log(`${chalk.dim(time)}${taskPart} ${chalk.bold(event.type)} ${msg}`);
 			}
 		} else {
 			console.log(JSON.stringify(events, null, 2));
