@@ -31,7 +31,7 @@ export type ComplexityLevel = "trivial" | "simple" | "standard" | "complex" | "c
  * | Level     | Planning | Workers | Validators | Model    | Validation Strategy |
  * |-----------|----------|---------|------------|----------|---------------------|
  * | Trivial   | None     | 1       | 0          | Haiku    | Fast path, no extra review |
- * | Simple    | None     | 1       | 1          | Sonnet   | Basic independent review |
+ * | Simple    | None     | 1       | 1          | Haiku    | Basic independent review |
  * | Standard  | Sonnet   | 1       | 2          | Sonnet   | Thorough independent review |
  * | Complex   | Opus     | 1       | 3          | Sonnet   | Comprehensive independent review |
  * | Critical  | Opus     | 1       | 5          | Sonnet   | Extensive independent review |
@@ -449,7 +449,7 @@ export function getTeamComposition(
 		},
 		simple: {
 			needsPlanning: false,
-			workerModel: "sonnet",
+			workerModel: "haiku",
 			validatorCount: 1,
 			validatorModel: "haiku",
 			independentValidators: true,

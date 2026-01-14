@@ -408,12 +408,12 @@ Default escalation settings balance retry attempts with cost:
 
 ```typescript
 maxAttempts: 7,        // Total attempts before failure
-maxRetriesPerTier: 2,  // Retries before escalating to next model
+maxRetriesPerTier: 3,  // Retries before escalating to next model
 ```
 
-**Why these values**: 7 attempts allows full escalation path (2 haiku + 2 sonnet + 3 opus).
-Previous default of 3 total attempts with 3 retries per tier created a dead escalation path
-where escalation would trigger but no attempts remained.
+**Why these values**: 7 attempts allows for 3 at first tier + 3 at second tier + 1 at final tier
+(or more at opus since it has its own `maxOpusRetries` setting). The 3 retries per tier
+prevents premature escalation to expensive models when the current tier just needs more attempts.
 
 ### Verification Cost
 

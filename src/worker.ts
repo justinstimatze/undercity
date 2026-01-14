@@ -355,7 +355,7 @@ export class TaskWorker {
 		this.maxOpusReviewPasses = options.maxOpusReviewPasses ?? this.maxReviewPassesPerTier * 3;
 		this.annealingAtOpus = options.annealingAtOpus ?? false;
 		// 2 retries per tier before escalating (was 3, but that's too slow)
-		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 2;
+		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
 		this.maxOpusRetries = options.maxOpusRetries ?? 7;
 		this.currentModel = this.startingModel;
 		this.metricsTracker = new MetricsTracker();

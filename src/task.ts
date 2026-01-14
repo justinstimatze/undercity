@@ -251,6 +251,8 @@ export interface AddTaskOptions {
 	priority?: number;
 	handoffContext?: HandoffContext;
 	path?: string;
+	/** If true, skip duplicate detection (for internal use, e.g., decomposition) */
+	skipDuplicateCheck?: boolean;
 }
 
 /**
@@ -420,7 +422,110 @@ export interface UpdateTaskParams {
 }
 
 /**
+ * Normalize objective text for comparison
+ * Strips prefixes, lowercases, normalizes whitespace
+ */
+function normalizeObjective(objective: string): string {
+	return objective
+		.toLowerCase()
+		.replace(/^\[[\w:]+\]\s*/i, "") // Remove [plan], [meta:triage], etc.
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+/**
+ * Extract significant words from objective (skip common words)
+ */
+function extractKeywords(objective: string): Set<string> {
+	const stopWords = new Set([
+		"a",
+		"an",
+		"the",
+		"to",
+		"in",
+		"on",
+		"at",
+		"for",
+		"of",
+		"and",
+		"or",
+		"is",
+		"it",
+		"be",
+		"as",
+		"with",
+		"that",
+		"this",
+		"from",
+	]);
+	const normalized = normalizeObjective(objective);
+	const words = normalized.split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w));
+	return new Set(words);
+}
+
+/**
+ * Calculate Jaccard similarity between two sets
+ */
+function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
+	if (a.size === 0 && b.size === 0) return 1;
+	const intersection = new Set([...a].filter((x) => b.has(x)));
+	const union = new Set([...a, ...b]);
+	return intersection.size / union.size;
+}
+
+/**
+ * Check if a task is a duplicate of an existing pending/in_progress task
+ * Returns the duplicate task if found, undefined otherwise
+ *
+ * Duplicate detection criteria:
+ * 1. Exact match (normalized): definitely duplicate
+ * 2. High keyword overlap (80%+) with sufficient substance: likely duplicate
+ *    - Requires at least 3 keywords in each set, or 2+ keywords in intersection
+ *    - This prevents false positives on short tasks like "Task 1" vs "Task 2"
+ */
+export function findDuplicateTask(
+	objective: string,
+	board: TaskBoard,
+): Task | undefined {
+	const normalized = normalizeObjective(objective);
+	const keywords = extractKeywords(objective);
+
+	// Only check pending and in_progress tasks
+	const activeTasks = board.tasks.filter((t) => t.status === "pending" || t.status === "in_progress");
+
+	for (const task of activeTasks) {
+		const taskNormalized = normalizeObjective(task.objective);
+
+		// Exact match (after normalization)
+		if (normalized === taskNormalized) {
+			return task;
+		}
+
+		// Keyword-based similarity check
+		const taskKeywords = extractKeywords(task.objective);
+
+		// Skip similarity check if either task is too short (< 3 keywords)
+		// This prevents "Task 1" and "Task 2" being flagged as duplicates
+		if (keywords.size < 3 || taskKeywords.size < 3) {
+			continue;
+		}
+
+		// Check for high keyword overlap
+		const intersection = new Set([...keywords].filter((k) => taskKeywords.has(k)));
+		const similarity = jaccardSimilarity(keywords, taskKeywords);
+
+		// Require 80% similarity AND at least 2 shared keywords
+		if (similarity >= 0.8 && intersection.size >= 2) {
+			return task;
+		}
+	}
+
+	return undefined;
+}
+
+/**
  * Add a task to the board
+ * Returns existing task if duplicate is detected (unless skipDuplicateCheck is set)
  */
 export function addTask(
 	objective: string,
@@ -430,6 +535,7 @@ export function addTask(
 	// Support both old signature (priority, path) and new signature (options)
 	let priority: number | undefined;
 	let handoffContext: HandoffContext | undefined;
+	let skipDuplicateCheck = false;
 	let taskPath = path;
 
 	if (typeof priorityOrOptions === "number") {
@@ -437,11 +543,21 @@ export function addTask(
 	} else if (priorityOrOptions) {
 		priority = priorityOrOptions.priority;
 		handoffContext = priorityOrOptions.handoffContext;
+		skipDuplicateCheck = priorityOrOptions.skipDuplicateCheck ?? false;
 		taskPath = priorityOrOptions.path ?? path;
 	}
 
 	return withLock(getLockPath(taskPath), () => {
 		const board = loadTaskBoard(taskPath);
+
+		// Check for duplicate task unless skipped
+		if (!skipDuplicateCheck) {
+			const duplicate = findDuplicateTask(objective, board);
+			if (duplicate) {
+				return duplicate;
+			}
+		}
+
 		const task: Task = {
 			id: generateTaskId(),
 			objective,
@@ -458,20 +574,34 @@ export function addTask(
 
 /**
  * Add multiple tasks to the board
+ * Skips duplicates automatically
  */
 export function addTasks(objectives: string[], path: string = DEFAULT_TASK_BOARD_PATH): Task[] {
 	return withLock(getLockPath(path), () => {
 		const board = loadTaskBoard(path);
-		const tasks: Task[] = objectives.map((objective, i) => ({
-			id: generateTaskId(),
-			objective,
-			status: "pending" as const,
-			priority: board.tasks.length + i,
-			createdAt: new Date(),
-		}));
-		board.tasks.push(...tasks);
+		const results: Task[] = [];
+
+		for (const objective of objectives) {
+			// Check for duplicate (including tasks just added in this batch)
+			const duplicate = findDuplicateTask(objective, board);
+			if (duplicate) {
+				results.push(duplicate);
+				continue;
+			}
+
+			const task: Task = {
+				id: generateTaskId(),
+				objective,
+				status: "pending" as const,
+				priority: board.tasks.length,
+				createdAt: new Date(),
+			};
+			board.tasks.push(task);
+			results.push(task);
+		}
+
 		saveTaskBoard(board, path);
-		return tasks;
+		return results;
 	});
 }
 

@@ -222,9 +222,9 @@ export class Orchestrator {
 		this.annealingAtOpus = options.annealingAtOpus ?? false;
 		this.pushOnSuccess = options.pushOnSuccess ?? false; // Default to no push - user must explicitly opt in
 		// Verification retry options with defaults
-		// 7 attempts allows full escalation: 2 haiku + 2 sonnet + 3 opus
+		// maxAttempts of 7 allows: 3 at first tier + 3 at second + 1 at third (or more at opus)
 		this.maxAttempts = options.maxAttempts ?? 7;
-		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 2;
+		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
 		this.maxReviewPassesPerTier = options.maxReviewPassesPerTier ?? 2;
 		this.maxOpusReviewPasses = options.maxOpusReviewPasses ?? 6;
 		// Health monitoring with defaults
