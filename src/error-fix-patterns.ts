@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { dirname, join } from "node:path";
 
 const DEFAULT_STATE_DIR = ".undercity";
+// Stores error-fix correlations - maps verification failures to successful fixes for learning
 const PATTERNS_FILE = "error-fix-patterns.json";
 
 /**
