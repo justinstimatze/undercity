@@ -5,14 +5,33 @@ Undercity is a multi-agent orchestrator for parallel task execution. It manages 
 ## Quick Reference
 
 ```bash
+# Task board
 undercity tasks                    # View task board
-undercity tasks add "description"  # Add a task
+undercity add "description"        # Add a task
+undercity complete <task-id>       # Mark task complete manually
+
+# Execution
 undercity grind                    # Run tasks (default: 1 task, sequential)
 undercity grind --parallel 3       # Run 3 agents in parallel
 undercity grind -n 5               # Process up to 5 tasks total
-undercity grind --parallel 3 -n 10 # 3 parallel agents, 10 tasks max
 undercity watch                    # Monitor running grind session
+
+# Proactive PM (task generation)
+undercity pm --propose             # Generate tasks from codebase analysis
+undercity pm "topic" --research    # Research a topic via web search
+undercity pm "topic" --ideate      # Full session: research + propose
+undercity pm "topic" --ideate --add # Add generated tasks to board
 ```
+
+## When to Use PM Commands
+
+Use `undercity pm` when:
+- **Board is empty**: Generate tasks from codebase analysis with `--propose`
+- **New direction**: Research a topic before adding tasks with `--research`
+- **Feature planning**: Full ideation session with `--ideate`
+- **User asks**: "what should we work on?" or "generate tasks for X"
+
+The PM uses web research, codebase analysis, and past patterns to generate relevant, actionable tasks.
 
 ## Task Board
 

@@ -811,6 +811,21 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		// Non-critical - continue without priming
 	}
 
+	// Check if task board is empty - suggest PM if so
+	try {
+		const { getAllTasks } = await import("../task.js");
+		const allTasks = getAllTasks();
+		const pendingTasks = allTasks.filter((t) => t.status === "pending" || t.status === "in_progress");
+		if (pendingTasks.length === 0) {
+			output.warning("Task board is empty - nothing to grind");
+			output.info("Generate tasks with: undercity pm --propose");
+			output.info("Or research a topic: undercity pm 'topic' --ideate");
+			return;
+		}
+	} catch {
+		// Continue - will fail later if board truly empty
+	}
+
 	// Track how many tasks we've processed (for -n flag)
 	let tasksProcessed = 0;
 

@@ -36,6 +36,17 @@ Multi-agent orchestrator with learning. Processes tasks from board with verifica
 - Uses past decisions + knowledge for context
 - Escalates only truly ambiguous decisions to human
 
+## When to Use PM Commands
+
+**Use `undercity pm` when:**
+- Task board is empty and user wants suggestions → `undercity pm --propose`
+- User asks "what should we work on?" → `undercity pm --propose`
+- User wants to explore a new feature/direction → `undercity pm "topic" --ideate`
+- User asks about best practices for X → `undercity pm "X best practices" --research`
+- User says "research X" or "generate tasks for X" → `undercity pm "X" --ideate --add`
+
+**Grind auto-suggests PM** when board is empty.
+
 ## Basic Commands
 
 **Primary commands** (Claude Code should use these):
