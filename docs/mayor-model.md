@@ -97,7 +97,74 @@ ATTENTION (1)
 - Query pending from tasks.json
 - Query rate limits from rate-limit-state.json
 - Query decisions from decision-tracker
+- Calculate sustainable pace based on remaining budget
 - Format as compact dashboard
+
+---
+
+### Rate-Aware Pacing
+
+**Problem:** Grind at full speed exhausts rate limits in ~2 hours, then idles. Not useful for overnight work.
+
+**Solution:** Pace work to spread evenly over target duration.
+
+**In `pulse` output:**
+```
+PACING
+  Budget: 1M tokens/5hr window
+  Used: 420K (42%)
+  Remaining: 580K tokens
+
+  Queue: 12 tasks (~50K tokens each estimated)
+  At full speed: exhausts in ~1.2 hours
+  Recommended: 1 task every 20min to last 4 hours
+
+  Current mode: --pace 8h (1 task/40min)
+```
+
+**New grind flags:**
+```bash
+# Spread work over duration
+undercity grind --pace 8h
+
+# Auto-pace to stay under threshold (default 80%)
+undercity grind --background
+undercity grind --background --max-usage 60%
+
+# Override: go fast, accept rate limit pauses
+undercity grind --no-pace
+```
+
+**Pacing algorithm:**
+```typescript
+interface PacingConfig {
+  targetDuration: number;      // e.g., 8 hours in ms
+  maxUsagePercent: number;     // e.g., 80%
+  tokenBudget: number;         // from rate limit config
+  tokensUsed: number;          // current usage
+  estimatedTokensPerTask: number; // from historical average
+}
+
+function calculateDelay(config: PacingConfig, queueSize: number): number {
+  const remainingBudget = config.tokenBudget * config.maxUsagePercent - config.tokensUsed;
+  const estimatedTotalTokens = queueSize * config.estimatedTokensPerTask;
+
+  if (estimatedTotalTokens <= remainingBudget) {
+    // Can finish within budget - pace over target duration
+    return config.targetDuration / queueSize;
+  } else {
+    // Budget constrained - pace to not exceed
+    const tasksAffordable = remainingBudget / config.estimatedTokensPerTask;
+    return config.targetDuration / tasksAffordable;
+  }
+}
+```
+
+**Sharing budget with Claude Code:**
+- Rate limits are per-account, shared between Claude Code and Undercity
+- Pulse should show total account usage, not just undercity's
+- If Claude Code is active, undercity should slow down
+- Consider: `--yield-to-interactive` flag that pauses grind when Claude Code session detected
 
 ---
 

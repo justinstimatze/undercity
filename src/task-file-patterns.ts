@@ -207,7 +207,7 @@ function calculateDecayFactor(lastUpdated: string | undefined): number {
 	const ageDays = ageMs / (1000 * 60 * 60 * 24);
 
 	// Exponential decay: halves every DECAY_HALF_LIFE_DAYS
-	return Math.pow(0.5, ageDays / DECAY_HALF_LIFE_DAYS);
+	return 0.5 ** (ageDays / DECAY_HALF_LIFE_DAYS);
 }
 
 /**

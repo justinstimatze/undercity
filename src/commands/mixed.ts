@@ -4,8 +4,10 @@
  */
 
 import {
+	type BriefOptions,
 	type ConfigOptions,
 	type GrindOptions,
+	handleBrief,
 	handleConfig,
 	handleDaemon,
 	handleDspyReadiness,
@@ -15,18 +17,22 @@ import {
 	handleIntrospect,
 	handleLimits,
 	handleOracle,
+	handlePulse,
 	handleServe,
 	handleSetup,
 	handleStatus,
 	handleTuning,
+	handleUsage,
 	handleWatch,
 	type IndexOptions,
 	type InitOptions,
 	type IntrospectOptions,
 	type OracleOptions,
+	type PulseOptions,
 	type ServeOptions,
 	type StatusOptions,
 	type TuningOptions,
+	type UsageOptions,
 } from "./mixed-handlers.js";
 import type { CommandModule } from "./types.js";
 
@@ -61,6 +67,38 @@ export const mixedCommands: CommandModule = {
 			.command("limits")
 			.description("Show current usage snapshot (use 'watch' for live dashboard)")
 			.action(() => handleLimits());
+
+		// Usage command - fetch Claude Max usage from claude.ai
+		program
+			.command("usage")
+			.description("Fetch Claude Max usage from claude.ai (requires one-time login)")
+			.option("--login", "Open browser to log in (saves session for future calls)")
+			.option("--clear", "Clear saved browser session")
+			.action((options: UsageOptions, cmd) => {
+				const parentOpts = cmd.parent?.opts() || {};
+				handleUsage({ ...options, human: parentOpts.human || options.human });
+			});
+
+		// Pulse command - quick state check (Mayor Model integration)
+		program
+			.command("pulse")
+			.description("Quick state check: active workers, queue, health, attention items (JSON default)")
+			.option("-w, --watch", "Live updating (like htop)")
+			.action((options: PulseOptions, cmd) => {
+				// Inherit --human from parent program if set
+				const parentOpts = cmd.parent?.opts() || {};
+				handlePulse({ ...options, human: parentOpts.human || options.human });
+			});
+
+		// Brief command - narrative summary (Mayor Model integration)
+		program
+			.command("brief")
+			.description("Narrative summary: accomplishments, failures, blockers, recommendations (JSON default)")
+			.option("--hours <n>", "Time window in hours (default: 24)", "24")
+			.action((options: BriefOptions, cmd) => {
+				const parentOpts = cmd.parent?.opts() || {};
+				handleBrief({ ...options, human: parentOpts.human || options.human });
+			});
 
 		// Tuning command - view/manage learned routing profile
 		program

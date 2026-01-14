@@ -42,3 +42,4 @@ overnight-*.log
 *.csv
 *.jsonl
 .test-grind-integration/
+.undercity/browser-data/

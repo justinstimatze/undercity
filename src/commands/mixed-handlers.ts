@@ -71,6 +71,624 @@ export interface TuningOptions {
 	clear?: boolean;
 }
 
+export interface UsageOptions {
+	login?: boolean;
+	clear?: boolean;
+	human?: boolean;
+}
+
+export interface PulseOptions {
+	human?: boolean;
+	watch?: boolean;
+}
+
+export interface BriefOptions {
+	human?: boolean;
+	hours?: string;
+}
+
+/**
+ * Pulse data structure for JSON output
+ */
+interface PulseData {
+	timestamp: string;
+	active: Array<{
+		taskId: string;
+		objective: string;
+		elapsed: string;
+		elapsedMs: number;
+		worktreePath: string;
+	}>;
+	queue: {
+		pending: number;
+		inProgress: number;
+		completed: number;
+		failed: number;
+		blocked: number;
+	};
+	health: {
+		rateLimit: {
+			fiveHourPercent: number;
+			weeklyPercent: number;
+			isPaused: boolean;
+			resumeAt?: string;
+		};
+		/** Mayor's observed rate limits (from Claude Code status bar) */
+		mayorUsage?: {
+			fiveHourPercent?: number;
+			weeklyPercent?: number;
+			observedAt?: string;
+		};
+		recentActivity: {
+			completedLastHour: number;
+			failedLastHour: number;
+		};
+	};
+	pacing: {
+		tokenBudget: number;
+		tokensUsed: number;
+		remaining: number;
+		percentUsed: number;
+		queueSize: number;
+		estimatedTokensPerTask: number;
+		sustainablePaceTasksPerHour: number;
+	};
+	attention: Array<{
+		type: "decision" | "failure" | "rate_limit";
+		message: string;
+		id?: string;
+	}>;
+}
+
+/**
+ * Handle the pulse command - quick state check
+ *
+ * Shows active workers, queue status, health metrics, and items needing attention.
+ * Fits on one screen, designed for quick glances.
+ */
+export async function handlePulse(options: PulseOptions): Promise<void> {
+	const { getAllTasks, getTaskBoardSummary } = await import("../task.js");
+	const { getPendingDecisions, getDecisionsByCategory } = await import("../decision-tracker.js");
+	const { fetchClaudeUsage } = await import("../claude-usage.js");
+
+	const persistence = new Persistence();
+	const savedState = persistence.getRateLimitState();
+	const tracker = new RateLimitTracker(savedState ?? undefined);
+
+	// Auto-fetch Claude Max usage from claude.ai (see claude-usage.ts for the sketchy details)
+	let mayorUsage: { fiveHourPercent?: number; weeklyPercent?: number; observedAt?: string } | null = null;
+	const liveUsage = await fetchClaudeUsage();
+	if (liveUsage.success) {
+		mayorUsage = {
+			fiveHourPercent: liveUsage.fiveHourPercent,
+			weeklyPercent: liveUsage.weeklyPercent,
+			observedAt: liveUsage.fetchedAt,
+		};
+	}
+
+	// Gather data
+	const activeWorktrees = persistence.getAllActiveWorktrees();
+	const allTasks = getAllTasks();
+	const summary = getTaskBoardSummary();
+	const pendingDecisions = getPendingDecisions();
+	const humanRequiredDecisions = getDecisionsByCategory("human_required");
+	const usage = tracker.getUsageSummary();
+
+	// Calculate recent activity (last hour)
+	const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+	const recentTasks = allTasks.filter((t) => t.completedAt && new Date(t.completedAt) >= oneHourAgo);
+	const completedLastHour = recentTasks.filter((t) => t.status === "complete").length;
+	const failedLastHour = recentTasks.filter((t) => t.status === "failed").length;
+
+	// Calculate pacing info
+	const config = tracker.getState().config;
+	const tokensUsed = usage.current.last5HoursSonnet;
+	const tokenBudget = config.maxTokensPer5Hours;
+	const remaining = tokenBudget - tokensUsed;
+	const pendingCount = summary.pending + summary.inProgress;
+
+	// Estimate tokens per task from historical data (default 50k if no data)
+	const totalTasks = Object.values(usage.modelBreakdown).reduce((sum, m) => sum + m.totalTasks, 0);
+	const totalTokens = Object.values(usage.modelBreakdown).reduce((sum, m) => sum + m.sonnetEquivalentTokens, 0);
+	const estimatedTokensPerTask = totalTasks > 0 ? Math.round(totalTokens / totalTasks) : 50000;
+
+	// Calculate sustainable pace (tasks per hour to last 5 hours)
+	const sustainablePace = estimatedTokensPerTask > 0 ? Math.floor(remaining / estimatedTokensPerTask / 5) : 0;
+
+	// Build active workers list with elapsed time
+	const now = Date.now();
+	const activeList = activeWorktrees.map((w) => {
+		const task = allTasks.find((t) => t.sessionId === w.sessionId);
+		const elapsedMs = now - new Date(w.createdAt).getTime();
+		const elapsedMin = Math.floor(elapsedMs / 60000);
+		return {
+			taskId: w.sessionId.split("-").slice(0, 2).join("-"), // Short ID
+			objective: task?.objective?.substring(0, 50) || "Unknown task",
+			elapsed: `${elapsedMin}m`,
+			elapsedMs,
+			worktreePath: w.path,
+		};
+	});
+
+	// Build attention items
+	const attention: PulseData["attention"] = [];
+
+	// Add human-required decisions
+	for (const dec of humanRequiredDecisions.slice(0, 3)) {
+		attention.push({
+			type: "decision",
+			message: dec.question.substring(0, 60),
+			id: dec.id,
+		});
+	}
+
+	// Add PM-decidable decisions if there are many
+	if (pendingDecisions.length > 3) {
+		attention.push({
+			type: "decision",
+			message: `${pendingDecisions.length} pending decisions`,
+		});
+	}
+
+	// Add rate limit warning
+	if (tracker.isPaused()) {
+		const pauseState = tracker.getPauseState();
+		const resumeTime = pauseState.resumeAt ? new Date(pauseState.resumeAt).toLocaleTimeString() : "unknown";
+		attention.push({
+			type: "rate_limit",
+			message: `Rate limited - resume at ${resumeTime}`,
+		});
+	} else if (usage.percentages.fiveHour >= 0.8) {
+		attention.push({
+			type: "rate_limit",
+			message: `Rate limit warning: ${Math.round(usage.percentages.fiveHour * 100)}% of 5hr budget used`,
+		});
+	}
+
+	// Add recent failures
+	const recentFailures = allTasks.filter(
+		(t) => t.status === "failed" && t.completedAt && new Date(t.completedAt) >= oneHourAgo,
+	);
+	if (recentFailures.length > 0) {
+		attention.push({
+			type: "failure",
+			message: `${recentFailures.length} task(s) failed in last hour`,
+		});
+	}
+
+	const pauseState = tracker.getPauseState();
+	const resumeAtDate = pauseState.resumeAt ? new Date(pauseState.resumeAt) : undefined;
+
+	const pulseData: PulseData = {
+		timestamp: new Date().toISOString(),
+		active: activeList,
+		queue: {
+			pending: summary.pending,
+			inProgress: summary.inProgress,
+			completed: summary.complete,
+			failed: summary.failed,
+			blocked: summary.blocked,
+		},
+		health: {
+			rateLimit: {
+				fiveHourPercent: Math.round(usage.percentages.fiveHour * 100),
+				weeklyPercent: Math.round(usage.percentages.weekly * 100),
+				isPaused: tracker.isPaused(),
+				resumeAt: resumeAtDate?.toISOString(),
+			},
+			mayorUsage: mayorUsage ?? undefined,
+			recentActivity: {
+				completedLastHour,
+				failedLastHour,
+			},
+		},
+		pacing: {
+			tokenBudget,
+			tokensUsed,
+			remaining,
+			percentUsed: Math.round((tokensUsed / tokenBudget) * 100),
+			queueSize: pendingCount,
+			estimatedTokensPerTask,
+			sustainablePaceTasksPerHour: sustainablePace,
+		},
+		attention,
+	};
+
+	// Human-readable dashboard (opt-in with --human)
+	if (!options.human) {
+		console.log(JSON.stringify(pulseData, null, 2));
+		return;
+	}
+
+	// Human-readable dashboard
+	console.log(chalk.bold.cyan("\n⚡ Undercity Pulse\n"));
+
+	// Active workers section
+	if (activeList.length > 0) {
+		console.log(chalk.bold(`ACTIVE (${activeList.length} workers)`));
+		for (const w of activeList) {
+			console.log(
+				chalk.green(`  🔄 ${w.taskId}: "${w.objective}${w.objective.length >= 50 ? "..." : ""}" (${w.elapsed})`),
+			);
+		}
+	} else {
+		console.log(chalk.bold("ACTIVE"));
+		console.log(chalk.dim("  No workers running"));
+	}
+	console.log();
+
+	// Queue section
+	console.log(chalk.bold(`QUEUE (${summary.pending} pending)`));
+	const queueTasks = allTasks.filter((t) => t.status === "pending" && !t.isDecomposed).slice(0, 3);
+	for (const t of queueTasks) {
+		const priority = t.priority !== undefined ? `#${t.priority}` : "";
+		console.log(chalk.dim(`  ${priority} "${t.objective.substring(0, 50)}${t.objective.length >= 50 ? "..." : ""}"`));
+	}
+	if (summary.pending > 3) {
+		console.log(chalk.dim(`  ... and ${summary.pending - 3} more`));
+	}
+	console.log();
+
+	// Health section
+	console.log(chalk.bold("HEALTH"));
+	if (mayorUsage?.fiveHourPercent !== undefined) {
+		// Mayor (Claude Code) provided its observed rate limits
+		const fiveHrColor =
+			mayorUsage.fiveHourPercent >= 80 ? chalk.red : mayorUsage.fiveHourPercent >= 50 ? chalk.yellow : chalk.green;
+		console.log(`  Claude Max: ${fiveHrColor(`${mayorUsage.fiveHourPercent}%`)} of 5hr budget`);
+		if (mayorUsage.weeklyPercent !== undefined) {
+			console.log(`  Weekly: ${mayorUsage.weeklyPercent}%`);
+		}
+	} else {
+		// Fall back to local tracking
+		const fiveHrColor =
+			usage.percentages.fiveHour >= 0.8 ? chalk.red : usage.percentages.fiveHour >= 0.5 ? chalk.yellow : chalk.green;
+		console.log(
+			`  Rate limit: ${fiveHrColor(`${Math.round(usage.percentages.fiveHour * 100)}%`)} used (local tracking)`,
+		);
+	}
+	console.log(`  Last hour: ${completedLastHour} completed, ${failedLastHour} failed`);
+	console.log();
+
+	// Pacing section
+	console.log(chalk.bold("PACING"));
+	console.log(`  Budget: ${(tokenBudget / 1000000).toFixed(1)}M tokens/5hr window`);
+	console.log(`  Used: ${(tokensUsed / 1000).toFixed(0)}K (${Math.round((tokensUsed / tokenBudget) * 100)}%)`);
+	console.log(`  Sustainable pace: ~${sustainablePace} tasks/hour to last 5 hours`);
+	console.log();
+
+	// Attention section (only if there are items)
+	if (attention.length > 0) {
+		console.log(chalk.bold.yellow(`ATTENTION (${attention.length})`));
+		for (const item of attention) {
+			const icon = item.type === "decision" ? "⚠️" : item.type === "rate_limit" ? "🚨" : "❌";
+			console.log(chalk.yellow(`  ${icon} ${item.message}`));
+		}
+		console.log();
+	}
+
+	// Hint for more details
+	console.log(chalk.dim("Run 'undercity brief' for detailed report, 'undercity decide' to handle pending decisions."));
+}
+
+/**
+ * Brief data structure for JSON output
+ */
+interface BriefData {
+	timestamp: string;
+	period: {
+		hours: number;
+		from: string;
+		to: string;
+	};
+	summary: {
+		tasksCompleted: number;
+		tasksFailed: number;
+		tasksInProgress: number;
+		tasksPending: number;
+		tokensUsed: number;
+		estimatedCost: number;
+	};
+	accomplishments: Array<{
+		taskId: string;
+		objective: string;
+		completedAt: string;
+		filesModified?: number;
+	}>;
+	failures: Array<{
+		taskId: string;
+		objective: string;
+		error: string;
+		failedAt: string;
+	}>;
+	inProgress: Array<{
+		taskId: string;
+		objective: string;
+		startedAt?: string;
+		elapsed?: string;
+	}>;
+	blockers: Array<{
+		type: "rate_limit" | "decision_required" | "merge_conflict" | "verification_failed";
+		message: string;
+		taskId?: string;
+	}>;
+	trajectory: {
+		velocity: number; // tasks/hour
+		estimatedClearTime?: string; // when queue will be empty at current pace
+		trend: "accelerating" | "steady" | "slowing" | "stalled";
+	};
+	recommendations: Array<{
+		priority: "high" | "medium" | "low";
+		action: string;
+		reason: string;
+	}>;
+}
+
+/**
+ * Handle the brief command - narrative summary for the mayor
+ *
+ * Provides a story-like summary of what Undercity has accomplished,
+ * issues encountered, and recommendations for the mayor.
+ */
+export async function handleBrief(options: BriefOptions): Promise<void> {
+	const { getAllTasks, getTaskBoardSummary } = await import("../task.js");
+	const { getPendingDecisions } = await import("../decision-tracker.js");
+	const { fetchClaudeUsage } = await import("../claude-usage.js");
+
+	const persistence = new Persistence();
+	const savedState = persistence.getRateLimitState();
+	const tracker = new RateLimitTracker(savedState ?? undefined);
+
+	// Auto-fetch Claude Max usage from claude.ai (see claude-usage.ts for the sketchy details)
+	let mayorUsage: { fiveHourPercent?: number; weeklyPercent?: number; observedAt?: string } | null = null;
+	const liveUsage = await fetchClaudeUsage();
+	if (liveUsage.success) {
+		mayorUsage = {
+			fiveHourPercent: liveUsage.fiveHourPercent,
+			weeklyPercent: liveUsage.weeklyPercent,
+			observedAt: liveUsage.fetchedAt,
+		};
+	}
+
+	// Time window (default 24 hours)
+	const hours = Number.parseInt(options.hours || "24", 10);
+	const periodStart = new Date(Date.now() - hours * 60 * 60 * 1000);
+	const periodEnd = new Date();
+
+	// Gather data
+	const allTasks = getAllTasks();
+	const summary = getTaskBoardSummary();
+	const pendingDecisions = getPendingDecisions();
+	const usage = tracker.getUsageSummary();
+
+	// Filter tasks by time window
+	const completedInPeriod = allTasks.filter(
+		(t) => t.status === "complete" && t.completedAt && new Date(t.completedAt) >= periodStart,
+	);
+	const failedInPeriod = allTasks.filter(
+		(t) => t.status === "failed" && t.completedAt && new Date(t.completedAt) >= periodStart,
+	);
+	const inProgressTasks = allTasks.filter((t) => t.status === "in_progress");
+
+	// Calculate velocity (tasks per hour over the period)
+	const tasksInPeriod = completedInPeriod.length + failedInPeriod.length;
+	const velocity = hours > 0 ? tasksInPeriod / hours : 0;
+
+	// Estimate clear time
+	const pendingCount = summary.pending + summary.inProgress;
+	let estimatedClearTime: string | undefined;
+	if (velocity > 0 && pendingCount > 0) {
+		const hoursToComplete = pendingCount / velocity;
+		const clearDate = new Date(Date.now() + hoursToComplete * 60 * 60 * 1000);
+		estimatedClearTime = clearDate.toISOString();
+	}
+
+	// Determine trend
+	let trend: "accelerating" | "steady" | "slowing" | "stalled" = "steady";
+	if (velocity === 0 && inProgressTasks.length === 0) {
+		trend = "stalled";
+	} else if (failedInPeriod.length > completedInPeriod.length) {
+		trend = "slowing";
+	}
+
+	// Build blockers list
+	const blockers: BriefData["blockers"] = [];
+
+	// Rate limit blocker
+	if (tracker.isPaused()) {
+		const pauseState = tracker.getPauseState();
+		blockers.push({
+			type: "rate_limit",
+			message: `Rate limited until ${pauseState.resumeAt ? new Date(pauseState.resumeAt).toLocaleTimeString() : "unknown"}`,
+		});
+	}
+
+	// Decision blockers
+	if (pendingDecisions.length > 0) {
+		blockers.push({
+			type: "decision_required",
+			message: `${pendingDecisions.length} decision(s) awaiting input`,
+		});
+	}
+
+	// Claude Max weekly budget blocker
+	if (mayorUsage?.weeklyPercent !== undefined && mayorUsage.weeklyPercent >= 95) {
+		blockers.push({
+			type: "rate_limit",
+			message: `Weekly Claude Max budget nearly exhausted (${mayorUsage.weeklyPercent}%)`,
+		});
+	}
+
+	// Build recommendations
+	const recommendations: BriefData["recommendations"] = [];
+
+	// Recommend addressing failures if many
+	if (failedInPeriod.length >= 3) {
+		recommendations.push({
+			priority: "high",
+			action: "Review failed tasks and consider manual intervention or task revision",
+			reason: `${failedInPeriod.length} tasks failed in the last ${hours}h`,
+		});
+	}
+
+	// Recommend handling decisions
+	if (pendingDecisions.length > 0) {
+		recommendations.push({
+			priority: pendingDecisions.length > 5 ? "high" : "medium",
+			action: "Run 'undercity decide' to handle pending decisions",
+			reason: `${pendingDecisions.length} decision(s) blocking progress`,
+		});
+	}
+
+	// Recommend rate limit awareness (prefer mayor usage if available)
+	if (mayorUsage?.weeklyPercent !== undefined && mayorUsage.weeklyPercent >= 80) {
+		recommendations.push({
+			priority: "high",
+			action: "Weekly rate limit critical - pause or reduce task volume",
+			reason: `${mayorUsage.weeklyPercent}% of weekly Claude Max budget used`,
+		});
+	} else if (mayorUsage?.fiveHourPercent !== undefined && mayorUsage.fiveHourPercent >= 70) {
+		recommendations.push({
+			priority: "medium",
+			action: "Consider pacing - session budget getting low",
+			reason: `${mayorUsage.fiveHourPercent}% of 5-hour Claude Max budget used`,
+		});
+	} else if (usage.percentages.fiveHour >= 0.7) {
+		recommendations.push({
+			priority: "medium",
+			action: "Consider pacing - rate limit budget is getting low",
+			reason: `${Math.round(usage.percentages.fiveHour * 100)}% of 5-hour budget used (local tracking)`,
+		});
+	}
+
+	// Recommend adding tasks if queue is empty
+	if (pendingCount === 0 && completedInPeriod.length > 0) {
+		recommendations.push({
+			priority: "low",
+			action: "Add more tasks to the queue",
+			reason: "Queue is empty - Undercity is idle",
+		});
+	}
+
+	// Estimate cost (rough: $3/1M input, $15/1M output for sonnet)
+	const estimatedCost = (usage.current.last5HoursSonnet / 1_000_000) * 9; // Average of input/output
+
+	const briefData: BriefData = {
+		timestamp: new Date().toISOString(),
+		period: {
+			hours,
+			from: periodStart.toISOString(),
+			to: periodEnd.toISOString(),
+		},
+		summary: {
+			tasksCompleted: completedInPeriod.length,
+			tasksFailed: failedInPeriod.length,
+			tasksInProgress: inProgressTasks.length,
+			tasksPending: summary.pending,
+			tokensUsed: usage.current.last5HoursSonnet,
+			estimatedCost: Math.round(estimatedCost * 100) / 100,
+		},
+		accomplishments: completedInPeriod.slice(0, 20).map((t) => ({
+			taskId: t.id,
+			objective: t.objective,
+			completedAt:
+				t.completedAt instanceof Date ? t.completedAt.toISOString() : t.completedAt || new Date().toISOString(),
+		})),
+		failures: failedInPeriod.slice(0, 10).map((t) => ({
+			taskId: t.id,
+			objective: t.objective,
+			error: t.error || "Unknown error",
+			failedAt: t.completedAt instanceof Date ? t.completedAt.toISOString() : t.completedAt || new Date().toISOString(),
+		})),
+		inProgress: inProgressTasks.map((t) => ({
+			taskId: t.id,
+			objective: t.objective,
+			startedAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : t.createdAt,
+		})),
+		blockers,
+		trajectory: {
+			velocity: Math.round(velocity * 100) / 100,
+			estimatedClearTime,
+			trend,
+		},
+		recommendations,
+	};
+
+	// JSON output (default)
+	if (!options.human) {
+		console.log(JSON.stringify(briefData, null, 2));
+		return;
+	}
+
+	// Human-readable narrative
+	console.log(chalk.bold.cyan(`\n📋 Undercity Brief (Last ${hours}h)\n`));
+
+	// Summary line
+	if (completedInPeriod.length > 0 || failedInPeriod.length > 0) {
+		console.log(
+			chalk.bold(
+				`Completed ${completedInPeriod.length} task(s), ${failedInPeriod.length} failed, ${pendingCount} remaining`,
+			),
+		);
+	} else {
+		console.log(chalk.dim("No tasks completed in this period"));
+	}
+	console.log();
+
+	// Accomplishments
+	if (completedInPeriod.length > 0) {
+		console.log(chalk.green.bold("Accomplishments:"));
+		for (const task of completedInPeriod.slice(0, 5)) {
+			console.log(chalk.green(`  ✓ ${task.objective.substring(0, 60)}${task.objective.length > 60 ? "..." : ""}`));
+		}
+		if (completedInPeriod.length > 5) {
+			console.log(chalk.dim(`  ... and ${completedInPeriod.length - 5} more`));
+		}
+		console.log();
+	}
+
+	// Failures
+	if (failedInPeriod.length > 0) {
+		console.log(chalk.red.bold("Failures:"));
+		for (const task of failedInPeriod.slice(0, 3)) {
+			console.log(chalk.red(`  ✗ ${task.objective.substring(0, 50)}...`));
+			console.log(chalk.dim(`    ${task.error?.substring(0, 60) || "Unknown error"}`));
+		}
+		if (failedInPeriod.length > 3) {
+			console.log(chalk.dim(`  ... and ${failedInPeriod.length - 3} more`));
+		}
+		console.log();
+	}
+
+	// Blockers
+	if (blockers.length > 0) {
+		console.log(chalk.yellow.bold("Blockers:"));
+		for (const blocker of blockers) {
+			console.log(chalk.yellow(`  ⚠ ${blocker.message}`));
+		}
+		console.log();
+	}
+
+	// Trajectory
+	console.log(chalk.bold("Trajectory:"));
+	console.log(`  Velocity: ${velocity.toFixed(1)} tasks/hour`);
+	console.log(`  Trend: ${trend}`);
+	if (estimatedClearTime) {
+		console.log(`  Queue clear: ~${new Date(estimatedClearTime).toLocaleString()}`);
+	}
+	console.log();
+
+	// Recommendations
+	if (recommendations.length > 0) {
+		console.log(chalk.bold("Recommendations:"));
+		for (const rec of recommendations) {
+			const icon = rec.priority === "high" ? "🔴" : rec.priority === "medium" ? "🟡" : "🟢";
+			console.log(`  ${icon} ${rec.action}`);
+			console.log(chalk.dim(`     ${rec.reason}`));
+		}
+	}
+}
+
 /**
  * Handle the grind command
  *
@@ -1667,4 +2285,61 @@ export async function handleTuning(options: TuningOptions): Promise<void> {
 	}
 
 	console.log(formatProfileSummary(profile));
+}
+
+/**
+ * Handle the usage command - fetch Claude Max usage from claude.ai
+ */
+export async function handleUsage(options: UsageOptions): Promise<void> {
+	const { fetchClaudeUsage, loginToClaude, clearBrowserSession } = await import("../claude-usage.js");
+
+	// Clear session if requested
+	if (options.clear) {
+		await clearBrowserSession();
+		return;
+	}
+
+	// Interactive login mode
+	if (options.login) {
+		const result = await loginToClaude();
+		if (result.success) {
+			// Verify by fetching usage
+			const usage = await fetchClaudeUsage();
+			if (usage.success) {
+				console.log(chalk.green("Verification successful!"));
+				console.log(`  Session: ${usage.fiveHourPercent}% used`);
+				console.log(`  Weekly:  ${usage.weeklyPercent}% used`);
+			}
+		}
+		return;
+	}
+
+	// Normal headless fetch
+	const usage = await fetchClaudeUsage();
+
+	if (!options.human) {
+		console.log(JSON.stringify(usage, null, 2));
+		return;
+	}
+
+	if (usage.needsLogin) {
+		console.log(chalk.yellow("Not logged in to Claude."));
+		console.log(chalk.dim("Run 'undercity usage --login' to authenticate."));
+		return;
+	}
+
+	if (!usage.success) {
+		console.log(chalk.red("Failed to fetch usage:"), usage.error);
+		return;
+	}
+
+	console.log(chalk.bold.cyan("\n📊 Claude Max Usage\n"));
+
+	const fiveHrColor =
+		usage.fiveHourPercent >= 80 ? chalk.red : usage.fiveHourPercent >= 50 ? chalk.yellow : chalk.green;
+	const weeklyColor = usage.weeklyPercent >= 80 ? chalk.red : usage.weeklyPercent >= 50 ? chalk.yellow : chalk.green;
+
+	console.log(`  5-hour session: ${fiveHrColor(`${usage.fiveHourPercent}%`)}`);
+	console.log(`  Weekly:         ${weeklyColor(`${usage.weeklyPercent}%`)}`);
+	console.log(chalk.dim(`\n  Fetched: ${new Date(usage.fetchedAt).toLocaleTimeString()}`));
 }
