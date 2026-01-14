@@ -143,6 +143,54 @@ ln -sf $(pwd)/bin/undercity.js ~/.local/bin/undercity
 | `pnpm typecheck` | Type check |
 | `pnpm semantic-check` | Analyze semantic density |
 
+## Agent Memory & Learning
+
+Undercity features an advanced knowledge compounding system that allows agents to learn from past task completions. This feature helps improve task performance over time by capturing and reusing insights.
+
+### Knowledge Extraction
+
+Each task completion is analyzed to extract learnings in four categories:
+- **Patterns**: Recurring code or architectural approaches
+- **Gotchas**: Common pitfalls or edge cases
+- **Preferences**: Project-specific conventions or design choices
+- **Facts**: Concrete pieces of information about the codebase
+
+### Knowledge Storage
+
+Learnings are stored in `.undercity/knowledge.json` with the following attributes:
+- Unique identifier
+- Task origin
+- Learning category
+- Natural language description
+- Keywords for retrieval
+- Confidence score (0-1)
+- Usage tracking
+
+### Retrieval and Injection
+
+When starting a new task, the system:
+1. Extracts keywords from the task objective
+2. Finds relevant past learnings using keyword and confidence matching
+3. Injects up to 5 most relevant learnings into the agent's context
+
+### Learning Adaptation
+
+The knowledge base dynamically adapts:
+- Confidence increases with successful reuse
+- Learnings not used or unsuccessful lose confidence
+- Periodic pruning removes stale or low-confidence learnings
+- Supports few-shot learning without manual prompt engineering
+
+### Knowledge Management
+
+```bash
+# View knowledge base statistics
+undercity stats knowledge
+
+# Manually prune unused learnings
+undercity prune knowledge
+```
+
 ## Output Modes
 
 | Context | Mode | Format |
