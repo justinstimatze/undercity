@@ -6,8 +6,8 @@
 |------|---------|-------------|
 | **cli.ts** | CLI entry, routes to command modules | - |
 | **commands/task.ts** | Task board commands (tasks, add, work, plan, import-plan, reconcile, triage, prune) | taskCommands |
-| **commands/mixed.ts** | Main commands (grind, limits, watch, serve, daemon, status, index, init, setup, oracle, config) | mixedCommands |
-| **commands/analysis.ts** | Metrics/analysis commands | analysisCommands |
+| **commands/mixed.ts** | Execution + learning commands (grind, pulse, brief, decide, knowledge, usage, tuning) | mixedCommands |
+| **commands/analysis.ts** | Metrics/analysis commands (patterns, decisions, ax) | analysisCommands |
 | **orchestrator.ts** | Main production orchestrator, parallel execution | Orchestrator |
 | **worker.ts** | Single-task executor, runs in worktree | TaskWorker |
 | **supervised.ts** | Opus orchestrates workers | SupervisedOrchestrator |
@@ -49,6 +49,14 @@
 | **experiment.ts** | A/B testing framework for grind | ExperimentManager, getExperimentManager |
 | **feedback-metrics.ts** | Historical metrics analysis, success rates | analyzeMetrics, suggestModelTier, analyzeTaskPatterns |
 | **self-tuning.ts** | Learned routing profile from historical data | loadRoutingProfile, computeOptimalThresholds, maybeUpdateProfile |
+| **knowledge.ts** | Knowledge compounding (learnings from tasks) | loadKnowledge, addLearning, findRelevantLearnings |
+| **knowledge-extractor.ts** | Extract learnings from task completions | extractLearnings |
+| **decision-tracker.ts** | Capture/resolve agent decisions | captureDecision, resolveDecision, getPendingDecisions |
+| **automated-pm.ts** | Automated PM for pm_decidable decisions | processPendingDecisions |
+| **task-file-patterns.ts** | Task→file correlations, co-modification | recordTaskFiles, findRelevantFiles, findCoModifiedFiles |
+| **error-fix-patterns.ts** | Error→fix patterns for known issues | recordErrorFix, findMatchingFix, getErrorFixStats |
+| **ax-programs.ts** | Ax/DSPy self-improving prompts | getAxProgramStats |
+| **claude-usage.ts** | Fetch live Claude Max usage from claude.ai | fetchClaudeMaxUsage |
 | **index.ts** | Public API exports | - |
 
 ## Task → File Mapping
@@ -79,6 +87,14 @@
 - Expose HTTP API → `server.ts`
 - Output to user → `output.ts`
 - Log structured events → `logger.ts` or `dual-logger.ts` (workers)
+- Store/retrieve learnings → `knowledge.ts`
+- Extract learnings from completed tasks → `knowledge-extractor.ts`
+- Capture/resolve agent decisions → `decision-tracker.ts`
+- Process PM-decidable decisions → `automated-pm.ts`
+- Track task→file patterns → `task-file-patterns.ts`
+- Track error→fix patterns → `error-fix-patterns.ts`
+- Fetch Claude Max usage → `claude-usage.ts`
+- View Ax/DSPy training stats → `ax-programs.ts`
 
 ## Orchestrators
 
@@ -113,6 +129,11 @@ Orchestrator.run():
 | File | Purpose | Schema |
 |------|---------|--------|
 | `.undercity/tasks.json` | Task board | `Task[]` |
+| `.undercity/knowledge.json` | Accumulated learnings | `KnowledgeBase` |
+| `.undercity/decisions.json` | Decision history | `DecisionStore` |
+| `.undercity/task-file-patterns.json` | Task→file correlations | `TaskFileStore` |
+| `.undercity/error-fix-patterns.json` | Error→fix patterns | `ErrorFixStore` |
+| `.undercity/routing-profile.json` | Learned model routing | `RoutingProfile` |
 | `.undercity/worktree-state.json` | Active worktrees | `WorktreeState` |
 | `.undercity/file-tracking.json` | Modified files per branch | `FileTrackingState` |
 | `.undercity/rate-limit-state.json` | Rate limit state | `RateLimitState` |
@@ -121,14 +142,17 @@ Orchestrator.run():
 | `.undercity/grind-events.jsonl` | Event log (append-only) | `{type, timestamp, data}` per line |
 | `.undercity/ast-index.json` | Persistent AST index | `ASTIndex` |
 | `.undercity/experiments.json` | A/B test state | `ExperimentStorage` |
+| `.undercity/ax-training.json` | Ax/DSPy examples | `AxTrainingData` |
+| `.undercity/usage-cache.json` | Claude Max usage cache | `{usage, fetchedAt}` |
 | `.undercity/daemon.json` | Daemon PID and port | `{pid, port}` |
 
 ## Gotchas
 
 **Rate limiting:**
-- 429 → pause + exponential backoff (rate-limit.ts:handleRateLimitError)
-- State persists across restarts
-- Check with: `undercity limits`
+- Dynamic pacing based on live Claude Max usage
+- Fetches real limits from claude.ai (`undercity usage`)
+- First-time setup: `undercity usage --login`
+- Usage cached 5 minutes
 
 **File conflicts:**
 - Detected **before** merge (FileTracker), not after
@@ -195,8 +219,9 @@ Orchestrator.run():
 **Load:** config.ts:loadConfig(), mergeWithConfig()
 
 **Env vars:**
-- `ANTHROPIC_API_KEY` - Required
-- `LOG_LEVEL` - debug|info|warn|error
+- `LOG_LEVEL` - debug|info|warn|error (optional)
+
+**Auth:** Claude Max OAuth via Agent SDK (no API key needed)
 
 ## Output Modes
 

@@ -8,8 +8,8 @@ Patterns and conventions discovered from codebase analysis.
 
 | Pattern | Purpose | Examples |
 |---------|---------|----------|
-| `{feature}.ts` | Core module | `task.ts`, `git.ts`, `cache.ts` |
-| `{feature}-{aspect}.ts` | Specialized variant | `task-analyzer.ts`, `task-scheduler.ts`, `dual-logger.ts` |
+| `{feature}.ts` | Core module | `task.ts`, `git.ts`, `cache.ts`, `knowledge.ts` |
+| `{feature}-{aspect}.ts` | Specialized variant | `task-analyzer.ts`, `task-file-patterns.ts`, `error-fix-patterns.ts` |
 | `commands/{category}.ts` | CLI command groups | `commands/task.ts`, `commands/mixed.ts` |
 | `commands/{category}-handlers.ts` | Handler extraction | `mixed-handlers.ts`, `task-handlers.ts` |
 

@@ -1,15 +1,15 @@
 # Undercity Architecture
 
-Agent-optimized reference. Mappings over prose.
+Agent-optimized reference. Mappings over prose. Includes learning systems.
 
 ## File → Function → Behavior
 
 | File | Key Exports | What It Does |
 |------|-------------|--------------|
 | `cli.ts` | `program` | CLI entry, routes to command modules |
-| `commands/task.ts` | `taskCommands.register()` | Task board: `tasks`, `add`, `load`, `import-plan`, `plan`, `work`, `task-analyze`, `task-status` |
-| `commands/mixed.ts` | `mixedCommands.register()` | Execution: `grind`, `limits`, `init`, `setup`, `oracle`, `config`, `watch`, `serve`, `daemon`, `status` |
-| `commands/analysis.ts` | `analysisCommands.register()` | Metrics: `metrics`, `complexity-metrics`, `enhanced-metrics`, `escalation-patterns`, `benchmark`, `semantic-check` |
+| `commands/task.ts` | `taskCommands.register()` | Task board: `tasks`, `add`, `load`, `import-plan`, `plan`, `work`, `task-analyze`, `reconcile`, `triage`, `prune` |
+| `commands/mixed.ts` | `mixedCommands.register()` | Execution + learning: `grind`, `pulse`, `brief`, `decide`, `knowledge`, `usage`, `tuning`, `introspect`, `watch` |
+| `commands/analysis.ts` | `analysisCommands.register()` | Metrics: `metrics`, `patterns`, `decisions`, `ax`, `semantic-check`, `insights` |
 | `orchestrator.ts` | `Orchestrator.run()` | **Main orchestrator**: parallel execution, worktrees, recovery, merge queue |
 | `worker.ts` | `TaskWorker.run()` | Single-task executor, runs in worktree |
 | `supervised.ts` | `SupervisedOrchestrator` | Opus orchestrates workers |
@@ -34,6 +34,14 @@ Agent-optimized reference. Mappings over prose.
 | `output.ts` | `info()`, `error()`, `summary()`, `metrics()` | Structured output |
 | `semantic-analyzer/analyzer.ts` | `SemanticAnalyzer.analyze()` | Semantic density analysis |
 | `semantic-analyzer/types.ts` | `SemanticReport`, `FileAnalysis`, `Issue`, `Action` | Analyzer types |
+| `knowledge.ts` | `loadKnowledge()`, `addLearning()`, `findRelevantLearnings()` | Knowledge compounding |
+| `knowledge-extractor.ts` | `extractLearnings()` | Extract learnings from task completions |
+| `decision-tracker.ts` | `captureDecision()`, `resolveDecision()`, `getPendingDecisions()` | Decision capture/resolution |
+| `automated-pm.ts` | `processPendingDecisions()` | Automated PM for pm_decidable |
+| `task-file-patterns.ts` | `recordTaskFiles()`, `findRelevantFiles()`, `findCoModifiedFiles()` | Task→file correlations |
+| `error-fix-patterns.ts` | `recordErrorFix()`, `findMatchingFix()` | Error→fix patterns |
+| `ax-programs.ts` | `getAxProgramStats()` | Ax/DSPy self-improving prompts |
+| `claude-usage.ts` | `fetchClaudeMaxUsage()` | Live Claude Max usage from claude.ai |
 
 ## Intent → Code Path
 
@@ -56,6 +64,14 @@ Agent-optimized reference. Mappings over prose.
 | Track tokens | `live-metrics.ts` | `saveLiveMetrics(metrics)` | Model breakdown |
 | Log grind event | `grind-events.ts` | `logTaskComplete()`, `logTaskFailed()` | Append-only JSONL |
 | Analyze semantic density | `semantic-analyzer/` | `runSemanticCheck({rootDir})` | Returns `SemanticReport` |
+| Store learning | `knowledge.ts` | `addLearning(learning)` | Returns `Learning` |
+| Find relevant learnings | `knowledge.ts` | `findRelevantLearnings(objective)` | Keyword + confidence scoring |
+| Capture agent decision | `decision-tracker.ts` | `captureDecision(taskId, question, context)` | Returns `DecisionPoint` |
+| Resolve decision | `decision-tracker.ts` | `resolveDecision(id, resolution)` | - |
+| Process PM decisions | `automated-pm.ts` | `processPendingDecisions()` | Auto-handles pm_decidable |
+| Record task→file pattern | `task-file-patterns.ts` | `recordTaskFiles(taskId, desc, files)` | Updates correlations |
+| Find relevant files | `task-file-patterns.ts` | `findRelevantFiles(taskDesc)` | Returns scored file list |
+| Fetch Claude Max usage | `claude-usage.ts` | `fetchClaudeMaxUsage()` | Live from claude.ai |
 
 ## Decision Trees
 
@@ -205,15 +221,21 @@ task complete → MergeQueue.add(branch)
 | Command | Purpose | Key Options |
 |---------|---------|-------------|
 | `grind [goal]` | Run tasks | `-p <n>` parallel, `-n <n>` count, `--no-decompose` |
-| `tasks` | Show board | - |
-| `add <goal>` | Add task | - |
+| `tasks` | Show board | `--status`, `--all` |
+| `add <goal>` | Add task | `--context <file>`, `--priority` |
 | `import-plan <file>` | Plan → tasks | `--dry-run` |
-| `limits` | Usage snapshot | - |
+| `pulse` | Quick state check | JSON: workers, queue, health |
+| `brief` | Narrative summary | `--hours <n>` |
+| `decide` | View/resolve decisions | `--resolve <id>`, `--decision` |
+| `knowledge <query>` | Search learnings | `--stats`, `--all` |
+| `usage` | Live Claude Max usage | `--login` |
+| `patterns` | Task→file patterns | - |
+| `tuning` | Learned routing | `--rebuild`, `--clear` |
+| `introspect` | Self-analysis | `--json`, `--patterns` |
 | `watch` | TUI dashboard | - |
 | `status` | Grind status | `--events`, `--human` |
-| `semantic-check` | Density analysis | `--fix`, `--human` |
 | `metrics` | Performance | - |
-| `complexity-metrics` | By complexity | `--json` |
+| `semantic-check` | Density analysis | `--fix`, `--human` |
 
 ## Complexity Signals
 
@@ -274,8 +296,9 @@ task complete → MergeQueue.add(branch)
 
 | Variable | Purpose | Required |
 |----------|---------|----------|
-| `ANTHROPIC_API_KEY` | API auth | Yes |
 | `LOG_LEVEL` | Logging | No (default: info) |
+
+**Auth**: Claude Max OAuth via Agent SDK (no API key needed). Run `undercity setup` to verify.
 
 ## Module Dependencies
 

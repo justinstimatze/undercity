@@ -28,14 +28,34 @@ Claude Code delegates to Undercity for autonomous execution. Undercity runs cont
 
 ## Commands
 
+### Monitoring (JSON default)
+
 | Command | Purpose | Output |
 |---------|---------|--------|
-| `pulse` | Quick state check - workers, queue, health | JSON (default) |
-| `brief` | Narrative summary - accomplishments, failures, recommendations | JSON (default) |
-| `decide` | View/resolve pending decisions from workers | JSON (default) |
-| `knowledge <query>` | Search accumulated learnings | JSON (default) |
-| `usage` | Fetch live Claude Max usage from claude.ai | JSON (default) |
-| `add --context <file>` | Delegate task with context JSON | - |
+| `pulse` | Quick state check | JSON: workers, queue, health, attention |
+| `brief --hours <n>` | Narrative summary | JSON: accomplishments, failures, recommendations |
+| `status` | Grind session status | JSON: current/recent events |
+| `usage` | Live Claude Max usage | JSON: limits, consumed, remaining |
+
+### Learning (JSON default)
+
+| Command | Purpose | Output |
+|---------|---------|--------|
+| `knowledge <query>` | Search accumulated learnings | JSON: matching learnings |
+| `knowledge --stats` | Knowledge base statistics | JSON: counts by category |
+| `decide` | View pending decisions | JSON: decisions needing resolution |
+| `decide --resolve <id> --decision "choice"` | Resolve decision | - |
+| `patterns` | Task→file correlations | Human: top keywords, files, risks |
+| `tuning` | Learned routing profile | Human: model thresholds |
+| `introspect --json` | Self-analysis | JSON: success rates, patterns |
+
+### Task Management
+
+| Command | Purpose | Output |
+|---------|---------|--------|
+| `add "task" --context <file>` | Delegate with context | Task ID |
+| `tasks --status pending` | View pending tasks | Task list |
+| `complete <id> --reason "..."` | Mark task complete | - |
 
 All commands output JSON by default for programmatic use. Use `--human` for readable output.
 
@@ -93,13 +113,18 @@ Query with: `undercity knowledge "search term"`
 
 Learnings are injected into future task prompts when relevant.
 
-## Files
+## State Files
 
-```
-.undercity/
-├── tasks.json           # Task board (tracked in git)
-├── knowledge.json       # Accumulated learnings
-├── decisions.json       # Decision history
-├── usage-cache.json     # Cached Claude Max usage
-└── browser-data/        # Playwright session (gitignored)
-```
+| File | Purpose | Tracked |
+|------|---------|---------|
+| `tasks.json` | Task board | Yes |
+| `knowledge.json` | Accumulated learnings | No |
+| `decisions.json` | Decision history | No |
+| `task-file-patterns.json` | Task→file correlations | No |
+| `error-fix-patterns.json` | Error→fix patterns | No |
+| `routing-profile.json` | Learned model routing | No |
+| `usage-cache.json` | Claude Max usage cache (5min TTL) | No |
+| `live-metrics.json` | Token usage tracking | No |
+| `grind-events.jsonl` | Event log | No |
+
+Browser auth stored in `.undercity/browser-data/` (gitignored).

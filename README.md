@@ -2,9 +2,9 @@
 
 | Property | Value |
 |----------|-------|
-| Purpose | Multi-agent autonomous task orchestrator |
+| Purpose | Multi-agent autonomous task orchestrator with learning |
 | Runtime | Node.js 24+ |
-| Auth | `ANTHROPIC_API_KEY` required |
+| Auth | Claude Max OAuth (via Agent SDK) |
 | Package Manager | pnpm |
 | CLI Command | `undercity` |
 
@@ -13,11 +13,15 @@
 | Capability | Implementation | State File |
 |------------|----------------|------------|
 | Task Management | Priority queuing | `.undercity/tasks.json` |
-| Parallel Execution | Isolated git worktrees | `.undercity/worktrees.json` |
-| Model Routing | Complexity-based model selection | `.undercity/metrics.json` |
-| Crash Recovery | Auto-resume batch | `.undercity/recovery.json` |
-| Rate Limiting | Exponential backoff | `.undercity/rate-limit.json` |
+| Parallel Execution | Isolated git worktrees | `.undercity/worktree-state.json` |
+| Model Routing | Complexity-based + learned routing | `.undercity/routing-profile.json` |
+| Crash Recovery | Auto-resume batch | `.undercity/parallel-recovery.json` |
+| Rate Limiting | Exponential backoff | `.undercity/rate-limit-state.json` |
 | Merge Pipeline | Serial git merge | In-memory (MergeQueue) |
+| Knowledge Compounding | Learn from task completions | `.undercity/knowledge.json` |
+| Decision Tracking | Capture/resolve agent decisions | `.undercity/decisions.json` |
+| Pattern Learning | Task→file correlations | `.undercity/task-file-patterns.json` |
+| Error Fix Learning | Error→fix patterns | `.undercity/error-fix-patterns.json` |
 
 ## Quick Setup
 
@@ -101,8 +105,9 @@ ln -sf $(pwd)/bin/undercity.js ~/.local/bin/undercity
 
 | Env Var | Required | Values |
 |---------|----------|--------|
-| `ANTHROPIC_API_KEY` | Yes | API key |
 | `LOG_LEVEL` | No | `debug` \| `info` \| `warn` \| `error` |
+
+Auth via Claude Max OAuth - run `undercity setup` to verify login status.
 
 ## Error Recovery Strategies
 
@@ -116,22 +121,60 @@ ln -sf $(pwd)/bin/undercity.js ~/.local/bin/undercity
 
 ## Monitoring Commands
 
-| Command | Data Source | Output |
-|---------|-------------|--------|
-| `undercity limits` | Rate/metrics JSON | Usage summary |
-| `undercity watch` | Live state | TUI dashboard |
-| `undercity status` | Event log | JSON status |
+| Command | Purpose | Output |
+|---------|---------|--------|
+| `undercity limits` | Rate limit snapshot | Usage summary |
+| `undercity watch` | Live TUI dashboard | Matrix-style visualization |
+| `undercity status` | Grind session status | JSON (default) |
+| `undercity pulse` | Quick state check | JSON: workers, queue, health |
+| `undercity brief` | Narrative summary | JSON: accomplishments, failures, recommendations |
+| `undercity usage` | Live Claude Max usage | JSON: fetches from claude.ai |
+| `undercity metrics-dashboard` | Interactive TUI | Token usage, success rates, costs |
+
+## Learning & Intelligence Commands
+
+| Command | Purpose | Output |
+|---------|---------|--------|
+| `undercity knowledge <query>` | Search accumulated learnings | JSON: matching learnings |
+| `undercity knowledge --stats` | Knowledge base statistics | JSON: counts, categories |
+| `undercity decide` | View pending decisions | JSON: decisions needing resolution |
+| `undercity decide --resolve <id>` | Resolve a decision | - |
+| `undercity patterns` | Task→file correlations | Human: top keywords, files, risks |
+| `undercity prime-patterns` | Seed patterns from git history | - |
+| `undercity tuning` | View learned routing profile | Human: model thresholds |
+| `undercity introspect` | Analyze own metrics | Human/JSON: success rates, patterns |
+| `undercity decisions` | Decision tracking stats | Human: pending, resolved, overrides |
+| `undercity ax` | Ax/DSPy training data stats | Human: example counts |
+
+## Analysis Commands
+
+| Command | Purpose | Output |
+|---------|---------|--------|
+| `undercity metrics` | Performance metrics | Human: success rate, tokens |
+| `undercity complexity-metrics` | Success by complexity level | Human/JSON |
+| `undercity enhanced-metrics` | Token usage + escalation | Human/JSON |
+| `undercity escalation-patterns` | Escalation effectiveness | Human |
+| `undercity insights` | Routing recommendations | Human/JSON |
+| `undercity semantic-check` | Semantic density analysis | JSON |
+| `undercity semantic-check --fix` | Auto-fix density issues | - |
 
 ## State Files
 
-| File | Purpose | Persistence |
-|------|---------|-------------|
-| `tasks.json` | Task board | Git tracked |
-| `worktree-state.json` | Active worktrees | Runtime |
-| `parallel-recovery.json` | Crash recovery | Runtime |
-| `rate-limit.json` | Rate limit state | Persistent |
-| `metrics.json` | Token usage/cost | Persistent |
-| `grind-events.jsonl` | Event log | Append-only |
+| File | Purpose | Tracked |
+|------|---------|---------|
+| `tasks.json` | Task board | Yes |
+| `knowledge.json` | Accumulated learnings | No |
+| `decisions.json` | Decision history | No |
+| `task-file-patterns.json` | Task→file correlations | No |
+| `error-fix-patterns.json` | Error→fix patterns | No |
+| `routing-profile.json` | Learned model routing | No |
+| `worktree-state.json` | Active worktrees | No |
+| `parallel-recovery.json` | Crash recovery | No |
+| `rate-limit-state.json` | Rate limit state | No |
+| `live-metrics.json` | Token usage/cost | No |
+| `grind-events.jsonl` | Event log | No |
+| `ast-index.json` | Symbol/dependency index | No |
+| `ax-training.json` | Ax/DSPy examples | No |
 
 ## Development Commands
 
@@ -143,52 +186,48 @@ ln -sf $(pwd)/bin/undercity.js ~/.local/bin/undercity
 | `pnpm typecheck` | Type check |
 | `pnpm semantic-check` | Analyze semantic density |
 
-## Agent Memory & Learning
+## Learning Systems
 
-Undercity features an advanced knowledge compounding system that allows agents to learn from past task completions. This feature helps improve task performance over time by capturing and reusing insights.
+### Knowledge Compounding
 
-### Knowledge Extraction
+| Category | Extracted From | Injected When |
+|----------|----------------|---------------|
+| `pattern` | Code/architectural approaches | Similar task keywords match |
+| `gotcha` | Pitfalls encountered | Keywords match |
+| `preference` | Project conventions | Keywords match |
+| `fact` | Codebase facts | Keywords match |
 
-Each task completion is analyzed to extract learnings in four categories:
-- **Patterns**: Recurring code or architectural approaches
-- **Gotchas**: Common pitfalls or edge cases
-- **Preferences**: Project-specific conventions or design choices
-- **Facts**: Concrete pieces of information about the codebase
+**Flow**: Task complete → Extract learnings → Store with keywords → Score by keyword overlap + confidence → Inject top 5 into future tasks
 
-### Knowledge Storage
+**Confidence**: Starts 0.5, +0.05 on successful reuse, -0.10 on failed reuse
 
-Learnings are stored in `.undercity/knowledge.json` with the following attributes:
-- Unique identifier
-- Task origin
-- Learning category
-- Natural language description
-- Keywords for retrieval
-- Confidence score (0-1)
-- Usage tracking
+### Decision Tracking
 
-### Retrieval and Injection
+| Category | Handling | Example |
+|----------|----------|---------|
+| `auto_handle` | Execute immediately | Retries, lint fixes, rebases |
+| `pm_decidable` | Automated PM decides | Scope, approach, priority |
+| `human_required` | Escalate to user | Security, breaking changes |
 
-When starting a new task, the system:
-1. Extracts keywords from the task objective
-2. Finds relevant past learnings using keyword and confidence matching
-3. Injects up to 5 most relevant learnings into the agent's context
+**Flow**: Agent surfaces question → Classify by patterns → Route to handler → Record outcome for learning
 
-### Learning Adaptation
+### Pattern Learning
 
-The knowledge base dynamically adapts:
-- Confidence increases with successful reuse
-- Learnings not used or unsuccessful lose confidence
-- Periodic pruning removes stale or low-confidence learnings
-- Supports few-shot learning without manual prompt engineering
+| Pattern Type | Source | Used For |
+|--------------|--------|----------|
+| Task→File | Completed tasks | Suggest relevant files for new tasks |
+| Co-modification | Git history | "When file A changes, B usually needs updating" |
+| Error→Fix | Failed verifications | Suggest fixes for known error patterns |
 
-### Knowledge Management
+**Decay**: Patterns weight halves every 14 days of inactivity. Fresh patterns preferred over stale.
 
-```bash
-# View knowledge base statistics
-undercity stats knowledge
+### Self-Tuning
 
-# Manually prune unused learnings
-undercity prune knowledge
+Model routing thresholds learned from historical success rates:
+
+```
+undercity tuning           # View current profile
+undercity tuning --rebuild # Rebuild from metrics
 ```
 
 ## Output Modes
@@ -220,9 +259,12 @@ undercity prune knowledge
 | `/resume` | POST | Resume grind |
 | `/stop` | POST | Stop daemon |
 
-## Rate Limits
+## Rate Limit Management
 
-| Limit | Window | Threshold |
-|-------|--------|-----------|
-| 1M tokens | 5 hours | Pause at 95% |
-| 5M tokens | 1 week | Pause at 95% |
+| Command | Purpose |
+|---------|---------|
+| `undercity usage` | Fetch live Claude Max usage from claude.ai |
+| `undercity usage --login` | One-time browser auth setup |
+| `undercity limits` | Local rate limit state |
+
+**Pacing**: Dynamic based on live usage queries. Auto-pauses when approaching limits, resumes when headroom available. Usage cached 5 minutes to avoid excessive scraping.

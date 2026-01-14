@@ -92,6 +92,29 @@ node ./bin/undercity.js grind "goal"
 pnpm start grind "goal"
 ```
 
+## Monitoring & Learning
+
+```bash
+undercity pulse                     # Quick state check (JSON)
+undercity brief                     # Narrative summary (JSON)
+undercity usage                     # Live Claude Max usage
+undercity usage --login             # One-time browser auth
+undercity knowledge "query"         # Search learnings
+undercity patterns                  # Task→file correlations
+undercity tuning                    # View learned routing
+undercity introspect                # Self-analysis
+```
+
+## Analysis
+
+```bash
+undercity metrics                   # Performance metrics
+undercity complexity-metrics        # Success by complexity
+undercity insights                  # Routing recommendations
+undercity decisions                 # Decision tracking stats
+undercity ax                        # Ax/DSPy training stats
+```
+
 ## PM2 Daemon
 
 ```bash

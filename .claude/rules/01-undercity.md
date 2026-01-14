@@ -1,6 +1,6 @@
 # Undercity
 
-Multi-agent orchestrator for autonomous task execution. Processes tasks from board with verification, crash recovery, and parallel execution.
+Multi-agent orchestrator with learning. Processes tasks from board with verification, crash recovery, parallel execution, and knowledge compounding.
 
 ## Core Concepts
 
@@ -15,11 +15,20 @@ Multi-agent orchestrator for autonomous task execution. Processes tasks from boa
 - Model routing by complexity (haiku → sonnet → opus)
 - Built-in verification (typecheck, test, lint)
 - Crash recovery from `.undercity/parallel-recovery.json`
+- Knowledge injection from past tasks
+- Pattern-based file suggestions
 
 **Workers**:
-- SDK agents executing in worktrees
+- SDK agents executing in worktrees (Claude Max OAuth)
 - No direct push access (orchestrator controls merges)
 - Verification loop before commit
+
+**Learning Systems**:
+- Knowledge compounding (`.undercity/knowledge.json`)
+- Decision tracking (`.undercity/decisions.json`)
+- Task→file patterns (`.undercity/task-file-patterns.json`)
+- Error→fix patterns (`.undercity/error-fix-patterns.json`)
+- Self-tuning routing (`.undercity/routing-profile.json`)
 
 ## Basic Commands
 
@@ -44,9 +53,31 @@ undercity grind --parallel 3               # Max 3 concurrent
 undercity grind --dry-run                  # Show what would run without executing
 
 # Monitoring
-undercity status                           # Current state
-undercity watch                            # Live dashboard
-undercity limits                           # Rate limit status
+undercity status                           # Current state (JSON default)
+undercity pulse                            # Quick state: workers, queue, health
+undercity brief                            # Narrative summary
+undercity watch                            # Live TUI dashboard
+undercity limits                           # Local rate limit state
+undercity usage                            # Live Claude Max usage from claude.ai
+undercity usage --login                    # One-time browser auth setup
+
+# Learning & intelligence
+undercity knowledge "query"                # Search accumulated learnings
+undercity knowledge --stats                # Knowledge base statistics
+undercity decide                           # View pending decisions
+undercity decide --resolve <id> --decision "choice"  # Resolve decision
+undercity patterns                         # Task→file correlations, risks
+undercity prime-patterns                   # Seed patterns from git history
+undercity tuning                           # View learned routing profile
+undercity introspect                       # Analyze own metrics
+undercity decisions                        # Decision tracking stats
+undercity decisions --process              # Have PM process pending
+
+# Analysis
+undercity metrics                          # Performance metrics
+undercity complexity-metrics               # Success by complexity
+undercity insights                         # Routing recommendations
+undercity semantic-check                   # Semantic density analysis
 
 # Daemon (for overnight)
 pnpm daemon:start                          # Start HTTP daemon
@@ -84,14 +115,21 @@ Task marked complete
 
 ## Persistence Files
 
-| File | Purpose | When Used |
-|------|---------|-----------|
-| `tasks.json` | Task board | Always (tracked in git) |
-| `pocket.json` | Active session state | During execution |
-| `parallel-recovery.json` | Crash recovery state | During parallel execution |
-| `rate-limit-state.json` | Token usage tracking | Always |
-| `grind-events.jsonl` | Execution audit log | During grind |
-| `worktree-state.json` | Active worktree tracking | During parallel execution |
+| File | Purpose | Tracked |
+|------|---------|---------|
+| `tasks.json` | Task board | Yes |
+| `knowledge.json` | Accumulated learnings | No |
+| `decisions.json` | Decision history | No |
+| `task-file-patterns.json` | Task→file correlations | No |
+| `error-fix-patterns.json` | Error→fix patterns | No |
+| `routing-profile.json` | Learned routing | No |
+| `parallel-recovery.json` | Crash recovery | No |
+| `rate-limit-state.json` | Rate limit state | No |
+| `live-metrics.json` | Token usage | No |
+| `grind-events.jsonl` | Event log (append) | No |
+| `worktree-state.json` | Active worktrees | No |
+| `ast-index.json` | Symbol index | No |
+| `ax-training.json` | Ax/DSPy examples | No |
 
 ## Model Routing
 
@@ -143,13 +181,13 @@ Recovery state includes:
 
 ## Rate Limiting
 
-Conservative defaults:
-- 1M tokens per 5 hours
-- 5M tokens per week
-- Auto-pause at 95% usage
-- Resume when usage drops
+Dynamic pacing based on live Claude Max usage:
+- Fetches real-time limits from claude.ai (`undercity usage`)
+- Auto-pauses when approaching limits
+- Resumes when headroom available
+- Usage cached 5 minutes
 
-Check status: `undercity limits`
+First-time setup: `undercity usage --login` (one-time browser auth)
 
 ## Worktree Isolation
 
