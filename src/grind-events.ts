@@ -403,8 +403,7 @@ export function getLastGrindSummary(): {
 		failureBreakdown[f.reason]++;
 	}
 
-	const totalTokens =
-		completes.reduce((sum, c) => sum + c.tokens, 0) + failures.reduce((sum, f) => sum + f.tokens, 0);
+	const totalTokens = completes.reduce((sum, c) => sum + c.tokens, 0) + failures.reduce((sum, f) => sum + f.tokens, 0);
 
 	return {
 		batchId: start.batch,
@@ -483,7 +482,12 @@ export function logTaskStarted(options: {
 	model: string;
 	worktreePath?: string;
 }): void {
-	logTaskStart({ batchId: options.batchId, taskId: options.taskId, objective: options.objective, model: options.model });
+	logTaskStart({
+		batchId: options.batchId,
+		taskId: options.taskId,
+		objective: options.objective,
+		model: options.model,
+	});
 }
 
 export function logTaskProgress(_options: { batchId: string; taskId: string; stage: string; details?: string }): void {
