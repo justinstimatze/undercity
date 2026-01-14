@@ -164,6 +164,8 @@ export interface TaskResult {
 	metaTaskResult?: import("./types.js").MetaTaskResult;
 	/** Result from research task - findings, sources, next steps */
 	researchResult?: import("./task-schema.js").ResearchResultSchemaType;
+	/** Task was already complete (no changes needed, content was correct) */
+	taskAlreadyComplete?: boolean;
 }
 
 /**
@@ -278,6 +280,9 @@ export class TaskWorker {
 
 	/** Last agent output for knowledge extraction */
 	private lastAgentOutput: string = "";
+
+	/** Count of no-op edits (content already correct) - signals task may be complete */
+	private noOpEditCount: number = 0;
 
 	/** Pending error signature (for tracking successful fixes) */
 	private pendingErrorSignature: string | null = null;
@@ -779,6 +784,37 @@ export class TaskWorker {
 
 				// Categorize errors for tracking
 				const errorCategories = categorizeErrors(verification);
+
+				// Check for "task already complete" scenario: no file changes but agent tried to edit
+				// and found content was already correct (no-op edits detected)
+				const taskAlreadyComplete =
+					!verification.passed &&
+					verification.filesChanged === 0 &&
+					this.noOpEditCount > 0 &&
+					errorCategories.includes("no_changes");
+
+				if (taskAlreadyComplete) {
+					output.workerVerification(taskId, true);
+					sessionLogger.info(
+						{ taskId, noOpEdits: this.noOpEditCount },
+						"Task already complete (no-op edits detected, content was correct)",
+					);
+					// Treat as success - no commit needed since no changes
+					return {
+						task,
+						status: "complete",
+						model: this.currentModel,
+						attempts: this.attempts,
+						verification,
+						commitSha: undefined, // No commit since no changes
+						durationMs: Date.now() - startTime,
+						tokenUsage: {
+							attempts: this.tokenUsageThisTask,
+							total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
+						},
+						taskAlreadyComplete: true,
+					};
+				}
 
 				if (verification.passed) {
 					output.workerVerification(taskId, true);
@@ -1506,6 +1542,7 @@ RULES:
 
 		// Reset write counter for this execution
 		this.writeCountThisExecution = 0;
+		this.noOpEditCount = 0;
 
 		// Build hooks - meta-tasks don't need the "must write files" check
 		// Research tasks now write to .undercity/research/*.md so they use the normal hook
@@ -1757,15 +1794,32 @@ RULES:
 									`Write succeeded (total: ${this.writeCountThisExecution})`,
 								);
 							} else {
-								sessionLogger.debug(
-									{
-										tool: pendingTool.name,
-										filePath: pendingTool.filePath,
-										isError,
-										contentPreview: block.content?.slice(0, 100),
-									},
-									"Write tool FAILED - not counting",
-								);
+								// Check if this is a no-op edit (content already correct)
+								const isNoOpEdit =
+									block.content?.includes("exactly the same") ||
+									block.content?.includes("No changes to make") ||
+									block.content?.includes("already exists");
+								if (isNoOpEdit) {
+									this.noOpEditCount++;
+									sessionLogger.debug(
+										{
+											tool: pendingTool.name,
+											filePath: pendingTool.filePath,
+											noOpCount: this.noOpEditCount,
+										},
+										"No-op edit detected (content already correct)",
+									);
+								} else {
+									sessionLogger.debug(
+										{
+											tool: pendingTool.name,
+											filePath: pendingTool.filePath,
+											isError,
+											contentPreview: block.content?.slice(0, 100),
+										},
+										"Write tool FAILED - not counting",
+									);
+								}
 							}
 						}
 					}
@@ -1788,8 +1842,13 @@ RULES:
 		verification: VerificationResult,
 		errorCategories: ErrorCategory[],
 	): { shouldEscalate: boolean; reason: string } {
-		// No changes made = agent is stuck, escalate immediately
+		// No changes made - check if this is because task is already complete
 		if (verification.filesChanged === 0) {
+			// If agent tried to make changes but content was already correct, task may be done
+			if (this.noOpEditCount > 0) {
+				return { shouldEscalate: false, reason: "task may already be complete (no-op edits detected)" };
+			}
+			// Otherwise agent is stuck, escalate
 			return { shouldEscalate: true, reason: "no changes made" };
 		}
 
