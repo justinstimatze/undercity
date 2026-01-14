@@ -275,7 +275,7 @@ describe("verification.ts", () => {
 				"git status --porcelain": "",
 				"git diff --name-only": "src/file.ts\nsrc/other.ts",
 				"pnpm typecheck": "",
-				"pnpm lint": "",
+				"pnpm check": "",
 				"pnpm test --run": "",
 				"pnpm quality:check": "",
 			};
@@ -406,7 +406,7 @@ describe("verification.ts", () => {
 				if (cmd.includes("pnpm typecheck")) {
 					return "";
 				}
-				if (cmd.includes("pnpm lint")) {
+				if (cmd.includes("pnpm check")) {
 					const error = new Error("Lint failed") as Error & { stdout: string };
 					error.stdout = "error: Unexpected any\nerror: Missing return type\nwarning: Unused variable";
 					throw error;
@@ -439,7 +439,7 @@ describe("verification.ts", () => {
 				if (cmd.includes("pnpm typecheck")) {
 					return "";
 				}
-				if (cmd.includes("pnpm lint")) {
+				if (cmd.includes("pnpm check")) {
 					return "";
 				}
 				if (cmd.includes("pnpm test --run")) {
@@ -601,7 +601,7 @@ describe("verification.ts", () => {
 				if (cmd.includes("pnpm typecheck")) {
 					return "";
 				}
-				if (cmd.includes("pnpm lint")) {
+				if (cmd.includes("pnpm check")) {
 					return "";
 				}
 				if (cmd.includes("pnpm quality:check")) {
@@ -635,7 +635,7 @@ describe("verification.ts", () => {
 				if (cmd.includes("pnpm typecheck")) {
 					return "";
 				}
-				if (cmd.includes("pnpm lint")) {
+				if (cmd.includes("pnpm check")) {
 					return "";
 				}
 				return "";

@@ -49,10 +49,11 @@ function getVerificationCommands(workingDirectory: string): {
 	}
 
 	// Default commands (pnpm-based)
+	// Note: use 'pnpm check' not 'pnpm lint' to match CI (biome check vs biome lint)
 	return {
 		typecheck: "pnpm typecheck",
 		test: "pnpm test --run",
-		lint: "pnpm lint",
+		lint: "pnpm check",
 		spell: "pnpm spell",
 		qualityCheck: "pnpm quality:check",
 	};
