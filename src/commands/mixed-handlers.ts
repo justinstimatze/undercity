@@ -102,6 +102,13 @@ export interface KnowledgeOptions {
 	limit?: string;
 }
 
+export interface PMOptions {
+	research?: boolean;
+	propose?: boolean;
+	ideate?: boolean;
+	add?: boolean;
+}
+
 /**
  * Pulse data structure for JSON output
  */
@@ -766,6 +773,28 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 
 	// Process from task board (all tasks run in worktrees)
 	output.header("Undercity Grind Mode", "Autonomous operation • Rate limit handling • Infinite processing");
+
+	// Pre-flight check: verify Claude Max usage limits before starting
+	try {
+		const { fetchClaudeUsage } = await import("../claude-usage.js");
+		const usage = await fetchClaudeUsage();
+		if (usage?.success) {
+			// Check both 5-hour and weekly limits
+			const maxPercent = Math.max(usage.fiveHourPercent, usage.weeklyPercent);
+			if (maxPercent >= 95) {
+				output.warning(`Claude Max usage at ${maxPercent.toFixed(0)}% - consider waiting for reset`);
+			} else if (maxPercent >= 80) {
+				output.info(`Claude Max usage: ${maxPercent.toFixed(0)}% of limit`);
+			} else {
+				output.debug(`Usage headroom OK: ${maxPercent.toFixed(0)}% used`);
+			}
+		} else if (usage?.needsLogin) {
+			output.debug("Skipping usage check (run 'undercity usage --login' to enable)");
+		}
+	} catch {
+		// Usage check is optional - continue without it
+		output.debug("Skipping usage check (may need login via 'undercity usage --login')");
+	}
 
 	// Auto-prime patterns from git history if store is empty/small
 	try {
@@ -2640,5 +2669,131 @@ export async function handleKnowledge(query: string | undefined, options: Knowle
 		}
 	} else {
 		console.log(JSON.stringify({ query, results: relevant }, null, 2));
+	}
+}
+
+/**
+ * PM command handler - proactive product management
+ */
+export async function handlePM(topic: string | undefined, options: PMOptions): Promise<void> {
+	// Lazy import to avoid circular dependencies
+	const { pmResearch, pmPropose, pmIdeate } = await import("../automated-pm.js");
+	const { addGoal } = await import("../task.js");
+	type TaskProposal = Awaited<ReturnType<typeof pmPropose>>[number];
+
+	const cwd = process.cwd();
+	const isHuman = output.isHumanMode();
+
+	// Default to ideate if no specific option chosen
+	const mode = options.research ? "research" : options.propose ? "propose" : "ideate";
+
+	if (mode === "ideate" || mode === "research") {
+		if (!topic) {
+			if (isHuman) {
+				console.log(chalk.yellow("Usage: undercity pm <topic> [--research|--propose|--ideate]"));
+				console.log(chalk.dim("Examples:"));
+				console.log(chalk.dim("  undercity pm 'testing best practices' --research"));
+				console.log(chalk.dim("  undercity pm 'code quality improvements' --propose"));
+				console.log(chalk.dim("  undercity pm 'error handling patterns' --ideate"));
+			} else {
+				console.log(JSON.stringify({ error: "Topic required for research or ideate mode" }));
+			}
+			return;
+		}
+	}
+
+	try {
+		let proposals: TaskProposal[] = [];
+
+		if (mode === "research") {
+			if (isHuman) {
+				console.log(chalk.cyan(`\n🔬 PM researching: ${topic}\n`));
+			}
+			const result = await pmResearch(topic!, cwd);
+			proposals = result.taskProposals;
+
+			if (isHuman) {
+				console.log(chalk.bold("Findings:"));
+				for (const finding of result.findings) {
+					console.log(`  • ${finding}`);
+				}
+				console.log();
+				console.log(chalk.bold("Recommendations:"));
+				for (const rec of result.recommendations) {
+					console.log(`  → ${rec}`);
+				}
+				console.log();
+				console.log(chalk.bold("Sources:"));
+				for (const source of result.sources) {
+					console.log(chalk.dim(`  ${source}`));
+				}
+			} else {
+				console.log(JSON.stringify(result, null, 2));
+			}
+		} else if (mode === "propose") {
+			if (isHuman) {
+				console.log(chalk.cyan(`\n💡 PM analyzing codebase${topic ? ` for: ${topic}` : ""}...\n`));
+			}
+			proposals = await pmPropose(topic, cwd);
+
+			if (isHuman && proposals.length === 0) {
+				console.log(chalk.dim("  No proposals generated."));
+			}
+		} else {
+			// ideate mode - full session
+			if (isHuman) {
+				console.log(chalk.cyan(`\n🧠 PM ideation session: ${topic}\n`));
+			}
+			const result = await pmIdeate(topic!, cwd);
+			proposals = result.proposals;
+
+			if (isHuman) {
+				console.log(chalk.bold("Research Findings:"));
+				for (const finding of result.research.findings) {
+					console.log(`  • ${finding}`);
+				}
+				console.log();
+			} else {
+				console.log(JSON.stringify(result, null, 2));
+			}
+		}
+
+		// Show proposals
+		if (proposals.length > 0 && isHuman) {
+			console.log(chalk.bold(`\nTask Proposals (${proposals.length}):\n`));
+			for (let i = 0; i < proposals.length; i++) {
+				const p = proposals[i];
+				const priorityColor =
+					p.suggestedPriority >= 800 ? chalk.red : p.suggestedPriority >= 600 ? chalk.yellow : chalk.white;
+				console.log(`  ${i + 1}. ${p.objective}`);
+				console.log(chalk.dim(`     ${p.rationale}`));
+				console.log(chalk.dim(`     Priority: ${priorityColor(String(p.suggestedPriority))} | Source: ${p.source}`));
+				console.log();
+			}
+		}
+
+		// Add to board if requested
+		if (options.add && proposals.length > 0) {
+			if (isHuman) {
+				console.log(chalk.yellow("\n⚠️  Adding proposals to task board...\n"));
+			}
+			for (const p of proposals) {
+				const task = addGoal(p.objective, p.suggestedPriority);
+				if (isHuman) {
+					console.log(chalk.green(`  ✓ Added: ${task.id} - ${p.objective.substring(0, 50)}...`));
+				}
+			}
+			if (!isHuman) {
+				console.log(JSON.stringify({ added: proposals.length, taskIds: proposals.map((_, i) => `task-${i}`) }));
+			}
+		} else if (proposals.length > 0 && isHuman && !options.add) {
+			console.log(chalk.dim("Use --add to add these proposals to the task board"));
+		}
+	} catch (error) {
+		if (isHuman) {
+			console.log(chalk.red(`\n✗ PM operation failed: ${error}`));
+		} else {
+			console.log(JSON.stringify({ error: String(error) }));
+		}
 	}
 }

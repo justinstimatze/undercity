@@ -20,6 +20,7 @@ import {
 	handleKnowledge,
 	handleLimits,
 	handleOracle,
+	handlePM,
 	handlePulse,
 	handleServe,
 	handleSetup,
@@ -32,6 +33,7 @@ import {
 	type IntrospectOptions,
 	type KnowledgeOptions,
 	type OracleOptions,
+	type PMOptions,
 	type PulseOptions,
 	type ServeOptions,
 	type StatusOptions,
@@ -222,5 +224,15 @@ export const mixedCommands: CommandModule = {
 				const parentOpts = cmd.parent?.opts() || {};
 				handleKnowledge(query, { ...options, human: parentOpts.human || options.human });
 			});
+
+		// PM command - proactive product management (ideation, research, task generation)
+		program
+			.command("pm [topic]")
+			.description("Proactive PM: research topics and generate task proposals")
+			.option("--research", "Research a topic via web search")
+			.option("--propose", "Generate task proposals from codebase analysis")
+			.option("--ideate", "Full ideation session: research + propose (default)")
+			.option("--add", "Add proposed tasks to the board (requires confirmation)")
+			.action((topic: string | undefined, options: PMOptions) => handlePM(topic, options));
 	},
 };

@@ -26,6 +26,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { getASTIndex } from "./ast-index.js";
+import { quickDecision } from "./automated-pm.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { findRelevantLearnings, formatLearningsForPrompt } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
@@ -220,6 +221,17 @@ export interface ExecutionPlan {
 	alreadyComplete?: { likely: boolean; reason?: string };
 	/** If task needs decomposition */
 	needsDecomposition?: { needed: boolean; suggestedSubtasks?: string[] };
+	/** Open questions that need decisions before execution */
+	openQuestions?: Array<{
+		question: string;
+		options?: string[];
+		context?: string;
+	}>;
+	/** Resolved decisions from PM */
+	resolvedDecisions?: Array<{
+		question: string;
+		decision: string;
+	}>;
 }
 
 /**
@@ -389,7 +401,8 @@ Output your plan in this exact JSON format:
   "risks": ["potential issues to watch for"],
   "expectedOutcome": "what success looks like",
   "alreadyComplete": {"likely": false, "reason": "if already done, explain"},
-  "needsDecomposition": {"needed": false, "suggestedSubtasks": ["if too big, list subtasks"]}
+  "needsDecomposition": {"needed": false, "suggestedSubtasks": ["if too big, list subtasks"]},
+  "openQuestions": [{"question": "question needing decision", "options": ["option1", "option2"], "context": "why this matters"}]
 }
 \`\`\`
 
@@ -399,7 +412,8 @@ RULES:
 3. Check if the task is already complete (read target files)
 4. If the task is too vague or large, mark needsDecomposition as true
 5. Be specific about which files and what changes
-6. List concrete steps, not vague directions`;
+6. List concrete steps, not vague directions
+7. If there are multiple valid approaches or decisions to make, add them to openQuestions`;
 
 	logger.debug({ task: task.substring(0, 50), model }, "Creating execution plan");
 
@@ -716,6 +730,55 @@ Verify file existence by checking the filesystem.`;
 }
 
 /**
+ * Resolve open questions in a plan via the automated PM
+ *
+ * The PM uses past decisions, knowledge base, and (optionally) LLM judgment
+ * to resolve questions inline before review. This keeps the plan-review
+ * cycle self-contained rather than deferring decisions.
+ */
+async function resolveOpenQuestions(
+	plan: ExecutionPlan,
+	taskId: string,
+	stateDir: string = ".undercity",
+): Promise<ExecutionPlan> {
+	if (!plan.openQuestions || plan.openQuestions.length === 0) {
+		return plan;
+	}
+
+	logger.info({ taskId, questionCount: plan.openQuestions.length }, "Resolving open questions via PM");
+
+	const resolvedDecisions: Array<{ question: string; decision: string }> = [];
+
+	for (const q of plan.openQuestions) {
+		try {
+			const context = q.context || `Options: ${q.options?.join(", ") || "none specified"}`;
+			const decision = await quickDecision(q.question, context, taskId, stateDir);
+
+			if (decision) {
+				resolvedDecisions.push({ question: q.question, decision });
+				logger.debug({ question: q.question.substring(0, 50), decision }, "PM resolved question");
+			} else {
+				// PM escalated to human - leave question open
+				logger.info({ question: q.question.substring(0, 50) }, "PM escalated question to human");
+			}
+		} catch (error) {
+			logger.warn({ error: String(error), question: q.question.substring(0, 50) }, "Failed to resolve question via PM");
+		}
+	}
+
+	// Return plan with resolved decisions and remaining open questions
+	const unresolvedQuestions = plan.openQuestions.filter(
+		(q) => !resolvedDecisions.some((r) => r.question === q.question),
+	);
+
+	return {
+		...plan,
+		resolvedDecisions: [...(plan.resolvedDecisions || []), ...resolvedDecisions],
+		openQuestions: unresolvedQuestions.length > 0 ? unresolvedQuestions : undefined,
+	};
+}
+
+/**
  * Run tiered planning: cheaper model creates plan, expensive model reviews
  *
  * Iterates on feedback: if reviewer has issues, planner revises and resubmits.
@@ -756,6 +819,12 @@ export async function planTaskWithReview(
 
 	// Phase 1: Create initial plan with cheaper model (using pre-gathered context)
 	let currentPlan = await createExecutionPlan(task, plannerModel, cwd, planningContext);
+
+	// Phase 1.5: Resolve any open questions via PM (inline, not deferred)
+	if (currentPlan.openQuestions && currentPlan.openQuestions.length > 0) {
+		const taskId = `plan-${Date.now().toString(36)}`;
+		currentPlan = await resolveOpenQuestions(currentPlan, taskId);
+	}
 
 	// Early exit: already complete
 	if (currentPlan.alreadyComplete?.likely) {
