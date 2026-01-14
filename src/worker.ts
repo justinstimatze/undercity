@@ -374,6 +374,12 @@ export class TaskWorker {
 	/** Track write operations during current execution (for Stop hook) */
 	private writeCountThisExecution: number = 0;
 
+	/** Track writes per file to detect thrashing (same file edited repeatedly without progress) */
+	private writesPerFile: Map<string, number> = new Map();
+
+	/** Maximum writes to a single file before failing (prevents token burn on stuck edits) */
+	private static readonly MAX_WRITES_PER_FILE = 6;
+
 	/** Track if current task is a meta-task (doesn't require file changes) */
 	private isCurrentTaskMeta: boolean = false;
 
@@ -678,7 +684,29 @@ export class TaskWorker {
 		metaType: MetaTaskType | null;
 		baseCommit: string | undefined;
 	} {
-		this.attempts = 0;
+		// Read assignment to check for checkpoint from crash recovery
+		const assignment = readTaskAssignment(this.workingDirectory);
+		const checkpoint = assignment?.checkpoint;
+
+		// Restore state from checkpoint if recovering, otherwise start fresh
+		if (checkpoint) {
+			this.attempts = checkpoint.attempts;
+			// Restore model from checkpoint if it was escalated
+			if (checkpoint.model && checkpoint.model !== this.currentModel) {
+				sessionLogger.info(
+					{ previousModel: checkpoint.model, currentModel: this.currentModel },
+					"Restoring model from checkpoint",
+				);
+				this.currentModel = checkpoint.model;
+			}
+			sessionLogger.info(
+				{ phase: checkpoint.phase, attempts: checkpoint.attempts },
+				"Resuming from checkpoint",
+			);
+		} else {
+			this.attempts = 0;
+		}
+
 		this.attemptRecords = [];
 		this.tokenUsageThisTask = [];
 		this.sameModelRetries = 0;
@@ -1555,6 +1583,14 @@ export class TaskWorker {
 	): void {
 		const escalationDecision = this.shouldEscalate(verification, errorCategories);
 
+		// Force failure when file thrashing detected (prevents token burn)
+		if (escalationDecision.forceFailure) {
+			output.error(`Forcing task failure: ${escalationDecision.reason}`, { taskId });
+			// Set attempts to max to break out of retry loop
+			this.attempts = this.maxAttempts;
+			return;
+		}
+
 		if (escalationDecision.shouldEscalate) {
 			const previousModel = this.currentModel;
 			const escalated = this.escalateModel();
@@ -2151,6 +2187,7 @@ RULES:
 
 		// Reset counters for this execution
 		this.writeCountThisExecution = 0;
+		this.writesPerFile.clear();
 		this.noOpEditCount = 0;
 		this.taskAlreadyCompleteReason = null;
 		this.invalidTargetReason = null;
@@ -2462,14 +2499,32 @@ RULES:
 
 							if (succeeded) {
 								this.writeCountThisExecution++;
+								// Track per-file writes to detect thrashing
+								const filePath = pendingTool.filePath || "unknown";
+								const fileWriteCount = (this.writesPerFile.get(filePath) || 0) + 1;
+								this.writesPerFile.set(filePath, fileWriteCount);
+
 								sessionLogger.debug(
 									{
 										tool: pendingTool.name,
 										filePath: pendingTool.filePath,
 										writeCount: this.writeCountThisExecution,
+										fileWriteCount,
 									},
-									`Write succeeded (total: ${this.writeCountThisExecution})`,
+									`Write succeeded (total: ${this.writeCountThisExecution}, file: ${fileWriteCount})`,
 								);
+
+								// Check for file thrashing (too many writes to same file)
+								if (fileWriteCount >= TaskWorker.MAX_WRITES_PER_FILE) {
+									sessionLogger.warn(
+										{
+											filePath,
+											writeCount: fileWriteCount,
+											maxAllowed: TaskWorker.MAX_WRITES_PER_FILE,
+										},
+										"File thrashing detected - too many writes to same file without progress",
+									);
+								}
 							} else {
 								// Check if this is a no-op edit (content already correct)
 								const isNoOpEdit =
@@ -2518,7 +2573,18 @@ RULES:
 	private shouldEscalate(
 		verification: VerificationResult,
 		errorCategories: ErrorCategory[],
-	): { shouldEscalate: boolean; reason: string } {
+	): { shouldEscalate: boolean; reason: string; forceFailure?: boolean } {
+		// Check for file thrashing (same file edited too many times without progress)
+		for (const [filePath, count] of this.writesPerFile) {
+			if (count >= TaskWorker.MAX_WRITES_PER_FILE) {
+				return {
+					shouldEscalate: false,
+					reason: `file thrashing: ${filePath} edited ${count} times without verification passing`,
+					forceFailure: true,
+				};
+			}
+		}
+
 		// No changes made - check if this is because task is already complete
 		if (verification.filesChanged === 0) {
 			// If agent tried to make changes but content was already correct, task may be done

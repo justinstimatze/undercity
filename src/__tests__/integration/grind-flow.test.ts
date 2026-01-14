@@ -3,6 +3,8 @@
  *
  * Tests the complete autonomous task execution cycle from task board to completion.
  * Uses a real temporary git repo but mocks the AI execution for speed and determinism.
+ *
+ * Note: These tests are skipped during verification runs to avoid slowdowns.
  */
 
 import { execSync } from "node:child_process";
@@ -12,7 +14,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Task } from "../../types.js";
 
-describe.sequential("Grind Flow Integration", () => {
+// Skip git-heavy integration tests during verification runs
+const isCoverage = process.env.npm_lifecycle_event?.includes("coverage");
+const isVerification = process.env.UNDERCITY_VERIFICATION === "true";
+const describeIntegration = isCoverage || isVerification ? describe.skip : describe.sequential;
+
+describeIntegration("Grind Flow Integration", () => {
 	let testRepoPath: string;
 	let tasksJsonPath: string;
 
