@@ -144,6 +144,10 @@ function saveKnowledge(kb: KnowledgeBase, stateDir: string = DEFAULT_STATE_DIR):
 
 /**
  * Extract keywords from text for retrieval
+ *
+ * Processes natural language text to extract meaningful keywords that can be used
+ * for learning retrieval. Filters out common stop words and punctuation, then
+ * returns the top 20 unique keywords for efficient matching against stored learnings.
  */
 function extractKeywords(text: string): string[] {
 	// Common words to filter out
