@@ -1412,8 +1412,10 @@ export class Orchestrator {
 			// If git status fails, the worktree is likely corrupted or deleted
 			const errorStr = String(cleanError);
 			if (errorStr.includes("not a work tree") || errorStr.includes("must be run in a work tree")) {
-				throw new Error(`Worktree for ${taskId} was deleted or corrupted before merge could complete. ` +
-					`This may be a race condition - try running with lower parallelism.`);
+				throw new Error(
+					`Worktree for ${taskId} was deleted or corrupted before merge could complete. ` +
+						`This may be a race condition - try running with lower parallelism.`,
+				);
 			}
 			output.warning(`Failed to clean worktree for ${taskId}: ${cleanError}`);
 		}
