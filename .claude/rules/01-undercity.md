@@ -30,56 +30,58 @@ Multi-agent orchestrator with learning. Processes tasks from board with verifica
 - Error→fix patterns (`.undercity/error-fix-patterns.json`)
 - Self-tuning routing (`.undercity/routing-profile.json`)
 
+**Automated PM**:
+- Resolves decisions during plan review (inline, not deferred)
+- Generates novel tasks via web research and codebase analysis
+- Uses past decisions + knowledge for context
+- Escalates only truly ambiguous decisions to human
+
 ## Basic Commands
 
+**Primary commands** (Claude Code should use these):
 ```bash
 # Task board (ALWAYS use CLI, never edit tasks.json directly)
 undercity add "task description"           # Add task
 undercity add "task" --priority 5          # Add with priority
-undercity tasks                            # List all tasks
-undercity tasks --status pending           # Filter by status
+undercity tasks                            # List pending tasks
 undercity tasks --status complete          # Show completed
-undercity tasks --tag context              # Filter by tag
-undercity tasks --all                      # Show all (not just 10)
-undercity tasks --count 20                 # Show first 20
-undercity complete <task-id>               # Mark task complete
-undercity complete <task-id> --reason "Already implemented"  # With explanation
-undercity reconcile                        # Mark duplicate/done tasks complete
+undercity complete <task-id>               # Mark task complete manually
 
 # Autonomous execution
 undercity grind                            # Process all tasks
 undercity grind -n 10                      # Process 10 tasks
 undercity grind --parallel 3               # Max 3 concurrent
-undercity grind --dry-run                  # Show what would run without executing
 
-# Monitoring
-undercity status                           # Current state (JSON default)
-undercity pulse                            # Quick state: workers, queue, health
-undercity brief                            # Narrative summary
+# Proactive PM (research and task generation)
+undercity pm "topic" --ideate              # Full ideation: research + propose
+undercity pm "topic" --research            # Web research on a topic
+undercity pm --propose                     # Generate tasks from codebase analysis
+undercity pm "topic" --ideate --add        # Add proposals to board
+```
+
+**Secondary commands** (debugging, human monitoring):
+```bash
+# Monitoring (data also available in .undercity/*.json files)
+undercity status                           # Current state (JSON)
 undercity watch                            # Live TUI dashboard
-undercity limits                           # Local rate limit state
-undercity usage                            # Live Claude Max usage from claude.ai
+undercity usage                            # Claude Max usage from claude.ai
 undercity usage --login                    # One-time browser auth setup
 
-# Learning & intelligence
+# Learning (auto-used during grind, manual inspection)
 undercity knowledge "query"                # Search accumulated learnings
-undercity knowledge --stats                # Knowledge base statistics
-undercity decide                           # View pending decisions
-undercity decide --resolve <id> --decision "choice"  # Resolve decision
-undercity patterns                         # Task→file correlations, risks
-undercity prime-patterns                   # Seed patterns from git history
-undercity tuning                           # View learned routing profile
-undercity introspect                       # Analyze own metrics
-undercity decisions                        # Decision tracking stats
-undercity decisions --process              # Have PM process pending
+undercity decide                           # View/resolve pending decisions
+undercity patterns                         # Task→file correlations
+```
 
-# Analysis
-undercity metrics                          # Performance metrics
-undercity complexity-metrics               # Success by complexity
-undercity insights                         # Routing recommendations
-undercity semantic-check                   # Semantic density analysis
+**Auto-chained** (happens automatically, no command needed):
+- Usage check before grind starts
+- Pattern priming from git history (if empty)
+- Knowledge injection during planning
+- PM resolution of open questions in plans
+- Pattern/knowledge recording after completion
 
-# Daemon (for overnight)
+**Daemon** (for overnight runs):
+```bash
 pnpm daemon:start                          # Start HTTP daemon
 pnpm daemon:status                         # Check status
 pnpm daemon:logs                           # View logs
@@ -92,6 +94,11 @@ Task Board (.undercity/tasks.json)
     ↓
 Grind picks task → Assess complexity
     ↓
+Pre-execution planning (tiered):
+    ├─ Haiku creates plan (files, steps, risks)
+    ├─ PM resolves open questions inline
+    └─ Sonnet/Opus reviews plan
+    ↓
 Route to model tier:
     - Simple (haiku): typos, docs, trivial fixes
     - Medium (sonnet): features, refactoring, most code
@@ -99,7 +106,7 @@ Route to model tier:
     ↓
 Create worktree (.undercity/worktrees/task-{id}/)
     ↓
-Worker executes → Verification loop
+Worker executes with validated plan → Verification loop
     ↓
     ├─ typecheck fails? → Fix or escalate
     ├─ tests fail? → Fix or escalate
@@ -110,7 +117,7 @@ Queue for merge → MergeQueue processes serially
     ↓
 Rebase onto local main → Verify → Fast-forward merge
     ↓
-Task marked complete
+Task marked complete → Record learnings
 ```
 
 ## Persistence Files

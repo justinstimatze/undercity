@@ -44,7 +44,7 @@
 | **task-analyzer.ts** | Task → packages, files, risk scoring | TaskAnalyzer |
 | **task-board-analyzer.ts** | Board-level insights, parallelization | TaskBoardAnalyzer |
 | **task-scheduler.ts** | Matchmaking for compatible task sets | TaskScheduler |
-| **task-planner.ts** | [plan] prefix → subtask expansion | TaskPlanner |
+| **task-planner.ts** | Pre-execution planning, tiered review, PM integration | planTaskWithReview, ExecutionPlan |
 | **capability-ledger.ts** | Track model success by keyword patterns | updateLedger, getRecommendedModel, getLedgerStats |
 | **experiment.ts** | A/B testing framework for grind | ExperimentManager, getExperimentManager |
 | **feedback-metrics.ts** | Historical metrics analysis, success rates | analyzeMetrics, suggestModelTier, analyzeTaskPatterns |
@@ -52,7 +52,7 @@
 | **knowledge.ts** | Knowledge compounding (learnings from tasks) | loadKnowledge, addLearning, findRelevantLearnings |
 | **knowledge-extractor.ts** | Extract learnings from task completions | extractLearnings |
 | **decision-tracker.ts** | Capture/resolve agent decisions | captureDecision, resolveDecision, getPendingDecisions |
-| **automated-pm.ts** | Automated PM for pm_decidable decisions | processPendingDecisions |
+| **automated-pm.ts** | Automated PM: decision resolution, task generation, web research | pmDecide, quickDecision, pmResearch, pmPropose, pmIdeate |
 | **task-file-patterns.ts** | Task→file correlations, co-modification | recordTaskFiles, findRelevantFiles, findCoModifiedFiles |
 | **error-fix-patterns.ts** | Error→fix patterns for known issues | recordErrorFix, findMatchingFix, getErrorFixStats |
 | **ax-programs.ts** | Ax/DSPy self-improving prompts | getAxProgramStats |
@@ -72,6 +72,7 @@
 - Track task metrics → `metrics.ts` (MetricsTracker)
 - Track live token usage → `live-metrics.ts`
 - Parse markdown plans → `plan-parser.ts`
+- Create pre-execution plans with review → `task-planner.ts` (planTaskWithReview)
 - Check task complexity → `complexity.ts` or `task-decomposer.ts`
 - Analyze historical metrics → `feedback-metrics.ts`
 - View/tune model routing → `self-tuning.ts` (or `undercity tuning`)
@@ -90,7 +91,9 @@
 - Store/retrieve learnings → `knowledge.ts`
 - Extract learnings from completed tasks → `knowledge-extractor.ts`
 - Capture/resolve agent decisions → `decision-tracker.ts`
-- Process PM-decidable decisions → `automated-pm.ts`
+- Resolve decisions via PM → `automated-pm.ts` (quickDecision, pmDecide)
+- Generate new tasks via PM → `automated-pm.ts` (pmPropose, pmIdeate)
+- Research topics via PM → `automated-pm.ts` (pmResearch)
 - Track task→file patterns → `task-file-patterns.ts`
 - Track error→fix patterns → `error-fix-patterns.ts`
 - Fetch Claude Max usage → `claude-usage.ts`
