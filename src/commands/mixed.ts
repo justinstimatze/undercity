@@ -17,6 +17,7 @@ import {
 	handleIndex,
 	handleInit,
 	handleIntrospect,
+	handleKnowledge,
 	handleLimits,
 	handleOracle,
 	handlePulse,
@@ -29,6 +30,7 @@ import {
 	type IndexOptions,
 	type InitOptions,
 	type IntrospectOptions,
+	type KnowledgeOptions,
 	type OracleOptions,
 	type PulseOptions,
 	type ServeOptions,
@@ -81,7 +83,7 @@ export const mixedCommands: CommandModule = {
 				handleUsage({ ...options, human: parentOpts.human || options.human });
 			});
 
-		// Pulse command - quick state check (Mayor Model integration)
+		// Pulse command - quick state check
 		program
 			.command("pulse")
 			.description("Quick state check: active workers, queue, health, attention items (JSON default)")
@@ -92,7 +94,7 @@ export const mixedCommands: CommandModule = {
 				handlePulse({ ...options, human: parentOpts.human || options.human });
 			});
 
-		// Brief command - narrative summary (Mayor Model integration)
+		// Brief command - narrative summary
 		program
 			.command("brief")
 			.description("Narrative summary: accomplishments, failures, blockers, recommendations (JSON default)")
@@ -102,7 +104,7 @@ export const mixedCommands: CommandModule = {
 				handleBrief({ ...options, human: parentOpts.human || options.human });
 			});
 
-		// Decide command - view and resolve pending decisions (Mayor Model integration)
+		// Decide command - view and resolve pending decisions
 		program
 			.command("decide")
 			.description("View and resolve pending decisions from task execution (JSON default)")
@@ -208,5 +210,17 @@ export const mixedCommands: CommandModule = {
 			.option("--since <date>", "Only analyze records since date (YYYY-MM-DD)")
 			.option("-p, --patterns", "Show task pattern analysis (keyword clustering)")
 			.action((options: IntrospectOptions) => handleIntrospect(options));
+
+		// Knowledge command - search accumulated learnings
+		program
+			.command("knowledge [query]")
+			.description("Search accumulated learnings from task execution (JSON default)")
+			.option("--stats", "Show knowledge base statistics")
+			.option("--all", "List all learnings (not just search results)")
+			.option("-n, --limit <n>", "Limit number of results (default: 10 for search, 50 for --all)")
+			.action((query: string | undefined, options: KnowledgeOptions, cmd) => {
+				const parentOpts = cmd.parent?.opts() || {};
+				handleKnowledge(query, { ...options, human: parentOpts.human || options.human });
+			});
 	},
 };
