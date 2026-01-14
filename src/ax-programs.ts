@@ -98,6 +98,43 @@ export const ReviewTriageSignature = AxSignature.create(
 	confidence:number "Confidence in assessment (0-1)"`,
 );
 
+/**
+ * Plan creation signature
+ * Input: task and pre-gathered context
+ * Output: structured execution plan
+ */
+export const PlanCreationSignature = AxSignature.create(
+	`task:string "The coding task to plan",
+	contextBriefing:string "Pre-gathered context: target files, types, learnings" ->
+	reasoning:string "Analysis of the task and approach",
+	filesToRead:string[] "Files to read for context",
+	filesToModify:string[] "Files that will be changed",
+	filesToCreate:string[] "New files to create if any",
+	steps:string[] "Step-by-step implementation approach",
+	risks:string[] "Potential issues or edge cases",
+	expectedOutcome:string "What success looks like",
+	alreadyComplete:boolean "Task appears to already be done",
+	alreadyCompleteReason:string "Why task appears done if alreadyComplete is true",
+	needsDecomposition:boolean "Task is too large and needs breaking down",
+	suggestedSubtasks:string[] "Subtasks if needsDecomposition is true"`,
+);
+
+/**
+ * Plan review signature
+ * Input: task and proposed plan
+ * Output: review assessment with approval/issues
+ */
+export const PlanReviewSignature = AxSignature.create(
+	`task:string "The original coding task",
+	plan:string "The proposed execution plan as JSON" ->
+	reasoning:string "Analysis of plan quality and completeness",
+	approved:boolean "Plan is ready for execution",
+	issues:string[] "Problems found with the plan",
+	suggestions:string[] "Improvements to consider",
+	skipExecution:boolean "Task should be skipped entirely",
+	skipReason:string "Why execution should be skipped if skipExecution is true"`,
+);
+
 // ============================================================================
 // Program Instances
 // ============================================================================
@@ -234,6 +271,65 @@ FOCUS AREAS to identify:
 - Performance regressions
 
 Analyze the diff carefully and think step by step before recommending a strategy.`);
+	return gen;
+}
+
+/**
+ * Plan creator program
+ * Creates structured execution plans from task + context
+ */
+export function createPlanCreator(): AxGen {
+	const gen = new AxGen(PlanCreationSignature);
+	gen.setInstruction(`You create execution plans for coding tasks.
+
+PLANNING RULES:
+1. Use the pre-gathered context - don't duplicate exploration work
+2. Be specific about files: include exact paths
+3. Steps should be concrete and actionable
+4. Identify risks proactively
+5. If task is done, set alreadyComplete=true with reason
+6. If task is too big, set needsDecomposition=true with subtasks
+
+GOOD PLAN:
+- filesToModify: ["src/auth.ts", "src/types.ts"]
+- steps: ["Add UserRole enum to types.ts", "Import UserRole in auth.ts", "Add role check to validateUser"]
+
+BAD PLAN:
+- filesToModify: ["somewhere"]
+- steps: ["Update the code", "Fix things"]
+
+Think through your approach in the reasoning field first.`);
+	return gen;
+}
+
+/**
+ * Plan reviewer program
+ * Reviews execution plans for quality and completeness
+ */
+export function createPlanReviewer(): AxGen {
+	const gen = new AxGen(PlanReviewSignature);
+	gen.setInstruction(`You review execution plans for coding tasks.
+
+REVIEW CRITERIA:
+1. Do referenced files exist? (Check paths are plausible)
+2. Are steps specific and actionable?
+3. Is scope appropriate? (not too big, not trivial)
+4. Are obvious risks identified?
+5. Is the approach sound?
+
+SET approved=false if:
+- Files look wrong (e.g., referencing src/services/ when none exists)
+- Steps are vague ("update the code")
+- Missing obvious considerations
+- Scope is too large for one task
+
+SET skipExecution=true if:
+- Task appears already done
+- Task is invalid (references non-existent things)
+- Task is duplicate of another
+
+Provide specific, actionable feedback in issues/suggestions.
+Think through your analysis in the reasoning field.`);
 	return gen;
 }
 
@@ -593,6 +689,115 @@ export async function triageReviewAx(
 	}
 }
 
+/**
+ * Create execution plan using Ax program
+ * Returns structured plan from task + context
+ */
+export async function createPlanAx(
+	task: string,
+	contextBriefing: string,
+	stateDir: string = ".undercity",
+): Promise<{
+	filesToRead: string[];
+	filesToModify: string[];
+	filesToCreate: string[];
+	steps: string[];
+	risks: string[];
+	expectedOutcome: string;
+	alreadyComplete: boolean;
+	alreadyCompleteReason: string;
+	needsDecomposition: boolean;
+	suggestedSubtasks: string[];
+	reasoning: string;
+}> {
+	try {
+		const ai = createAxAI();
+		const creator = createPlanCreatorWithExamples(stateDir);
+
+		const result = await creator.forward(ai, { task, contextBriefing });
+
+		const output = {
+			filesToRead: Array.isArray(result.filesToRead) ? result.filesToRead.map(String) : [],
+			filesToModify: Array.isArray(result.filesToModify) ? result.filesToModify.map(String) : [],
+			filesToCreate: Array.isArray(result.filesToCreate) ? result.filesToCreate.map(String) : [],
+			steps: Array.isArray(result.steps) ? result.steps.map(String) : [],
+			risks: Array.isArray(result.risks) ? result.risks.map(String) : [],
+			expectedOutcome: String(result.expectedOutcome || "Task completion"),
+			alreadyComplete: Boolean(result.alreadyComplete),
+			alreadyCompleteReason: String(result.alreadyCompleteReason || ""),
+			needsDecomposition: Boolean(result.needsDecomposition),
+			suggestedSubtasks: Array.isArray(result.suggestedSubtasks) ? result.suggestedSubtasks.map(String) : [],
+			reasoning: String(result.reasoning || ""),
+		};
+
+		logger.debug({ task: task.slice(0, 50), filesCount: output.filesToModify.length }, "Ax plan creation complete");
+
+		return output;
+	} catch (error) {
+		logger.warn({ error: String(error) }, "Ax plan creation failed, using defaults");
+		return {
+			filesToRead: [],
+			filesToModify: [],
+			filesToCreate: [],
+			steps: ["Execute the task as described"],
+			risks: ["Ax planning failed - proceeding with minimal plan"],
+			expectedOutcome: "Task completion",
+			alreadyComplete: false,
+			alreadyCompleteReason: "",
+			needsDecomposition: false,
+			suggestedSubtasks: [],
+			reasoning: `Ax planning failed: ${error}`,
+		};
+	}
+}
+
+/**
+ * Review execution plan using Ax program
+ * Returns structured review assessment
+ */
+export async function reviewPlanAx(
+	task: string,
+	plan: string,
+	stateDir: string = ".undercity",
+): Promise<{
+	approved: boolean;
+	issues: string[];
+	suggestions: string[];
+	skipExecution: boolean;
+	skipReason: string;
+	reasoning: string;
+}> {
+	try {
+		const ai = createAxAI();
+		const reviewer = createPlanReviewerWithExamples(stateDir);
+
+		const result = await reviewer.forward(ai, { task, plan });
+
+		const output = {
+			approved: Boolean(result.approved),
+			issues: Array.isArray(result.issues) ? result.issues.map(String) : [],
+			suggestions: Array.isArray(result.suggestions) ? result.suggestions.map(String) : [],
+			skipExecution: Boolean(result.skipExecution),
+			skipReason: String(result.skipReason || ""),
+			reasoning: String(result.reasoning || ""),
+		};
+
+		logger.debug({ task: task.slice(0, 50), approved: output.approved }, "Ax plan review complete");
+
+		return output;
+	} catch (error) {
+		logger.warn({ error: String(error) }, "Ax plan review failed, approving by default");
+		return {
+			approved: true,
+			issues: ["Ax review failed - approving by default"],
+			suggestions: [],
+			skipExecution: false,
+			skipReason: "",
+			reasoning: `Ax review failed: ${error}`,
+		};
+	}
+}
+
 // ============================================================================
 // Example Recording Helpers
 // ============================================================================
@@ -695,6 +900,52 @@ export function recordReviewTriageOutcome(
 	saveExample("reviewTriage", input, result, reviewSucceeded ? "success" : "failure", stateDir);
 }
 
+/**
+ * Record plan creation outcome for training
+ */
+export function recordPlanCreationOutcome(
+	input: {
+		task: string;
+		contextBriefing: string;
+	},
+	result: {
+		filesToRead: string[];
+		filesToModify: string[];
+		filesToCreate: string[];
+		steps: string[];
+		risks: string[];
+		expectedOutcome: string;
+		alreadyComplete: boolean;
+		needsDecomposition: boolean;
+		reasoning: string;
+	},
+	taskSucceeded: boolean,
+	stateDir: string = ".undercity",
+): void {
+	saveExample("planCreation", input, result, taskSucceeded ? "success" : "failure", stateDir);
+}
+
+/**
+ * Record plan review outcome for training
+ */
+export function recordPlanReviewOutcome(
+	input: {
+		task: string;
+		plan: string;
+	},
+	result: {
+		approved: boolean;
+		issues: string[];
+		suggestions: string[];
+		skipExecution: boolean;
+		reasoning: string;
+	},
+	reviewAccurate: boolean,
+	stateDir: string = ".undercity",
+): void {
+	saveExample("planReview", input, result, reviewAccurate ? "success" : "failure", stateDir);
+}
+
 // ============================================================================
 // Stats
 // ============================================================================
@@ -708,8 +959,18 @@ export function getAxProgramStats(stateDir: string = ".undercity"): {
 	decision: { total: number; successful: number };
 	complexity: { total: number; successful: number };
 	reviewTriage: { total: number; successful: number };
+	planCreation: { total: number; successful: number };
+	planReview: { total: number; successful: number };
 } {
-	const programs = ["atomicity", "decomposition", "decision", "complexity", "reviewTriage"] as const;
+	const programs = [
+		"atomicity",
+		"decomposition",
+		"decision",
+		"complexity",
+		"reviewTriage",
+		"planCreation",
+		"planReview",
+	] as const;
 	const stats: Record<string, { total: number; successful: number }> = {};
 
 	for (const prog of programs) {
@@ -726,6 +987,8 @@ export function getAxProgramStats(stateDir: string = ".undercity"): {
 		decision: { total: number; successful: number };
 		complexity: { total: number; successful: number };
 		reviewTriage: { total: number; successful: number };
+		planCreation: { total: number; successful: number };
+		planReview: { total: number; successful: number };
 	};
 }
 
@@ -849,6 +1112,58 @@ export function createReviewTriagerWithExamples(stateDir: string = ".undercity")
 	if (examples.length > 0) {
 		gen.setExamples(examples);
 		logger.info({ count: examples.length }, "Loaded review triage examples for few-shot learning");
+	}
+
+	return gen;
+}
+
+/**
+ * Create plan creator with few-shot examples loaded
+ */
+export function createPlanCreatorWithExamples(stateDir: string = ".undercity"): AxGen {
+	const gen = createPlanCreator();
+	const examples = getTrainingExamples<
+		{ task: string; contextBriefing: string },
+		{
+			filesToRead: string[];
+			filesToModify: string[];
+			filesToCreate: string[];
+			steps: string[];
+			risks: string[];
+			expectedOutcome: string;
+			alreadyComplete: boolean;
+			needsDecomposition: boolean;
+			reasoning: string;
+		}
+	>("planCreation", 10, stateDir);
+
+	if (examples.length > 0) {
+		gen.setExamples(examples);
+		logger.info({ count: examples.length }, "Loaded plan creation examples for few-shot learning");
+	}
+
+	return gen;
+}
+
+/**
+ * Create plan reviewer with few-shot examples loaded
+ */
+export function createPlanReviewerWithExamples(stateDir: string = ".undercity"): AxGen {
+	const gen = createPlanReviewer();
+	const examples = getTrainingExamples<
+		{ task: string; plan: string },
+		{
+			approved: boolean;
+			issues: string[];
+			suggestions: string[];
+			skipExecution: boolean;
+			reasoning: string;
+		}
+	>("planReview", 10, stateDir);
+
+	if (examples.length > 0) {
+		gen.setExamples(examples);
+		logger.info({ count: examples.length }, "Loaded plan review examples for few-shot learning");
 	}
 
 	return gen;

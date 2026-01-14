@@ -22,8 +22,14 @@
  * - task-board-analyzer.ts: Board-level insights and recommendations
  */
 
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { getASTIndex } from "./ast-index.js";
+import { type ContextBriefing, prepareContext } from "./context.js";
+import { findRelevantLearnings, formatLearningsForPrompt } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
+import { findRelevantFiles } from "./task-file-patterns.js";
 import { MODEL_NAMES, type ModelTier } from "./types.js";
 
 const logger = sessionLogger.child({ module: "task-planner" });
@@ -272,14 +278,106 @@ function getReviewerTier(plannerTier: ModelTier): ModelTier {
 const MAX_PLAN_ITERATIONS = 3;
 
 /**
+ * Pre-gathered context for planning
+ * Uses existing infrastructure instead of having planner explore
+ */
+interface PlanningContext {
+	/** Context briefing with target files, types, etc. */
+	briefing?: ContextBriefing;
+	/** Suggested files from task-file patterns */
+	suggestedFiles: Array<{ file: string; score: number; keywords: string[] }>;
+	/** Relevant learnings from past tasks */
+	learnings: string;
+}
+
+/**
+ * Gather context for planning using existing infrastructure
+ * This is FREE (local operations) vs expensive (LLM exploration)
+ */
+async function gatherPlanningContext(task: string, cwd: string): Promise<PlanningContext> {
+	// Get suggested files from task-file patterns (instant, local)
+	const suggestedFiles = findRelevantFiles(task, 10);
+
+	// Get relevant learnings from knowledge base (instant, local)
+	const learnings = findRelevantLearnings(task, 5);
+	const learningsText = learnings.length > 0 ? formatLearningsForPrompt(learnings) : "";
+
+	// Prepare context briefing (uses AST index, grep - fast local operations)
+	let briefing: ContextBriefing | undefined;
+	try {
+		briefing = await prepareContext(task, { cwd, mode: "compact" });
+	} catch (e) {
+		logger.warn({ error: String(e) }, "Failed to prepare context for planning");
+	}
+
+	return {
+		briefing,
+		suggestedFiles,
+		learnings: learningsText,
+	};
+}
+
+/**
+ * Format pre-gathered context for injection into planner prompt
+ */
+function formatContextForPlanner(ctx: PlanningContext): string {
+	const sections: string[] = [];
+
+	if (ctx.briefing?.targetFiles && ctx.briefing.targetFiles.length > 0) {
+		sections.push(`TARGET FILES (from codebase analysis):
+${ctx.briefing.targetFiles.map((f) => `- ${f}`).join("\n")}`);
+	}
+
+	if (ctx.suggestedFiles.length > 0) {
+		sections.push(`SUGGESTED FILES (from past task patterns):
+${ctx.suggestedFiles.map((f) => `- ${f.file} (matched: ${f.keywords.join(", ")})`).join("\n")}`);
+	}
+
+	if (ctx.briefing?.typeDefinitions && ctx.briefing.typeDefinitions.length > 0) {
+		sections.push(`RELEVANT TYPES:
+${ctx.briefing.typeDefinitions.slice(0, 5).join("\n")}`);
+	}
+
+	if (ctx.briefing?.functionSignatures && ctx.briefing.functionSignatures.length > 0) {
+		sections.push(`RELEVANT FUNCTIONS:
+${ctx.briefing.functionSignatures.slice(0, 5).join("\n")}`);
+	}
+
+	if (ctx.learnings) {
+		sections.push(ctx.learnings);
+	}
+
+	if (ctx.briefing?.constraints && ctx.briefing.constraints.length > 0) {
+		sections.push(`CONSTRAINTS:
+${ctx.briefing.constraints.map((c) => `- ${c}`).join("\n")}`);
+	}
+
+	return sections.length > 0 ? sections.join("\n\n") : "";
+}
+
+/**
  * Create an execution plan using the specified model
  */
-async function createExecutionPlan(task: string, model: ModelTier, cwd: string): Promise<ExecutionPlan> {
+async function createExecutionPlan(
+	task: string,
+	model: ModelTier,
+	cwd: string,
+	preContext?: PlanningContext,
+): Promise<ExecutionPlan> {
+	// Format pre-gathered context if available
+	const contextSection = preContext ? formatContextForPlanner(preContext) : "";
+	const contextIntro = contextSection
+		? `\n\nPRE-GATHERED CONTEXT (use this instead of exploring):
+${contextSection}
+
+Based on this context, create your plan. You may still read specific files to verify details.`
+		: "\n\nCreate a plan by exploring the codebase.";
+
 	const prompt = `You are a planning assistant. Analyze this task and create a detailed execution plan.
 
-TASK: ${task}
+TASK: ${task}${contextIntro}
 
-Create a plan by exploring the codebase. Output your plan in this exact JSON format:
+Output your plan in this exact JSON format:
 
 \`\`\`json
 {
@@ -296,12 +394,12 @@ Create a plan by exploring the codebase. Output your plan in this exact JSON for
 \`\`\`
 
 RULES:
-1. Explore the codebase to understand existing patterns
-2. Check if the task is already complete (read relevant files)
-3. If the task is too vague or large, mark needsDecomposition as true
-4. Be specific about which files and what changes
-5. List concrete steps, not vague directions
-6. Check that referenced files actually exist`;
+1. Use the pre-gathered context above - don't explore redundantly
+2. Read specific files only to verify details or check current state
+3. Check if the task is already complete (read target files)
+4. If the task is too vague or large, mark needsDecomposition as true
+5. Be specific about which files and what changes
+6. List concrete steps, not vague directions`;
 
 	logger.debug({ task: task.substring(0, 50), model }, "Creating execution plan");
 
@@ -361,13 +459,21 @@ async function revisePlan(
 	feedback: PlanReview,
 	model: ModelTier,
 	cwd: string,
+	preContext?: PlanningContext,
 ): Promise<ExecutionPlan> {
 	const issuesText = feedback.issues.length > 0 ? feedback.issues.join("\n- ") : "None specified";
 	const suggestionsText = feedback.suggestions.length > 0 ? feedback.suggestions.join("\n- ") : "None specified";
 
+	// Include pre-gathered context for revision
+	const contextSection = preContext ? formatContextForPlanner(preContext) : "";
+	const contextIntro = contextSection
+		? `\n\nAVAILABLE CONTEXT:
+${contextSection}`
+		: "";
+
 	const prompt = `You are a planning assistant. Your previous plan was reviewed and needs revision.
 
-TASK: ${task}
+TASK: ${task}${contextIntro}
 
 YOUR PREVIOUS PLAN:
 ${JSON.stringify(currentPlan, null, 2)}
@@ -379,7 +485,7 @@ Issues found:
 Suggestions:
 - ${suggestionsText}
 
-Please revise your plan to address this feedback. Explore the codebase again if needed to verify files exist and understand the correct approach.
+Revise your plan to address this feedback. Use the context above; read files only to verify specific details.
 
 Output your REVISED plan in this exact JSON format:
 
@@ -439,6 +545,85 @@ Address ALL issues raised by the reviewer. If a file doesn't exist, either remov
 }
 
 /**
+ * Pre-validate a plan by checking files and symbols exist
+ * Returns validation findings to inject into review prompt
+ */
+function preValidatePlan(
+	plan: ExecutionPlan,
+	cwd: string,
+): { missingFiles: string[]; unknownSymbols: string[]; validationSummary: string } {
+	const missingFiles: string[] = [];
+	const unknownSymbols: string[] = [];
+
+	// Check if files to modify exist
+	for (const file of plan.filesToModify) {
+		const fullPath = join(cwd, file);
+		if (!existsSync(fullPath)) {
+			missingFiles.push(file);
+		}
+	}
+
+	// Check if files to read exist
+	for (const file of plan.filesToRead) {
+		const fullPath = join(cwd, file);
+		if (!existsSync(fullPath)) {
+			// Reading a non-existent file is a warning, not an error
+			// The plan might create it or it might be optional
+		}
+	}
+
+	// Try to validate symbols via AST index
+	try {
+		const astIndex = getASTIndex(cwd);
+
+		// Extract function/class/type names from steps
+		const symbolPattern = /\b([A-Z][a-zA-Z0-9]+|[a-z]+[A-Z][a-zA-Z0-9]*)\b/g;
+		const mentionedSymbols = new Set<string>();
+
+		for (const step of plan.steps) {
+			for (const match of step.matchAll(symbolPattern)) {
+				// Filter out common words and short names
+				if (match[1].length > 3 && !["true", "false", "null", "undefined"].includes(match[1].toLowerCase())) {
+					mentionedSymbols.add(match[1]);
+				}
+			}
+		}
+
+		// Check if symbols exist (limit to avoid noise)
+		let checked = 0;
+		for (const symbol of mentionedSymbols) {
+			if (checked >= 10) break;
+			const definitions = astIndex.findSymbolDefinition(symbol);
+			if (definitions.length === 0) {
+				// Only flag if it looks like a real symbol (starts with capital or is camelCase)
+				if (/^[A-Z]/.test(symbol) || /[a-z][A-Z]/.test(symbol)) {
+					unknownSymbols.push(symbol);
+				}
+			}
+			checked++;
+		}
+	} catch {
+		// AST index not available, skip symbol validation
+	}
+
+	// Build validation summary
+	const parts: string[] = [];
+	if (missingFiles.length > 0) {
+		parts.push(`MISSING FILES: ${missingFiles.join(", ")}`);
+	}
+	if (unknownSymbols.length > 0) {
+		parts.push(`UNKNOWN SYMBOLS (may not exist): ${unknownSymbols.join(", ")}`);
+	}
+
+	const validationSummary =
+		parts.length > 0
+			? `\n\nPRE-VALIDATION FINDINGS (automated check):\n${parts.join("\n")}`
+			: "\n\nPRE-VALIDATION: All referenced files exist.";
+
+	return { missingFiles, unknownSymbols, validationSummary };
+}
+
+/**
  * Review a plan using a higher-tier model
  */
 async function reviewExecutionPlan(
@@ -447,12 +632,23 @@ async function reviewExecutionPlan(
 	model: ModelTier,
 	cwd: string,
 ): Promise<PlanReview> {
+	// Pre-validate plan before sending to reviewer
+	const validation = preValidatePlan(plan, cwd);
+
+	logger.debug(
+		{
+			missingFiles: validation.missingFiles.length,
+			unknownSymbols: validation.unknownSymbols.length,
+		},
+		"Plan pre-validation complete",
+	);
+
 	const prompt = `You are a senior code reviewer. Review this execution plan for quality and completeness.
 
 ORIGINAL TASK: ${task}
 
 PROPOSED PLAN:
-${JSON.stringify(plan, null, 2)}
+${JSON.stringify(plan, null, 2)}${validation.validationSummary}
 
 Review the plan and output your assessment in this exact JSON format:
 
@@ -547,8 +743,19 @@ export async function planTaskWithReview(
 		"Starting tiered planning phase",
 	);
 
-	// Phase 1: Create initial plan with cheaper model
-	let currentPlan = await createExecutionPlan(task, plannerModel, cwd);
+	// Gather context using existing infrastructure (FREE - local operations)
+	const planningContext = await gatherPlanningContext(task, cwd);
+	logger.debug(
+		{
+			targetFiles: planningContext.briefing?.targetFiles?.length || 0,
+			suggestedFiles: planningContext.suggestedFiles.length,
+			hasLearnings: !!planningContext.learnings,
+		},
+		"Planning context gathered",
+	);
+
+	// Phase 1: Create initial plan with cheaper model (using pre-gathered context)
+	let currentPlan = await createExecutionPlan(task, plannerModel, cwd, planningContext);
 
 	// Early exit: already complete
 	if (currentPlan.alreadyComplete?.likely) {
@@ -634,7 +841,7 @@ export async function planTaskWithReview(
 			"Revising plan based on feedback",
 		);
 
-		currentPlan = await revisePlan(task, currentPlan, review, plannerModel, cwd);
+		currentPlan = await revisePlan(task, currentPlan, review, plannerModel, cwd, planningContext);
 
 		// Check if revision triggered decomposition
 		if (currentPlan.needsDecomposition?.needed) {

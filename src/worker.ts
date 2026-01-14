@@ -24,6 +24,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
+import { recordPlanCreationOutcome, recordPlanReviewOutcome } from "./ax-programs.js";
 import {
 	adjustModelFromMetrics,
 	assessComplexityFast,
@@ -1415,6 +1416,48 @@ export class TaskWorker {
 		} catch {
 			// Non-critical
 		}
+
+		// Plan outcome recording (for Ax few-shot learning)
+		if (this.executionPlan?.proceedWithExecution) {
+			try {
+				const plan = this.executionPlan.plan;
+				const briefing = this.currentBriefing?.briefingDoc || "";
+
+				recordPlanCreationOutcome(
+					{ task, contextBriefing: briefing },
+					{
+						filesToRead: plan.filesToRead,
+						filesToModify: plan.filesToModify,
+						filesToCreate: plan.filesToCreate,
+						steps: plan.steps,
+						risks: plan.risks,
+						expectedOutcome: plan.expectedOutcome,
+						alreadyComplete: plan.alreadyComplete?.likely || false,
+						needsDecomposition: plan.needsDecomposition?.needed || false,
+						reasoning: "",
+					},
+					true, // Task succeeded
+					this.stateDir,
+				);
+
+				recordPlanReviewOutcome(
+					{ task, plan: JSON.stringify(plan) },
+					{
+						approved: this.executionPlan.review.approved,
+						issues: this.executionPlan.review.issues,
+						suggestions: this.executionPlan.review.suggestions,
+						skipExecution: this.executionPlan.review.skipExecution?.skip || false,
+						reasoning: "",
+					},
+					true, // Review was accurate (task succeeded after approval)
+					this.stateDir,
+				);
+
+				output.debug("Recorded plan outcomes for Ax learning", { taskId });
+			} catch {
+				// Non-critical
+			}
+		}
 	}
 
 	/**
@@ -1647,6 +1690,37 @@ export class TaskWorker {
 			});
 		} catch {
 			// Non-critical
+		}
+
+		// Record plan failure for Ax learning (if we had a plan)
+		if (this.executionPlan?.proceedWithExecution) {
+			try {
+				const plan = this.executionPlan.plan;
+				const briefing = this.currentBriefing?.briefingDoc || "";
+
+				recordPlanCreationOutcome(
+					{ task, contextBriefing: briefing },
+					{
+						filesToRead: plan.filesToRead,
+						filesToModify: plan.filesToModify,
+						filesToCreate: plan.filesToCreate,
+						steps: plan.steps,
+						risks: plan.risks,
+						expectedOutcome: plan.expectedOutcome,
+						alreadyComplete: plan.alreadyComplete?.likely || false,
+						needsDecomposition: plan.needsDecomposition?.needed || false,
+						reasoning: "",
+					},
+					false, // Task failed
+					this.stateDir,
+				);
+
+				// Note: We don't necessarily blame the review for task failure
+				// The review was accurate if it approved and the plan was reasonable
+				// So we record as success unless the plan was clearly wrong
+			} catch {
+				// Non-critical
+			}
 		}
 
 		return {
