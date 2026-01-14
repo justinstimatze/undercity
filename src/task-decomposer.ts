@@ -2,16 +2,18 @@
  * Task Decomposition Module
  *
  * Provides lazy complexity checking and task decomposition at pickup time.
- * Uses Haiku for cheap, fast assessment before expensive execution.
+ * Uses Ax/DSPy programs for self-improving prompts.
  *
  * Flow:
  * 1. Agent picks up task
- * 2. Quick atomicity check (~500 tokens with Haiku)
+ * 2. Quick atomicity check via Ax program
  * 3. If atomic → proceed with execution
  * 4. If not → decompose into subtasks, add to board
+ *
+ * Training data collected in .undercity/ax-examples/ for prompt optimization.
  */
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { checkAtomicityAx, decomposeTaskAx } from "./ax-programs.js";
 import { sessionLogger } from "./logger.js";
 
 const logger = sessionLogger.child({ module: "task-decomposer" });
@@ -61,195 +63,51 @@ export interface DecompositionResult {
 /**
  * Check if a task is atomic (can be completed in a single focused session)
  *
- * Uses Haiku for cheap, fast assessment (~500 tokens)
+ * Uses Ax/DSPy program for self-improving assessment
  */
 export async function checkAtomicity(task: string): Promise<AtomicityCheckResult> {
-	try {
-		let result = "";
-
-		for await (const message of query({
-			prompt: `You are assessing a coding task's atomicity and model assignment. Be CONSERVATIVE about atomicity - when in doubt, mark as NOT atomic.
-
-Task: ${task}
-
-ATOMICITY RULES:
-- ATOMIC (true): Single file change, OR 2-3 closely related files with ONE clear objective
-- NOT ATOMIC (false): Multiple unrelated changes, vague scope, "and" connecting different actions, requires exploration
-
-EXAMPLES:
-- "Add comment to cli.ts" → atomic (1 file, clear action)
-- "Fix typo in README" → atomic (1 file, trivial)
-- "Add error handling to auth module" → NOT atomic (could touch many files)
-- "Update types and add tests" → NOT atomic (two separate objectives)
-- "Refactor X" → NOT atomic unless very specific
-
-MODEL SELECTION:
-- "haiku": Trivial mechanical changes - typos, comments, simple renames, deleting unused code
-- "sonnet": Most tasks - bug fixes, new features, any change requiring judgment or domain knowledge
-- "opus": Architectural changes, multi-system integration, ambiguous requirements
-
-DEFAULT TO SONNET unless the task is clearly trivial (typo, comment, rename).
-
-Respond with ONLY this JSON:
-{
-  "isAtomic": true/false,
-  "confidence": 0.0-1.0,
-  "estimatedFiles": number,
-  "recommendedModel": "haiku" | "sonnet" | "opus",
-  "reasoning": "brief explanation"
-}`,
-			options: {
-				model: "claude-3-5-haiku-20241022",
-				maxTurns: 1,
-				allowedTools: [],
-			},
-		})) {
-			if (message.type === "result" && message.subtype === "success") {
-				result = message.result;
-			}
-		}
-
-		// Parse the response
-		const jsonMatch = result.match(/\{[\s\S]*\}/);
-		if (jsonMatch) {
-			const parsed = JSON.parse(jsonMatch[0]);
-			// Validate and normalize recommendedModel
-			const validModels = ["haiku", "sonnet", "opus"] as const;
-			const rawModel = String(parsed.recommendedModel || "sonnet").toLowerCase();
-			const recommendedModel = validModels.includes(rawModel as (typeof validModels)[number])
-				? (rawModel as "haiku" | "sonnet" | "opus")
-				: "sonnet";
-
-			return {
-				isAtomic: Boolean(parsed.isAtomic),
-				confidence: Number(parsed.confidence) || 0.5,
-				estimatedFiles: Number(parsed.estimatedFiles) || 1,
-				reasoning: String(parsed.reasoning || ""),
-				recommendedModel,
-			};
-		}
-
-		// Default to atomic with sonnet if parsing fails (don't block on assessment failure)
-		logger.warn({ task, result }, "Failed to parse atomicity check, defaulting to atomic");
-		return {
-			isAtomic: true,
-			confidence: 0.3,
-			estimatedFiles: 1,
-			reasoning: "Failed to parse assessment, proceeding with task",
-			recommendedModel: "sonnet",
-		};
-	} catch (error) {
-		logger.error({ task, error }, "Atomicity check failed");
-		// Don't block execution on assessment failure
-		return {
-			isAtomic: true,
-			confidence: 0.2,
-			estimatedFiles: 1,
-			reasoning: "Assessment failed, proceeding with task",
-			recommendedModel: "sonnet",
-		};
-	}
+	logger.debug({ task: task.substring(0, 50) }, "Running Ax atomicity check");
+	return checkAtomicityAx(task);
 }
 
 /**
  * Decompose a complex task into smaller, atomic subtasks
  *
- * Uses Haiku for decomposition (~1000 tokens)
+ * Uses Ax/DSPy program for self-improving decomposition
  */
 export async function decomposeTask(task: string): Promise<DecompositionResult> {
-	try {
-		let result = "";
+	logger.debug({ task: task.substring(0, 50) }, "Running Ax decomposition");
 
-		for await (const message of query({
-			prompt: `You are breaking down a complex coding task into smaller, atomic subtasks that a junior developer (haiku model) can execute.
+	const result = await decomposeTaskAx(task);
 
-Task to decompose: ${task}
-
-CRITICAL RULES:
-1. Each subtask should modify exactly 1 file when possible (2-3 max for tightly coupled changes)
-2. INCLUDE THE FILE PATH in each subtask objective (e.g., "In src/auth.ts, add validation...")
-3. Make objectives specific and unambiguous - no room for interpretation
-4. Subtasks should be independent when possible (can run in parallel)
-5. Create 2-5 subtasks (fewer is better)
-6. Order by dependency (prerequisites first)
-
-GOOD SUBTASK EXAMPLES:
-- "In src/types.ts, add the UserRole enum with values ADMIN, USER, GUEST"
-- "In src/auth.ts:45, fix the null check by adding optional chaining"
-- "In README.md, update the installation section to include pnpm commands"
-
-BAD SUBTASK EXAMPLES:
-- "Update the types" (which file? what types?)
-- "Add error handling" (where? what errors?)
-- "Improve the code" (too vague)
-
-Respond with ONLY this JSON:
-{
-  "subtasks": [
-    {
-      "objective": "In path/to/file.ts, do specific thing",
-      "estimatedFiles": ["path/to/file.ts"],
-      "order": 1
-    }
-  ],
-  "reasoning": "brief explanation"
-}`,
-			options: {
-				model: "claude-3-5-haiku-20241022",
-				maxTurns: 1,
-				allowedTools: [],
-			},
-		})) {
-			if (message.type === "result" && message.subtype === "success") {
-				result = message.result;
-			}
-		}
-
-		// Parse the response
-		const jsonMatch = result.match(/\{[\s\S]*\}/);
-		if (jsonMatch) {
-			const parsed = JSON.parse(jsonMatch[0]);
-			const subtasks: Subtask[] = (parsed.subtasks || []).map(
-				(st: { objective?: string; estimatedFiles?: string[]; order?: number }, idx: number) => ({
-					objective: String(st.objective || task),
-					estimatedFiles: st.estimatedFiles,
-					order: Number(st.order) || idx + 1,
-				}),
-			);
-
-			if (subtasks.length === 0) {
-				// No decomposition possible, return original
-				return {
-					wasDecomposed: false,
-					originalTask: task,
-					subtasks: [],
-					reasoning: "Could not decompose task",
-				};
-			}
-
-			return {
-				wasDecomposed: true,
-				originalTask: task,
-				subtasks: subtasks.sort((a, b) => a.order - b.order),
-				reasoning: String(parsed.reasoning || "Task decomposed into atomic subtasks"),
-			};
-		}
-
+	if (result.subtasks.length === 0) {
 		return {
 			wasDecomposed: false,
 			originalTask: task,
 			subtasks: [],
-			reasoning: "Failed to parse decomposition response",
-		};
-	} catch (error) {
-		logger.error({ task, error }, "Task decomposition failed");
-		return {
-			wasDecomposed: false,
-			originalTask: task,
-			subtasks: [],
-			reasoning: `Decomposition failed: ${error}`,
+			reasoning: result.reasoning || "Could not decompose task",
 		};
 	}
+
+	// Transform string subtasks to Subtask objects
+	// Extract file paths from objectives like "In src/file.ts, do something"
+	const subtasks: Subtask[] = result.subtasks.map((objective, idx) => {
+		const fileMatch = objective.match(/(?:In |in )([\w/./-]+\.\w+)/);
+		const estimatedFiles = fileMatch ? [fileMatch[1]] : undefined;
+
+		return {
+			objective,
+			estimatedFiles,
+			order: idx + 1,
+		};
+	});
+
+	return {
+		wasDecomposed: true,
+		originalTask: task,
+		subtasks,
+		reasoning: result.reasoning,
+	};
 }
 
 /**

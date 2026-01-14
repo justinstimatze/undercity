@@ -246,11 +246,11 @@ export function getTrainingExamples<I, O>(
 
 /**
  * Run atomicity check using Ax program
- * Falls back to legacy implementation on error
+ * Loads successful examples as few-shot demos for self-improvement
  */
 export async function checkAtomicityAx(
 	task: string,
-	_stateDir: string = ".undercity",
+	stateDir: string = ".undercity",
 ): Promise<{
 	isAtomic: boolean;
 	confidence: number;
@@ -260,7 +260,8 @@ export async function checkAtomicityAx(
 }> {
 	try {
 		const ai = createAxAI();
-		const checker = createAtomicityChecker();
+		// Load program with examples from past successful runs
+		const checker = createAtomicityCheckerWithExamples(stateDir);
 
 		const result = await checker.forward(ai, { task });
 
@@ -296,17 +297,19 @@ export async function checkAtomicityAx(
 
 /**
  * Run task decomposition using Ax program
+ * Loads successful examples as few-shot demos for self-improvement
  */
 export async function decomposeTaskAx(
 	task: string,
-	_stateDir: string = ".undercity",
+	stateDir: string = ".undercity",
 ): Promise<{
 	subtasks: string[];
 	reasoning: string;
 }> {
 	try {
 		const ai = createAxAI();
-		const decomposer = createTaskDecomposer();
+		// Load program with examples from past successful runs
+		const decomposer = createTaskDecomposerWithExamples(stateDir);
 
 		const result = await decomposer.forward(ai, { task });
 
@@ -329,6 +332,7 @@ export async function decomposeTaskAx(
 
 /**
  * Run PM decision using Ax program
+ * Loads successful examples as few-shot demos for self-improvement
  */
 export async function makeDecisionAx(
 	question: string,
@@ -336,7 +340,7 @@ export async function makeDecisionAx(
 	options: string,
 	similarDecisions: string,
 	relevantKnowledge: string,
-	_stateDir: string = ".undercity",
+	stateDir: string = ".undercity",
 ): Promise<{
 	decision: string;
 	reasoning: string;
@@ -345,7 +349,8 @@ export async function makeDecisionAx(
 }> {
 	try {
 		const ai = createAxAI();
-		const decider = createDecisionMaker();
+		// Load program with examples from past successful runs
+		const decider = createDecisionMakerWithExamples(stateDir);
 
 		const result = await decider.forward(ai, {
 			question,
@@ -474,4 +479,73 @@ export function getAxProgramStats(stateDir: string = ".undercity"): {
 		decomposition: { total: number; successful: number };
 		decision: { total: number; successful: number };
 	};
+}
+
+// ============================================================================
+// Few-Shot Learning (apply examples to programs)
+// ============================================================================
+
+/**
+ * Create atomicity checker with few-shot examples loaded
+ */
+export function createAtomicityCheckerWithExamples(stateDir: string = ".undercity"): AxGen {
+	const gen = createAtomicityChecker();
+	const examples = getTrainingExamples<{ task: string }, {
+		isAtomic: boolean;
+		confidence: number;
+		estimatedFiles: number;
+		recommendedModel: string;
+		reasoning: string;
+	}>("atomicity", 10, stateDir);
+
+	if (examples.length > 0) {
+		gen.setExamples(examples);
+		logger.info({ count: examples.length }, "Loaded atomicity examples for few-shot learning");
+	}
+
+	return gen;
+}
+
+/**
+ * Create task decomposer with few-shot examples loaded
+ */
+export function createTaskDecomposerWithExamples(stateDir: string = ".undercity"): AxGen {
+	const gen = createTaskDecomposer();
+	const examples = getTrainingExamples<{ task: string }, {
+		subtasks: string[];
+		reasoning: string;
+	}>("decomposition", 10, stateDir);
+
+	if (examples.length > 0) {
+		gen.setExamples(examples);
+		logger.info({ count: examples.length }, "Loaded decomposition examples for few-shot learning");
+	}
+
+	return gen;
+}
+
+/**
+ * Create decision maker with few-shot examples loaded
+ */
+export function createDecisionMakerWithExamples(stateDir: string = ".undercity"): AxGen {
+	const gen = createDecisionMaker();
+	const examples = getTrainingExamples<{
+		question: string;
+		context: string;
+		options: string;
+		similarDecisions: string;
+		relevantKnowledge: string;
+	}, {
+		decision: string;
+		reasoning: string;
+		confidence: string;
+		escalate: boolean;
+	}>("decision", 10, stateDir);
+
+	if (examples.length > 0) {
+		gen.setExamples(examples);
+		logger.info({ count: examples.length }, "Loaded decision examples for few-shot learning");
+	}
+
+	return gen;
 }

@@ -600,6 +600,41 @@ export const analysisCommands: CommandModule = {
 					}
 				}
 			});
+
+		// Ax/DSPy training stats
+		program
+			.command("ax")
+			.description("View Ax/DSPy training data stats for self-improving prompts")
+			.action(async () => {
+				const { getAxProgramStats } = await import("../ax-programs.js");
+				const stats = getAxProgramStats();
+
+				console.log(chalk.cyan.bold("\n📊 Ax Training Data Stats\n"));
+
+				const programs = [
+					{ name: "Atomicity Checker", key: "atomicity" as const },
+					{ name: "Task Decomposer", key: "decomposition" as const },
+					{ name: "Decision Maker", key: "decision" as const },
+				];
+
+				for (const prog of programs) {
+					const s = stats[prog.key];
+					const successRate = s.total > 0 ? ((s.successful / s.total) * 100).toFixed(1) : "N/A";
+					console.log(chalk.bold(prog.name));
+					console.log(`  Examples: ${s.total}`);
+					console.log(`  Successful: ${s.successful}`);
+					console.log(`  Success Rate: ${successRate}%`);
+					console.log();
+				}
+
+				const totalExamples = stats.atomicity.total + stats.decomposition.total + stats.decision.total;
+				if (totalExamples === 0) {
+					console.log(chalk.dim("No training data yet. Run some tasks to collect examples."));
+				} else {
+					console.log(chalk.dim(`Total: ${totalExamples} examples across all programs`));
+					console.log(chalk.dim("Examples are used as few-shot demos to improve prompt performance."));
+				}
+			});
 	},
 };
 
