@@ -1075,10 +1075,7 @@ async function tryASTIndexFirst(
 		}
 
 		// 7. Get file summaries for target files (compact and informative)
-		const allRelevantFiles = [
-			...briefing.targetFiles.slice(0, 5),
-			...briefing.dependencies.slice(0, 2),
-		];
+		const allRelevantFiles = [...briefing.targetFiles.slice(0, 5), ...briefing.dependencies.slice(0, 2)];
 		briefing.fileSummaries = index.getFileSummaries(allRelevantFiles);
 
 		// 8. Lazy incremental update: check if target files are stale

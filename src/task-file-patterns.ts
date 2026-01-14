@@ -433,21 +433,42 @@ export function findCoModifiedFiles(
  * Format file suggestions for injection into prompt
  */
 export function formatFileSuggestionsForPrompt(taskDescription: string, stateDir: string = DEFAULT_STATE_DIR): string {
+	const store = loadTaskFileStore(stateDir);
+	const taskKeywords = extractTaskKeywords(taskDescription);
 	const relevant = findRelevantFiles(taskDescription, 5, stateDir);
 
-	if (relevant.length === 0) {
-		return "";
+	const lines: string[] = [];
+
+	// Check for risky keywords (low success rate)
+	const riskyFound: Array<{ keyword: string; successRate: number }> = [];
+	for (const keyword of taskKeywords) {
+		const correlation = store.keywordCorrelations[keyword];
+		if (correlation && correlation.taskCount >= 3) {
+			const successRate = correlation.successCount / correlation.taskCount;
+			if (successRate < 0.7) {
+				riskyFound.push({ keyword, successRate });
+			}
+		}
 	}
 
-	const lines: string[] = ["FILES TYPICALLY MODIFIED FOR SIMILAR TASKS:"];
-
-	for (const { file, keywords } of relevant) {
-		const keywordHint = keywords.slice(0, 3).join(", ");
-		lines.push(`- ${file} (keywords: ${keywordHint})`);
+	if (riskyFound.length > 0) {
+		lines.push("⚠ CAUTION - This task involves keywords with historically low success rates:");
+		for (const { keyword, successRate } of riskyFound.slice(0, 3)) {
+			lines.push(`- "${keyword}" (${Math.round(successRate * 100)}% success rate)`);
+		}
+		lines.push("Take extra care with verification and consider breaking into smaller steps.");
+		lines.push("");
 	}
 
-	lines.push("");
-	lines.push("Consider these files as starting points for your implementation.");
+	if (relevant.length > 0) {
+		lines.push("FILES TYPICALLY MODIFIED FOR SIMILAR TASKS:");
+		for (const { file, keywords } of relevant) {
+			const keywordHint = keywords.slice(0, 3).join(", ");
+			lines.push(`- ${file} (keywords: ${keywordHint})`);
+		}
+		lines.push("");
+		lines.push("Consider these files as starting points for your implementation.");
+	}
 
 	return lines.join("\n");
 }
@@ -605,10 +626,10 @@ export async function primeFromGitHistory(
 
 	try {
 		// Get recent commits with files changed
-		const logOutput = execSync(
-			`git log --oneline --name-only --no-merges -n ${maxCommits} 2>/dev/null`,
-			{ encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 },
-		);
+		const logOutput = execSync(`git log --oneline --name-only --no-merges -n ${maxCommits} 2>/dev/null`, {
+			encoding: "utf-8",
+			maxBuffer: 10 * 1024 * 1024,
+		});
 
 		const lines = logOutput.trim().split("\n");
 		let currentCommit: { hash: string; message: string; files: string[] } | null = null;

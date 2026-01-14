@@ -454,7 +454,9 @@ export const analysisCommands: CommandModule = {
 				// Task-File Patterns
 				const taskFileStats = getTaskFileStats();
 				console.log(chalk.cyan("Task → File Correlations:"));
-				console.log(`  Tasks recorded: ${taskFileStats.totalTasks} (${taskFileStats.successfulTasks} success, ${taskFileStats.failedTasks} failed)`);
+				console.log(
+					`  Tasks recorded: ${taskFileStats.totalTasks} (${taskFileStats.successfulTasks} success, ${taskFileStats.failedTasks} failed)`,
+				);
 				console.log(`  Unique keywords: ${taskFileStats.uniqueKeywords}`);
 				console.log(`  Unique files: ${taskFileStats.uniqueFiles}`);
 				if (taskFileStats.topKeywords.length > 0) {
@@ -467,7 +469,9 @@ export const analysisCommands: CommandModule = {
 				if (taskFileStats.riskyKeywords.length > 0) {
 					console.log(chalk.yellow("  ⚠ Risky keywords (low success rate):"));
 					for (const { keyword, taskCount, successRate } of taskFileStats.riskyKeywords) {
-						console.log(chalk.yellow(`    - ${keyword} (${taskCount} tasks, ${Math.round(successRate * 100)}% success)`));
+						console.log(
+							chalk.yellow(`    - ${keyword} (${taskCount} tasks, ${Math.round(successRate * 100)}% success)`),
+						);
 					}
 				}
 				if (taskFileStats.topFiles.length > 0) {
