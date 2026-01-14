@@ -44,6 +44,8 @@ export interface AddOptions {
 	filesRead?: string;
 	/** Notes to pass to the worker */
 	notes?: string;
+	/** Comma-separated task IDs this task depends on */
+	dependsOn?: string;
 }
 
 export interface ImportPlanOptions {
