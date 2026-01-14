@@ -49,7 +49,7 @@ import * as output from "./output.js";
 import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
 import { type ModelTier, runEscalatingReview, type UnresolvedTicket } from "./review.js";
 import type { HandoffContext } from "./task.js";
-import { formatFileSuggestionsForPrompt, recordTaskFiles } from "./task-file-patterns.js";
+import { formatCoModificationHints, formatFileSuggestionsForPrompt, recordTaskFiles } from "./task-file-patterns.js";
 import { extractMetaTaskType, isMetaTask, isResearchTask, parseResearchResult } from "./task-schema.js";
 import type { AttemptRecord, ErrorCategory, TaskCheckpoint, TokenUsage } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
@@ -956,8 +956,29 @@ export class TaskWorker {
 					// Non-critical
 				}
 
-				// Combine feedback with fix suggestions
-				this.lastFeedback = fixSuggestion ? `${verification.feedback}\n\n${fixSuggestion}` : verification.feedback;
+				// Check for co-modification hints (files that usually change together)
+				let coModHints = "";
+				try {
+					const modifiedFiles = this.getModifiedFiles();
+					if (modifiedFiles.length > 0) {
+						coModHints = formatCoModificationHints(modifiedFiles);
+						if (coModHints) {
+							output.debug("Found co-modification hints", { taskId, fileCount: modifiedFiles.length });
+						}
+					}
+				} catch {
+					// Non-critical
+				}
+
+				// Combine feedback with fix suggestions and co-modification hints
+				let enhancedFeedback = verification.feedback;
+				if (fixSuggestion) {
+					enhancedFeedback += `\n\n${fixSuggestion}`;
+				}
+				if (coModHints) {
+					enhancedFeedback += `\n\n${coModHints}`;
+				}
+				this.lastFeedback = enhancedFeedback;
 
 				// Checkpoint: verification failed with errors
 				this.saveCheckpoint("verifying", {

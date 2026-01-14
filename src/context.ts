@@ -382,6 +382,11 @@ import { sessionLogger } from "./logger.js";
 import { extractFunctionSignaturesWithTypes } from "./ts-analysis.js";
 
 /**
+ * Context mode - controls verbosity/size of context
+ */
+export type ContextMode = "full" | "compact" | "minimal";
+
+/**
  * A focused context briefing for an agent
  */
 export interface ContextBriefing {
@@ -405,6 +410,10 @@ export interface ContextBriefing {
 	fileSummaries: Record<string, string>;
 	/** Pre-formatted briefing document */
 	briefingDoc: string;
+	/** Symbol stubs from AST index (compact representation) */
+	symbolStubs: string[];
+	/** Token budget used for context */
+	tokenBudgetUsed: number;
 }
 
 /**
@@ -428,10 +437,25 @@ const AREA_KEYWORDS: Record<string, string[]> = {
 };
 
 /**
+ * Token budget limits for context modes (approximate characters, ~4 chars = 1 token)
+ */
+const CONTEXT_TOKEN_BUDGETS: Record<ContextMode, number> = {
+	full: 8000, // ~2000 tokens
+	compact: 4000, // ~1000 tokens - preferred for most tasks
+	minimal: 1500, // ~375 tokens - for simple tasks
+};
+
+/**
  * Prepare context briefing for a task
  *
  * Uses local tools to gather relevant context before agent runs.
  * This is FREE - no LLM tokens consumed.
+ *
+ * Strategy:
+ * 1. Use AST index as PRIMARY source for symbol/file discovery (fast, accurate)
+ * 2. Fall back to git grep/find only when AST index is unavailable
+ * 3. Prefer compact symbol stubs over full signatures to save tokens
+ * 4. Apply token budget to limit context size
  */
 export async function prepareContext(
 	task: string,
@@ -440,10 +464,16 @@ export async function prepareContext(
 		cwd?: string;
 		/** Optional repository root directory */
 		repoRoot?: string;
+		/** Context mode - controls verbosity (default: compact) */
+		mode?: ContextMode;
+		/** Token budget override (characters, ~4 chars = 1 token) */
+		tokenBudget?: number;
 	} = {},
 ): Promise<ContextBriefing> {
 	const cwd = options.cwd || process.cwd();
 	const repoRoot = options.repoRoot || cwd;
+	const mode = options.mode || "compact";
+	const tokenBudget = options.tokenBudget || CONTEXT_TOKEN_BUDGETS[mode];
 
 	const briefing: ContextBriefing = {
 		objective: task,
@@ -456,6 +486,8 @@ export async function prepareContext(
 		dependencies: [],
 		fileSummaries: {},
 		briefingDoc: "",
+		symbolStubs: [],
+		tokenBudgetUsed: 0,
 	};
 
 	// Check if this is a "new file" task - don't search for existing files
@@ -480,68 +512,80 @@ export async function prepareContext(
 		// 2. Extract key terms from task for searching
 		const searchTerms = extractSearchTerms(task);
 
-		// 3. Find related files IN PARALLEL - each search term spawns its own process
-		const fileSearchPromises = searchTerms.slice(0, 5).map(async (term) => {
-			if (term.match(/\.(ts|tsx|js|jsx)$/)) {
-				return { type: "explicit" as const, files: findFilesByName(term, repoRoot) };
-			}
-			return { type: "searched" as const, files: findFilesWithTerm(term, repoRoot) };
-		});
+		// 3. TRY AST INDEX FIRST (preferred - fast, accurate, structured)
+		const astResult = await tryASTIndexFirst(briefing, searchTerms, repoRoot, mode);
 
-		// Run file searches, ast-grep, and related patterns in parallel
-		const [fileSearchResults, astPatterns, relatedPatternsResult] = await Promise.all([
-			Promise.all(fileSearchPromises),
-			findWithAstGrep(task, repoRoot),
-			Promise.resolve(findRelatedPatterns(task, repoRoot)),
-		]);
+		// 4. If AST index didn't find enough, fall back to git grep/find
+		if (!astResult.sufficient) {
+			sessionLogger.debug("AST index insufficient, falling back to file search");
 
-		// Collect file search results - explicit files first
-		const explicitFiles: string[] = [];
-		const searchedFiles: string[] = [];
-		for (const result of fileSearchResults) {
-			if (result.type === "explicit") {
-				explicitFiles.push(...result.files);
-			} else {
-				searchedFiles.push(...result.files);
+			// Find related files IN PARALLEL - each search term spawns its own process
+			const fileSearchPromises = searchTerms.slice(0, 5).map(async (term) => {
+				if (term.match(/\.(ts|tsx|js|jsx)$/)) {
+					return { type: "explicit" as const, files: findFilesByName(term, repoRoot) };
+				}
+				return { type: "searched" as const, files: findFilesWithTerm(term, repoRoot) };
+			});
+
+			// Run file searches and ast-grep patterns in parallel
+			const [fileSearchResults, astPatterns] = await Promise.all([
+				Promise.all(fileSearchPromises),
+				findWithAstGrep(task, repoRoot),
+			]);
+
+			// Collect file search results - explicit files first
+			const explicitFiles: string[] = [];
+			const searchedFiles: string[] = [];
+			for (const result of fileSearchResults) {
+				if (result.type === "explicit") {
+					explicitFiles.push(...result.files);
+				} else {
+					searchedFiles.push(...result.files);
+				}
 			}
+			briefing.targetFiles.push(...explicitFiles, ...searchedFiles);
+			briefing.relatedPatterns.push(...astPatterns);
 		}
-		briefing.targetFiles.push(...explicitFiles, ...searchedFiles);
-		briefing.relatedPatterns.push(...astPatterns);
 
 		// Deduplicate and limit files
 		briefing.targetFiles = [...new Set(briefing.targetFiles)].slice(0, 10);
 
-		// 4. Use AST index for smarter context (if available)
-		await enrichWithASTIndex(briefing, searchTerms, repoRoot);
-
-		// 5. Extract type definitions from common/schema if task mentions types
-		if (task.match(/type|interface|schema|zod/i)) {
-			const types = extractTypeDefinitions(repoRoot);
-			briefing.typeDefinitions.push(...types.slice(0, 10));
-		}
-
-		// 6. Find function signatures in target files IN PARALLEL
-		const signaturePromises = briefing.targetFiles.slice(0, 5).map(async (file) => {
-			const fullPath = path.isAbsolute(file) ? file : path.join(repoRoot, file);
-			// Try ts-morph first for full type info
-			let signatures = extractFunctionSignaturesWithTypes(fullPath, repoRoot);
-			if (signatures.length === 0) {
-				// Fall back to regex-based extraction
-				signatures = extractFunctionSignatures(fullPath, repoRoot);
+		// 5. In compact mode, skip expensive function signature extraction if we have symbol stubs
+		if (mode !== "compact" || briefing.symbolStubs.length === 0) {
+			// Extract type definitions from common/schema if task mentions types
+			if (task.match(/type|interface|schema|zod/i)) {
+				const types = extractTypeDefinitions(repoRoot);
+				briefing.typeDefinitions.push(...types.slice(0, 10));
 			}
-			return signatures;
-		});
 
-		const signatureResults = await Promise.all(signaturePromises);
-		for (const sigs of signatureResults) {
-			briefing.functionSignatures.push(...sigs);
+			// Find function signatures in target files IN PARALLEL (only in full mode or if no stubs)
+			if (mode === "full" || briefing.symbolStubs.length === 0) {
+				const signaturePromises = briefing.targetFiles.slice(0, 5).map(async (file) => {
+					const fullPath = path.isAbsolute(file) ? file : path.join(repoRoot, file);
+					// Try ts-morph first for full type info
+					let signatures = extractFunctionSignaturesWithTypes(fullPath, repoRoot);
+					if (signatures.length === 0) {
+						// Fall back to regex-based extraction
+						signatures = extractFunctionSignatures(fullPath, repoRoot);
+					}
+					return signatures;
+				});
+
+				const signatureResults = await Promise.all(signaturePromises);
+				for (const sigs of signatureResults) {
+					briefing.functionSignatures.push(...sigs);
+				}
+				briefing.functionSignatures = briefing.functionSignatures.slice(0, 15);
+			}
 		}
-		briefing.functionSignatures = briefing.functionSignatures.slice(0, 15);
 
-		// 7. Add related patterns (already fetched in parallel above)
-		briefing.relatedPatterns.push(...relatedPatternsResult.slice(0, 5));
+		// 6. Add related patterns (only in full mode to save tokens)
+		if (mode === "full") {
+			const relatedPatternsResult = findRelatedPatterns(task, repoRoot);
+			briefing.relatedPatterns.push(...relatedPatternsResult.slice(0, 5));
+		}
 
-		// 8. Add repository-specific constraints
+		// 7. Add repository-specific constraints
 		const constraints = [
 			...detectConstraints(task, repoRoot),
 			`Working in repository: ${repoRoot}`,
@@ -549,13 +593,25 @@ export async function prepareContext(
 		];
 		briefing.constraints.push(...constraints);
 
-		// 9. Add file scope restriction to prevent scope creep
+		// 8. Add file scope restriction to prevent scope creep
 		if (briefing.targetFiles.length > 0) {
 			briefing.constraints.push(`SCOPE: Only modify files related to this task. Avoid touching unrelated code.`);
 		}
 
-		// 10. Build the briefing document
-		briefing.briefingDoc = buildBriefingDoc(briefing);
+		// 9. Build the briefing document with token budget
+		briefing.briefingDoc = buildBriefingDoc(briefing, mode, tokenBudget);
+		briefing.tokenBudgetUsed = briefing.briefingDoc.length;
+
+		sessionLogger.debug(
+			{
+				mode,
+				tokenBudget,
+				tokenBudgetUsed: briefing.tokenBudgetUsed,
+				targetFiles: briefing.targetFiles.length,
+				symbolStubs: briefing.symbolStubs.length,
+			},
+			"Context preparation complete",
+		);
 	} catch (error) {
 		sessionLogger.warn(
 			{ error: String(error), cwd, repoRoot },
@@ -890,22 +946,142 @@ function detectConstraints(_task: string, cwd: string): string[] {
 }
 
 /**
- * Enrich context briefing using AST index for smarter context selection
- * Uses persistent index for fast symbol and dependency lookups
+ * Result of trying AST index first
  */
-async function enrichWithASTIndex(briefing: ContextBriefing, searchTerms: string[], repoRoot: string): Promise<void> {
+interface ASTIndexResult {
+	/** Whether AST index provided sufficient context */
+	sufficient: boolean;
+	/** Number of files found via AST index */
+	filesFound: number;
+	/** Number of symbols found */
+	symbolsFound: number;
+}
+
+/**
+ * Try AST index FIRST as the primary source for context
+ *
+ * This is more aggressive than the previous enrichWithASTIndex approach:
+ * 1. Uses AST index as PRIMARY source (not just enrichment)
+ * 2. Extracts compact symbol stubs instead of full signatures
+ * 3. Only falls back to git grep if AST index is unavailable/insufficient
+ *
+ * Returns whether the AST index provided sufficient context
+ */
+async function tryASTIndexFirst(
+	briefing: ContextBriefing,
+	searchTerms: string[],
+	repoRoot: string,
+	mode: ContextMode,
+): Promise<ASTIndexResult> {
 	try {
 		const index = getASTIndex(repoRoot);
 		await index.load();
 
 		const stats = index.getStats();
 		if (stats.fileCount === 0) {
-			// Index not built yet - skip enrichment
-			sessionLogger.debug("AST index empty, skipping enrichment");
-			return;
+			// Index not built yet - can't use it
+			sessionLogger.debug("AST index empty, cannot use as primary source");
+			return { sufficient: false, filesFound: 0, symbolsFound: 0 };
 		}
 
-		// Lazy incremental update: check if target files are stale
+		let filesFound = 0;
+		let symbolsFound = 0;
+
+		// 1. Find files defining symbols mentioned in the task (PRIMARY discovery method)
+		const symbolFiles: string[] = [];
+		const foundSymbols: Array<{ name: string; kind: string; file: string }> = [];
+
+		for (const term of searchTerms) {
+			// Skip short terms and file-like patterns
+			if (term.length < 3 || term.includes(".")) continue;
+
+			// Check if term looks like a symbol (PascalCase or camelCase)
+			if (/^[A-Z][a-zA-Z0-9]*$/.test(term) || /^[a-z][a-zA-Z0-9]*$/.test(term)) {
+				const files = index.findSymbolDefinition(term);
+				for (const file of files) {
+					symbolFiles.push(file);
+					const info = index.getSymbolInfo(term);
+					if (info) {
+						foundSymbols.push({ name: term, kind: info.kind, file });
+					}
+				}
+			}
+		}
+
+		// Add symbol-based files to target files (prioritize them)
+		if (symbolFiles.length > 0) {
+			const uniqueSymbolFiles = [...new Set(symbolFiles)];
+			briefing.targetFiles = [...uniqueSymbolFiles, ...briefing.targetFiles];
+			briefing.targetFiles = [...new Set(briefing.targetFiles)].slice(0, 10);
+			filesFound = uniqueSymbolFiles.length;
+		}
+
+		// 2. Build compact symbol stubs (saves tokens vs full signatures)
+		// Format: "symbolName (kind) in file.ts"
+		for (const sym of foundSymbols.slice(0, 15)) {
+			const stub = `${sym.name} (${sym.kind}) in ${path.basename(sym.file)}`;
+			if (!briefing.symbolStubs.includes(stub)) {
+				briefing.symbolStubs.push(stub);
+				symbolsFound++;
+			}
+		}
+
+		// 3. Get file exports as compact stubs (for target files)
+		for (const file of briefing.targetFiles.slice(0, 5)) {
+			const exports = index.getFileExports(file);
+			for (const exp of exports.slice(0, 5)) {
+				const stub = `${exp.name} (${exp.kind}) in ${path.basename(file)}`;
+				if (!briefing.symbolStubs.includes(stub)) {
+					briefing.symbolStubs.push(stub);
+				}
+			}
+		}
+
+		// Limit symbol stubs based on mode
+		const maxStubs = mode === "minimal" ? 5 : mode === "compact" ? 10 : 20;
+		briefing.symbolStubs = briefing.symbolStubs.slice(0, maxStubs);
+
+		// 4. Find dependencies for target files
+		const allDependencies: string[] = [];
+		for (const file of briefing.targetFiles.slice(0, 5)) {
+			const deps = index.findImports(file);
+			allDependencies.push(...deps);
+		}
+		briefing.dependencies = [...new Set(allDependencies)].filter((f) => !briefing.targetFiles.includes(f)).slice(0, 5);
+
+		// 5. Find impacted files (what depends on target files)
+		const allImpacted: string[] = [];
+		for (const file of briefing.targetFiles.slice(0, 5)) {
+			const importers = index.findImporters(file);
+			allImpacted.push(...importers);
+		}
+		briefing.impactedFiles = [...new Set(allImpacted)].filter((f) => !briefing.targetFiles.includes(f)).slice(0, 5);
+
+		// 6. Enrich type definitions from index (only if task mentions types)
+		const typeTerms = searchTerms.filter((t) => /^[A-Z][a-zA-Z0-9]*$/.test(t) && t.length > 2);
+		for (const typeName of typeTerms.slice(0, 5)) {
+			const info = index.getSymbolInfo(typeName);
+			if (info && (info.kind === "interface" || info.kind === "type")) {
+				if (!briefing.typeDefinitions.includes(typeName)) {
+					// In compact mode, just use the name; in full mode, include signature
+					if (mode === "compact" || mode === "minimal") {
+						briefing.typeDefinitions.push(typeName);
+					} else {
+						const sig = info.signature ? `: ${info.signature}` : "";
+						briefing.typeDefinitions.push(`${typeName}${sig}`);
+					}
+				}
+			}
+		}
+
+		// 7. Get file summaries for target files (compact and informative)
+		const allRelevantFiles = [
+			...briefing.targetFiles.slice(0, 5),
+			...briefing.dependencies.slice(0, 2),
+		];
+		briefing.fileSummaries = index.getFileSummaries(allRelevantFiles);
+
+		// 8. Lazy incremental update: check if target files are stale
 		const filesToCheck = briefing.targetFiles.slice(0, 10);
 		const staleFiles = filesToCheck.filter((f) => index.isStale(f));
 		if (staleFiles.length > 0) {
@@ -914,81 +1090,31 @@ async function enrichWithASTIndex(briefing: ContextBriefing, searchTerms: string
 			await index.save();
 		}
 
-		// 1. Find files defining symbols mentioned in the task
-		const symbolFiles: string[] = [];
-		for (const term of searchTerms) {
-			// Skip short terms and file-like patterns
-			if (term.length < 3 || term.includes(".")) continue;
-
-			// Check if term looks like a symbol (PascalCase or camelCase)
-			if (/^[A-Z][a-zA-Z0-9]*$/.test(term) || /^[a-z][a-zA-Z0-9]*$/.test(term)) {
-				const files = index.findSymbolDefinition(term);
-				symbolFiles.push(...files);
-			}
-		}
-
-		// Add symbol-based files to target files (prioritize them)
-		if (symbolFiles.length > 0) {
-			const uniqueSymbolFiles = [...new Set(symbolFiles)];
-			// Prepend symbol files - they're more likely to be relevant
-			briefing.targetFiles = [...uniqueSymbolFiles, ...briefing.targetFiles];
-			briefing.targetFiles = [...new Set(briefing.targetFiles)].slice(0, 10);
-		}
-
-		// 2. Find dependencies for target files
-		const allDependencies: string[] = [];
-		for (const file of briefing.targetFiles.slice(0, 5)) {
-			const deps = index.findImports(file);
-			allDependencies.push(...deps);
-		}
-		briefing.dependencies = [...new Set(allDependencies)].filter((f) => !briefing.targetFiles.includes(f)).slice(0, 5);
-
-		// 3. Find impacted files (what depends on target files)
-		const allImpacted: string[] = [];
-		for (const file of briefing.targetFiles.slice(0, 5)) {
-			const importers = index.findImporters(file);
-			allImpacted.push(...importers);
-		}
-		briefing.impactedFiles = [...new Set(allImpacted)].filter((f) => !briefing.targetFiles.includes(f)).slice(0, 5);
-
-		// 4. Enrich type definitions from index
-		const typeTerms = searchTerms.filter((t) => /^[A-Z][a-zA-Z0-9]*$/.test(t) && t.length > 2);
-		for (const typeName of typeTerms.slice(0, 5)) {
-			const info = index.getSymbolInfo(typeName);
-			if (info && (info.kind === "interface" || info.kind === "type")) {
-				if (!briefing.typeDefinitions.includes(typeName)) {
-					const sig = info.signature ? `: ${info.signature}` : "";
-					briefing.typeDefinitions.push(`${typeName}${sig}`);
-				}
-			}
-		}
-
-		// 5. Get file summaries for target files and dependencies
-		const allRelevantFiles = [
-			...briefing.targetFiles.slice(0, 5),
-			...briefing.dependencies.slice(0, 3),
-			...briefing.impactedFiles.slice(0, 3),
-		];
-		briefing.fileSummaries = index.getFileSummaries(allRelevantFiles);
-
 		sessionLogger.debug(
 			{
-				symbolFilesFound: symbolFiles.length,
-				dependenciesFound: briefing.dependencies.length,
-				impactedFilesFound: briefing.impactedFiles.length,
+				filesFound,
+				symbolsFound,
+				symbolStubs: briefing.symbolStubs.length,
+				dependencies: briefing.dependencies.length,
+				impactedFiles: briefing.impactedFiles.length,
 			},
-			"AST index enrichment complete",
+			"AST index primary lookup complete",
 		);
+
+		// Consider sufficient if we found at least one file or symbol
+		const sufficient = filesFound > 0 || symbolsFound > 0;
+		return { sufficient, filesFound, symbolsFound };
 	} catch (error) {
-		// AST index errors are non-fatal - fall back to existing behavior
-		sessionLogger.debug({ error: String(error) }, "AST index enrichment failed");
+		// AST index errors are non-fatal - fall back to git grep
+		sessionLogger.debug({ error: String(error) }, "AST index primary lookup failed");
+		return { sufficient: false, filesFound: 0, symbolsFound: 0 };
 	}
 }
 
 /**
  * Build the full briefing document
  */
-function buildBriefingDoc(briefing: ContextBriefing): string {
+function buildBriefingDoc(briefing: ContextBriefing, _mode: ContextMode, _tokenBudget: number): string {
 	const sections: string[] = [];
 
 	sections.push(`# CONTEXT BRIEFING`);
