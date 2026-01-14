@@ -6,6 +6,7 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync } fro
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
+import { recordAtomicityOutcome } from "../ax-programs.js";
 import { getConfigSource, loadConfig } from "../config.js";
 import { type OracleCard, UndercityOracle } from "../oracle.js";
 import type { TaskResultSummary } from "../output.js";
@@ -245,10 +246,22 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			return;
 		}
 
-		// Lazy decomposition check: assess atomicity and decompose complex tasks
+		/// Lazy decomposition check: assess atomicity and decompose complex tasks
 		// Also collects recommended model for each task
 		type TaskWithModel = (typeof tasksToProcess)[0] & { recommendedModel?: "haiku" | "sonnet" | "opus" };
 		let tasksWithModels: TaskWithModel[] = [];
+
+		// Store atomicity check results for outcome recording (Ax training data)
+		const atomicityResults = new Map<
+			string,
+			{
+				isAtomic: boolean;
+				confidence: number;
+				estimatedFiles: number;
+				recommendedModel: string;
+				reasoning: string;
+			}
+		>();
 
 		if (options.decompose !== false) {
 			const { checkAndDecompose } = await import("../task-decomposer.js");
@@ -283,6 +296,15 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 					};
 					tasksWithModels.push(taskWithModel);
 					output.debug(`Task "${task.objective.substring(0, 40)}..." → ${result.recommendedModel || "sonnet"}`);
+
+					// Store atomicity result for outcome recording
+					atomicityResults.set(task.objective, {
+						isAtomic: true,
+						confidence: 0.8, // checkAndDecompose doesn't expose confidence directly
+						estimatedFiles: 1,
+						recommendedModel: result.recommendedModel || "sonnet",
+						reasoning: result.reasoning,
+					});
 				}
 			}
 
@@ -307,6 +329,15 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 					tasksWithModels.push({
 						...task,
 						recommendedModel: result.recommendedModel || "sonnet",
+					});
+
+					// Store atomicity result for outcome recording
+					atomicityResults.set(task.objective, {
+						isAtomic: true,
+						confidence: 0.8,
+						estimatedFiles: 1,
+						recommendedModel: result.recommendedModel || "sonnet",
+						reasoning: result.reasoning,
 					});
 				}
 			}
@@ -649,6 +680,12 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 										output.info(`Parent task ${task.parentId} auto-completed (all subtasks done)`);
 									}
 								}
+
+								// Record atomicity outcome for Ax training data
+								const atomicityResult = atomicityResults.get(taskResult.task);
+								if (atomicityResult) {
+									recordAtomicityOutcome(taskResult.task, atomicityResult, true);
+								}
 							} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
 								const errorMsg = taskResult.mergeError || "Task failed";
 								markTaskFailed(taskId, errorMsg);
@@ -686,6 +723,12 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 									status: "failed",
 									error: errorMsg,
 								});
+
+								// Record atomicity outcome for Ax training data (failure)
+								const atomicityResult = atomicityResults.get(taskResult.task);
+								if (atomicityResult) {
+									recordAtomicityOutcome(taskResult.task, atomicityResult, false);
+								}
 							}
 						}
 					}
