@@ -235,7 +235,7 @@ export function extractTaskKeywords(task: string): string[] {
  * Normalize a file path (remove leading ./ or src/)
  */
 function normalizeFilePath(filePath: string): string {
-	return filePath.replace(/^\.\//, "").replace(/^src\//, "src/"); // Keep src/ prefix consistent
+	return filePath.replace(/^\.\//, "");
 }
 
 /**

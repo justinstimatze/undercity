@@ -767,9 +767,12 @@ export class TaskWorker {
 				if (this.autoCommit && fastResult.filesChanged?.length) {
 					try {
 						for (const file of fastResult.filesChanged) {
-							execSync(`git add "${file}"`, { cwd: this.workingDirectory, stdio: "pipe" });
+							execFileSync("git", ["add", file], { cwd: this.workingDirectory, stdio: "pipe" });
 						}
-						execSync(`git commit -m "${task.substring(0, 50)}"`, { cwd: this.workingDirectory, stdio: "pipe" });
+						execFileSync("git", ["commit", "-m", task.substring(0, 50)], {
+							cwd: this.workingDirectory,
+							stdio: "pipe",
+						});
 						output.success("Fast-path changes committed", { taskId });
 					} catch (e) {
 						output.warning("Fast-path commit failed, changes staged", { taskId, error: String(e) });
