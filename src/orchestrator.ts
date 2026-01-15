@@ -1466,7 +1466,9 @@ export class Orchestrator {
 
 				// If we have more attempts, try to fix
 				if (attempt < maxMergeFixAttempts) {
-					output.warning(`Verification failed for ${taskId}, attempting fix (${attempt + 1}/${maxMergeFixAttempts})...`);
+					output.warning(
+						`Verification failed for ${taskId}, attempting fix (${attempt + 1}/${maxMergeFixAttempts})...`,
+					);
 
 					try {
 						await this.attemptMergeVerificationFix(taskId, worktreePath, String(verifyError));
@@ -1478,7 +1480,9 @@ export class Orchestrator {
 		}
 
 		if (lastVerifyError) {
-			throw new Error(`Verification failed for ${taskId} after ${maxMergeFixAttempts} fix attempts: ${lastVerifyError}`);
+			throw new Error(
+				`Verification failed for ${taskId} after ${maxMergeFixAttempts} fix attempts: ${lastVerifyError}`,
+			);
 		}
 
 		// Merge worktree changes into local main
