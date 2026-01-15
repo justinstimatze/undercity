@@ -17,6 +17,7 @@ import { execFileSync, execSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { isAbsolute, normalize } from "node:path";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import { updateLedger } from "./capability-ledger.js";
 import { type ExperimentManager, getExperimentManager } from "./experiment.js";
 import { FileTracker } from "./file-tracker.js";
@@ -1442,19 +1443,42 @@ export class Orchestrator {
 			throw new Error(`Rebase failed for ${taskId}: ${error}`);
 		}
 
-		// Run verification after rebase (catches any merge issues)
-		try {
-			output.progress(`Running verification for ${taskId}...`);
-			execInDir(`pnpm typecheck`, worktreePath);
-			// Set UNDERCITY_VERIFICATION to skip integration tests during merge verification
-			execSync(`pnpm test --run`, {
-				cwd: worktreePath,
-				encoding: "utf-8",
-				stdio: ["pipe", "pipe", "pipe"],
-				env: { ...process.env, UNDERCITY_VERIFICATION: "true" },
-			});
-		} catch (verifyError) {
-			throw new Error(`Verification failed for ${taskId}: ${verifyError}`);
+		// Run verification after rebase with fix loop (catches any merge issues)
+		const maxMergeFixAttempts = 2;
+		let lastVerifyError: unknown = null;
+
+		for (let attempt = 0; attempt <= maxMergeFixAttempts; attempt++) {
+			try {
+				output.progress(`Running verification for ${taskId}${attempt > 0 ? ` (fix attempt ${attempt})` : ""}...`);
+				execInDir(`pnpm typecheck`, worktreePath);
+				// Set UNDERCITY_VERIFICATION to skip integration tests during merge verification
+				execSync(`pnpm test --run`, {
+					cwd: worktreePath,
+					encoding: "utf-8",
+					stdio: ["pipe", "pipe", "pipe"],
+					env: { ...process.env, UNDERCITY_VERIFICATION: "true" },
+				});
+				// Verification passed
+				lastVerifyError = null;
+				break;
+			} catch (verifyError) {
+				lastVerifyError = verifyError;
+
+				// If we have more attempts, try to fix
+				if (attempt < maxMergeFixAttempts) {
+					output.warning(`Verification failed for ${taskId}, attempting fix (${attempt + 1}/${maxMergeFixAttempts})...`);
+
+					try {
+						await this.attemptMergeVerificationFix(taskId, worktreePath, String(verifyError));
+					} catch (fixError) {
+						output.warning(`Fix attempt failed for ${taskId}: ${fixError}`);
+					}
+				}
+			}
+		}
+
+		if (lastVerifyError) {
+			throw new Error(`Verification failed for ${taskId} after ${maxMergeFixAttempts} fix attempts: ${lastVerifyError}`);
 		}
 
 		// Merge worktree changes into local main
@@ -1485,6 +1509,38 @@ export class Orchestrator {
 			output.debug(`Merged ${taskId} into local main (${commitSha.slice(0, 7)})`);
 		} catch (mergeError) {
 			throw new Error(`Merge into local main failed for ${taskId}: ${mergeError}`);
+		}
+	}
+
+	/**
+	 * Attempt to fix verification errors after rebase by spawning a lightweight agent
+	 */
+	private async attemptMergeVerificationFix(taskId: string, worktreePath: string, errorOutput: string): Promise<void> {
+		const fixPrompt = `VERIFICATION FAILED after rebasing onto main. Fix these errors:
+
+${errorOutput}
+
+Focus ONLY on fixing the specific errors shown above. Do not refactor or change anything else.
+The errors are likely caused by changes in main that conflict with this branch's changes.
+
+Working directory: ${worktreePath}`;
+
+		output.info(`Spawning fix agent for ${taskId}...`);
+
+		for await (const message of query({
+			prompt: fixPrompt,
+			options: {
+				model: "claude-sonnet-4-20250514",
+				permissionMode: "bypassPermissions",
+				allowDangerouslySkipPermissions: true,
+				maxTurns: 5, // Limited turns for focused fix
+				settingSources: ["project"],
+				cwd: worktreePath,
+			},
+		})) {
+			if (message.type === "result" && message.subtype === "success") {
+				output.info(`Fix agent completed for ${taskId}`);
+			}
 		}
 	}
 
