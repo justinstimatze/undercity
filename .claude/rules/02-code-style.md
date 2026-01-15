@@ -84,6 +84,24 @@ console.log("Processing task", { taskId, userId });
 - Mask PII: `user@example.com` → `us***@example.com`
 - Be cautious with request/response bodies
 
+## Shell Command Safety
+
+**Use `execFileSync` over `execSync` when including variables:**
+```typescript
+// BAD: Shell injection risk with user input
+execSync(`git commit -m "${userInput}"`, { cwd });
+
+// GOOD: No shell interpretation
+execFileSync("git", ["commit", "-m", userInput], { cwd });
+```
+
+**When `execSync` is acceptable:**
+- Command requires shell features (pipes, redirects, `||`, `&&`)
+- All interpolated values are trusted internal values (numbers, controlled paths)
+- Values are properly escaped
+
+CodeQL runs on PRs and will catch shell injection from user input.
+
 ## Code Quality Targets
 
 - Cyclomatic complexity: ≤10 per function
