@@ -876,17 +876,26 @@ export class TaskWorker {
 					};
 				}
 
-				// Check for already complete signal
+				// Check for already complete signal - but still run verification to confirm
+				// This prevents hallucinated "already complete" claims from being trusted
 				if (this.executionPlan.plan.alreadyComplete?.likely) {
-					output.success(`Task already complete: ${skipReason}`, { taskId });
-					return {
-						task,
-						status: "complete",
-						model: this.currentModel,
-						attempts: 0,
-						durationMs: planDuration,
-						tokenUsage: { attempts: [], total: 0 },
-					};
+					output.info(`Planner claims task already complete, verifying: ${skipReason}`, { taskId });
+					const verification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory);
+					if (verification.passed) {
+						output.success(`Task verified as already complete: ${skipReason}`, { taskId });
+						return {
+							task,
+							status: "complete",
+							model: this.currentModel,
+							attempts: 0,
+							durationMs: planDuration,
+							tokenUsage: { attempts: [], total: 0 },
+						};
+					}
+					// Verification failed - planner was wrong, continue with execution
+					output.warning(`Planner claimed complete but verification failed, proceeding with execution`, {
+						taskId,
+					});
 				}
 
 				// Plan rejected for other reasons
@@ -1200,12 +1209,12 @@ export class TaskWorker {
 		}
 
 		// Check for task already complete
+		// IMPORTANT: Even if agent claims complete, verification must pass.
+		// This prevents hallucinated "already complete" claims from being trusted.
 		const taskAlreadyComplete =
-			this.taskAlreadyCompleteReason !== null ||
-			(!verification.passed &&
-				verification.filesChanged === 0 &&
-				this.noOpEditCount > 0 &&
-				errorCategories.includes("no_changes"));
+			verification.passed &&
+			verification.filesChanged === 0 &&
+			(this.taskAlreadyCompleteReason !== null || this.noOpEditCount > 0);
 
 		if (taskAlreadyComplete) {
 			return this.buildAlreadyCompleteResult(task, taskId, verification, startTime);
