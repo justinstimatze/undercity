@@ -2157,9 +2157,38 @@ export async function handleDaemon(action?: string): Promise<void> {
 
 		await queryDaemon("/resume", "POST");
 		console.log(chalk.green("Grind resumed"));
+	} else if (action === "drain") {
+		if (!isDaemonRunning()) {
+			console.log(chalk.gray("Daemon not running"));
+			return;
+		}
+
+		await queryDaemon("/drain", "POST");
+		console.log(chalk.yellow("Drain initiated - finishing current tasks, starting no more"));
 	} else {
 		console.log(chalk.red(`Unknown action: ${action}`));
-		console.log(chalk.dim("Available: status, stop, pause, resume"));
+		console.log(chalk.dim("Available: status, stop, pause, resume, drain"));
+	}
+}
+
+/**
+ * Handle drain command - signal grind to finish current tasks and stop
+ */
+export async function handleDrain(): Promise<void> {
+	const { isDaemonRunning, queryDaemon } = await import("../server.js");
+
+	if (!isDaemonRunning()) {
+		console.log(chalk.gray("Daemon not running - nothing to drain"));
+		console.log(chalk.dim("Drain is for gracefully stopping a running grind session"));
+		return;
+	}
+
+	try {
+		await queryDaemon("/drain", "POST");
+		console.log(chalk.yellow("Drain initiated"));
+		console.log(chalk.dim("Current tasks will complete, no new tasks will start"));
+	} catch (error) {
+		console.error(chalk.red(`Failed to drain: ${error}`));
 	}
 }
 

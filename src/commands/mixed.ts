@@ -12,6 +12,7 @@ import {
 	handleConfig,
 	handleDaemon,
 	handleDecide,
+	handleDrain,
 	handleDspyReadiness,
 	handleGrind,
 	handleIndex,
@@ -182,6 +183,12 @@ export const mixedCommands: CommandModule = {
 			.command("daemon [action]")
 			.description("Check or control the daemon (status, stop)")
 			.action((action?: string) => handleDaemon(action));
+
+		// Drain command - graceful shutdown
+		program
+			.command("drain")
+			.description("Signal grind to finish current tasks and start no more")
+			.action(() => handleDrain());
 
 		// Status command - check grind session status from event log
 		program

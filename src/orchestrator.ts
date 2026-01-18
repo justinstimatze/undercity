@@ -213,6 +213,10 @@ export class Orchestrator {
 	private recoveryAttempts: Map<string, number> = new Map();
 	/** Active health check interval handle */
 	private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+	/** Draining flag - when true, finish current tasks but start no more */
+	private draining = false;
+	/** Callback to invoke when drain completes */
+	private onDrainComplete?: () => void;
 
 	constructor(options: ParallelSoloOptions = {}) {
 		this.maxConcurrent = options.maxConcurrent ?? 3;
@@ -253,6 +257,27 @@ export class Orchestrator {
 
 		// Initialize experiment manager for A/B testing
 		this.experimentManager = getExperimentManager();
+	}
+
+	/**
+	 * Signal graceful drain - finish current tasks, start no more
+	 * @param onComplete Optional callback when drain completes
+	 */
+	drain(onComplete?: () => void): void {
+		if (this.draining) {
+			output.warning("Already draining");
+			return;
+		}
+		this.draining = true;
+		this.onDrainComplete = onComplete;
+		output.progress("Drain initiated - finishing current tasks, starting no more");
+	}
+
+	/**
+	 * Check if orchestrator is draining
+	 */
+	isDraining(): boolean {
+		return this.draining;
 	}
 
 	/**
@@ -866,6 +891,13 @@ export class Orchestrator {
 		this.startHealthMonitoring();
 
 		for (let batchStart = 0; batchStart < tasks.length; batchStart += this.maxConcurrent) {
+			// Check for drain signal before starting new batch
+			if (this.draining) {
+				const remaining = tasks.length - batchStart;
+				output.progress(`Drain: skipping ${remaining} remaining tasks`);
+				break;
+			}
+
 			const batchEnd = Math.min(batchStart + this.maxConcurrent, tasks.length);
 			const batchTasks = tasks.slice(batchStart, batchEnd);
 			const batchNum = Math.floor(batchStart / this.maxConcurrent) + 1;
@@ -883,6 +915,12 @@ export class Orchestrator {
 
 			const batchResults = await this.executeBatchWorkers(preparedTasks, mainBranch);
 			results.push(...batchResults);
+		}
+
+		// If we drained, invoke the callback
+		if (this.draining && this.onDrainComplete) {
+			output.success("Drain complete - all in-progress tasks finished");
+			this.onDrainComplete();
 		}
 
 		return results;

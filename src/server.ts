@@ -17,6 +17,7 @@
  *   GET  /metrics  - Metrics summary
  *   POST /pause    - Pause grind loop
  *   POST /resume   - Resume grind loop
+ *   POST /drain    - Finish current tasks, start no more
  *   POST /stop     - Stop the daemon
  */
 
@@ -40,6 +41,7 @@ export interface DaemonState {
 	startedAt: string;
 	paused: boolean;
 	grindActive: boolean;
+	draining: boolean;
 }
 
 export interface ServerConfig {
@@ -48,6 +50,7 @@ export interface ServerConfig {
 	onPause?: () => void;
 	onResume?: () => void;
 	onStop?: () => void;
+	onDrain?: () => void;
 }
 
 /**
@@ -115,10 +118,12 @@ export class UndercityServer {
 	private stateDir: string;
 	private paused = false;
 	private grindActive = false;
+	private draining = false;
 	private persistence: Persistence;
 	private onPause?: () => void;
 	private onResume?: () => void;
 	private onStop?: () => void;
+	private onDrain?: () => void;
 
 	constructor(config: ServerConfig = {}) {
 		this.port = config.port ?? DEFAULT_PORT;
@@ -127,6 +132,7 @@ export class UndercityServer {
 		this.onPause = config.onPause;
 		this.onResume = config.onResume;
 		this.onStop = config.onStop;
+		this.onDrain = config.onDrain;
 	}
 
 	/**
@@ -159,6 +165,7 @@ export class UndercityServer {
 						startedAt: new Date().toISOString(),
 						paused: this.paused,
 						grindActive: this.grindActive,
+						draining: this.draining,
 					},
 					this.stateDir,
 				);
@@ -206,6 +213,7 @@ export class UndercityServer {
 		if (state) {
 			state.paused = this.paused;
 			state.grindActive = this.grindActive;
+			state.draining = this.draining;
 			saveDaemonState(state, this.stateDir);
 		}
 	}
@@ -244,6 +252,8 @@ export class UndercityServer {
 					return this.handleResume(res);
 				case "POST /stop":
 					return this.handleStop(res);
+				case "POST /drain":
+					return this.handleDrain(res);
 				default:
 					return this.sendJson(res, 404, { error: "Not found", availableEndpoints: ENDPOINTS });
 			}
@@ -377,6 +387,14 @@ export class UndercityServer {
 		}, 100);
 	}
 
+	private handleDrain(res: ServerResponse): void {
+		this.draining = true;
+		this.updateDaemonState();
+		this.onDrain?.();
+		serverLogger.info("Drain initiated via API - finishing current tasks, starting no more");
+		this.sendJson(res, 200, { success: true, draining: true, message: "Finishing current tasks, starting no more" });
+	}
+
 	private readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
 		return new Promise((resolve, reject) => {
 			let data = "";
@@ -413,6 +431,7 @@ const ENDPOINTS = {
 	"GET /metrics": "Metrics summary",
 	"POST /pause": "Pause grind loop",
 	"POST /resume": "Resume grind loop",
+	"POST /drain": "Finish current tasks, start no more",
 	"POST /stop": "Stop daemon",
 };
 
