@@ -286,6 +286,65 @@ function getReviewerTier(plannerTier: ModelTier): ModelTier {
 	}
 }
 
+/**
+ * Request decomposition subtasks from a model
+ * Called when a plan says "needs decomposition" but doesn't provide subtasks
+ */
+async function requestDecompositionSubtasks(
+	task: string,
+	reason: string,
+	model: ModelTier,
+	cwd: string,
+): Promise<string[]> {
+	const prompt = `You are decomposing a task that is too large or vague to execute directly.
+
+TASK: ${task}
+
+REASON IT NEEDS DECOMPOSITION: ${reason}
+
+Break this task into 2-5 specific, actionable subtasks. Each subtask should:
+1. Be concrete and executable (not vague)
+2. Target specific files or components
+3. Be completable independently
+4. Together fully accomplish the original task
+
+Respond with ONLY a JSON array of subtask descriptions:
+["subtask 1 description", "subtask 2 description", ...]`;
+
+	try {
+		let result = "";
+		for await (const message of query({
+			prompt,
+			options: {
+				model: MODEL_NAMES[model],
+				maxTurns: 1,
+				permissionMode: "bypassPermissions",
+				allowDangerouslySkipPermissions: true,
+				cwd,
+			},
+		})) {
+			if (message.type === "result" && message.subtype === "success") {
+				result = message.result;
+			}
+		}
+
+		// Parse JSON array from response
+		const match = result.match(/\[[\s\S]*?\]/);
+		if (match) {
+			const subtasks = JSON.parse(match[0]) as string[];
+			if (Array.isArray(subtasks) && subtasks.length > 0 && subtasks.every((s) => typeof s === "string")) {
+				logger.info({ model, count: subtasks.length }, "Got decomposition subtasks");
+				return subtasks;
+			}
+		}
+		logger.warn({ model, result: result.substring(0, 200) }, "Failed to parse subtasks from response");
+		return [];
+	} catch (error) {
+		logger.warn({ error: String(error), model }, "Failed to request decomposition subtasks");
+		return [];
+	}
+}
+
 /** Maximum iterations for plan revision (create + N revisions) */
 const MAX_PLAN_ITERATIONS = 3;
 
@@ -846,13 +905,33 @@ export async function planTaskWithReview(
 
 	// Early exit: needs decomposition
 	if (currentPlan.needsDecomposition?.needed) {
+		let subtasks = currentPlan.needsDecomposition.suggestedSubtasks || [];
+		const reason = "Task is too large or vague to execute directly";
+
+		// If no subtasks provided, escalate through models to get them
+		if (subtasks.length === 0) {
+			logger.info({ plannerModel, reason }, "Plan needs decomposition but no subtasks - escalating");
+
+			// Try reviewerModel first (sonnet if planner was haiku)
+			subtasks = await requestDecompositionSubtasks(task, reason, reviewerModel, cwd);
+
+			// If still no subtasks and not at opus, try opus
+			if (subtasks.length === 0 && reviewerModel !== "opus") {
+				logger.info("Escalating to opus for decomposition subtasks");
+				subtasks = await requestDecompositionSubtasks(task, reason, "opus", cwd);
+			}
+		}
+
 		return {
 			success: true,
-			plan: currentPlan,
+			plan: {
+				...currentPlan,
+				needsDecomposition: { ...currentPlan.needsDecomposition, suggestedSubtasks: subtasks },
+			},
 			review: {
 				approved: false,
 				issues: ["Task requires decomposition"],
-				suggestions: currentPlan.needsDecomposition.suggestedSubtasks || [],
+				suggestions: subtasks,
 			},
 			plannerModel,
 			reviewerModel,
@@ -914,13 +993,30 @@ export async function planTaskWithReview(
 
 		// Check if revision triggered decomposition
 		if (currentPlan.needsDecomposition?.needed) {
+			let subtasks = currentPlan.needsDecomposition.suggestedSubtasks || [];
+			const reason = "Task is too large or vague after plan revision";
+
+			// If no subtasks provided, escalate through models to get them
+			if (subtasks.length === 0) {
+				logger.info({ plannerModel, reason }, "Revision needs decomposition but no subtasks - escalating");
+				subtasks = await requestDecompositionSubtasks(task, reason, reviewerModel, cwd);
+
+				if (subtasks.length === 0 && reviewerModel !== "opus") {
+					logger.info("Escalating to opus for decomposition subtasks");
+					subtasks = await requestDecompositionSubtasks(task, reason, "opus", cwd);
+				}
+			}
+
 			return {
 				success: true,
-				plan: currentPlan,
+				plan: {
+					...currentPlan,
+					needsDecomposition: { ...currentPlan.needsDecomposition, suggestedSubtasks: subtasks },
+				},
 				review: {
 					approved: false,
 					issues: ["Task requires decomposition after revision"],
-					suggestions: currentPlan.needsDecomposition.suggestedSubtasks || [],
+					suggestions: subtasks,
 				},
 				plannerModel,
 				reviewerModel,
