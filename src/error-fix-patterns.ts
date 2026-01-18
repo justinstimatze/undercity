@@ -83,6 +83,8 @@ export interface PermanentFailure {
 	filesAttempted: string[];
 	/** When this failure was recorded */
 	recordedAt: string;
+	/** Detailed error output (actual lint/typecheck/test messages) */
+	detailedErrors?: string[];
 }
 
 /**
@@ -321,28 +323,62 @@ export function clearPendingError(taskId: string, stateDir: string = DEFAULT_STA
 }
 
 /**
+ * Options for recording a permanent failure
+ */
+export interface RecordPermanentFailureOptions {
+	taskId: string;
+	category: string;
+	message: string;
+	taskObjective: string;
+	modelUsed: string;
+	attemptCount: number;
+	currentFiles: string[];
+	/** Actual error output (lint messages, typecheck errors, test failures) */
+	detailedErrors?: string[];
+	stateDir?: string;
+}
+
+/**
  * Record a permanent failure when verification error cannot be fixed after max retries
  * Call this when a task fails after exhausting all retry attempts
  */
 export function recordPermanentFailure(
-	taskId: string,
-	category: string,
-	message: string,
-	taskObjective: string,
-	modelUsed: string,
-	attemptCount: number,
-	currentFiles: string[],
+	taskIdOrOptions: string | RecordPermanentFailureOptions,
+	category?: string,
+	message?: string,
+	taskObjective?: string,
+	modelUsed?: string,
+	attemptCount?: number,
+	currentFiles?: string[],
 	stateDir: string = DEFAULT_STATE_DIR,
 ): string {
-	const store = loadErrorFixStore(stateDir);
-	const signature = generateErrorSignature(category, message);
+	// Support both old positional args and new options object
+	let opts: RecordPermanentFailureOptions;
+	if (typeof taskIdOrOptions === "object") {
+		opts = taskIdOrOptions;
+	} else {
+		opts = {
+			taskId: taskIdOrOptions,
+			category: category!,
+			message: message!,
+			taskObjective: taskObjective!,
+			modelUsed: modelUsed!,
+			attemptCount: attemptCount!,
+			currentFiles: currentFiles!,
+			stateDir,
+		};
+	}
+
+	const actualStateDir = opts.stateDir ?? DEFAULT_STATE_DIR;
+	const store = loadErrorFixStore(actualStateDir);
+	const signature = generateErrorSignature(opts.category, opts.message);
 
 	// Update or create the pattern
 	if (!store.patterns[signature]) {
 		store.patterns[signature] = {
 			signature,
-			category,
-			sampleMessage: message.slice(0, 500),
+			category: opts.category,
+			sampleMessage: opts.message.slice(0, 500),
 			fixes: [],
 			occurrences: 0,
 			fixSuccesses: 0,
@@ -354,16 +390,20 @@ export function recordPermanentFailure(
 	store.patterns[signature].occurrences++;
 	store.patterns[signature].lastSeen = new Date().toISOString();
 
+	// Prepare detailed errors (truncate each to 300 chars, keep max 10)
+	const detailedErrors = opts.detailedErrors?.slice(0, 10).map((e) => e.slice(0, 300));
+
 	// Add to failures array
 	store.failures.push({
 		signature,
-		category,
-		sampleMessage: message.slice(0, 500),
-		taskObjective: taskObjective.slice(0, 200),
-		modelUsed,
-		attemptsCount: attemptCount,
-		filesAttempted: currentFiles.slice(0, 10), // Track files being worked on at failure
+		category: opts.category,
+		sampleMessage: opts.message.slice(0, 500),
+		taskObjective: opts.taskObjective.slice(0, 200),
+		modelUsed: opts.modelUsed,
+		attemptsCount: opts.attemptCount,
+		filesAttempted: opts.currentFiles.slice(0, 10),
 		recordedAt: new Date().toISOString(),
+		detailedErrors,
 	});
 
 	// Keep only most recent 10 failures
@@ -372,9 +412,9 @@ export function recordPermanentFailure(
 	}
 
 	// Clear from pending if it exists
-	store.pending = store.pending.filter((p) => p.taskId !== taskId);
+	store.pending = store.pending.filter((p) => p.taskId !== opts.taskId);
 
-	saveErrorFixStore(store, stateDir);
+	saveErrorFixStore(store, actualStateDir);
 	return signature;
 }
 

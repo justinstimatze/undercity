@@ -1235,6 +1235,79 @@ describe("error-fix-patterns.ts", () => {
 			expect(failure.taskObjective).toBe("");
 		});
 
+		it("should capture detailed errors when using options object", () => {
+			mockDirs.add(".undercity");
+
+			recordPermanentFailure({
+				taskId: "task-details",
+				category: "typecheck",
+				message: "Typecheck failed (3 errors)",
+				taskObjective: "Fix types",
+				modelUsed: "sonnet",
+				attemptCount: 5,
+				currentFiles: ["src/file.ts"],
+				detailedErrors: [
+					"src/file.ts:10:5 - error TS2345: Argument of type 'string' is not assignable",
+					"src/file.ts:15:10 - error TS2322: Type 'number' is not assignable",
+					"src/file.ts:20:3 - error TS2339: Property 'foo' does not exist",
+				],
+			});
+
+			const store = loadErrorFixStore();
+			const failure = store.failures[0];
+
+			expect(failure.detailedErrors).toHaveLength(3);
+			expect(failure.detailedErrors?.[0]).toContain("TS2345");
+			expect(failure.detailedErrors?.[1]).toContain("TS2322");
+			expect(failure.detailedErrors?.[2]).toContain("TS2339");
+		});
+
+		it("should truncate long detailed errors", () => {
+			mockDirs.add(".undercity");
+
+			const longError = "x".repeat(500);
+
+			recordPermanentFailure({
+				taskId: "task-long",
+				category: "lint",
+				message: "Lint failed",
+				taskObjective: "Fix lint",
+				modelUsed: "haiku",
+				attemptCount: 3,
+				currentFiles: [],
+				detailedErrors: [longError],
+			});
+
+			const store = loadErrorFixStore();
+			const failure = store.failures[0];
+
+			expect(failure.detailedErrors?.[0].length).toBe(300);
+		});
+
+		it("should limit detailed errors to 10 entries", () => {
+			mockDirs.add(".undercity");
+
+			const manyErrors = Array.from({ length: 20 }, (_, i) => `Error ${i}`);
+
+			recordPermanentFailure({
+				taskId: "task-many",
+				category: "test",
+				message: "Tests failed",
+				taskObjective: "Fix tests",
+				modelUsed: "opus",
+				attemptCount: 7,
+				currentFiles: [],
+				detailedErrors: manyErrors,
+			});
+
+			const store = loadErrorFixStore();
+			const failure = store.failures[0];
+
+			expect(failure.detailedErrors).toHaveLength(10);
+			expect(failure.detailedErrors?.[0]).toBe("Error 0");
+			expect(failure.detailedErrors?.[9]).toBe("Error 9");
+		});
+
 		it("should preserve failures field in legacy stores", () => {
 			mockDirs.add(".undercity");
 

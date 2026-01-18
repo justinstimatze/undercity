@@ -423,6 +423,9 @@ export class TaskWorker {
 	/** Last error message (for recordPermanentFailure) */
 	private lastErrorMessage: string | null = null;
 
+	/** Detailed error output for permanent failure recording */
+	private lastDetailedErrors: string[] = [];
+
 	/** Files modified before current attempt (for tracking what fixed the error) */
 	private filesBeforeAttempt: string[] = [];
 
@@ -1586,6 +1589,14 @@ export class TaskWorker {
 		// Store for potential permanent failure recording
 		this.lastErrorCategory = primaryCategory;
 		this.lastErrorMessage = errorMessage;
+		// Capture detailed errors: all issues plus relevant lines from feedback
+		this.lastDetailedErrors = [
+			...verification.issues,
+			...verification.feedback
+				.split("\n")
+				.filter((line) => line.includes("error") || line.includes("Error") || line.includes("FAIL") || line.includes("✗"))
+				.slice(0, 10),
+		];
 		try {
 			this.pendingErrorSignature = recordPendingError(
 				this.currentTaskId,
@@ -1777,19 +1788,21 @@ export class TaskWorker {
 		// Record permanent failure (instead of just clearing pending error)
 		if (this.pendingErrorSignature && this.lastErrorCategory && this.lastErrorMessage) {
 			try {
-				recordPermanentFailure(
-					this.currentTaskId,
-					this.lastErrorCategory,
-					this.lastErrorMessage,
-					task,
-					this.currentModel,
-					this.attempts,
-					this.getModifiedFiles(),
-					this.stateDir,
-				);
+				recordPermanentFailure({
+					taskId: this.currentTaskId,
+					category: this.lastErrorCategory,
+					message: this.lastErrorMessage,
+					taskObjective: task,
+					modelUsed: this.currentModel,
+					attemptCount: this.attempts,
+					currentFiles: this.getModifiedFiles(),
+					detailedErrors: this.lastDetailedErrors,
+					stateDir: this.stateDir,
+				});
 				output.debug("Recorded permanent failure for learning", {
 					taskId,
 					category: this.lastErrorCategory,
+					detailedErrorCount: this.lastDetailedErrors.length,
 				});
 			} catch {
 				// Non-critical - fall back to just clearing
@@ -1802,6 +1815,7 @@ export class TaskWorker {
 			this.pendingErrorSignature = null;
 			this.lastErrorCategory = null;
 			this.lastErrorMessage = null;
+			this.lastDetailedErrors = [];
 		}
 
 		// Record failed task pattern
