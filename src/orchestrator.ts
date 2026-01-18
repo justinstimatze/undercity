@@ -1138,33 +1138,43 @@ export class Orchestrator {
 			const { reason, suggestedSubtasks } = result.needsDecomposition;
 			if (suggestedSubtasks && suggestedSubtasks.length > 0) {
 				// Use the original task ID from the board, not the worktree ID
-				const originalTaskId = this.originalTaskIds.get(task) || taskId;
-				output.info(`Decomposing task into ${suggestedSubtasks.length} subtasks`, {
-					taskId: originalTaskId,
-					reason,
-				});
-				try {
-					const subtaskIds = decomposeTaskIntoSubtasks({
-						parentTaskId: originalTaskId,
-						subtasks: suggestedSubtasks.map((objective, i) => ({
-							objective,
-							order: i,
-						})),
-					});
-					output.info(`Created subtasks: ${subtaskIds.join(", ")}`, { taskId: originalTaskId });
-					// Return early - task is now decomposed, not failed
-					return {
-						task,
-						taskId,
-						result: { ...result, status: "complete" }, // Treat as success (decomposed)
-						worktreePath,
-						branch,
-						merged: false, // No merge needed for decomposed tasks
-						modifiedFiles,
-					};
-				} catch (decomposeError) {
-					output.warning(`Failed to decompose task: ${decomposeError}`, { taskId, originalTaskId });
+				const originalTaskId = this.originalTaskIds.get(task);
+				if (!originalTaskId) {
+					// Cannot decompose without a valid parent task ID from the board
+					// This happens when task was passed as string without board lookup
+					output.warning(
+						`Cannot decompose task: no board task ID found (task may have been passed as string)`,
+						{ taskId, task: task.substring(0, 50) },
+					);
 					// Fall through to failure handling
+				} else {
+					output.info(`Decomposing task into ${suggestedSubtasks.length} subtasks`, {
+						taskId: originalTaskId,
+						reason,
+					});
+					try {
+						const subtaskIds = decomposeTaskIntoSubtasks({
+							parentTaskId: originalTaskId,
+							subtasks: suggestedSubtasks.map((objective, i) => ({
+								objective,
+								order: i,
+							})),
+						});
+						output.info(`Created subtasks: ${subtaskIds.join(", ")}`, { taskId: originalTaskId });
+						// Return early - task is now decomposed, not failed
+						return {
+							task,
+							taskId,
+							result: { ...result, status: "complete" }, // Treat as success (decomposed)
+							worktreePath,
+							branch,
+							merged: false, // No merge needed for decomposed tasks
+							modifiedFiles,
+						};
+					} catch (decomposeError) {
+						output.warning(`Failed to decompose task: ${decomposeError}`, { taskId, originalTaskId });
+						// Fall through to failure handling
+					}
 				}
 			}
 			// No suggested subtasks - fall through to failure handling
