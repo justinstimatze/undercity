@@ -280,12 +280,16 @@ export class RateLimitTracker {
 		// Standard warnings
 		if (fiveHourUsage >= threshold) {
 			const source = usingActual ? "actual" : "estimated";
-			console.warn(`⚠️  Rate limit warning: ${(fiveHourUsage * 100).toFixed(1)}% of 5-hour limit used (${model}, ${source})`);
+			console.warn(
+				`⚠️  Rate limit warning: ${(fiveHourUsage * 100).toFixed(1)}% of 5-hour limit used (${model}, ${source})`,
+			);
 		}
 
 		if (weeklyUsage >= threshold) {
 			const source = usingActual ? "actual" : "estimated";
-			console.warn(`⚠️  Rate limit warning: ${(weeklyUsage * 100).toFixed(1)}% of weekly limit used (${model}, ${source})`);
+			console.warn(
+				`⚠️  Rate limit warning: ${(weeklyUsage * 100).toFixed(1)}% of weekly limit used (${model}, ${source})`,
+			);
 		}
 	}
 
