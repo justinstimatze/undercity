@@ -19,12 +19,14 @@
  *   POST /resume   - Resume grind loop
  *   POST /drain    - Finish current tasks, start no more
  *   POST /stop     - Stop the daemon
+ *   POST /mcp      - MCP protocol endpoint for knowledge tools
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { serverLogger } from "./logger.js";
+import { handleMCPRequest } from "./mcp-protocol.js";
 import { Persistence } from "./persistence.js";
 import { addGoal, getAllItems, getBacklogSummary } from "./task.js";
 
@@ -254,6 +256,8 @@ export class UndercityServer {
 					return this.handleStop(res);
 				case "POST /drain":
 					return this.handleDrain(res);
+				case "POST /mcp":
+					return this.handleMCP(req, res);
 				default:
 					return this.sendJson(res, 404, { error: "Not found", availableEndpoints: ENDPOINTS });
 			}
@@ -395,6 +399,25 @@ export class UndercityServer {
 		this.sendJson(res, 200, { success: true, draining: true, message: "Finishing current tasks, starting no more" });
 	}
 
+	private async handleMCP(req: IncomingMessage, res: ServerResponse): Promise<void> {
+		const body = await this.readBody(req);
+		const bodyStr = JSON.stringify(body);
+
+		serverLogger.debug({ body }, "MCP request received");
+
+		try {
+			const responseStr = await handleMCPRequest(bodyStr, this.stateDir);
+			const response = JSON.parse(responseStr);
+
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(response, null, 2));
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "MCP request failed";
+			serverLogger.error({ error }, "MCP request error");
+			this.sendJson(res, 500, { error: message });
+		}
+	}
+
 	private readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
 		return new Promise((resolve, reject) => {
 			let data = "";
@@ -433,6 +456,7 @@ const ENDPOINTS = {
 	"POST /resume": "Resume grind loop",
 	"POST /drain": "Finish current tasks, start no more",
 	"POST /stop": "Stop daemon",
+	"POST /mcp": "MCP protocol endpoint for knowledge tools (JSON-RPC 2.0)",
 };
 
 /**

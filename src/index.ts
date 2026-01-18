@@ -50,6 +50,19 @@ export {
 	stash,
 	stashPop,
 } from "./git.js";
+// Knowledge System
+export {
+	addLearning,
+	findRelevantLearnings,
+	formatLearningsForPrompt,
+	getKnowledgeStats,
+	type KnowledgeBase,
+	type Learning,
+	type LearningCategory,
+	loadKnowledge,
+	markLearningsUsed,
+	pruneUnusedLearnings,
+} from "./knowledge.js";
 // Live metrics
 export {
 	type LiveMetrics,
@@ -58,6 +71,17 @@ export {
 	resetLiveMetrics,
 	saveLiveMetrics,
 } from "./live-metrics.js";
+// MCP Protocol
+export {
+	handleMCPRequest,
+	JSONRPCErrorCode,
+	type JSONRPCErrorResponse,
+	type JSONRPCRequest,
+	type JSONRPCSuccessResponse,
+	MCPProtocolHandler,
+} from "./mcp-protocol.js";
+// MCP Tools
+export { knowledgeTools, type MCPTool } from "./mcp-tools.js";
 // Merge queue (extracted from git.ts)
 export { MergeQueue } from "./merge-queue.js";
 // Metrics dashboard
