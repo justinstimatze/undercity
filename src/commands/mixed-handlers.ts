@@ -825,6 +825,26 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		// Non-critical - continue without priming
 	}
 
+	// Pre-build AST index if empty (critical for context selection)
+	try {
+		const { getASTIndex } = await import("../ast-index.js");
+		const index = getASTIndex();
+		await index.load();
+		const indexStats = index.getStats();
+		if (indexStats.fileCount === 0) {
+			output.progress("Building AST index for smart context selection...");
+			await index.rebuildFull();
+			await index.save();
+			const newStats = index.getStats();
+			output.info(`AST index built: ${newStats.fileCount} files, ${newStats.symbolCount} symbols`);
+		} else {
+			output.debug(`AST index loaded: ${indexStats.fileCount} files`);
+		}
+	} catch {
+		// Non-critical - context selection will fall back to git grep
+		output.debug("AST index unavailable, will use git grep for context");
+	}
+
 	// Check if task board is empty - suggest PM if so
 	try {
 		const { getAllTasks } = await import("../task.js");

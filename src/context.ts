@@ -682,9 +682,14 @@ function extractSearchTerms(task: string): string[] {
 		.filter((w) => !stopWords.has(w.toLowerCase()))
 		.filter((w) => !w.match(/^\d+$/));
 
-	// Also extract camelCase/PascalCase identifiers
-	// Use atomic matching via split to avoid ReDoS
-	const identifiers = task.split(/\s+/).filter((word) => /^[A-Z][a-z]+[A-Z]/.test(word) || /^[a-z]+[A-Z]/.test(word));
+	// Extract camelCase/PascalCase identifiers - these are likely symbol names
+	// Match full identifier patterns: MyClass, myFunction, getAST, etc.
+	const identifiers = task.split(/[\s\-_.,;:!?()[\]{}'"]+/).filter((word) => {
+		// Must contain both upper and lower case (indicates camelCase/PascalCase)
+		if (!/[a-z]/.test(word) || !/[A-Z]/.test(word)) return false;
+		// Full pattern: starts with letter, contains letters/numbers only
+		return /^[A-Za-z][A-Za-z0-9]*$/.test(word);
+	});
 
 	// Extract file paths or file names mentioned (e.g., "solo.ts", "src/solo.ts")
 	// Limit path depth and use word boundaries to prevent backtracking
@@ -1041,13 +1046,36 @@ async function tryASTIndexFirst(
 		const maxStubs = mode === "minimal" ? 5 : mode === "compact" ? 10 : 20;
 		briefing.symbolStubs = briefing.symbolStubs.slice(0, maxStubs);
 
-		// 4. Find dependencies for target files
+		// 4. Find dependencies for target files - AGGRESSIVE import graph usage
 		const allDependencies: string[] = [];
+		const typeProviders: string[] = []; // Files that provide types to target files
 		for (const file of briefing.targetFiles.slice(0, 5)) {
-			const deps = index.findImports(file);
-			allDependencies.push(...deps);
+			const fileInfo = index.getFileInfo(file);
+			if (fileInfo) {
+				for (const imp of fileInfo.imports) {
+					if (imp.resolvedPath) {
+						allDependencies.push(imp.resolvedPath);
+						// Track type-only imports - these are CRITICAL for context
+						if (imp.isTypeOnly || imp.namedImports.some((n) => /^[A-Z]/.test(n))) {
+							typeProviders.push(imp.resolvedPath);
+						}
+					}
+				}
+			}
 		}
-		briefing.dependencies = [...new Set(allDependencies)].filter((f) => !briefing.targetFiles.includes(f)).slice(0, 5);
+
+		// Include type provider files in target files (not just dependencies)
+		// because understanding types is critical for code modification
+		if (typeProviders.length > 0) {
+			const uniqueTypeProviders = [...new Set(typeProviders)].filter((f) => !briefing.targetFiles.includes(f));
+			// Add up to 3 type providers directly to target files
+			briefing.targetFiles = [...briefing.targetFiles, ...uniqueTypeProviders.slice(0, 3)];
+			briefing.targetFiles = [...new Set(briefing.targetFiles)].slice(0, 12);
+		}
+
+		briefing.dependencies = [...new Set(allDependencies)]
+			.filter((f) => !briefing.targetFiles.includes(f))
+			.slice(0, 8); // Increased limit
 
 		// 5. Find impacted files (what depends on target files)
 		const allImpacted: string[] = [];
@@ -1055,7 +1083,7 @@ async function tryASTIndexFirst(
 			const importers = index.findImporters(file);
 			allImpacted.push(...importers);
 		}
-		briefing.impactedFiles = [...new Set(allImpacted)].filter((f) => !briefing.targetFiles.includes(f)).slice(0, 5);
+		briefing.impactedFiles = [...new Set(allImpacted)].filter((f) => !briefing.targetFiles.includes(f)).slice(0, 8);
 
 		// 6. Enrich type definitions from index (only if task mentions types)
 		const typeTerms = searchTerms.filter((t) => /^[A-Z][a-zA-Z0-9]*$/.test(t) && t.length > 2);
