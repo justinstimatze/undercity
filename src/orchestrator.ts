@@ -27,6 +27,7 @@ import { Persistence, readTaskAssignment, writeTaskAssignment } from "./persiste
 import { RateLimitTracker } from "./rate-limit.js";
 import {
 	addTask,
+	decomposeTaskIntoSubtasks,
 	findSimilarInProgressTask,
 	type HandoffContext,
 	loadTaskBoard,
@@ -1125,6 +1126,34 @@ export class Orchestrator {
 			this.fileTracker.recordFileAccess(taskId, file, "edit", taskId, worktreePath);
 		}
 		this.fileTracker.stopTaskTracking(taskId);
+
+		// Handle decomposition: agent determined task needs to be broken down
+		if (result.needsDecomposition) {
+			const { reason, suggestedSubtasks } = result.needsDecomposition;
+			if (suggestedSubtasks && suggestedSubtasks.length > 0) {
+				output.info(`Decomposing task into ${suggestedSubtasks.length} subtasks`, { taskId, reason });
+				const subtaskIds = decomposeTaskIntoSubtasks({
+					parentTaskId: taskId,
+					subtasks: suggestedSubtasks.map((objective, i) => ({
+						objective,
+						order: i,
+					})),
+				});
+				output.info(`Created subtasks: ${subtaskIds.join(", ")}`, { taskId });
+				// Return early - task is now decomposed, not failed
+				return {
+					task,
+					taskId,
+					result: { ...result, status: "complete" }, // Treat as success (decomposed)
+					worktreePath,
+					branch,
+					merged: false, // No merge needed for decomposed tasks
+					modifiedFiles,
+				};
+			}
+			// No suggested subtasks - fall through to failure handling
+			output.warning(`Task needs decomposition but no subtasks suggested: ${reason}`, { taskId });
+		}
 
 		if (result.status === "complete") {
 			output.taskComplete(taskId, "Task completed", { modifiedFiles: modifiedFiles.length });
