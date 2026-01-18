@@ -87,6 +87,7 @@ import {
 	markFixSuccessful,
 	pruneOldPatterns,
 	recordPendingError,
+	recordPermanentFailure,
 	recordSuccessfulFix,
 } from "../error-fix-patterns.js";
 
@@ -1024,6 +1025,237 @@ describe("error-fix-patterns.ts", () => {
 			const pruned = pruneOldPatterns(30 * 24 * 60 * 60 * 1000, "/custom/.undercity");
 
 			expect(pruned).toBe(1);
+		});
+	});
+
+	describe("recordPermanentFailure", () => {
+		it("should record permanent failure with full context", () => {
+			mockDirs.add(".undercity");
+
+			const signature = recordPermanentFailure(
+				"task-1",
+				"typecheck",
+				"Type error at line 10",
+				"Add user authentication",
+				"sonnet",
+				7,
+				["auth.ts", "types.ts"],
+			);
+
+			expect(signature).toMatch(/^typecheck-[a-f0-9]{12}$/);
+
+			const store = loadErrorFixStore();
+			expect(store.failures).toHaveLength(1);
+
+			const failure = store.failures[0];
+			expect(failure.signature).toBe(signature);
+			expect(failure.category).toBe("typecheck");
+			expect(failure.sampleMessage).toBe("Type error at line 10");
+			expect(failure.taskObjective).toBe("Add user authentication");
+			expect(failure.modelUsed).toBe("sonnet");
+			expect(failure.attemptsCount).toBe(7);
+			expect(failure.recordedAt).toBe(new Date(mockNow).toISOString());
+		});
+
+		it("should increment pattern occurrences when recording failure", () => {
+			mockDirs.add(".undercity");
+
+			recordPermanentFailure("task-1", "lint", "Lint error", "Fix lint", "haiku", 3, []);
+			recordPermanentFailure("task-2", "lint", "Lint error", "Fix more lint", "sonnet", 5, []);
+
+			const store = loadErrorFixStore();
+			const pattern = Object.values(store.patterns)[0];
+
+			expect(pattern.occurrences).toBe(2);
+			expect(store.failures).toHaveLength(2);
+		});
+
+		it("should create pattern if it does not exist", () => {
+			mockDirs.add(".undercity");
+
+			const signature = recordPermanentFailure("task-1", "test", "Test failed", "Add tests", "opus", 7, []);
+
+			const store = loadErrorFixStore();
+			const pattern = store.patterns[signature];
+
+			expect(pattern).toBeDefined();
+			expect(pattern.signature).toBe(signature);
+			expect(pattern.category).toBe("test");
+			expect(pattern.fixes).toEqual([]);
+			expect(pattern.occurrences).toBe(1);
+		});
+
+		it("should limit failures to 10 most recent", () => {
+			mockDirs.add(".undercity");
+
+			// Add 15 failures
+			for (let i = 0; i < 15; i++) {
+				recordPermanentFailure(`task-${i}`, "build", `Build error ${i}`, `Objective ${i}`, "sonnet", 5, []);
+			}
+
+			const store = loadErrorFixStore();
+
+			expect(store.failures).toHaveLength(10);
+			// Should keep last 10 (5-14)
+			expect(store.failures[0].taskObjective).toBe("Objective 5");
+			expect(store.failures[9].taskObjective).toBe("Objective 14");
+		});
+
+		it("should truncate message to 500 chars", () => {
+			mockDirs.add(".undercity");
+
+			const longMessage = `Error: ${"x".repeat(600)}`;
+
+			recordPermanentFailure("task-1", "typecheck", longMessage, "Long error task", "opus", 7, []);
+
+			const store = loadErrorFixStore();
+			const failure = store.failures[0];
+
+			expect(failure.sampleMessage.length).toBe(500);
+		});
+
+		it("should truncate taskObjective to 200 chars", () => {
+			mockDirs.add(".undercity");
+
+			const longObjective = `Objective: ${"x".repeat(300)}`;
+
+			recordPermanentFailure("task-1", "lint", "Lint error", longObjective, "haiku", 3, []);
+
+			const store = loadErrorFixStore();
+			const failure = store.failures[0];
+
+			expect(failure.taskObjective.length).toBe(200);
+		});
+
+		it("should clear pending error for the task", () => {
+			mockDirs.add(".undercity");
+
+			// Record pending error first
+			recordPendingError("task-1", "typecheck", "Type error", ["file.ts"]);
+
+			const storeBefore = loadErrorFixStore();
+			expect(storeBefore.pending).toHaveLength(1);
+
+			// Record permanent failure
+			recordPermanentFailure("task-1", "typecheck", "Type error", "Failed task", "opus", 7, ["file.ts"]);
+
+			const storeAfter = loadErrorFixStore();
+			expect(storeAfter.pending).toHaveLength(0);
+			expect(storeAfter.failures).toHaveLength(1);
+		});
+
+		it("should handle failures with different models", () => {
+			mockDirs.add(".undercity");
+
+			recordPermanentFailure("task-1", "test", "Test error", "Task 1", "haiku", 3, []);
+			recordPermanentFailure("task-2", "test", "Test error", "Task 2", "sonnet", 5, []);
+			recordPermanentFailure("task-3", "test", "Test error", "Task 3", "opus", 7, []);
+
+			const store = loadErrorFixStore();
+
+			expect(store.failures).toHaveLength(3);
+			expect(store.failures[0].modelUsed).toBe("haiku");
+			expect(store.failures[1].modelUsed).toBe("sonnet");
+			expect(store.failures[2].modelUsed).toBe("opus");
+		});
+
+		it("should track different attempt counts", () => {
+			mockDirs.add(".undercity");
+
+			recordPermanentFailure("task-1", "lint", "Error 1", "Objective 1", "haiku", 3, []);
+			recordPermanentFailure("task-2", "lint", "Error 2", "Objective 2", "sonnet", 5, []);
+			recordPermanentFailure("task-3", "lint", "Error 3", "Objective 3", "opus", 7, []);
+
+			const store = loadErrorFixStore();
+
+			expect(store.failures[0].attemptsCount).toBe(3);
+			expect(store.failures[1].attemptsCount).toBe(5);
+			expect(store.failures[2].attemptsCount).toBe(7);
+		});
+
+		it("should persist to disk atomically", () => {
+			mockDirs.add(".undercity");
+
+			recordPermanentFailure("task-1", "build", "Build failed", "Build task", "sonnet", 5, []);
+
+			expect(mockFiles.has(".undercity/error-fix-patterns.json")).toBe(true);
+			expect(mockFiles.has(".undercity/error-fix-patterns.json.tmp")).toBe(false);
+		});
+
+		it("should use custom state directory", () => {
+			mockDirs.add("/custom/.undercity");
+
+			recordPermanentFailure("task-1", "test", "Test error", "Test task", "haiku", 3, [], "/custom/.undercity");
+
+			expect(mockFiles.has("/custom/.undercity/error-fix-patterns.json")).toBe(true);
+
+			const store = loadErrorFixStore("/custom/.undercity");
+			expect(store.failures).toHaveLength(1);
+		});
+
+		it("should handle repeated failures for same error pattern", () => {
+			mockDirs.add(".undercity");
+
+			const sig1 = recordPermanentFailure("task-1", "typecheck", "Same error", "Task 1", "haiku", 3, []);
+			const sig2 = recordPermanentFailure("task-2", "typecheck", "Same error", "Task 2", "sonnet", 5, []);
+
+			expect(sig1).toBe(sig2);
+
+			const store = loadErrorFixStore();
+			const pattern = store.patterns[sig1];
+
+			expect(pattern.occurrences).toBe(2);
+			expect(store.failures).toHaveLength(2);
+		});
+
+		it("should update lastSeen timestamp on pattern", () => {
+			mockDirs.add(".undercity");
+
+			recordPermanentFailure("task-1", "lint", "Error", "Task 1", "haiku", 3, []);
+
+			mockNow = 1704067200000 + 60000; // 1 minute later
+
+			recordPermanentFailure("task-2", "lint", "Error", "Task 2", "sonnet", 5, []);
+
+			const store = loadErrorFixStore();
+			const pattern = Object.values(store.patterns)[0];
+
+			expect(pattern.firstSeen).toBe(new Date(1704067200000).toISOString());
+			expect(pattern.lastSeen).toBe(new Date(1704067200000 + 60000).toISOString());
+		});
+
+		it("should handle empty taskObjective gracefully", () => {
+			mockDirs.add(".undercity");
+
+			recordPermanentFailure("task-1", "typecheck", "Error", "", "sonnet", 5, []);
+
+			const store = loadErrorFixStore();
+			const failure = store.failures[0];
+
+			expect(failure.taskObjective).toBe("");
+		});
+
+		it("should preserve failures field in legacy stores", () => {
+			mockDirs.add(".undercity");
+
+			// Create legacy store without failures field
+			const legacyStore = {
+				patterns: {},
+				pending: [],
+				version: "1.0",
+				lastUpdated: new Date(mockNow).toISOString(),
+			};
+			mockFiles.set(".undercity/error-fix-patterns.json", JSON.stringify(legacyStore));
+
+			// Load should add failures field
+			const store = loadErrorFixStore();
+			expect(store.failures).toEqual([]);
+
+			// Recording should work
+			recordPermanentFailure("task-1", "test", "Error", "Task", "haiku", 3, []);
+
+			const updated = loadErrorFixStore();
+			expect(updated.failures).toHaveLength(1);
 		});
 	});
 

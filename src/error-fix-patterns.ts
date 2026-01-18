@@ -64,11 +64,32 @@ export interface PendingError {
 }
 
 /**
+ * A permanent failure after max retries exhausted
+ */
+export interface PermanentFailure {
+	/** Unique signature for this error type */
+	signature: string;
+	/** The error category (typecheck, test, lint, build) */
+	category: string;
+	/** Representative error message */
+	sampleMessage: string;
+	/** Task objective that failed */
+	taskObjective: string;
+	/** Model used during failed attempts */
+	modelUsed: string;
+	/** Number of attempts before giving up */
+	attemptsCount: number;
+	/** When this failure was recorded */
+	recordedAt: string;
+}
+
+/**
  * The full error-fix pattern store
  */
 export interface ErrorFixStore {
 	patterns: Record<string, ErrorFixPattern>;
 	pending: PendingError[];
+	failures: PermanentFailure[];
 	version: string;
 	lastUpdated: string;
 }
@@ -116,6 +137,7 @@ export function loadErrorFixStore(stateDir: string = DEFAULT_STATE_DIR): ErrorFi
 		return {
 			patterns: {},
 			pending: [],
+			failures: [],
 			version: "1.0",
 			lastUpdated: new Date().toISOString(),
 		};
@@ -128,15 +150,21 @@ export function loadErrorFixStore(stateDir: string = DEFAULT_STATE_DIR): ErrorFi
 			return {
 				patterns: {},
 				pending: [],
+				failures: [],
 				version: "1.0",
 				lastUpdated: new Date().toISOString(),
 			};
+		}
+		// Handle legacy stores without failures field
+		if (!parsed.failures) {
+			parsed.failures = [];
 		}
 		return parsed;
 	} catch {
 		return {
 			patterns: {},
 			pending: [],
+			failures: [],
 			version: "1.0",
 			lastUpdated: new Date().toISOString(),
 		};
@@ -288,6 +316,63 @@ export function clearPendingError(taskId: string, stateDir: string = DEFAULT_STA
 	const store = loadErrorFixStore(stateDir);
 	store.pending = store.pending.filter((p) => p.taskId !== taskId);
 	saveErrorFixStore(store, stateDir);
+}
+
+/**
+ * Record a permanent failure when verification error cannot be fixed after max retries
+ * Call this when a task fails after exhausting all retry attempts
+ */
+export function recordPermanentFailure(
+	taskId: string,
+	category: string,
+	message: string,
+	taskObjective: string,
+	modelUsed: string,
+	attemptCount: number,
+	currentFiles: string[],
+	stateDir: string = DEFAULT_STATE_DIR,
+): string {
+	const store = loadErrorFixStore(stateDir);
+	const signature = generateErrorSignature(category, message);
+
+	// Update or create the pattern
+	if (!store.patterns[signature]) {
+		store.patterns[signature] = {
+			signature,
+			category,
+			sampleMessage: message.slice(0, 500),
+			fixes: [],
+			occurrences: 0,
+			fixSuccesses: 0,
+			firstSeen: new Date().toISOString(),
+			lastSeen: new Date().toISOString(),
+		};
+	}
+
+	store.patterns[signature].occurrences++;
+	store.patterns[signature].lastSeen = new Date().toISOString();
+
+	// Add to failures array
+	store.failures.push({
+		signature,
+		category,
+		sampleMessage: message.slice(0, 500),
+		taskObjective: taskObjective.slice(0, 200),
+		modelUsed,
+		attemptsCount: attemptCount,
+		recordedAt: new Date().toISOString(),
+	});
+
+	// Keep only most recent 10 failures
+	if (store.failures.length > 10) {
+		store.failures = store.failures.slice(-10);
+	}
+
+	// Clear from pending if it exists
+	store.pending = store.pending.filter((p) => p.taskId !== taskId);
+
+	saveErrorFixStore(store, stateDir);
+	return signature;
 }
 
 /**
