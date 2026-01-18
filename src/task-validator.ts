@@ -339,3 +339,169 @@ export function formatValidationIssues(taskId: string, result: TaskValidationRes
 	}
 	return lines;
 }
+
+// ==========================================================================
+// Task Clarity Assessment
+// ==========================================================================
+
+/**
+ * Result of task clarity assessment
+ */
+export interface ClarityAssessment {
+	/** Overall clarity level */
+	clarity: "clear" | "vague" | "needs_context";
+	/** Confidence in assessment (0-1) */
+	confidence: number;
+	/** Specific issues found */
+	issues: string[];
+	/** Suggestions to improve clarity */
+	suggestions: string[];
+}
+
+/** Generic action verbs that need specifics */
+const VAGUE_VERBS = [
+	/^improve\b/i,
+	/^fix\b/i,
+	/^update\b/i,
+	/^better\b/i,
+	/^enhance\b/i,
+	/^optimize\b/i,
+	/^refactor\b/i,
+	/^clean\s*up\b/i,
+	/^make\b.*\bbetter\b/i,
+];
+
+/** Patterns indicating compound/multiple objectives */
+const COMPOUND_PATTERNS = [
+	/\band\s+also\b/i,
+	/\bplus\b/i,
+	/\badditionally\b/i,
+	/\bfurthermore\b/i,
+	/,\s*and\s+/i, // "do X, and Y"
+];
+
+/** Patterns indicating clear, specific tasks */
+const SPECIFICITY_INDICATORS = [
+	/\bin\s+\S+\.\w+/i, // "In src/file.ts"
+	/\bfunction\s+\w+/i, // "function doThing"
+	/\bclass\s+\w+/i, // "class MyClass"
+	/\bmethod\s+\w+/i, // "method getName"
+	/\bcomponent\s+\w+/i, // "component Button"
+	/\btest\s+(?:for|that|when)/i, // "test for X" or "test that Y"
+	/\berror\s*:?\s*.{10,}/i, // "error: ..." with message
+	/TS\d{4}/i, // TypeScript error code
+	/line\s+\d+/i, // "line 42"
+	/\bwhen\s+.{10,}/i, // "when X happens"
+	/\breturn\s+/i, // "return X"
+];
+
+/**
+ * Assess the clarity of a task objective
+ * Determines if a task is specific enough for autonomous execution
+ */
+export function assessTaskClarity(objective: string): ClarityAssessment {
+	const issues: string[] = [];
+	const suggestions: string[] = [];
+	let clarityScore = 1.0; // Start at max, deduct for issues
+
+	const trimmedObjective = objective.trim();
+	const wordCount = trimmedObjective.split(/\s+/).length;
+
+	// Check 1: Too short
+	if (wordCount < 5) {
+		issues.push("Task objective is very short");
+		suggestions.push("Add more detail about what specifically needs to be done");
+		clarityScore -= 0.3;
+	} else if (wordCount < 10) {
+		// Mildly short, only a warning
+		clarityScore -= 0.1;
+	}
+
+	// Check 2: Starts with vague verb without specifics
+	for (const pattern of VAGUE_VERBS) {
+		if (pattern.test(trimmedObjective)) {
+			// Check if there are specificity indicators that make it acceptable
+			const hasSpecifics = SPECIFICITY_INDICATORS.some((sp) => sp.test(trimmedObjective));
+			if (!hasSpecifics) {
+				issues.push(`Starts with generic verb "${trimmedObjective.split(/\s+/)[0]}" without specific target`);
+				suggestions.push('Specify the file, function, or component to modify (e.g., "In src/auth.ts, improve...")');
+				clarityScore -= 0.25;
+			}
+			break;
+		}
+	}
+
+	// Check 3: Compound objectives
+	for (const pattern of COMPOUND_PATTERNS) {
+		if (pattern.test(trimmedObjective)) {
+			issues.push("Contains multiple objectives that should be separate tasks");
+			suggestions.push("Split into separate tasks, each with a single clear objective");
+			clarityScore -= 0.2;
+			break;
+		}
+	}
+
+	// Check 4: No file path or target for code tasks
+	// Skip this check for non-code tasks (research, docs, etc.)
+	const isCodeTask = /\b(add|fix|update|implement|refactor|change|modify|remove|delete)\b/i.test(trimmedObjective);
+	const hasFilePath = /\.\w{1,5}\b/.test(trimmedObjective) || /\bsrc\/|\blib\/|\btest\//.test(trimmedObjective);
+	const hasFunctionName = /\bfunction\s+\w+|\bclass\s+\w+|\bmethod\s+\w+|\b\w+\(\)/.test(trimmedObjective);
+
+	if (isCodeTask && !hasFilePath && !hasFunctionName && wordCount < 15) {
+		issues.push("No specific file or function mentioned for code change");
+		suggestions.push("Specify the target file or function (e.g., 'In src/utils.ts, ...')");
+		clarityScore -= 0.15;
+	}
+
+	// Check 5: Positive indicators (boost clarity)
+	let specificityBoost = 0;
+	for (const pattern of SPECIFICITY_INDICATORS) {
+		if (pattern.test(trimmedObjective)) {
+			specificityBoost += 0.1;
+		}
+	}
+	clarityScore = Math.min(1.0, clarityScore + specificityBoost);
+
+	// Determine final clarity level
+	let clarity: "clear" | "vague" | "needs_context";
+	if (clarityScore >= 0.7) {
+		clarity = "clear";
+	} else if (clarityScore >= 0.4) {
+		clarity = "needs_context";
+	} else {
+		clarity = "vague";
+	}
+
+	return {
+		clarity,
+		confidence: Math.max(0, Math.min(1, clarityScore)),
+		issues,
+		suggestions,
+	};
+}
+
+/**
+ * Format clarity assessment for display
+ */
+export function formatClarityAssessment(taskId: string, assessment: ClarityAssessment): string[] {
+	if (assessment.clarity === "clear") {
+		return [];
+	}
+
+	const lines: string[] = [];
+	const prefix = assessment.clarity === "vague" ? "⚠" : "?";
+	lines.push(`${prefix} ${taskId}: Task may be too ${assessment.clarity === "vague" ? "vague" : "ambiguous"}`);
+
+	for (const issue of assessment.issues) {
+		lines.push(`  - ${issue}`);
+	}
+
+	if (assessment.suggestions.length > 0) {
+		lines.push("  Suggestions:");
+		for (const suggestion of assessment.suggestions) {
+			lines.push(`    → ${suggestion}`);
+		}
+	}
+
+	return lines;
+}

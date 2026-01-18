@@ -980,7 +980,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		>();
 
 		// Pre-flight validation: check for invalid paths and auto-fix when possible
-		const { validateTask } = await import("../task-validator.js");
+		const { validateTask, assessTaskClarity } = await import("../task-validator.js");
 		const { updateTaskFields } = await import("../task.js");
 
 		output.progress("Validating task references...");
@@ -1023,6 +1023,36 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		if (tasksToProcess.length === 0) {
 			output.info("No valid tasks to process after validation");
 			return;
+		}
+
+		// Pre-flight clarity check: warn about vague tasks
+		output.progress("Assessing task clarity...");
+		const vagueTasks: string[] = [];
+
+		for (const task of tasksToProcess) {
+			const clarity = assessTaskClarity(task.objective);
+
+			if (clarity.clarity === "vague") {
+				output.warning(`Task ${task.id} may be too vague for autonomous execution:`);
+				for (const issue of clarity.issues) {
+					output.warning(`  - ${issue}`);
+				}
+				for (const suggestion of clarity.suggestions) {
+					output.debug(`  → ${suggestion}`);
+				}
+				vagueTasks.push(task.id);
+			} else if (clarity.clarity === "needs_context") {
+				// Just log a note, don't skip
+				output.debug(
+					`Task ${task.id} could benefit from more context (confidence: ${(clarity.confidence * 100).toFixed(0)}%)`,
+				);
+			}
+		}
+
+		// Optionally skip vague tasks (for now, just warn and continue)
+		// In future, could add --strict flag to skip vague tasks
+		if (vagueTasks.length > 0) {
+			output.warning(`${vagueTasks.length} task(s) are vague and may require decomposition or escalation`);
 		}
 
 		if (options.decompose !== false) {
