@@ -71,6 +71,25 @@ undercity pm --propose                     # Generate tasks from codebase analys
 undercity pm "topic" --ideate --add        # Add proposals to board
 ```
 
+**Plan-task linkage** (cross-reference Claude Code plans with undercity tasks):
+```bash
+# List plans linked to this project
+undercity plans --list                     # Project-specific plans
+undercity plans --list --project           # All plans in ~/.claude/plans/
+
+# View plan status with task completion progress
+undercity plans my-plan.md --status        # Show progress bar + task status
+
+# Link tasks to a plan (stores task IDs in plan frontmatter)
+undercity plans my-plan.md --link "task-123,task-456"
+
+# Unlink tasks from a plan
+undercity plans my-plan.md --unlink "task-123"
+
+# Mark plan as complete
+undercity plans my-plan.md --complete
+```
+
 **Secondary commands** (debugging, inspection):
 ```bash
 # Monitoring
@@ -310,6 +329,61 @@ undercity reconcile --lookback 50  # Search last 50 commits
 undercity reconcile --dry-run    # See what would be marked
 undercity reconcile              # Apply the changes
 undercity tasks                  # Verify board state
+```
+
+## Plan-Task Linkage
+
+Cross-reference Claude Code plan files (`~/.claude/plans/*.md`) with undercity tasks.
+
+**How it works:**
+1. Plans store task IDs in YAML frontmatter
+2. Links are bidirectional (plan → tasks, task → plan)
+3. Progress calculated from linked task completion status
+
+**Frontmatter format** (added/updated by `undercity plans`):
+```yaml
+---
+undercity:
+  tasks: ["task-abc123", "task-def456"]
+  project: /home/user/myproject
+  linkedAt: 2026-01-18T12:00:00.000Z
+  status: implementing
+---
+
+# My Plan Title
+...
+```
+
+**Status values:**
+| Status | Meaning |
+|--------|---------|
+| `draft` | Plan not yet approved |
+| `approved` | Plan approved, not started |
+| `implementing` | Tasks being executed |
+| `complete` | All linked tasks done |
+
+**When to use:**
+- Working on a Claude Code plan that maps to multiple undercity tasks
+- Want to track plan completion via task status
+- Need to see which plan a task belongs to
+
+**Example workflow:**
+```bash
+# Create plan in Claude Code (generates ~/.claude/plans/my-feature.md)
+
+# Break plan into tasks
+undercity add "Implement X from my-feature plan"
+undercity add "Implement Y from my-feature plan"
+
+# Link tasks to plan
+undercity plans my-feature.md --link "task-abc,task-def"
+
+# Check progress
+undercity plans my-feature.md --status
+# Shows: [████████░░░░░░░░░░░░] 50%
+
+# After tasks complete via grind
+undercity plans my-feature.md --complete
 ```
 
 ## When NOT to Use Undercity

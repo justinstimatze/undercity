@@ -5,7 +5,8 @@
 | File | Purpose | Key Exports |
 |------|---------|-------------|
 | **cli.ts** | CLI entry, routes to command modules | - |
-| **commands/task.ts** | Task board commands (tasks, add, work, plan, import-plan, reconcile, triage, prune) | taskCommands |
+| **commands/task.ts** | Task board commands (tasks, add, work, plan, plans, import-plan, reconcile, triage, prune) | taskCommands |
+| **commands/plan-handlers.ts** | Plan-task linkage command handlers | handlePlan (linkage) |
 | **commands/mixed.ts** | Execution + learning commands (grind, pm, usage, knowledge, decide, tuning, watch) | mixedCommands |
 | **commands/analysis.ts** | Metrics/analysis commands (patterns, decisions, ax) | analysisCommands |
 | **orchestrator.ts** | Main production orchestrator, parallel execution | Orchestrator |
@@ -21,6 +22,7 @@
 | **grind-events.ts** | Structured event logging (not metrics) | startGrindSession, logTaskComplete, etc. |
 | **task-decomposer.ts** | Break multi-step tasks into atomic subtasks | checkAndDecompose |
 | **plan-parser.ts** | Parse markdown plans into tasks | parsePlanFile, planToTasks |
+| **plan-link.ts** | Plan-task linkage (frontmatter metadata) | linkTasksToPlan, findLinkedPlans, getPlanStatus |
 | **complexity.ts** | Assess task complexity | assessComplexityFast |
 | **persistence.ts** | State management, file I/O for `.undercity/*` | Persistence |
 | **dashboard.ts** | TUI (blessed-based) | launchDashboard |
@@ -71,6 +73,8 @@
 - Track task metrics → `metrics.ts` (MetricsTracker)
 - Track live token usage → `live-metrics.ts`
 - Parse markdown plans → `plan-parser.ts`
+- Link tasks to Claude Code plans → `plan-link.ts` (frontmatter metadata)
+- Find plans for a task → `plan-link.ts` (findPlanForTask)
 - Create pre-execution plans with review → `task-planner.ts` (planTaskWithReview)
 - Check task complexity → `complexity.ts` or `task-decomposer.ts`
 - Analyze historical metrics → `feedback-metrics.ts`

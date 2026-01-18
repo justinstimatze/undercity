@@ -11,6 +11,7 @@
  * | load         | Bulk load goals from file                    |
  * | import-plan  | Parse plan file into discrete tasks          |
  * | plan         | Execute plan file with judgment              |
+ * | plans        | Manage plan-task linkage (frontmatter)       |
  * | work         | Process backlog continuously                 |
  * | task-analyze | Parallelization opportunities                |
  * | reconcile    | Sync completed tasks with git history        |
@@ -20,6 +21,10 @@
  * Handlers: task-handlers.ts (extracted for maintainability)
  */
 
+import {
+	handlePlan as handlePlanLinkage,
+	type PlanOptions as PlanLinkageOptions,
+} from "./plan-handlers.js";
 import {
 	type AddOptions,
 	type CompleteOptions,
@@ -167,5 +172,17 @@ export const taskCommands: CommandModule = {
 			.command("remove <taskId>")
 			.description("Permanently remove a task from the board")
 			.action((taskId: string) => handleRemove(taskId));
+
+		// Plans command - manage plan-task linkage
+		program
+			.command("plans [plan]")
+			.description("Manage plan-task linkage (links Claude Code plans to undercity tasks)")
+			.option("--list", "List plans linked to this project")
+			.option("--status", "Show plan completion status with task progress")
+			.option("--link <taskIds>", "Link comma-separated task IDs to plan")
+			.option("--unlink <taskIds>", "Unlink comma-separated task IDs from plan")
+			.option("--complete", "Mark plan as complete")
+			.option("--project", "Show all plans in ~/.claude/plans/, not just project-linked")
+			.action((plan: string | undefined, options: PlanLinkageOptions) => handlePlanLinkage(plan, options));
 	},
 };
