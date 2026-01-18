@@ -12,6 +12,7 @@ undercity grind --parallel 3       # Run 3 agents in parallel
 undercity grind -n 5               # Process up to 5 tasks total
 undercity grind --parallel 3 -n 10 # 3 parallel agents, 10 tasks max
 undercity watch                    # Monitor running grind session
+undercity drain                    # Graceful stop: finish current, start no more
 ```
 
 ## Task Board
@@ -110,6 +111,23 @@ undercity complete <task-id> --reason "No longer needed"
 
 Use `--reason` for explaining why a task is being closed (obsolete, deferred, duplicate).
 Use `--resolution` for explaining how it was completed (implemented, merged, etc.).
+
+## Graceful Shutdown (Drain)
+
+To stop a running grind without interrupting current tasks:
+
+```bash
+undercity drain                    # Finish current tasks, start no more
+undercity daemon drain             # Same, via daemon action
+curl -X POST localhost:7331/drain  # Same, via HTTP API
+```
+
+The drain signal:
+1. Lets in-progress tasks complete normally
+2. Skips all remaining pending tasks
+3. Exits cleanly after current work finishes
+
+Use this when you need to interrupt a long grind session gracefully.
 
 ## Recovery
 

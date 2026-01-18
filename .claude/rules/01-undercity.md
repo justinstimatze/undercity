@@ -62,6 +62,7 @@ undercity complete <task-id>               # Mark task complete manually
 undercity grind                            # Process all tasks
 undercity grind -n 10                      # Process 10 tasks
 undercity grind --parallel 3               # Max 3 concurrent
+undercity drain                            # Graceful stop: finish current, start no more
 
 # Proactive PM (research and task generation)
 undercity pm "topic" --ideate              # Full ideation: research + propose
