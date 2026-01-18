@@ -236,6 +236,312 @@ undercity knowledge --stats
 4. **Periodic pruning** - Run pruning to remove stale learnings
 5. **Review stats** - Monitor `getKnowledgeStats` to understand learning effectiveness
 
+## Advanced Patterns
+
+### Bulk Querying with Custom Limits
+
+Query more learnings for complex tasks:
+
+```typescript
+// Simple task: 3-5 learnings
+const basicLearnings = findRelevantLearnings("Fix typo", 3);
+
+// Complex task: 10-15 learnings
+const complexLearnings = findRelevantLearnings("Refactor authentication system", 15);
+
+// Review/analysis task: 20+ learnings
+const analysisLearnings = findRelevantLearnings("Review codebase patterns", 20);
+```
+
+**Trade-off**: More learnings = more context but higher token cost.
+
+### Category-Specific Filtering
+
+Filter learnings by category for targeted queries:
+
+```typescript
+function findByCategoryAndRelevance(
+  objective: string,
+  category: LearningCategory,
+  maxResults: number = 5
+): Learning[] {
+  const kb = loadKnowledge();
+  const keywords = extractKeywordsFromObjective(objective);
+
+  return kb.learnings
+    .filter(l => l.category === category)
+    .map(l => ({
+      learning: l,
+      score: calculateScore(l, keywords)
+    }))
+    .filter(item => item.score > 0.1)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxResults)
+    .map(item => item.learning);
+}
+
+// Only inject gotchas for bug fix tasks
+const gotchas = findByCategoryAndRelevance("Fix import error", "gotcha", 5);
+
+// Only inject patterns for new features
+const patterns = findByCategoryAndRelevance("Add authentication", "pattern", 5);
+```
+
+### Confidence Thresholds
+
+Filter learnings by confidence before injection:
+
+```typescript
+function findHighConfidenceLearnings(
+  objective: string,
+  minConfidence: number = 0.6,
+  maxResults: number = 5
+): Learning[] {
+  return findRelevantLearnings(objective, maxResults * 2) // Query more
+    .filter(l => l.confidence >= minConfidence)
+    .slice(0, maxResults); // Trim to max
+}
+
+// Only inject proven learnings
+const proven = findHighConfidenceLearnings("Add validation", 0.7);
+```
+
+**Use cases**:
+- Critical tasks: `minConfidence = 0.8` (only battle-tested learnings)
+- Standard tasks: `minConfidence = 0.6` (moderately proven)
+- Exploratory tasks: `minConfidence = 0.4` (include experimental learnings)
+
+### Custom Relevance Weighting
+
+Adjust keyword vs confidence weighting:
+
+```typescript
+function findWithCustomWeighting(
+  objective: string,
+  keywordWeight: number = 0.7,
+  confidenceWeight: number = 0.3,
+  maxResults: number = 5
+): Learning[] {
+  const kb = loadKnowledge();
+  const keywords = extractKeywordsFromObjective(objective);
+
+  return kb.learnings
+    .map(l => {
+      const keywordOverlap = calculateOverlap(keywords, l.keywords);
+      const score = keywordOverlap * keywordWeight + l.confidence * confidenceWeight;
+      return { learning: l, score };
+    })
+    .filter(item => item.score > 0.1)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxResults)
+    .map(item => item.learning);
+}
+
+// Prioritize keyword match (for specific technical queries)
+const keywordFocused = findWithCustomWeighting("ESM import error", 0.9, 0.1);
+
+// Prioritize confidence (for general guidance)
+const confidenceFocused = findWithCustomWeighting("best practices", 0.3, 0.7);
+```
+
+### Learning Lifecycle Management
+
+Track and manage learning evolution:
+
+```typescript
+interface LearningHealth {
+  learning: Learning;
+  healthScore: number;
+  status: "healthy" | "declining" | "stale";
+  recommendation: string;
+}
+
+function assessLearningHealth(learning: Learning): LearningHealth {
+  const successRate = learning.usedCount > 0
+    ? learning.successCount / learning.usedCount
+    : 0.5;
+
+  const daysSinceCreated = (Date.now() - new Date(learning.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+  const daysSinceUsed = learning.lastUsedAt
+    ? (Date.now() - new Date(learning.lastUsedAt).getTime()) / (1000 * 60 * 60 * 24)
+    : daysSinceCreated;
+
+  let healthScore = 0;
+  let status: "healthy" | "declining" | "stale" = "healthy";
+  let recommendation = "";
+
+  // Health scoring
+  if (successRate > 0.7 && learning.usedCount > 5) {
+    healthScore = 0.9;
+    status = "healthy";
+    recommendation = "Keep - proven valuable";
+  } else if (successRate < 0.3 && learning.usedCount > 3) {
+    healthScore = 0.2;
+    status = "declining";
+    recommendation = "Review - low success rate";
+  } else if (daysSinceUsed > 60 && learning.usedCount === 0) {
+    healthScore = 0.1;
+    status = "stale";
+    recommendation = "Prune - never used";
+  } else {
+    healthScore = 0.5;
+    status = "healthy";
+    recommendation = "Monitor";
+  }
+
+  return { learning, healthScore, status, recommendation };
+}
+
+// Assess all learnings
+const kb = loadKnowledge();
+const assessments = kb.learnings.map(assessLearningHealth);
+
+// Find candidates for pruning
+const pruneTargets = assessments.filter(a => a.status === "stale");
+console.log(`Prune candidates: ${pruneTargets.length}`);
+```
+
+### Temporal Relevance
+
+Prefer recently successful learnings:
+
+```typescript
+function findRecentSuccessful(
+  objective: string,
+  maxAgeDays: number = 30,
+  maxResults: number = 5
+): Learning[] {
+  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+
+  return findRelevantLearnings(objective, maxResults * 2)
+    .filter(l => l.lastUsedAt && new Date(l.lastUsedAt).getTime() > cutoff)
+    .filter(l => l.confidence > 0.6)
+    .slice(0, maxResults);
+}
+
+// Inject only recently proven learnings
+const recent = findRecentSuccessful("API validation", 14); // Last 2 weeks
+```
+
+## Performance and Maintenance
+
+### Pruning Strategy
+
+Run periodic pruning to maintain knowledge base health:
+
+```bash
+# Manual pruning (30 days)
+undercity knowledge --prune
+
+# Custom age threshold
+undercity knowledge --prune --max-age 60
+```
+
+**Pruning criteria**:
+- Never used (`usedCount = 0`)
+- Low confidence (`confidence < 0.7`)
+- Older than threshold (default 30 days)
+
+**When to prune**:
+- Weekly for active projects (>50 tasks/week)
+- Monthly for moderate projects (10-50 tasks/week)
+- Quarterly for maintenance projects (<10 tasks/week)
+
+### Monitoring Knowledge Base Size
+
+Track knowledge base growth:
+
+```typescript
+import { getKnowledgeStats } from "./knowledge.js";
+
+const stats = getKnowledgeStats();
+
+if (stats.totalLearnings > 1000) {
+  console.warn("Knowledge base exceeds 1000 learnings - consider aggressive pruning");
+}
+
+// Check category distribution
+const categoryRatio = stats.byCategory.gotcha / stats.totalLearnings;
+if (categoryRatio > 0.5) {
+  console.warn("Gotchas dominate knowledge base - may indicate quality issues");
+}
+```
+
+**Size targets**:
+- Small projects: <100 learnings
+- Medium projects: 100-500 learnings
+- Large projects: 500-1000 learnings
+- Enterprise: >1000 learnings (requires indexing optimization)
+
+### Query Performance Optimization
+
+For large knowledge bases (>500 learnings):
+
+**1. Limit query scope**:
+```typescript
+// BAD: Query all learnings
+const all = findRelevantLearnings(task, 50);
+
+// GOOD: Query targeted subset
+const targeted = findRelevantLearnings(task, 10);
+```
+
+**2. Cache frequent queries**:
+```typescript
+const queryCache = new Map<string, Learning[]>();
+
+function findWithCache(objective: string, maxResults: number): Learning[] {
+  const key = `${objective}:${maxResults}`;
+  if (queryCache.has(key)) {
+    return queryCache.get(key)!;
+  }
+
+  const results = findRelevantLearnings(objective, maxResults);
+  queryCache.set(key, results);
+  return results;
+}
+```
+
+**3. Pre-filter by category**:
+```typescript
+// Load once, filter multiple times
+const kb = loadKnowledge();
+const patterns = kb.learnings.filter(l => l.category === "pattern");
+const gotchas = kb.learnings.filter(l => l.category === "gotcha");
+```
+
+### Quality Maintenance
+
+Monitor learning quality metrics:
+
+```typescript
+function analyzeQuality(): void {
+  const kb = loadKnowledge();
+  const stats = getKnowledgeStats();
+
+  // Low success rate learnings
+  const lowSuccess = kb.learnings.filter(l =>
+    l.usedCount > 5 && (l.successCount / l.usedCount) < 0.4
+  );
+  console.log(`Low success rate: ${lowSuccess.length} learnings`);
+
+  // Never used learnings
+  const unused = kb.learnings.filter(l => l.usedCount === 0);
+  console.log(`Unused: ${unused.length} learnings`);
+
+  // High-value learnings
+  const highValue = kb.learnings.filter(l =>
+    l.usedCount > 10 && l.confidence > 0.8
+  );
+  console.log(`High-value: ${highValue.length} learnings`);
+}
+```
+
+**Quality indicators**:
+- High success rate (>70%) indicates valuable learnings
+- Never used (after 30+ days) indicates poor keyword extraction
+- Declining confidence indicates outdated or wrong learnings
+
 ## Related Systems
 
 | System | Integration |

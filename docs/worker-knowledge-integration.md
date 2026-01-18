@@ -2,6 +2,26 @@
 
 How workers query and use the knowledge system during task execution.
 
+## Quick Start Guide
+
+**Find relevant learnings:**
+```typescript
+const learnings = findRelevantLearnings("Add API validation", 5);
+```
+
+**Inject into prompts:**
+```typescript
+const prompt = formatLearningsForPrompt(learnings);
+```
+
+**Mark success/failure:**
+```typescript
+markLearningsUsed(learningIds, true);  // success
+markLearningsUsed(learningIds, false); // failure
+```
+
+For complete examples, see [examples/knowledge-queries.ts](../examples/knowledge-queries.ts) (Example 7: Worker Integration Pattern).
+
 ## Worker Lifecycle Integration
 
 ```
@@ -359,4 +379,60 @@ describe("Knowledge Integration", () => {
     expect(updated?.confidence).toBe(0.55);
   });
 });
+```
+
+## Troubleshooting
+
+### Empty Query Results
+
+**Problem**: `findRelevantLearnings` returns empty array.
+
+**Solutions**:
+- Check knowledge base has learnings: `loadKnowledge().learnings.length`
+- Verify keywords match: learnings use lowercase, stemmed keywords
+- Lower relevance threshold by checking raw scores
+- Ensure task objective has specific technical terms
+
+**Example diagnostic**:
+```typescript
+const kb = loadKnowledge();
+console.log(`Total learnings: ${kb.learnings.length}`);
+console.log(`Categories: ${kb.learnings.map(l => l.category).join(", ")}`);
+```
+
+### Low Confidence Learnings
+
+**Problem**: Learnings have confidence <0.3 and aren't being retrieved.
+
+**Solutions**:
+- Confidence drops after failed usage (−0.10 per failure)
+- Check `usedCount` vs `successCount` ratio
+- Consider pruning learnings with sustained low confidence
+- Add new learnings for failing patterns
+
+**Diagnosis**:
+```typescript
+const lowConf = kb.learnings.filter(l => l.confidence < 0.3);
+console.log(`Low confidence learnings: ${lowConf.length}`);
+for (const l of lowConf) {
+  console.log(`  - ${l.content} (${l.successCount}/${l.usedCount} success rate)`);
+}
+```
+
+### Learning Injection Not Improving Tasks
+
+**Problem**: Injected learnings don't improve task success rate.
+
+**Solutions**:
+- Review learning content quality (vague vs specific)
+- Check prompt placement (learnings before task description)
+- Verify keywords are actually relevant to tasks
+- Consider category-specific filtering (only inject gotchas/patterns)
+- Monitor `successCount` to identify ineffective learnings
+
+**Pattern to add**:
+```typescript
+// Filter to high-confidence learnings only
+const highConfLearnings = findRelevantLearnings(task, 10)
+  .filter(l => l.confidence > 0.6);
 ```
