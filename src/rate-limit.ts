@@ -14,6 +14,7 @@ import type {
 	TimeWindow,
 	TokenUsage,
 } from "./types.js";
+import * as output from "./output.js";
 
 /**
  * Default rate limit configuration
@@ -341,7 +342,7 @@ export class RateLimitTracker {
 		}
 		this.state.pause.resumeAt = resumeAt;
 
-		console.log(`🛡️  Proactive ${limitType} pause for ${model} - resume at ${resumeAt.toISOString()}`);
+		output.warning(`Proactive ${limitType} pause for ${model} - resume at ${resumeAt.toISOString()}`);
 	}
 
 	/**
@@ -355,7 +356,7 @@ export class RateLimitTracker {
 
 		const cleaned = originalLength - this.state.tasks.length;
 		if (cleaned > 0) {
-			console.log(`🧹 Cleaned up ${cleaned} old task entries`);
+			output.debug(`Cleaned up ${cleaned} old task entries`);
 		}
 
 		// Also clean up old rate limit hits
@@ -364,7 +365,7 @@ export class RateLimitTracker {
 
 		const cleanedHits = originalHits - this.state.rateLimitHits.length;
 		if (cleanedHits > 0) {
-			console.log(`🧹 Cleaned up ${cleanedHits} old rate limit hit entries`);
+			output.debug(`Cleaned up ${cleanedHits} old rate limit hit entries`);
 		}
 	}
 
@@ -516,7 +517,7 @@ export class RateLimitTracker {
 		if (retryAfterMs) {
 			// Use API-provided retry-after time
 			resumeAt = new Date(now.getTime() + retryAfterMs);
-			console.log(`📡 Using API retry-after: ${retryAfterMs / 1000} seconds`);
+			output.info(`Using API retry-after: ${retryAfterMs / 1000} seconds`);
 		} else {
 			// Fallback to intelligent estimation based on usage patterns
 			resumeAt = this.estimateResumeTime(model, now);
@@ -552,7 +553,7 @@ export class RateLimitTracker {
 
 		this.state.lastUpdated = now;
 
-		console.log(`🚨 Rate limit hit for ${model} model - pausing ${model} agents only`);
+		output.warning(`Rate limit hit for ${model} model - pausing ${model} agents only`);
 		this.logPauseStatus();
 	}
 
@@ -596,7 +597,7 @@ export class RateLimitTracker {
 
 		// Enhanced monitoring: Check if usage has naturally decreased below limits
 		if (this.shouldResumeBasedOnUsage()) {
-			console.log("📊 Usage has dropped below limits - resuming all models");
+			output.info("Usage has dropped below limits - resuming all models");
 			this.resumeFromRateLimit();
 			return true;
 		}
@@ -689,9 +690,9 @@ export class RateLimitTracker {
 
 		this.state.lastUpdated = new Date();
 
-		console.log(`✅ ${model} model resumed from rate limit pause`);
+		output.success(`${model} model resumed from rate limit pause`);
 		if (!stillPaused) {
-			console.log(`✅ All models resumed - squad fully operational`);
+			output.success("All models resumed - squad fully operational");
 		}
 	}
 
@@ -716,7 +717,7 @@ export class RateLimitTracker {
 		this.state.pause = { isPaused: false };
 		this.state.lastUpdated = new Date();
 
-		console.log(`✅ Resumed from rate limit pause`);
+		output.success("Resumed from rate limit pause");
 	}
 
 	/**
@@ -796,8 +797,8 @@ export class RateLimitTracker {
 		const resumeTime = this.state.pause.resumeAt;
 		const resumeTimeStr = resumeTime ? resumeTime.toLocaleString() : "unknown";
 
-		console.log(`⏳ Rate limit pause: ${remaining} remaining (${agentCount} agents paused, ${model} model)`);
-		console.log(`🕒 Resume at: ${resumeTimeStr}`);
+		output.status(`Rate limit pause: ${remaining} remaining (${agentCount} agents paused, ${model} model)`);
+		output.status(`Resume at: ${resumeTimeStr}`);
 
 		// Show per-model status if available
 		if (this.state.pause.modelPauses) {
@@ -808,13 +809,13 @@ export class RateLimitTracker {
 					const modelRemaining = pause.resumeAt
 						? this.formatTimeRemaining(pause.resumeAt.getTime() - Date.now())
 						: "unknown";
-					return `  ${model}: ${modelRemaining} (until ${modelResume})`;
+					return `${model}: ${modelRemaining} (until ${modelResume})`;
 				});
 
 			if (pausedModels.length > 0) {
-				console.log("📊 Per-model status:");
+				output.status("Per-model status:");
 				for (const status of pausedModels) {
-					console.log(status);
+					output.status(`  ${status}`);
 				}
 			}
 		}
@@ -947,7 +948,7 @@ export class RateLimitTracker {
 		const metadata = RateLimitTracker.processRateLimitHeaders(headers);
 
 		if (Object.keys(metadata).length > 0) {
-			console.log("📡 Rate limit headers received:", {
+			output.debug("Rate limit headers received", {
 				limit: metadata.limit,
 				remaining: metadata.remaining,
 				reset: metadata.reset?.toISOString(),
