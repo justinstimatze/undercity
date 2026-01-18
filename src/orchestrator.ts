@@ -771,8 +771,8 @@ export class Orchestrator {
 
 		const startTime = Date.now();
 
-		// Check rate limits and setup
-		if (!this.checkRateLimits(startTime)) {
+		// Check rate limits and setup (syncs with actual claude.ai usage)
+		if (!(await this.checkRateLimits(startTime))) {
 			return {
 				results: [],
 				successful: 0,
@@ -824,8 +824,20 @@ export class Orchestrator {
 
 	/**
 	 * Check rate limits and return whether execution can proceed
+	 * Syncs with actual claude.ai usage to ensure accurate rate limiting
 	 */
-	private checkRateLimits(_startTime: number): boolean {
+	private async checkRateLimits(_startTime: number): Promise<boolean> {
+		// Sync with actual claude.ai usage (non-blocking, best effort)
+		try {
+			const { fetchClaudeUsage } = await import("./claude-usage.js");
+			const actualUsage = await fetchClaudeUsage();
+			if (actualUsage.success) {
+				this.rateLimitTracker.syncWithActualUsage(actualUsage.fiveHourPercent, actualUsage.weeklyPercent);
+			}
+		} catch {
+			// Silent failure - continue with local estimates if fetch fails
+		}
+
 		this.rateLimitTracker.checkAutoResume();
 
 		if (this.rateLimitTracker.isPaused()) {
@@ -841,6 +853,22 @@ export class Orchestrator {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Refresh actual usage from claude.ai and sync with tracker
+	 * Silent failure - continues with local estimates if fetch fails
+	 */
+	private async refreshActualUsage(): Promise<void> {
+		try {
+			const { fetchClaudeUsage } = await import("./claude-usage.js");
+			const actualUsage = await fetchClaudeUsage();
+			if (actualUsage.success) {
+				this.rateLimitTracker.syncWithActualUsage(actualUsage.fiveHourPercent, actualUsage.weeklyPercent);
+			}
+		} catch {
+			// Silent failure - continue with local estimates
+		}
 	}
 
 	/**
@@ -891,6 +919,9 @@ export class Orchestrator {
 		this.startHealthMonitoring();
 
 		for (let batchStart = 0; batchStart < tasks.length; batchStart += this.maxConcurrent) {
+			// Refresh actual usage from claude.ai at start of each batch
+			await this.refreshActualUsage();
+
 			// Check for drain signal before starting new batch
 			if (this.draining) {
 				const remaining = tasks.length - batchStart;

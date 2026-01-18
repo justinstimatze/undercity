@@ -35,6 +35,18 @@ const DEFAULT_CONFIG: RateLimitConfig = {
  */
 export class RateLimitTracker {
 	private state: RateLimitState;
+	/**
+	 * Actual usage percentages from claude.ai (preferred over local estimates)
+	 */
+	private actualUsage: {
+		fiveHourPercent: number;
+		weeklyPercent: number;
+		fetchedAt: Date;
+	} | null = null;
+	/**
+	 * Cache TTL for actual usage (5 minutes)
+	 */
+	private static readonly ACTUAL_USAGE_TTL_MS = 5 * 60 * 1000;
 
 	constructor(initialState?: Partial<RateLimitState>) {
 		this.state = {
@@ -44,6 +56,31 @@ export class RateLimitTracker {
 			lastUpdated: new Date(),
 			pause: { isPaused: false },
 			...initialState,
+		};
+	}
+
+	/**
+	 * Sync with actual usage from claude.ai
+	 * This should be called periodically to get accurate rate limit data
+	 */
+	syncWithActualUsage(fiveHourPercent: number, weeklyPercent: number): void {
+		this.actualUsage = {
+			fiveHourPercent,
+			weeklyPercent,
+			fetchedAt: new Date(),
+		};
+	}
+
+	/**
+	 * Get actual usage if available and fresh, otherwise null
+	 */
+	getActualUsage(): { fiveHourPercent: number; weeklyPercent: number } | null {
+		if (!this.actualUsage) return null;
+		const age = Date.now() - this.actualUsage.fetchedAt.getTime();
+		if (age > RateLimitTracker.ACTUAL_USAGE_TTL_MS) return null;
+		return {
+			fiveHourPercent: this.actualUsage.fiveHourPercent,
+			weeklyPercent: this.actualUsage.weeklyPercent,
 		};
 	}
 
@@ -197,26 +234,44 @@ export class RateLimitTracker {
 
 	/**
 	 * Check if usage is approaching limits and warn or prevent
+	 * Prefers actual usage from claude.ai when available, falls back to local estimates
 	 */
 	private checkUsageWarnings(model: string): void {
-		const fiveHourUsage = this.getUsagePercentage("5hour");
-		const weeklyUsage = this.getUsagePercentage("week");
+		// Prefer actual usage from claude.ai if available and fresh
+		const actualUsage = this.getActualUsage();
+		let fiveHourUsage: number;
+		let weeklyUsage: number;
+		let usingActual = false;
+
+		if (actualUsage) {
+			// Use actual percentages from claude.ai (already 0-100, convert to 0-1)
+			fiveHourUsage = actualUsage.fiveHourPercent / 100;
+			weeklyUsage = actualUsage.weeklyPercent / 100;
+			usingActual = true;
+		} else {
+			// Fall back to local estimates
+			fiveHourUsage = this.getUsagePercentage("5hour");
+			weeklyUsage = this.getUsagePercentage("week");
+		}
+
 		const threshold = this.state.config.warningThreshold;
 
 		// Proactive prevention at 95% to avoid hitting hard limits
 		const preventionThreshold = 0.95;
 
 		if (fiveHourUsage >= preventionThreshold) {
+			const source = usingActual ? "actual" : "estimated";
 			console.warn(
-				`🚨 Proactive rate limit prevention: ${(fiveHourUsage * 100).toFixed(1)}% of 5-hour limit used (${model})`,
+				`🚨 Proactive rate limit prevention: ${(fiveHourUsage * 100).toFixed(1)}% of 5-hour limit used (${model}, ${source})`,
 			);
 			this.triggerProactivePause(model as "haiku" | "sonnet" | "opus", "5-hour");
 			return;
 		}
 
 		if (weeklyUsage >= preventionThreshold) {
+			const source = usingActual ? "actual" : "estimated";
 			console.warn(
-				`🚨 Proactive rate limit prevention: ${(weeklyUsage * 100).toFixed(1)}% of weekly limit used (${model})`,
+				`🚨 Proactive rate limit prevention: ${(weeklyUsage * 100).toFixed(1)}% of weekly limit used (${model}, ${source})`,
 			);
 			this.triggerProactivePause(model as "haiku" | "sonnet" | "opus", "weekly");
 			return;
@@ -224,11 +279,13 @@ export class RateLimitTracker {
 
 		// Standard warnings
 		if (fiveHourUsage >= threshold) {
-			console.warn(`⚠️  Rate limit warning: ${(fiveHourUsage * 100).toFixed(1)}% of 5-hour limit used (${model})`);
+			const source = usingActual ? "actual" : "estimated";
+			console.warn(`⚠️  Rate limit warning: ${(fiveHourUsage * 100).toFixed(1)}% of 5-hour limit used (${model}, ${source})`);
 		}
 
 		if (weeklyUsage >= threshold) {
-			console.warn(`⚠️  Rate limit warning: ${(weeklyUsage * 100).toFixed(1)}% of weekly limit used (${model})`);
+			const source = usingActual ? "actual" : "estimated";
+			console.warn(`⚠️  Rate limit warning: ${(weeklyUsage * 100).toFixed(1)}% of weekly limit used (${model}, ${source})`);
 		}
 	}
 
