@@ -432,6 +432,105 @@ export function formatFixSuggestionsForPrompt(
 }
 
 /**
+ * Get failure warnings relevant to a task objective
+ * These are "signs for Ralph" - warnings about past failures to avoid repeating them
+ *
+ * Returns formatted text to inject into worker prompts when:
+ * - The task objective matches keywords from previous failures
+ * - There are repeated failures (N >= 2) of the same error type
+ *
+ * @param taskObjective - The task being planned
+ * @param minOccurrences - Minimum failure occurrences to trigger warning (default: 2)
+ * @param stateDir - State directory path
+ */
+export function getFailureWarningsForTask(
+	taskObjective: string,
+	minOccurrences: number = 2,
+	stateDir: string = DEFAULT_STATE_DIR,
+): string {
+	const store = loadErrorFixStore(stateDir);
+
+	if (!store.failures || store.failures.length === 0) {
+		return "";
+	}
+
+	// Extract keywords from task objective for matching
+	const taskWords = new Set(
+		taskObjective
+			.toLowerCase()
+			.split(/[\s,./\-_()[\]{}]+/)
+			.filter((w) => w.length > 3),
+	);
+
+	// Count failure occurrences by signature
+	const failureCounts = new Map<string, { count: number; failures: PermanentFailure[] }>();
+	for (const failure of store.failures) {
+		const existing = failureCounts.get(failure.signature) || { count: 0, failures: [] };
+		existing.count++;
+		existing.failures.push(failure);
+		failureCounts.set(failure.signature, existing);
+	}
+
+	// Find relevant warnings based on:
+	// 1. Repeated failures (same error N+ times)
+	// 2. Task objective keyword matches
+	const warnings: Array<{
+		category: string;
+		message: string;
+		taskPattern: string;
+		occurrences: number;
+	}> = [];
+
+	for (const [signature, data] of failureCounts) {
+		if (data.count < minOccurrences) continue;
+
+		const failure = data.failures[0];
+
+		// Check if task objective has keyword overlap
+		const failureWords = new Set(
+			(failure.taskObjective + " " + failure.sampleMessage)
+				.toLowerCase()
+				.split(/[\s,./\-_()[\]{}]+/)
+				.filter((w) => w.length > 3),
+		);
+
+		const overlap = [...taskWords].filter((w) => failureWords.has(w));
+
+		// Include if there's significant overlap or many occurrences
+		if (overlap.length >= 2 || data.count >= 3) {
+			warnings.push({
+				category: failure.category,
+				message: failure.sampleMessage.slice(0, 150),
+				taskPattern: failure.taskObjective.slice(0, 80),
+				occurrences: data.count,
+			});
+		}
+	}
+
+	if (warnings.length === 0) {
+		return "";
+	}
+
+	// Format warnings for prompt injection
+	const lines: string[] = [
+		"⚠️ FAILURE PATTERNS TO AVOID:",
+		"The following errors have occurred multiple times on similar tasks. Take care to avoid them:",
+		"",
+	];
+
+	for (const warning of warnings.slice(0, 3)) {
+		lines.push(`• ${warning.category.toUpperCase()} failure (${warning.occurrences}x):`);
+		lines.push(`  Error: ${warning.message}`);
+		lines.push(`  On task like: "${warning.taskPattern}..."`);
+		lines.push("");
+	}
+
+	lines.push("Review your approach to avoid these known failure patterns.");
+
+	return lines.join("\n");
+}
+
+/**
  * Get statistics about error-fix patterns
  */
 export function getErrorFixStats(stateDir: string = DEFAULT_STATE_DIR): {

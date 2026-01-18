@@ -38,6 +38,7 @@ import { generateToolsPrompt } from "./efficiency-tools.js";
 import {
 	clearPendingError,
 	formatFixSuggestionsForPrompt,
+	getFailureWarningsForTask,
 	recordPendingError,
 	recordPermanentFailure,
 	recordSuccessfulFix,
@@ -2147,6 +2148,17 @@ The file MUST be created at ${outputPath} for this task to succeed.`;
 				this.injectedLearningIds = relevantLearnings.map((l) => l.id);
 			} else {
 				this.injectedLearningIds = [];
+			}
+
+			// Add failure warnings ("signs for Ralph") from past failures
+			// Use this.stateDir (main repo) for error patterns, not worktree
+			const failureWarnings = getFailureWarningsForTask(task, 2, this.stateDir);
+			if (failureWarnings) {
+				contextSection += `${failureWarnings}
+
+---
+
+`;
 			}
 
 			// Add file suggestions based on task-file patterns
