@@ -78,8 +78,6 @@ vi.mock("node:fs", () => ({
 // Import after mocking
 import {
 	clearPendingError,
-	type ErrorFix,
-	type ErrorFixPattern,
 	type ErrorFixStore,
 	findFixSuggestions,
 	formatFixSuggestionsForPrompt,
@@ -87,7 +85,6 @@ import {
 	getErrorFixStats,
 	loadErrorFixStore,
 	markFixSuccessful,
-	type PendingError,
 	pruneOldPatterns,
 	recordPendingError,
 	recordSuccessfulFix,
@@ -216,7 +213,7 @@ describe("error-fix-patterns.ts", () => {
 		});
 
 		it("should handle very long messages", () => {
-			const longMsg = "Error: " + "x".repeat(10000);
+			const longMsg = `Error: ${"x".repeat(10000)}`;
 
 			const sig = generateErrorSignature("lint", longMsg);
 
@@ -393,7 +390,7 @@ describe("error-fix-patterns.ts", () => {
 		it("should truncate message to 500 chars", () => {
 			mockDirs.add(".undercity");
 
-			const longMessage = "Error: " + "x".repeat(600);
+			const longMessage = `Error: ${"x".repeat(600)}`;
 
 			recordPendingError("task-1", "typecheck", longMessage, []);
 
@@ -529,7 +526,7 @@ describe("error-fix-patterns.ts", () => {
 
 			recordPendingError("task-1", "test", "Error", []);
 
-			const longSummary = "Fixed: " + "x".repeat(300);
+			const longSummary = `Fixed: ${"x".repeat(300)}`;
 			recordSuccessfulFix("task-1", ["file.ts"], longSummary);
 
 			const store = loadErrorFixStore();
@@ -1136,7 +1133,7 @@ describe("error-fix-patterns.ts", () => {
 		it("should handle very long messages (500+ char truncation)", () => {
 			mockDirs.add(".undercity");
 
-			const longMessage = "Error: " + "x".repeat(1000);
+			const longMessage = `Error: ${"x".repeat(1000)}`;
 
 			recordPendingError("task-1", "typecheck", longMessage, []);
 
@@ -1178,7 +1175,7 @@ describe("error-fix-patterns.ts", () => {
 			// Fix the ones that are still in pending (last 10)
 			const pendingTaskIds = store.pending.map((p) => p.taskId);
 			for (const taskId of pendingTaskIds) {
-				const taskIndex = Number.parseInt(taskId.split("-")[1]);
+				const taskIndex = Number.parseInt(taskId.split("-")[1], 10);
 				recordSuccessfulFix(taskId, [`file${taskIndex}.ts`], `Fix ${taskIndex}`);
 			}
 

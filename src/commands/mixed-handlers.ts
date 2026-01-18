@@ -23,9 +23,7 @@ export interface GrindOptions {
 	parallel?: string;
 	stream?: boolean;
 	verbose?: boolean;
-	supervised?: boolean;
 	model?: string;
-	worker?: string;
 	commit?: boolean;
 	typecheck?: boolean;
 	review?: boolean;
@@ -1812,7 +1810,7 @@ export function handleInit(options: InitOptions): void {
 			console.log(chalk.green("  Added undercity state files to .gitignore"));
 		}
 	} else {
-		writeFileSync(gitignorePath, gitignorePatterns.trim() + "\n");
+		writeFileSync(gitignorePath, `${gitignorePatterns.trim()}\n`);
 		console.log(chalk.green("  Created .gitignore with undercity state patterns"));
 	}
 

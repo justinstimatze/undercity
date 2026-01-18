@@ -10,7 +10,6 @@
 | **commands/analysis.ts** | Metrics/analysis commands (patterns, decisions, ax) | analysisCommands |
 | **orchestrator.ts** | Main production orchestrator, parallel execution | Orchestrator |
 | **worker.ts** | Single-task executor, runs in worktree | TaskWorker |
-| **supervised.ts** | Opus orchestrates workers | SupervisedOrchestrator |
 | **task.ts** | Task board CRUD (add, get, mark status) | addGoal, getAllItems, markComplete, etc. |
 | **worktree-manager.ts** | Git worktree isolation per task | WorktreeManager |
 | **git.ts** | Git operations, branch management, fingerprinting | getCurrentBranch, rebase, merge, execGit |
@@ -105,7 +104,6 @@
 |-------|------|-----|----------|----------------|
 | Orchestrator | orchestrator.ts | **Main production** (grind) | Yes (1-5) | Worktree, MergeQueue, RateLimit, FileTracker, Recovery |
 | TaskWorker | worker.ts | Single task executor | No | Runs in worktree |
-| SupervisedOrchestrator | supervised.ts | Opus orchestrates workers | No | LiveMetrics only |
 
 **Decision:** Use Orchestrator for everything (even single tasks with maxConcurrent=1).
 
