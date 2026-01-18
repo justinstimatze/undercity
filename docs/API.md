@@ -1,12 +1,101 @@
 # Undercity API Reference
 
 ## Table of Contents
+- [Knowledge System](#knowledge-system)
 - [Semantic Analyzer](#semantic-analyzer)
 - [Task Analyzer](#task-analyzer)
 - [Complexity Utilities](#complexity-utilities)
 - [Context Management](#context-management)
 - [Output Utilities](#output-utilities)
 - [Rate Limit Management](#rate-limit-management)
+
+## Knowledge System
+
+The knowledge system enables learning from completed tasks. For comprehensive documentation, see:
+- [Knowledge System Guide](./knowledge-system.md) - Architecture, categories, confidence scoring
+- [Worker Integration Guide](./worker-knowledge-integration.md) - How workers use knowledge
+- [Examples](../examples/knowledge-queries.ts) - Executable TypeScript examples
+
+### Quick API Reference
+
+#### `findRelevantLearnings(objective: string, maxResults?: number, stateDir?: string): Learning[]`
+- **Purpose**: Find learnings relevant to a task objective
+- **Parameters**:
+  - `objective`: Task description to match against
+  - `maxResults`: Maximum learnings to return (default: 5)
+  - `stateDir`: State directory path (default: ".undercity")
+- **Returns**: Array of relevant `Learning` objects sorted by relevance score
+- **Example**:
+```typescript
+import { findRelevantLearnings } from "./knowledge.js";
+
+const learnings = findRelevantLearnings("Add API validation", 5);
+```
+
+#### `formatLearningsForPrompt(learnings: Learning[]): string`
+- **Purpose**: Format learnings for injection into agent prompts
+- **Parameters**:
+  - `learnings`: Array of Learning objects
+- **Returns**: Formatted string for prompt inclusion
+- **Example**:
+```typescript
+import { formatLearningsForPrompt } from "./knowledge.js";
+
+const promptSection = formatLearningsForPrompt(learnings);
+// Adds to agent context
+```
+
+#### `markLearningsUsed(learningIds: string[], taskSuccess: boolean, stateDir?: string): void`
+- **Purpose**: Update learning stats after task completion
+- **Parameters**:
+  - `learningIds`: IDs of learnings that were used
+  - `taskSuccess`: Whether the task succeeded
+  - `stateDir`: State directory path
+- **Example**:
+```typescript
+import { markLearningsUsed } from "./knowledge.js";
+
+// After task completes
+markLearningsUsed(injectedLearningIds, true);
+```
+
+#### `addLearning(learning: Partial<Learning>, stateDir?: string): Learning`
+- **Purpose**: Add a new learning to the knowledge base
+- **Parameters**:
+  - `learning`: Learning data (taskId, category, content, keywords required)
+  - `stateDir`: State directory path
+- **Returns**: Complete Learning object with generated ID
+- **Example**:
+```typescript
+import { addLearning } from "./knowledge.js";
+
+const learning = addLearning({
+  taskId: "task-123",
+  category: "gotcha",
+  content: "ESM requires .js extension",
+  keywords: ["esm", "import"]
+});
+```
+
+#### `getKnowledgeStats(stateDir?: string): KnowledgeStats`
+- **Purpose**: Get knowledge base statistics
+- **Returns**: Stats including totalLearnings, byCategory, avgConfidence, mostUsed
+- **Example**:
+```typescript
+import { getKnowledgeStats } from "./knowledge.js";
+
+const stats = getKnowledgeStats();
+console.log(`Total: ${stats.totalLearnings}`);
+```
+
+### Learning Categories
+
+| Category | Description |
+|----------|-------------|
+| `pattern` | Codebase conventions |
+| `gotcha` | Pitfalls and fixes |
+| `fact` | Code discoveries |
+| `preference` | Project preferences |
 
 ## Semantic Analyzer
 
