@@ -18,10 +18,11 @@
   "packageManager": "pnpm@10.26.2",
   "files": [
     "dist",
-    "bin"
+    "bin",
+    "templates"
   ],
   "scripts": {
-    "prepare": "husky",
+    "prepare": "npm run build && husky",
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest",

@@ -2,7 +2,7 @@
  * Command handlers for mixed commands
  * Extracted from mixed.ts to reduce complexity
  */
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
@@ -1758,19 +1758,19 @@ export function handleInit(options: InitOptions): void {
 
 	// Find the templates directory (relative to compiled output)
 	const templatesDir = join(__dirname, "..", "..", "templates");
-	const skillTemplatePath = join(templatesDir, "undercity-skill.md");
+	const skillTemplatePath = join(templatesDir, "SKILL.md");
 
 	// Install skill file if template exists
 	if (existsSync(skillTemplatePath)) {
-		// Create .claude/skills directory
-		const skillsDir = ".claude/skills";
+		// Create .claude/skills/undercity directory (SKILL.md format)
+		const skillsDir = ".claude/skills/undercity";
 		if (!existsSync(skillsDir)) {
 			mkdirSync(skillsDir, { recursive: true });
 			console.log(chalk.green(`  Created ${skillsDir}/`));
 		}
 
 		// Copy skill file
-		const skillPath = join(skillsDir, "undercity.md");
+		const skillPath = join(skillsDir, "SKILL.md");
 		if (existsSync(skillPath) && !options.force) {
 			console.log(chalk.yellow(`  ${skillPath} already exists (use --force to overwrite)`));
 		} else {
@@ -1781,14 +1781,39 @@ export function handleInit(options: InitOptions): void {
 		console.log(chalk.dim("  Skill template not found, skipping skill installation"));
 	}
 
-	// Add .undercity to .gitignore if not already present
+	// Add undercity state files to .gitignore (but NOT tasks.json - that should be tracked)
 	const gitignorePath = ".gitignore";
+	const gitignorePatterns = `
+# Undercity state (local, not tracked)
+# Note: .undercity/tasks.json is intentionally NOT ignored - track it for team visibility
+.undercity/knowledge.json
+.undercity/decisions.json
+.undercity/task-file-patterns.json
+.undercity/error-fix-patterns.json
+.undercity/routing-profile.json
+.undercity/parallel-recovery.json
+.undercity/rate-limit-state.json
+.undercity/live-metrics.json
+.undercity/grind-events.jsonl
+.undercity/worktree-state.json
+.undercity/ast-index.json
+.undercity/ax-training.json
+.undercity/usage-cache.json
+.undercity/daemon.json
+.undercity/file-tracking.json
+.undercity/grind-progress.json
+.undercity/experiments.json
+.undercity/profile.json
+`;
 	if (existsSync(gitignorePath)) {
 		const gitignore = readFileSync(gitignorePath, "utf-8");
-		if (!gitignore.includes(".undercity")) {
-			appendFileSync(gitignorePath, "\n# Undercity runtime state\n.undercity/\n");
-			console.log(chalk.green("  Added .undercity/ to .gitignore"));
+		if (!gitignore.includes(".undercity/knowledge.json")) {
+			appendFileSync(gitignorePath, gitignorePatterns);
+			console.log(chalk.green("  Added undercity state files to .gitignore"));
 		}
+	} else {
+		writeFileSync(gitignorePath, gitignorePatterns.trim() + "\n");
+		console.log(chalk.green("  Created .gitignore with undercity state patterns"));
 	}
 
 	// Check efficiency tools for fast-path optimization
