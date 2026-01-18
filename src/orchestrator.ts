@@ -204,6 +204,8 @@ export class Orchestrator {
 	private recoveredCheckpoints: Map<string, TaskCheckpoint> = new Map();
 	/** Handoff context from calling Claude Code session (task objective → context) */
 	private handoffContexts: Map<string, HandoffContext> = new Map();
+	/** Original task IDs from the board (task objective → board task ID) */
+	private originalTaskIds: Map<string, string> = new Map();
 	// Worker health monitoring
 	private healthCheckEnabled: boolean;
 	private healthCheckIntervalMs: number;
@@ -806,7 +808,7 @@ export class Orchestrator {
 	}
 
 	/**
-	 * Extract task objectives and store handoff contexts
+	 * Extract task objectives and store handoff contexts and original task IDs
 	 */
 	private extractObjectivesAndContexts(tasks: Array<string | Task>): string[] {
 		const objectives: string[] = [];
@@ -817,6 +819,10 @@ export class Orchestrator {
 				objectives.push(t.objective);
 				if (t.handoffContext) {
 					this.handoffContexts.set(t.objective, t.handoffContext);
+				}
+				// Store the original task ID from the board for decomposition
+				if (t.id) {
+					this.originalTaskIds.set(t.objective, t.id);
 				}
 			}
 		}
@@ -1131,25 +1137,35 @@ export class Orchestrator {
 		if (result.needsDecomposition) {
 			const { reason, suggestedSubtasks } = result.needsDecomposition;
 			if (suggestedSubtasks && suggestedSubtasks.length > 0) {
-				output.info(`Decomposing task into ${suggestedSubtasks.length} subtasks`, { taskId, reason });
-				const subtaskIds = decomposeTaskIntoSubtasks({
-					parentTaskId: taskId,
-					subtasks: suggestedSubtasks.map((objective, i) => ({
-						objective,
-						order: i,
-					})),
+				// Use the original task ID from the board, not the worktree ID
+				const originalTaskId = this.originalTaskIds.get(task) || taskId;
+				output.info(`Decomposing task into ${suggestedSubtasks.length} subtasks`, {
+					taskId: originalTaskId,
+					reason,
 				});
-				output.info(`Created subtasks: ${subtaskIds.join(", ")}`, { taskId });
-				// Return early - task is now decomposed, not failed
-				return {
-					task,
-					taskId,
-					result: { ...result, status: "complete" }, // Treat as success (decomposed)
-					worktreePath,
-					branch,
-					merged: false, // No merge needed for decomposed tasks
-					modifiedFiles,
-				};
+				try {
+					const subtaskIds = decomposeTaskIntoSubtasks({
+						parentTaskId: originalTaskId,
+						subtasks: suggestedSubtasks.map((objective, i) => ({
+							objective,
+							order: i,
+						})),
+					});
+					output.info(`Created subtasks: ${subtaskIds.join(", ")}`, { taskId: originalTaskId });
+					// Return early - task is now decomposed, not failed
+					return {
+						task,
+						taskId,
+						result: { ...result, status: "complete" }, // Treat as success (decomposed)
+						worktreePath,
+						branch,
+						merged: false, // No merge needed for decomposed tasks
+						modifiedFiles,
+					};
+				} catch (decomposeError) {
+					output.warning(`Failed to decompose task: ${decomposeError}`, { taskId, originalTaskId });
+					// Fall through to failure handling
+				}
 			}
 			// No suggested subtasks - fall through to failure handling
 			output.warning(`Task needs decomposition but no subtasks suggested: ${reason}`, { taskId });

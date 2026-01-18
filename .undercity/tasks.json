@@ -1201,7 +1201,425 @@
       "priority": 107,
       "createdAt": "2026-01-14T00:40:10.306Z",
       "completedAt": "2026-01-14T04:23:52.656Z"
+    },
+    {
+      "id": "task-mkk2t342-720237",
+      "objective": "Implement PreToolUse hook for knowledge injection: create a hook that intercepts tool calls and injects relevant context from error-fix-patterns, task-file-patterns, and knowledge.json",
+      "status": "failed",
+      "priority": 7,
+      "createdAt": "2026-01-18T18:34:56.642Z",
+      "completedAt": "2026-01-18T18:38:27.117Z",
+      "error": "Tier error: Error: Parent task not found: task-mkk2u80b-4ab3be"
+    },
+    {
+      "id": "task-mkk2tacq-f36200",
+      "objective": "Create queryable knowledge tool: expose knowledge.json as searchable MCP tool that workers can query for relevant learnings during task execution",
+      "status": "pending",
+      "priority": 7,
+      "createdAt": "2026-01-18T18:35:06.026Z",
+      "isDecomposed": true,
+      "subtaskIds": [
+        "task-mkk2u7zo-af5cba",
+        "task-mkk2u7zo-af24b6",
+        "task-mkk2u7zo-b2fc2a",
+        "task-mkk2u7zo-288910",
+        "task-mkk2u7zo-afd25d",
+        "task-mkk2u7zo-37e48d",
+        "task-mkk2u7zo-213435"
+      ]
+    },
+    {
+      "id": "task-mkk2u7zo-af5cba",
+      "objective": "Examine knowledge.json structure and understand existing content organization",
+      "status": "pending",
+      "priority": 7.1,
+      "createdAt": "2026-01-18T18:35:49.620Z",
+      "parentId": "task-mkk2tacq-f36200"
+    },
+    {
+      "id": "task-mkk2u7zo-af24b6",
+      "objective": "Design MCP server interface with search endpoint specifications",
+      "status": "pending",
+      "priority": 7.2,
+      "createdAt": "2026-01-18T18:35:49.620Z",
+      "parentId": "task-mkk2tacq-f36200"
+    },
+    {
+      "id": "task-mkk2u7zo-b2fc2a",
+      "objective": "Implement text search and filtering logic for knowledge queries",
+      "status": "pending",
+      "priority": 7.3,
+      "createdAt": "2026-01-18T18:35:49.620Z",
+      "parentId": "task-mkk2tacq-f36200"
+    },
+    {
+      "id": "task-mkk2u7zo-288910",
+      "objective": "Create MCP tool definition and request handlers for knowledge search",
+      "status": "pending",
+      "priority": 7.4,
+      "createdAt": "2026-01-18T18:35:49.620Z",
+      "parentId": "task-mkk2tacq-f36200"
+    },
+    {
+      "id": "task-mkk2u7zo-afd25d",
+      "objective": "Write integration code to expose the search tool through MCP protocol",
+      "status": "pending",
+      "priority": 7.5,
+      "createdAt": "2026-01-18T18:35:49.620Z",
+      "parentId": "task-mkk2tacq-f36200"
+    },
+    {
+      "id": "task-mkk2u7zo-37e48d",
+      "objective": "Create usage documentation and examples for workers querying knowledge",
+      "status": "pending",
+      "priority": 7.6,
+      "createdAt": "2026-01-18T18:35:49.620Z",
+      "parentId": "task-mkk2tacq-f36200"
+    },
+    {
+      "id": "task-mkk2u7zo-213435",
+      "objective": "Test knowledge search with sample queries and edge cases",
+      "status": "pending",
+      "priority": 7.7,
+      "createdAt": "2026-01-18T18:35:49.620Z",
+      "parentId": "task-mkk2tacq-f36200"
+    },
+    {
+      "id": "task-mkk32dj5-2e720c",
+      "objective": "Add delta knowledge extraction: only process new learnings from sessions, not re-process entire history (inspired by Nexus delta distillation)",
+      "status": "pending",
+      "priority": 4,
+      "createdAt": "2026-01-18T18:42:10.049Z"
+    },
+    {
+      "id": "task-mkk32dye-afcf3d",
+      "objective": "Add contradiction detection: surface conflicting decisions/learnings in knowledge.json (e.g. 'use X for auth' vs 'avoid X for auth')",
+      "status": "pending",
+      "priority": 4,
+      "createdAt": "2026-01-18T18:42:10.598Z"
+    },
+    {
+      "id": "task-mkk32ecy-1083fa",
+      "objective": "Add vector similarity to knowledge search: embed learnings for semantic 'find related' queries beyond keyword matching",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:42:11.122Z"
+    },
+    {
+      "id": "task-mkk32esa-ace8da",
+      "objective": "Expose knowledge via REST API: JSON endpoints for querying decisions/learnings (agent-consumable, no HTML)",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:42:11.674Z"
+    },
+    {
+      "id": "task-mkk32f7l-7295fc",
+      "objective": "Add session transcript capture hook: auto-distill grind session transcripts into knowledge.json on completion",
+      "status": "pending",
+      "priority": 5,
+      "createdAt": "2026-01-18T18:42:12.225Z"
+    },
+    {
+      "id": "task-mkk32fma-31471e",
+      "objective": "Add identity resolution for knowledge: track who/what (human vs AI) authored each learning, enable 'what did X decide' queries",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:42:12.754Z"
+    },
+    {
+      "id": "task-mkk32lc5-ac550b",
+      "objective": "Add universal webhook endpoint for knowledge ingestion: accept JSON from GitHub PRs, Slack, Linear with AI-powered understanding",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:42:20.166Z"
+    },
+    {
+      "id": "task-mkk32lqw-c4db14",
+      "objective": "Categorize knowledge into decisions vs learnings: decisions are choices made, learnings are insights discovered (not action items)",
+      "status": "pending",
+      "priority": 4,
+      "createdAt": "2026-01-18T18:42:20.696Z"
+    },
+    {
+      "id": "task-mkk36a9k-530b83",
+      "objective": "RLM-style knowledge exploration: let agents write Python code to programmatically explore knowledge.json instead of just keyword search (treat knowledge as REPL environment object)",
+      "status": "pending",
+      "priority": 4,
+      "createdAt": "2026-01-18T18:45:12.440Z"
+    },
+    {
+      "id": "task-mkk36ap6-0fff45",
+      "objective": "Recursive session distillation: for large transcripts (>10K tokens), use RLM-style chunking + recursive summarization before knowledge extraction",
+      "status": "pending",
+      "priority": 4,
+      "createdAt": "2026-01-18T18:45:13.002Z"
+    },
+    {
+      "id": "task-mkk36b3n-7e9898",
+      "objective": "Context budget based on RLM findings: inject knowledge in chunks with verification sub-calls to prevent context rot degradation",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:45:13.523Z"
+    },
+    {
+      "id": "task-mkk36bhs-3bb661",
+      "objective": "Recursive knowledge synthesis: for complex queries, decompose into sub-queries, recursively gather answers, then synthesize (RLM pattern)",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:45:14.032Z"
+    },
+    {
+      "id": "task-mkk36bvy-c7f018",
+      "objective": "Progressive knowledge building: stream learnings to knowledge.json as session progresses, not just at end (RLM progressive output pattern)",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:45:14.542Z"
+    },
+    {
+      "id": "task-mkk36i5e-fa3211",
+      "objective": "Verification sub-calls for contradiction detection: use RLM-style recursive queries to verify knowledge consistency across entries",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:45:22.658Z"
+    },
+    {
+      "id": "task-mkk36ik3-626503",
+      "objective": "Semantic chunking for knowledge storage: partition learnings by topic/domain using RLM semantic partitioning, not just flat list",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:45:23.187Z"
+    },
+    {
+      "id": "task-mkk36iyd-5c1263",
+      "objective": "Async parallel knowledge distillation: process multiple transcript chunks simultaneously (RLM suggests async LM calls for 3x speedup)",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:45:23.701Z"
+    },
+    {
+      "id": "task-mkk3fssl-50140d",
+      "objective": "Auto-generate 'signs for Ralph': after N failures of same type, auto-append warning to worker prompts (error-fix-patterns → prompt injection)",
+      "status": "pending",
+      "priority": 5,
+      "createdAt": "2026-01-18T18:52:36.357Z"
+    },
+    {
+      "id": "task-mkk3ft7p-e5cdcf",
+      "objective": "Prompt evolution from knowledge: inject relevant learnings/decisions into worker prompts automatically (accumulated knowledge → better Ralph)",
+      "status": "pending",
+      "priority": 5,
+      "createdAt": "2026-01-18T18:52:36.901Z"
+    },
+    {
+      "id": "task-mkk3ftmk-014c77",
+      "objective": "Detect deterministic failure modes: classify recurring errors into fixable categories, generate targeted prompt patches (Ralph tuning)",
+      "status": "pending",
+      "priority": 4,
+      "createdAt": "2026-01-18T18:52:37.436Z"
+    },
+    {
+      "id": "task-mkk3fu0s-979981",
+      "objective": "Eventual consistency metrics: track convergence rate per task type, identify which tasks need more 'signs' vs model escalation",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:52:37.948Z"
+    },
+    {
+      "id": "task-mkk3fuf6-cf9ef2",
+      "objective": "Graduate to 'New Ralph': after accumulating enough learnings for a domain, generate optimized domain-specific prompts (prompt distillation)",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:52:38.466Z"
+    },
+    {
+      "id": "task-mkk3g0ah-86a463",
+      "objective": "Recursive Ralph with knowledge: use RLM-style decomposition + Nexus knowledge injection for complex tasks (all three patterns combined)",
+      "status": "pending",
+      "priority": 4,
+      "createdAt": "2026-01-18T18:52:46.073Z"
+    },
+    {
+      "id": "task-mkk3g0p6-0b52d1",
+      "objective": "Operator skill metrics: track which prompt patterns correlate with success, surface 'LLM mirror' insights to improve prompting",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:52:46.602Z"
+    },
+    {
+      "id": "task-mkk3jge7-2be421",
+      "objective": "Add Witness patrol: periodic check for stuck workers, trigger recovery or escalation (Gas Town pattern)",
+      "status": "pending",
+      "priority": 4,
+      "createdAt": "2026-01-18T18:55:26.911Z"
+    },
+    {
+      "id": "task-mkk3jgse-f0f366",
+      "objective": "Add workflow Formulas: TOML-defined reusable task patterns (e.g., 'release', 'refactor-module') that expand to task sequences",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:55:27.422Z"
+    },
+    {
+      "id": "task-mkk3jh6f-d5ccc9",
+      "objective": "Add Molecules: durable chained workflows that survive crashes, track multi-step processes as linked beads",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:55:27.927Z"
+    },
+    {
+      "id": "task-mkk3jhk2-8695ff",
+      "objective": "Add Seance: query previous grind sessions for context/decisions (combine with Nexus knowledge capture)",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:55:28.418Z"
+    },
+    {
+      "id": "task-mkk3jhyh-b06bd0",
+      "objective": "Add Boot the Dog: watchdog for the daemon watchdog, ensure daemon itself stays healthy",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:55:28.937Z"
+    },
+    {
+      "id": "task-mkk3jicm-dfbcd1",
+      "objective": "Add inter-worker messaging (Nudge): allow workers to signal each other for coordination without going through orchestrator",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:55:29.446Z"
+    },
+    {
+      "id": "task-mkk3jry2-0f37e1",
+      "objective": "GUPP + Ralph loop: 'If there is work on your Hook, YOU MUST RUN IT' - make grind more aggressive about processing available work",
+      "status": "pending",
+      "priority": 4,
+      "createdAt": "2026-01-18T18:55:41.882Z"
+    },
+    {
+      "id": "task-mkk3jsbw-1dc5c8",
+      "objective": "NDI via knowledge: achieve Nondeterministic Idempotence by recording all decisions/learnings, replay to get consistent outcomes",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:55:42.380Z"
+    },
+    {
+      "id": "task-mkk3jspp-aa4c69",
+      "objective": "Refinery with learning: AI-powered merge conflict resolution that learns from past resolutions (Gas Town Refinery + error-fix patterns)",
+      "status": "pending",
+      "priority": 3,
+      "createdAt": "2026-01-18T18:55:42.877Z"
+    },
+    {
+      "id": "task-mkk3jt3g-89f4eb",
+      "objective": "Formulas from patterns: auto-generate workflow Formulas from frequently co-occurring task sequences in history",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:55:43.372Z"
+    },
+    {
+      "id": "task-mkk3jth6-a2f39f",
+      "objective": "Seance + RLM: recursively query past sessions to build context for complex tasks (Gas Town Seance + RLM decomposition)",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:55:43.866Z"
+    },
+    {
+      "id": "task-mkk3lycc-b104df",
+      "objective": "[vision] Federated learning network: share anonymized learnings across undercity instances (opt-in), build collective intelligence without exposing proprietary code",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:57:23.484Z"
+    },
+    {
+      "id": "task-mkk3lysv-c3822f",
+      "objective": "[vision] Predictive task generation: infer what human will want next from patterns (time-of-day, recent commits, calendar), propose before asked",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:57:24.079Z"
+    },
+    {
+      "id": "task-mkk3lzbh-bb724d",
+      "objective": "[vision] Adversarial self-improvement: spawn 'red team' agent to find weaknesses in completed work, proactively harden before merge",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:57:24.749Z"
+    },
+    {
+      "id": "task-mkk3lzst-f9d82b",
+      "objective": "[vision] Economic optimizer: track cost-per-value (tokens spent vs impact delivered), auto-adjust routing to maximize ROI not just success rate",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:57:25.373Z"
+    },
+    {
+      "id": "task-mkk3m0a6-f7f584",
+      "objective": "[vision] Emergent specialization: let workers naturally specialize based on success patterns, create 'expert' prompt variants per domain",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:57:25.998Z"
+    },
+    {
+      "id": "task-mkk3m0qb-5c4ab8",
+      "objective": "[vision] Self-modifying orchestration: orchestrator evolves its own strategies (retry logic, routing, decomposition) based on meta-metrics",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:57:26.579Z"
+    },
+    {
+      "id": "task-mkk3maj4-21ca91",
+      "objective": "[vision] Temporal scheduling intelligence: learn when tasks succeed best (time of day, after which commits, sprint phase), auto-schedule for optimal timing",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:57:39.280Z"
+    },
+    {
+      "id": "task-mkk3mb3f-86921a",
+      "objective": "[vision] Counterfactual reasoning: 'what if we had chosen X?' - simulate alternate decisions using knowledge graph, inform future choices",
+      "status": "pending",
+      "priority": 1,
+      "createdAt": "2026-01-18T18:57:40.011Z"
+    },
+    {
+      "id": "task-mkk3mbkj-956ac1",
+      "objective": "[vision] Code archaeology agent: analyze git history + decisions to understand WHY code evolved, inject 'institutional memory' into context",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:57:40.627Z"
+    },
+    {
+      "id": "task-mkk3mc2e-7285fb",
+      "objective": "[vision] Autonomous codebase gardening: proactively identify and fix tech debt, refactoring opportunities, security issues without being asked",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:57:41.271Z"
+    },
+    {
+      "id": "task-mkk3mcjg-008e33",
+      "objective": "[vision] Intent completion: from partial/ambiguous instructions, predict full intent using past decisions + codebase patterns, confirm with human",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:57:41.884Z"
+    },
+    {
+      "id": "task-mkk3md26-259187",
+      "objective": "[vision] Meta-orchestration layer: orchestrate multiple undercity instances across repos, share context, coordinate cross-repo changes",
+      "status": "pending",
+      "priority": 1,
+      "createdAt": "2026-01-18T18:57:42.558Z"
+    },
+    {
+      "id": "task-mkk3mioy-4d2e63",
+      "objective": "[vision] Dream mode: during idle time, agents 'dream' - replay past sessions, discover patterns, consolidate learnings, wake up smarter",
+      "status": "pending",
+      "priority": 1,
+      "createdAt": "2026-01-18T18:57:49.858Z"
+    },
+    {
+      "id": "task-mkk3mj5t-b7ea94",
+      "objective": "[vision] Skill acquisition: detect unknown frameworks/tools in tasks, spawn research agent to learn them, add to capability set without retraining",
+      "status": "pending",
+      "priority": 2,
+      "createdAt": "2026-01-18T18:57:50.465Z"
     }
   ],
-  "lastUpdated": "2026-01-14T05:54:06.712Z"
+  "lastUpdated": "2026-01-18T18:57:50.465Z"
 }

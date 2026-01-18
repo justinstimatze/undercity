@@ -1327,9 +1327,9 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 						maxOpusReviewPasses,
 					});
 
-					const batchObjectives = batchTasks.map((t) => t.objective);
+					// Pass full task objects to preserve IDs for decomposition
 					const batchStartTime = Date.now();
-					const result = await batchOrchestrator.runParallel(batchObjectives);
+					const result = await batchOrchestrator.runParallel(batchTasks);
 					const batchDurationMs = Date.now() - batchStartTime;
 
 					// Update task status based on results
