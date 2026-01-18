@@ -163,6 +163,28 @@ export interface Task {
 
 	// Handoff context from Claude Code session
 	handoffContext?: HandoffContext;
+
+	// Last attempt context for retry tasks
+	lastAttempt?: LastAttemptContext;
+}
+
+/**
+ * Context from a task's last failed attempt
+ * Used to help agents avoid repeating the same mistakes on retry
+ */
+export interface LastAttemptContext {
+	/** Model used during last attempt */
+	model: string;
+	/** Error category (typecheck, lint, test, build) */
+	category: string;
+	/** Error message from verification */
+	error: string;
+	/** Files that were modified during the attempt */
+	filesModified: string[];
+	/** When the attempt was made */
+	attemptedAt: Date;
+	/** Total attempts before giving up */
+	attemptCount: number;
 }
 
 /**
@@ -178,6 +200,8 @@ export interface HandoffContext {
 	codeContext?: string;
 	/** Free-form notes from the caller */
 	notes?: string;
+	/** Context from previous failed attempt (for retry tasks) */
+	lastAttempt?: LastAttemptContext;
 }
 
 export interface TaskBoard {
@@ -273,6 +297,8 @@ export interface MarkTaskFailedParams {
 	id: string;
 	error: string;
 	path?: string;
+	/** Context from the failed attempt for future retry */
+	lastAttempt?: LastAttemptContext;
 }
 
 /**
@@ -814,9 +840,10 @@ export function markTaskFailed(paramsOrId: MarkTaskFailedParams | string, error?
 	let id: string;
 	let actualError: string;
 	let actualPath: string;
+	let lastAttempt: LastAttemptContext | undefined;
 
 	if (typeof paramsOrId === "object") {
-		({ id, error: actualError, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrId);
+		({ id, error: actualError, path: actualPath = DEFAULT_TASK_BOARD_PATH, lastAttempt } = paramsOrId);
 	} else {
 		id = paramsOrId;
 		actualError = error!;
@@ -829,6 +856,9 @@ export function markTaskFailed(paramsOrId: MarkTaskFailedParams | string, error?
 			task.status = "failed";
 			task.completedAt = new Date();
 			task.error = actualError;
+			if (lastAttempt) {
+				task.lastAttempt = lastAttempt;
+			}
 		},
 		actualPath,
 	);

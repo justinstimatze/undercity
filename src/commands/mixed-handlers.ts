@@ -13,6 +13,7 @@ import type { TaskResultSummary } from "../output.js";
 import * as output from "../output.js";
 import { Persistence } from "../persistence.js";
 import { RateLimitTracker } from "../rate-limit.js";
+import type { LastAttemptContext } from "../task.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -160,6 +161,21 @@ interface PulseData {
 		message: string;
 		id?: string;
 	}>;
+}
+
+/**
+ * Determine error category from verification result
+ */
+function getErrorCategoryFromVerification(verification?: {
+	typecheckPassed: boolean;
+	testsPassed: boolean;
+	lintPassed: boolean;
+}): string {
+	if (!verification) return "unknown";
+	if (!verification.typecheckPassed) return "typecheck";
+	if (!verification.testsPassed) return "test";
+	if (!verification.lintPassed) return "lint";
+	return "build";
 }
 
 /**
@@ -1437,7 +1453,16 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 								}
 							} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
 								const errorMsg = taskResult.mergeError || "Task failed";
-								markTaskFailed(taskId, errorMsg);
+								// Build last attempt context for future retries
+								const lastAttempt: LastAttemptContext = {
+									model: taskResult.result?.model ?? modelTier,
+									category: getErrorCategoryFromVerification(taskResult.result?.verification),
+									error: errorMsg,
+									filesModified: taskResult.modifiedFiles ?? [],
+									attemptedAt: new Date(),
+									attemptCount: taskResult.result?.attempts ?? 1,
+								};
+								markTaskFailed({ id: taskId, error: errorMsg, lastAttempt });
 								output.taskFailed(taskId, `Task failed (${modelTier})`, errorMsg);
 								completedCount++;
 								updateGrindProgress(completedCount, totalToProcess);
@@ -1497,7 +1522,15 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 				for (const task of tierTasks) {
 					const taskId = objectiveToQuestId.get(task.objective);
 					if (taskId) {
-						markTaskFailed(taskId, `Tier error: ${tierError}`);
+						const lastAttempt: LastAttemptContext = {
+							model: modelTier,
+							category: "tier_error",
+							error: `Tier error: ${tierError}`,
+							filesModified: [],
+							attemptedAt: new Date(),
+							attemptCount: 0,
+						};
+						markTaskFailed({ id: taskId, error: `Tier error: ${tierError}`, lastAttempt });
 						completedCount++;
 						updateGrindProgress(completedCount, totalToProcess);
 

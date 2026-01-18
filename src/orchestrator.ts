@@ -817,8 +817,13 @@ export class Orchestrator {
 				objectives.push(t);
 			} else {
 				objectives.push(t.objective);
-				if (t.handoffContext) {
-					this.handoffContexts.set(t.objective, t.handoffContext);
+				// Build handoff context, including lastAttempt for retry tasks
+				const handoffContext: HandoffContext = { ...t.handoffContext };
+				if (t.lastAttempt) {
+					handoffContext.lastAttempt = t.lastAttempt;
+				}
+				if (Object.keys(handoffContext).length > 0) {
+					this.handoffContexts.set(t.objective, handoffContext);
 				}
 				// Store the original task ID from the board for decomposition
 				if (t.id) {

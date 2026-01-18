@@ -576,6 +576,31 @@ export class TaskWorker {
 			lines.push("");
 		}
 
+		// Add last attempt context for retry tasks
+		if (ctx.lastAttempt) {
+			lines.push("⚠️ PREVIOUS ATTEMPT FAILED:");
+			lines.push(`This task was attempted before and failed. Learn from these mistakes:`);
+			lines.push("");
+			lines.push(`  Model used: ${ctx.lastAttempt.model}`);
+			lines.push(`  Error type: ${ctx.lastAttempt.category}`);
+			lines.push(`  Attempts: ${ctx.lastAttempt.attemptCount}`);
+			if (ctx.lastAttempt.filesModified.length > 0) {
+				lines.push(`  Files modified during attempt:`);
+				for (const file of ctx.lastAttempt.filesModified.slice(0, 10)) {
+					lines.push(`    - ${file}`);
+				}
+			}
+			lines.push("");
+			lines.push("  Error message:");
+			// Truncate long error messages
+			const errorPreview = ctx.lastAttempt.error.slice(0, 500);
+			lines.push(`    ${errorPreview}${ctx.lastAttempt.error.length > 500 ? "..." : ""}`);
+			lines.push("");
+			lines.push("  DO NOT repeat the same approach that caused this error.");
+			lines.push("  Try a different strategy or ask for clarification if the task is unclear.");
+			lines.push("");
+		}
+
 		return lines.join("\n");
 	}
 
