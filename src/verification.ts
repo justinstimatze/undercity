@@ -132,13 +132,14 @@ export async function verifyWork(
 	// Get commands from profile or use defaults
 	const commands = getVerificationCommands(workingDirectory);
 
-	// Auto-format code before verification (worktrees don't have pre-commit hooks)
+	// Auto-fix lint/format issues before verification (worktrees don't have pre-commit hooks)
+	// Use check:fix (not format:fix) to include import organization
 	let stepStart = Date.now();
 	try {
-		execSync("pnpm format:fix 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
-		feedbackParts.push("✓ Auto-formatted code");
+		execSync("pnpm check:fix 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
+		feedbackParts.push("✓ Auto-fixed lint/format issues");
 	} catch {
-		// Format:fix may not be available in all projects, continue
+		// check:fix may not be available in all projects, continue
 	}
 	if (profile) timing.format = Date.now() - stepStart;
 
