@@ -52,6 +52,8 @@
 | **self-tuning.ts** | Learned routing profile from historical data | loadRoutingProfile, computeOptimalThresholds, maybeUpdateProfile |
 | **knowledge.ts** | Knowledge compounding (learnings from tasks) | loadKnowledge, addLearning, findRelevantLearnings |
 | **knowledge-extractor.ts** | Extract learnings from task completions | extractLearnings |
+| **mcp-tools.ts** | MCP tool definitions for knowledge access | knowledgeTools, knowledgeSearchTool |
+| **mcp-protocol.ts** | MCP JSON-RPC 2.0 handler | MCPProtocolHandler, handleMCPRequest |
 | **decision-tracker.ts** | Capture/resolve agent decisions | captureDecision, resolveDecision, getPendingDecisions |
 | **automated-pm.ts** | Automated PM: decision resolution, task generation, web research | pmDecide, quickDecision, pmResearch, pmPropose, pmIdeate |
 | **task-file-patterns.ts** | Task→file correlations, co-modification | recordTaskFiles, findRelevantFiles, findCoModifiedFiles |
@@ -93,6 +95,7 @@
 - Log structured events → `logger.ts` or `dual-logger.ts` (workers)
 - Store/retrieve learnings → `knowledge.ts`
 - Extract learnings from completed tasks → `knowledge-extractor.ts`
+- Query knowledge via MCP → `mcp-protocol.ts` (MCPProtocolHandler)
 - Capture/resolve agent decisions → `decision-tracker.ts`
 - Resolve decisions via PM → `automated-pm.ts` (quickDecision, pmDecide)
 - Generate new tasks via PM → `automated-pm.ts` (pmPropose, pmIdeate)

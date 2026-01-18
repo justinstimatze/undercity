@@ -5,10 +5,9 @@
  * Uses YAML frontmatter in plan files to store task associations.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { readdirSync } from "node:fs";
 
 // Default Claude Code plans directory
 const DEFAULT_PLANS_DIR = join(homedir(), ".claude", "plans");
@@ -205,11 +204,7 @@ export function updatePlanMetadata(path: string, metadata: PlanMetadata): boolea
 /**
  * Link tasks to a plan file
  */
-export function linkTasksToPlan(
-	planPath: string,
-	taskIds: string[],
-	projectRoot: string = process.cwd(),
-): boolean {
+export function linkTasksToPlan(planPath: string, taskIds: string[], projectRoot: string = process.cwd()): boolean {
 	const plan = parsePlanFile(planPath);
 	if (!plan) {
 		return false;
@@ -274,10 +269,7 @@ export function findLinkedPlans(
 /**
  * Find plan containing a specific task
  */
-export function findPlanForTask(
-	taskId: string,
-	plansDir: string = DEFAULT_PLANS_DIR,
-): ParsedPlan | null {
+export function findPlanForTask(taskId: string, plansDir: string = DEFAULT_PLANS_DIR): ParsedPlan | null {
 	if (!existsSync(plansDir)) {
 		return null;
 	}

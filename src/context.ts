@@ -1073,9 +1073,7 @@ async function tryASTIndexFirst(
 			briefing.targetFiles = [...new Set(briefing.targetFiles)].slice(0, 12);
 		}
 
-		briefing.dependencies = [...new Set(allDependencies)]
-			.filter((f) => !briefing.targetFiles.includes(f))
-			.slice(0, 8); // Increased limit
+		briefing.dependencies = [...new Set(allDependencies)].filter((f) => !briefing.targetFiles.includes(f)).slice(0, 8); // Increased limit
 
 		// 5. Find impacted files (what depends on target files)
 		const allImpacted: string[] = [];

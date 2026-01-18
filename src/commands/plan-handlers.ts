@@ -94,9 +94,7 @@ export async function handlePlan(planPathOrName: string | undefined, options: Pl
  * List plans linked to this project
  */
 async function handleListPlans(projectRoot: string, showAll?: boolean): Promise<void> {
-	const plans = showAll
-		? listPlans(DEFAULT_PLANS_DIR)
-		: findLinkedPlans(projectRoot);
+	const plans = showAll ? listPlans(DEFAULT_PLANS_DIR) : findLinkedPlans(projectRoot);
 
 	if (plans.length === 0) {
 		if (showAll) {

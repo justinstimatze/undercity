@@ -131,6 +131,17 @@ pnpm daemon:status                         # Check status
 pnpm daemon:logs                           # View logs
 ```
 
+**MCP Knowledge Tools** (JSON-RPC 2.0 via `POST /mcp`):
+```bash
+# List available tools
+curl -X POST http://localhost:7331/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# Search knowledge base
+curl -X POST http://localhost:7331/mcp -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"knowledge_search","arguments":{"query":"validation patterns"}}}'
+```
+
+Tools: `knowledge_search`, `knowledge_add`, `knowledge_stats`, `knowledge_mark_used`
+
 ## Task Execution Flow
 
 ```

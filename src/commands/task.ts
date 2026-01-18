@@ -21,10 +21,7 @@
  * Handlers: task-handlers.ts (extracted for maintainability)
  */
 
-import {
-	handlePlan as handlePlanLinkage,
-	type PlanOptions as PlanLinkageOptions,
-} from "./plan-handlers.js";
+import { handlePlan as handlePlanLinkage, type PlanOptions as PlanLinkageOptions } from "./plan-handlers.js";
 import {
 	type AddOptions,
 	type CompleteOptions,
