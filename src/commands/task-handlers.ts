@@ -1197,3 +1197,21 @@ export function handleUpdate(taskId: string, options: UpdateOptions): void {
 		console.log(chalk.gray(`  ${update}`));
 	}
 }
+
+export function handleRemove(taskId: string): void {
+	const existingTask = getTaskById(taskId);
+
+	if (!existingTask) {
+		console.log(chalk.red(`Task not found: ${taskId}`));
+		console.log(chalk.dim("Use 'undercity tasks --all' to see all task IDs"));
+		process.exit(1);
+	}
+
+	const removed = removeTasks([taskId]);
+	if (removed > 0) {
+		console.log(chalk.green(`Removed: ${existingTask.objective.substring(0, 60)}...`));
+	} else {
+		console.log(chalk.red(`Failed to remove task: ${taskId}`));
+		process.exit(1);
+	}
+}

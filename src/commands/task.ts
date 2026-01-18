@@ -7,6 +7,7 @@
  * | add          | Add goal to backlog                          |
  * | complete     | Mark task as complete                        |
  * | update       | Update task objective, priority, tags, status|
+ * | remove       | Permanently delete a task                    |
  * | load         | Bulk load goals from file                    |
  * | import-plan  | Parse plan file into discrete tasks          |
  * | plan         | Execute plan file with judgment              |
@@ -29,6 +30,7 @@ import {
 	handlePlan,
 	handlePrune,
 	handleReconcile,
+	handleRemove,
 	handleTaskAnalyze,
 	handleTaskStatus,
 	handleTasks,
@@ -159,5 +161,11 @@ export const taskCommands: CommandModule = {
 				"New status (pending, in_progress, complete, failed, blocked, canceled, obsolete)",
 			)
 			.action((taskId: string, options: UpdateOptions) => handleUpdate(taskId, options));
+
+		// Remove command - permanently delete a task
+		program
+			.command("remove <taskId>")
+			.description("Permanently remove a task from the board")
+			.action((taskId: string) => handleRemove(taskId));
 	},
 };
