@@ -79,6 +79,8 @@ export interface PermanentFailure {
 	modelUsed: string;
 	/** Number of attempts before giving up */
 	attemptsCount: number;
+	/** Files being worked on at time of failure */
+	filesAttempted: string[];
 	/** When this failure was recorded */
 	recordedAt: string;
 }
@@ -360,6 +362,7 @@ export function recordPermanentFailure(
 		taskObjective: taskObjective.slice(0, 200),
 		modelUsed,
 		attemptsCount: attemptCount,
+		filesAttempted: currentFiles.slice(0, 10), // Track files being worked on at failure
 		recordedAt: new Date().toISOString(),
 	});
 
@@ -481,14 +484,14 @@ export function getFailureWarningsForTask(
 		occurrences: number;
 	}> = [];
 
-	for (const [signature, data] of failureCounts) {
+	for (const [_signature, data] of failureCounts) {
 		if (data.count < minOccurrences) continue;
 
 		const failure = data.failures[0];
 
 		// Check if task objective has keyword overlap
 		const failureWords = new Set(
-			(failure.taskObjective + " " + failure.sampleMessage)
+			`${failure.taskObjective} ${failure.sampleMessage}`
 				.toLowerCase()
 				.split(/[\s,./\-_()[\]{}]+/)
 				.filter((w) => w.length > 3),

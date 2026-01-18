@@ -18,14 +18,13 @@ import {
 	addLearning,
 	findRelevantLearnings,
 	getKnowledgeStats,
-	type Learning,
 	type LearningCategory,
 	markLearningsUsed,
 } from "./knowledge.js";
 import { serverLogger } from "./logger.js";
 import { knowledgeTools, type MCPTool } from "./mcp-tools.js";
 
-const MCP_VERSION = "2025-11-25";
+const _MCP_VERSION = "2025-11-25";
 const JSONRPC_VERSION = "2.0";
 
 /**
@@ -329,7 +328,7 @@ export async function handleMCPRequest(body: string, stateDir?: string): Promise
 		const handler = new MCPProtocolHandler(stateDir);
 		const response = await handler.handleRequest(request);
 		return JSON.stringify(response);
-	} catch (error) {
+	} catch (_error) {
 		// Parse error
 		const errorResponse: JSONRPCErrorResponse = {
 			jsonrpc: JSONRPC_VERSION,

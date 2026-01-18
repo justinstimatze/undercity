@@ -1142,10 +1142,10 @@ export class Orchestrator {
 				if (!originalTaskId) {
 					// Cannot decompose without a valid parent task ID from the board
 					// This happens when task was passed as string without board lookup
-					output.warning(
-						`Cannot decompose task: no board task ID found (task may have been passed as string)`,
-						{ taskId, task: task.substring(0, 50) },
-					);
+					output.warning(`Cannot decompose task: no board task ID found (task may have been passed as string)`, {
+						taskId,
+						task: task.substring(0, 50),
+					});
 					// Fall through to failure handling
 				} else {
 					output.info(`Decomposing task into ${suggestedSubtasks.length} subtasks`, {

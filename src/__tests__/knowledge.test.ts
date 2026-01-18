@@ -15,7 +15,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
 	addLearning,
@@ -195,8 +195,8 @@ describe("knowledge.ts", () => {
 				tempDir,
 			);
 
-			// Try to add nearly identical learning
-			const learning2 = addLearning(
+			// Try to add nearly identical learning (result intentionally not used)
+			addLearning(
 				{
 					taskId: "task-2",
 					category: "pattern",
@@ -957,14 +957,14 @@ describe("knowledge.ts", () => {
 			kb.learnings[0].usedCount = 0;
 			kb.learnings[0].confidence = 0.8;
 
-			const pruned = pruneUnusedLearnings(0, tempDir);
+			const _pruned = pruneUnusedLearnings(0, tempDir);
 			const remaining = loadKnowledge(tempDir);
 
 			expect(remaining.learnings.length).toBeGreaterThan(0);
 		});
 
 		it("should respect maxAge parameter", () => {
-			const learning = addLearning(
+			const _learning = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -975,7 +975,7 @@ describe("knowledge.ts", () => {
 			);
 
 			// With large maxAge, even unused recent learnings are kept
-			const pruned = pruneUnusedLearnings(1000 * 60 * 60 * 24 * 365, tempDir); // 1 year
+			const _pruned = pruneUnusedLearnings(1000 * 60 * 60 * 24 * 365, tempDir); // 1 year
 
 			const remaining = loadKnowledge(tempDir);
 
@@ -1036,7 +1036,7 @@ describe("knowledge.ts", () => {
 				tempDir,
 			);
 
-			const learning2 = addLearning(
+			const _learning2 = addLearning(
 				{
 					taskId: "previous-task-2",
 					category: "gotcha",
@@ -1128,7 +1128,7 @@ describe("knowledge.ts", () => {
 
 		it("should handle very long learning content", () => {
 			const longContent = "A".repeat(10000);
-			const learning = addLearning(
+			const _learning = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -1144,7 +1144,7 @@ describe("knowledge.ts", () => {
 
 		it("should handle special characters in content", () => {
 			const content = "Special: !@#$%^&*() <>/? \"quotes\" 'apostrophes'";
-			const learning = addLearning(
+			const _learning = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -1266,7 +1266,7 @@ describe("knowledge.ts", () => {
 	describe("Realistic scenarios", () => {
 		it("should support API validation workflow", () => {
 			// Scenario: Learning Zod validation pattern from multiple tasks
-			const task1 = addLearning(
+			const _task1 = addLearning(
 				{
 					taskId: "task-add-user-endpoint",
 					category: "pattern",
@@ -1280,7 +1280,7 @@ describe("knowledge.ts", () => {
 				tempDir,
 			);
 
-			const task2 = addLearning(
+			const _task2 = addLearning(
 				{
 					taskId: "task-add-product-endpoint",
 					category: "pattern",

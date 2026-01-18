@@ -963,6 +963,52 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			}
 		>();
 
+		// Pre-flight validation: check for invalid paths and auto-fix when possible
+		const { validateTask } = await import("../task-validator.js");
+		const { updateTaskFields } = await import("../task.js");
+
+		output.progress("Validating task references...");
+		const invalidTasks: string[] = [];
+
+		for (const task of tasksToProcess) {
+			const validation = validateTask(task.objective);
+
+			// Auto-fix correctable paths
+			if (validation.correctedObjective) {
+				output.info(`Auto-fixed path in task: ${task.id}`);
+				for (const issue of validation.issues.filter((i) => i.type === "path_corrected")) {
+					output.debug(`  ${issue.autoFix?.originalPath} → ${issue.autoFix?.correctedPath}`);
+				}
+				// Update the task objective
+				updateTaskFields({ id: task.id, objective: validation.correctedObjective });
+				task.objective = validation.correctedObjective;
+			}
+
+			// Flag invalid tasks that can't be auto-fixed
+			if (!validation.valid) {
+				const errorIssues = validation.issues.filter((i) => i.severity === "error");
+				output.warning(`Task ${task.id} has validation errors:`);
+				for (const issue of errorIssues) {
+					output.warning(`  ${issue.message}`);
+					if (issue.suggestion) {
+						output.debug(`  → ${issue.suggestion}`);
+					}
+				}
+				invalidTasks.push(task.id);
+			}
+		}
+
+		// Remove invalid tasks from processing (they'll stay pending for manual fix)
+		if (invalidTasks.length > 0) {
+			output.warning(`Skipping ${invalidTasks.length} task(s) with validation errors`);
+			tasksToProcess = tasksToProcess.filter((t) => !invalidTasks.includes(t.id));
+		}
+
+		if (tasksToProcess.length === 0) {
+			output.info("No valid tasks to process after validation");
+			return;
+		}
+
 		if (options.decompose !== false) {
 			const { checkAndDecompose } = await import("../task-decomposer.js");
 
