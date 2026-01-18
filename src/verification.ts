@@ -111,13 +111,46 @@ export interface VerificationResult {
  *
  * Returns detailed feedback the agent can act on.
  */
+export interface VerifyWorkOptions {
+	runTypecheck?: boolean;
+	runTests?: boolean;
+	workingDirectory?: string;
+	baseCommit?: string;
+	profile?: boolean;
+	/** Skip optional checks (spell, security, code health) for trivial tasks */
+	skipOptionalChecks?: boolean;
+	/** Skip auto-format/lint-fix step */
+	skipAutoFix?: boolean;
+}
+
 export async function verifyWork(
-	runTypecheck: boolean = true,
+	runTypecheckOrOptions: boolean | VerifyWorkOptions = true,
 	runTests: boolean = true,
 	workingDirectory: string = process.cwd(),
 	baseCommit?: string,
 	profile: boolean = false,
 ): Promise<VerificationResult> {
+	// Support both positional args (legacy) and options object
+	let opts: VerifyWorkOptions;
+	if (typeof runTypecheckOrOptions === "object") {
+		opts = runTypecheckOrOptions;
+	} else {
+		opts = {
+			runTypecheck: runTypecheckOrOptions,
+			runTests,
+			workingDirectory,
+			baseCommit,
+			profile,
+		};
+	}
+
+	const runTypecheck = opts.runTypecheck ?? true;
+	const runTestsOpt = opts.runTests ?? true;
+	const cwd = opts.workingDirectory ?? process.cwd();
+	const baseCommitOpt = opts.baseCommit;
+	const profileOpt = opts.profile ?? false;
+	const skipOptionalChecks = opts.skipOptionalChecks ?? false;
+	const skipAutoFix = opts.skipAutoFix ?? false;
 	const issues: string[] = [];
 	const feedbackParts: string[] = [];
 	let typecheckPassed = true;
@@ -130,57 +163,63 @@ export async function verifyWork(
 	const totalStart = Date.now();
 
 	// Get commands from profile or use defaults
-	const commands = getVerificationCommands(workingDirectory);
+	const commands = getVerificationCommands(cwd);
 
 	// Auto-fix lint/format issues before verification (worktrees don't have pre-commit hooks)
 	// Use check:fix (not format:fix) to include import organization
 	let stepStart = Date.now();
-	try {
-		execSync("pnpm check:fix 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
-		feedbackParts.push("✓ Auto-fixed lint/format issues");
-	} catch {
-		// check:fix may not be available in all projects, continue
-	}
-	if (profile) timing.format = Date.now() - stepStart;
-
-	// Security scan (mirrors pre-commit hook)
-	stepStart = Date.now();
-	try {
-		execSync("bash ./scripts/security-scan.sh 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
-		feedbackParts.push("✓ Security scan passed");
-	} catch (error) {
-		const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
-		// Security issues are blocking
-		if (output.includes("secret") || output.includes("leak")) {
-			issues.push("Security scan failed - potential secrets detected");
-			feedbackParts.push("✗ SECURITY: Potential secrets detected in code. Remove before committing.");
+	if (!skipAutoFix) {
+		try {
+			execSync("pnpm check:fix 2>&1", { encoding: "utf-8", cwd, timeout: 30000 });
+			feedbackParts.push("✓ Auto-fixed lint/format issues");
+		} catch {
+			// check:fix may not be available in all projects, continue
 		}
-		// If script doesn't exist, continue (non-fatal)
 	}
-	if (profile) timing.security = Date.now() - stepStart;
+	if (profileOpt) timing.format = Date.now() - stepStart;
 
-	// Spell check
+	// Security scan (mirrors pre-commit hook) - skip for trivial tasks
 	stepStart = Date.now();
-	try {
-		// Only run spell check on typescript and markdown files
-		execSync(`${commands.spell} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 30000 });
-		feedbackParts.push("✓ Spell check passed");
-	} catch (error) {
-		// Spell errors are non-blocking - just log a warning
-		const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
-		const spellingErrors = output.split("\n").filter((line) => line.includes("spelling error"));
-		const errorCount = spellingErrors.length;
-		// Only mark as failed if there are actual spelling errors to fix
-		if (errorCount > 0) {
-			spellPassed = false;
-			logger.warn({ errorCount, errors: spellingErrors.slice(0, 5) }, "Spelling issues detected (non-blocking)");
-			feedbackParts.push(`⚠ Spelling issues (${errorCount}) - non-blocking`);
-		} else {
-			// Spell command failed but no actionable errors - treat as passed
+	if (!skipOptionalChecks) {
+		try {
+			execSync("bash ./scripts/security-scan.sh 2>&1", { encoding: "utf-8", cwd, timeout: 30000 });
+			feedbackParts.push("✓ Security scan passed");
+		} catch (error) {
+			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
+			// Security issues are blocking
+			if (output.includes("secret") || output.includes("leak")) {
+				issues.push("Security scan failed - potential secrets detected");
+				feedbackParts.push("✗ SECURITY: Potential secrets detected in code. Remove before committing.");
+			}
+			// If script doesn't exist, continue (non-fatal)
+		}
+	}
+	if (profileOpt) timing.security = Date.now() - stepStart;
+
+	// Spell check - skip for trivial tasks
+	stepStart = Date.now();
+	if (!skipOptionalChecks) {
+		try {
+			// Only run spell check on typescript and markdown files
+			execSync(`${commands.spell} 2>&1`, { encoding: "utf-8", cwd, timeout: 30000 });
 			feedbackParts.push("✓ Spell check passed");
+		} catch (error) {
+			// Spell errors are non-blocking - just log a warning
+			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
+			const spellingErrors = output.split("\n").filter((line) => line.includes("spelling error"));
+			const errorCount = spellingErrors.length;
+			// Only mark as failed if there are actual spelling errors to fix
+			if (errorCount > 0) {
+				spellPassed = false;
+				logger.warn({ errorCount, errors: spellingErrors.slice(0, 5) }, "Spelling issues detected (non-blocking)");
+				feedbackParts.push(`⚠ Spelling issues (${errorCount}) - non-blocking`);
+			} else {
+				// Spell command failed but no actionable errors - treat as passed
+				feedbackParts.push("✓ Spell check passed");
+			}
 		}
 	}
-	if (profile) timing.spell = Date.now() - stepStart;
+	if (profileOpt) timing.spell = Date.now() - stepStart;
 	let codeHealthPassed = true;
 	let filesChanged = 0;
 	let linesChanged = 0;
@@ -195,13 +234,13 @@ export async function verifyWork(
 		// First check uncommitted changes (modified files)
 		let diffStat = execSync("git diff --stat HEAD 2>/dev/null || git diff --stat", {
 			encoding: "utf-8",
-			cwd: workingDirectory,
+			cwd,
 		});
 
 		// Also check for untracked files (new files) - git diff misses these!
 		const statusOutput = execSync("git status --porcelain 2>/dev/null || true", {
 			encoding: "utf-8",
-			cwd: workingDirectory,
+			cwd,
 		});
 		untrackedFiles = statusOutput
 			.split("\n")
@@ -213,10 +252,10 @@ export async function verifyWork(
 		if (!diffStat.trim() && untrackedFiles.length === 0) {
 			try {
 				// Compare HEAD to baseCommit if provided, otherwise fall back to HEAD~1
-				const compareRef = baseCommit || "HEAD~1";
+				const compareRef = baseCommitOpt || "HEAD~1";
 				diffStat = execSync(`git diff --stat ${compareRef} HEAD 2>/dev/null || true`, {
 					encoding: "utf-8",
-					cwd: workingDirectory,
+					cwd,
 				});
 			} catch {
 				// Ignore errors (e.g., no parent commit or invalid base)
@@ -240,14 +279,14 @@ export async function verifyWork(
 		// Get list of changed files (modified + untracked)
 		const diffNames = execSync("git diff --name-only HEAD 2>/dev/null || git diff --name-only", {
 			encoding: "utf-8",
-			cwd: workingDirectory,
+			cwd,
 		});
 		changedFiles = [...diffNames.trim().split("\n").filter(Boolean), ...untrackedFiles];
 	} catch {
 		issues.push("No changes detected");
 		feedbackParts.push("ERROR: No file changes were made. The task may not have been completed.");
 	}
-	if (profile) timing.gitDiff = Date.now() - stepStart;
+	if (profileOpt) timing.gitDiff = Date.now() - stepStart;
 
 	// 2. Run typecheck, lint, and tests IN PARALLEL (they're independent)
 	// This significantly reduces verification time vs running sequentially
@@ -270,7 +309,7 @@ export async function verifyWork(
 		}
 
 		try {
-			execSync(`${commands.typecheck} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 60000 });
+			execSync(`${commands.typecheck} 2>&1`, { encoding: "utf-8", cwd, timeout: 60000 });
 			feedback.push("✓ Typecheck passed");
 		} catch (error) {
 			passed = false;
@@ -308,7 +347,7 @@ export async function verifyWork(
 		let passed = true;
 
 		try {
-			execSync(`${commands.lint} 2>&1`, { encoding: "utf-8", cwd: workingDirectory, timeout: 60000 });
+			execSync(`${commands.lint} 2>&1`, { encoding: "utf-8", cwd, timeout: 60000 });
 			feedback.push("✓ Lint passed");
 		} catch (error) {
 			passed = false;
@@ -339,7 +378,7 @@ export async function verifyWork(
 		const taskIssues: string[] = [];
 		let passed = true;
 
-		if (!runTests || !changedFiles.some((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))) {
+		if (!runTestsOpt || !changedFiles.some((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))) {
 			return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
 		}
 
@@ -348,7 +387,7 @@ export async function verifyWork(
 			// Set UNDERCITY_VERIFICATION to skip integration tests
 			execSync(`${commands.test} 2>&1`, {
 				encoding: "utf-8",
-				cwd: workingDirectory,
+				cwd,
 				timeout: 120000,
 				env: { ...process.env, UNDERCITY_VERIFICATION: "true" },
 			});
@@ -393,7 +432,7 @@ export async function verifyWork(
 	issues.push(...lintResult.issues);
 	issues.push(...testsResult.issues);
 
-	if (profile) {
+	if (profileOpt) {
 		timing.typecheck = typecheckResult.duration;
 		timing.lint = lintResult.duration;
 		timing.tests = testsResult.duration;
@@ -411,7 +450,7 @@ export async function verifyWork(
 	stepStart = Date.now();
 	let buildPassed = true;
 	try {
-		execSync("pnpm build 2>&1", { encoding: "utf-8", cwd: workingDirectory, timeout: 60000 });
+		execSync("pnpm build 2>&1", { encoding: "utf-8", cwd, timeout: 60000 });
 		feedbackParts.push("✓ Build passed");
 	} catch (error) {
 		buildPassed = false;
@@ -424,38 +463,40 @@ export async function verifyWork(
 			.slice(0, 3);
 		feedbackParts.push(`✗ BUILD FAILED:\n${errorLines.join("\n")}`);
 	}
-	if (profile) timing.build = Date.now() - stepStart;
+	if (profileOpt) timing.build = Date.now() - stepStart;
 
-	// 6. CodeScene code health (optional, nice to have)
+	// 6. CodeScene code health (optional, nice to have) - skip for trivial tasks
 	stepStart = Date.now();
-	try {
-		// Only check changed files to be fast
-		if (changedFiles.length > 0 && changedFiles.length <= 5) {
-			const tsFiles = changedFiles.filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
-			if (tsFiles.length > 0) {
-				const result = execSync(`${commands.qualityCheck} 2>&1 || true`, {
-					encoding: "utf-8",
-					cwd: workingDirectory,
-					timeout: 30000,
-				});
+	if (!skipOptionalChecks) {
+		try {
+			// Only check changed files to be fast
+			if (changedFiles.length > 0 && changedFiles.length <= 5) {
+				const tsFiles = changedFiles.filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
+				if (tsFiles.length > 0) {
+					const result = execSync(`${commands.qualityCheck} 2>&1 || true`, {
+						encoding: "utf-8",
+						cwd,
+						timeout: 30000,
+					});
 
-				// Check for code health issues
-				if (result.includes("Code Health:") && result.includes("problematic")) {
-					codeHealthPassed = false;
-					issues.push("Code health issues detected");
-					feedbackParts.push("⚠ CODE HEALTH: Consider simplifying complex functions");
-				} else {
-					feedbackParts.push("✓ Code health OK");
+					// Check for code health issues
+					if (result.includes("Code Health:") && result.includes("problematic")) {
+						codeHealthPassed = false;
+						issues.push("Code health issues detected");
+						feedbackParts.push("⚠ CODE HEALTH: Consider simplifying complex functions");
+					} else {
+						feedbackParts.push("✓ Code health OK");
+					}
 				}
 			}
+		} catch {
+			// CodeScene check is optional, don't fail on errors
 		}
-	} catch {
-		// CodeScene check is optional, don't fail on errors
 	}
-	if (profile) timing.codeHealth = Date.now() - stepStart;
+	if (profileOpt) timing.codeHealth = Date.now() - stepStart;
 
 	// Calculate total time
-	if (profile) {
+	if (profileOpt) {
 		timing.total = Date.now() - totalStart;
 		logger.info(
 			{

@@ -329,6 +329,13 @@ export interface SoloOptions {
 	 * Default: true
 	 */
 	enablePlanning?: boolean;
+	/**
+	 * Skip optional verification checks (spell, security, code health).
+	 * Use for trivial tasks to reduce overhead. Critical checks
+	 * (typecheck, tests, lint, build) still run.
+	 * Default: false
+	 */
+	skipOptionalVerification?: boolean;
 }
 
 /**
@@ -352,6 +359,7 @@ export class TaskWorker {
 	private annealingAtOpus: boolean;
 	private maxRetriesPerTier: number;
 	private maxOpusRetries: number;
+	private skipOptionalVerification: boolean;
 
 	private currentModel: ModelTier;
 	private attempts: number = 0;
@@ -457,6 +465,8 @@ export class TaskWorker {
 		this.maxOpusRetries = options.maxOpusRetries ?? 7;
 		// Enable planning by default - haiku plans, sonnet reviews
 		this.enablePlanning = options.enablePlanning ?? true;
+		// Skip optional verification for trivial tasks to reduce overhead
+		this.skipOptionalVerification = options.skipOptionalVerification ?? false;
 		this.currentModel = this.startingModel;
 		this.metricsTracker = new MetricsTracker();
 	}
@@ -794,7 +804,13 @@ export class TaskWorker {
 
 		if (fastResult.success) {
 			output.success(`Fast-path completed: ${fastResult.filesChanged?.join(", ")}`, { taskId });
-			const verification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory, baseCommit);
+			const verification = await verifyWork({
+				runTypecheck: this.runTypecheck,
+				runTests: this.runTests,
+				workingDirectory: this.workingDirectory,
+				baseCommit,
+				skipOptionalChecks: this.skipOptionalVerification,
+			});
 
 			if (verification.passed) {
 				if (this.autoCommit && fastResult.filesChanged?.length) {
@@ -913,7 +929,12 @@ export class TaskWorker {
 				// This prevents hallucinated "already complete" claims from being trusted
 				if (this.executionPlan.plan.alreadyComplete?.likely) {
 					output.info(`Planner claims task already complete, verifying: ${skipReason}`, { taskId });
-					const verification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory);
+					const verification = await verifyWork({
+						runTypecheck: this.runTypecheck,
+						runTests: this.runTests,
+						workingDirectory: this.workingDirectory,
+						skipOptionalChecks: this.skipOptionalVerification,
+					});
 					if (verification.passed) {
 						output.success(`Task verified as already complete: ${skipReason}`, { taskId });
 						return {
@@ -1181,7 +1202,13 @@ export class TaskWorker {
 		this.saveCheckpoint("verifying");
 		output.workerPhase(taskId, "verifying");
 		const verifyStart = Date.now();
-		const verification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory, baseCommit);
+		const verification = await verifyWork({
+			runTypecheck: this.runTypecheck,
+			runTests: this.runTests,
+			workingDirectory: this.workingDirectory,
+			baseCommit,
+			skipOptionalChecks: this.skipOptionalVerification,
+		});
 		phaseTimings.verification = Date.now() - verifyStart;
 
 		const errorCategories = categorizeErrors(verification);
@@ -1431,7 +1458,13 @@ export class TaskWorker {
 		}
 
 		if (reviewResult.issuesFound.length > 0) {
-			const finalVerification = await verifyWork(this.runTypecheck, this.runTests, this.workingDirectory, baseCommit);
+			const finalVerification = await verifyWork({
+				runTypecheck: this.runTypecheck,
+				runTests: this.runTests,
+				workingDirectory: this.workingDirectory,
+				baseCommit,
+				skipOptionalChecks: this.skipOptionalVerification,
+			});
 			if (!finalVerification.passed) {
 				output.warning("Final verification failed after reviews", { taskId });
 				this.lastFeedback = finalVerification.feedback;
