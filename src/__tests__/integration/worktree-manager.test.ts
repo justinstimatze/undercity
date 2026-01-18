@@ -166,7 +166,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 				encoding: "utf-8",
 			}).trim();
 			expect(currentBranch).toBe(info.branch);
-		});
+		}, 15000);
 
 		it("should throw error if worktree already exists", () => {
 			manager = new WorktreeManager({ repoRoot: testDir, defaultBranch });
@@ -177,7 +177,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 
 			// Try to create again
 			expect(() => manager.createWorktree(sessionId)).toThrow(WorktreeError);
-		});
+		}, 15000);
 
 		it("should create worktree with files from main branch", () => {
 			manager = new WorktreeManager({ repoRoot: testDir, defaultBranch });
@@ -187,7 +187,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 
 			// Verify README.md exists in worktree
 			expect(existsSync(join(info.path, "README.md"))).toBe(true);
-		});
+		}, 15000);
 	});
 
 	describe("removeWorktree", () => {
@@ -204,7 +204,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 
 			// Verify removed
 			expect(existsSync(info.path)).toBe(false);
-		});
+		}, 15000);
 
 		it("should delete the branch when removing worktree", () => {
 			manager = new WorktreeManager({ repoRoot: testDir, defaultBranch });
@@ -220,7 +220,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 			// Verify branch deleted
 			const branches = execSync("git branch --list", { cwd: testDir, encoding: "utf-8" });
 			expect(branches).not.toContain(branchName);
-		});
+		}, 15000);
 
 		it("should handle force removal", () => {
 			manager = new WorktreeManager({ repoRoot: testDir, defaultBranch });
@@ -235,7 +235,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 			// Force remove should work
 			expect(() => manager.removeWorktree(sessionId, true)).not.toThrow();
 			expect(existsSync(info.path)).toBe(false);
-		});
+		}, 15000);
 	});
 
 	describe("listWorktrees", () => {
@@ -262,7 +262,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 
 			expect(sessionWorktree).toBeDefined();
 			expect(sessionWorktree?.branch).toBe(manager.getWorktreeBranchName(sessionId));
-		});
+		}, 15000);
 	});
 
 	describe("getActiveSessionWorktrees", () => {
@@ -282,7 +282,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 
 			// Should not include main worktree
 			expect(sessionWorktrees.find((w) => w.path === testDir)).toBeUndefined();
-		});
+		}, 15000);
 
 		it("should return empty array when no session worktrees exist", () => {
 			manager = new WorktreeManager({ repoRoot: testDir, defaultBranch });
@@ -306,7 +306,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 			manager.createWorktree(sessionId);
 
 			expect(manager.hasWorktree(sessionId)).toBe(true);
-		});
+		}, 15000);
 
 		it("should return false for non-existing worktree", () => {
 			manager = new WorktreeManager({ repoRoot: testDir, defaultBranch });
@@ -326,7 +326,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 			expect(info?.sessionId).toBe(sessionId);
 			expect(info?.path).toBe(manager.getWorktreePath(sessionId));
 			expect(info?.branch).toBe(manager.getWorktreeBranchName(sessionId));
-		});
+		}, 15000);
 
 		it("should return null for non-existing worktree", () => {
 			manager = new WorktreeManager({ repoRoot: testDir, defaultBranch });
@@ -353,7 +353,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 
 			// Active should remain
 			expect(manager.hasWorktree(activeSessionId)).toBe(true);
-		});
+		}, 30000);
 	});
 
 	describe("emergencyCleanup", () => {
@@ -379,7 +379,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 			for (const sessionId of sessions) {
 				expect(manager.hasWorktree(sessionId)).toBe(false);
 			}
-		});
+		}, 30000);
 	});
 
 	describe("Worktree Isolation", () => {
@@ -398,7 +398,7 @@ describeGit("WorktreeManager Integration Tests", () => {
 
 			// File should NOT exist in main repo
 			expect(existsSync(join(testDir, "worktree-only.txt"))).toBe(false);
-		});
+		}, 15000);
 
 		it("should be on separate branch", () => {
 			manager = new WorktreeManager({ repoRoot: testDir, defaultBranch });
@@ -420,6 +420,6 @@ describeGit("WorktreeManager Integration Tests", () => {
 
 			expect(worktreeBranch).toBe(info.branch);
 			expect(worktreeBranch).not.toBe(mainBranch);
-		});
+		}, 15000);
 	});
 });

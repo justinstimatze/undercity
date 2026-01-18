@@ -635,6 +635,19 @@ export const analysisCommands: CommandModule = {
 					console.log(chalk.dim("Examples are used as few-shot demos to improve prompt performance."));
 				}
 			});
+
+		// Visualize command - generate HTML visualization of grind sessions
+		program
+			.command("visualize")
+			.description("Generate static HTML visualization of grind sessions")
+			.option("--list", "List available sessions")
+			.option("-s, --session <batch-id>", "Visualize specific session by batch ID")
+			.option("--open", "Open in browser after generating")
+			.option("-o, --output <path>", "Custom output file path")
+			.action(async (options) => {
+				const { handleVisualize } = await import("./visualize-handlers.js");
+				await handleVisualize(options);
+			});
 	},
 };
 
