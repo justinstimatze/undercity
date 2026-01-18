@@ -39,6 +39,7 @@ import {
 	clearPendingError,
 	formatFixSuggestionsForPrompt,
 	recordPendingError,
+	recordPermanentFailure,
 	recordSuccessfulFix,
 } from "./error-fix-patterns.js";
 import { createAndCheckout } from "./git.js";
@@ -406,6 +407,12 @@ export class TaskWorker {
 
 	/** Pending error signature (for tracking successful fixes) */
 	private pendingErrorSignature: string | null = null;
+
+	/** Last error category (for recordPermanentFailure) */
+	private lastErrorCategory: string | null = null;
+
+	/** Last error message (for recordPermanentFailure) */
+	private lastErrorMessage: string | null = null;
 
 	/** Files modified before current attempt (for tracking what fixed the error) */
 	private filesBeforeAttempt: string[] = [];
@@ -1517,6 +1524,9 @@ export class TaskWorker {
 		// Record error pattern for learning
 		const primaryCategory = errorCategories[0] || "unknown";
 		const errorMessage = verification.issues[0] || verification.feedback.slice(0, 200);
+		// Store for potential permanent failure recording
+		this.lastErrorCategory = primaryCategory;
+		this.lastErrorMessage = errorMessage;
 		try {
 			this.pendingErrorSignature = recordPendingError(
 				this.currentTaskId,
@@ -1705,14 +1715,34 @@ export class TaskWorker {
 			}
 		}
 
-		// Clear pending error
-		if (this.pendingErrorSignature) {
+		// Record permanent failure (instead of just clearing pending error)
+		if (this.pendingErrorSignature && this.lastErrorCategory && this.lastErrorMessage) {
 			try {
-				clearPendingError(this.currentTaskId);
+				recordPermanentFailure(
+					this.currentTaskId,
+					this.lastErrorCategory,
+					this.lastErrorMessage,
+					task,
+					this.currentModel,
+					this.attempts,
+					this.getModifiedFiles(),
+					this.stateDir,
+				);
+				output.debug("Recorded permanent failure for learning", {
+					taskId,
+					category: this.lastErrorCategory,
+				});
 			} catch {
-				// Non-critical
+				// Non-critical - fall back to just clearing
+				try {
+					clearPendingError(this.currentTaskId);
+				} catch {
+					// Ignore
+				}
 			}
 			this.pendingErrorSignature = null;
+			this.lastErrorCategory = null;
+			this.lastErrorMessage = null;
 		}
 
 		// Record failed task pattern
