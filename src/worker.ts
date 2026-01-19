@@ -42,6 +42,7 @@ import {
 	recordPendingError,
 	recordPermanentFailure,
 	recordSuccessfulFix,
+	tryAutoRemediate,
 } from "./error-fix-patterns.js";
 import { createAndCheckout } from "./git.js";
 import { logFastPathComplete, logFastPathFailed } from "./grind-events.js";
@@ -429,6 +430,9 @@ export class TaskWorker {
 	/** Files modified before current attempt (for tracking what fixed the error) */
 	private filesBeforeAttempt: string[] = [];
 
+	/** Whether auto-remediation was already attempted this task (prevent infinite loops) */
+	private autoRemediationAttempted: boolean = false;
+
 	/** State directory for decision tracking and other operational learning */
 	private stateDir: string = ".undercity";
 
@@ -757,6 +761,7 @@ export class TaskWorker {
 		this.currentHandoffContext = handoffContext;
 		this.currentAgentSessionId = undefined;
 		this.executionPlan = null;
+		this.autoRemediationAttempted = false;
 
 		this.saveCheckpoint("starting");
 		this.cleanupDirtyState();
@@ -1297,7 +1302,59 @@ export class TaskWorker {
 			);
 		}
 
-		// Verification failed
+		// Verification failed - try auto-remediation before escalating to AI
+		if (!this.autoRemediationAttempted) {
+			const primaryCategory = errorCategories[0] || "unknown";
+			const errorMessage = verification.issues.slice(0, 3).join("; ");
+
+			const remediation = tryAutoRemediate(
+				primaryCategory,
+				errorMessage,
+				this.workingDirectory,
+				this.stateDir,
+			);
+
+			this.autoRemediationAttempted = true;
+
+			if (remediation.applied) {
+				output.info(`Auto-remediation applied for ${primaryCategory}`, {
+					taskId,
+					patchedFiles: remediation.patchedFiles,
+				});
+
+				// Re-verify after auto-fix
+				const reVerification = await verifyWork({
+					runTypecheck: this.runTypecheck,
+					runTests: this.runTests,
+					workingDirectory: this.workingDirectory,
+					baseCommit,
+					skipOptionalChecks: this.skipOptionalVerification,
+				});
+
+				if (reVerification.passed) {
+					output.success(`Auto-remediation fixed ${primaryCategory} error`, { taskId });
+					return await this.handleVerificationSuccess(
+						task,
+						taskId,
+						baseCommit,
+						reVerification,
+						reviewLevel,
+						errorCategories,
+						attemptStart,
+						startTime,
+						phaseTimings,
+					);
+				}
+				output.debug(`Auto-remediation applied but verification still failed`, { taskId });
+			} else if (remediation.attempted) {
+				output.debug(`Auto-remediation patch failed to apply`, {
+					taskId,
+					error: remediation.error,
+				});
+			}
+		}
+
+		// Verification failed (and auto-remediation didn't help)
 		this.handleVerificationFailure(task, taskId, verification, errorCategories, attemptStart);
 		return null;
 	}
@@ -1353,11 +1410,14 @@ export class TaskWorker {
 				const currentFiles = this.getModifiedFiles();
 				const newFiles = currentFiles.filter((f) => !this.filesBeforeAttempt.includes(f));
 				const changedFiles = newFiles.length > 0 ? newFiles : currentFiles;
-				recordSuccessfulFix(
-					this.currentTaskId,
-					changedFiles,
-					`Fixed ${errorCategories.join(", ") || "verification"} error`,
-				);
+				recordSuccessfulFix({
+					taskId: this.currentTaskId,
+					filesChanged: changedFiles,
+					editSummary: `Fixed ${errorCategories.join(", ") || "verification"} error`,
+					workingDirectory: this.workingDirectory,
+					baseCommit,
+					stateDir: this.stateDir,
+				});
 				output.debug(`Recorded fix for error pattern`, { taskId, files: changedFiles.length });
 			} catch {
 				// Non-critical

@@ -75,6 +75,17 @@ vi.mock("node:fs", () => ({
 	}),
 }));
 
+// Mock child_process for git operations
+let mockExecResult: string | Error = "";
+vi.mock("node:child_process", () => ({
+	execFileSync: vi.fn((_cmd: string, _args: string[], _options?: Record<string, unknown>): string => {
+		if (mockExecResult instanceof Error) {
+			throw mockExecResult;
+		}
+		return mockExecResult;
+	}),
+}));
+
 // Import after mocking
 import {
 	clearPendingError,
@@ -89,6 +100,7 @@ import {
 	recordPendingError,
 	recordPermanentFailure,
 	recordSuccessfulFix,
+	tryAutoRemediate,
 } from "../error-fix-patterns.js";
 
 describe("error-fix-patterns.ts", () => {
@@ -96,6 +108,7 @@ describe("error-fix-patterns.ts", () => {
 		mockFiles.clear();
 		mockDirs.clear();
 		mockNow = 1704067200000;
+		mockExecResult = "";
 		vi.clearAllMocks();
 	});
 
@@ -1526,6 +1539,306 @@ describe("error-fix-patterns.ts", () => {
 
 			// Should not crash, should show 0% success rate
 			expect(formatted).toContain("0% fix success rate");
+		});
+	});
+
+	describe("tryAutoRemediate", () => {
+		// Test error message used throughout - generate signature once
+		const testErrorMessage = "Type error in file";
+		const testSignature = generateErrorSignature("typecheck", testErrorMessage);
+
+		it("should return attempted=false when no matching pattern exists", () => {
+			mockDirs.add(".undercity");
+
+			const result = tryAutoRemediate("typecheck", "Unknown error", "/some/dir");
+
+			expect(result.attempted).toBe(false);
+			expect(result.applied).toBe(false);
+		});
+
+		it("should return attempted=false when pattern has no patch data", () => {
+			mockDirs.add(".undercity");
+
+			// Record error and fix without patch data (no workingDirectory)
+			recordPendingError("task-1", "typecheck", "Error in file.ts", []);
+			recordSuccessfulFix("task-1", ["file.ts"], "Fixed the error");
+
+			const result = tryAutoRemediate("typecheck", "Error in file.ts", "/some/dir");
+
+			expect(result.attempted).toBe(false);
+			expect(result.applied).toBe(false);
+		});
+
+		it("should attempt remediation when pattern has patch data", () => {
+			mockDirs.add(".undercity");
+
+			// Create a store with patch data using actual generated signature
+			const store: ErrorFixStore = {
+				patterns: {
+					[testSignature]: {
+						signature: testSignature,
+						category: "typecheck",
+						sampleMessage: testErrorMessage,
+						fixes: [
+							{
+								filesChanged: ["src/file.ts"],
+								editSummary: "Fixed type error",
+								taskId: "task-1",
+								recordedAt: "2024-01-01T00:00:00.000Z",
+								patchData: "--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+new",
+							},
+						],
+						occurrences: 1,
+						fixSuccesses: 0,
+						firstSeen: "2024-01-01T00:00:00.000Z",
+						lastSeen: "2024-01-01T00:00:00.000Z",
+					},
+				},
+				pending: [],
+				failures: [],
+				version: "1.0",
+				lastUpdated: "2024-01-01T00:00:00.000Z",
+			};
+			mockFiles.set(".undercity/error-fix-patterns.json", JSON.stringify(store));
+
+			// Mock git apply to succeed
+			mockExecResult = "";
+
+			const result = tryAutoRemediate("typecheck", testErrorMessage, "/some/dir");
+
+			expect(result.attempted).toBe(true);
+			expect(result.applied).toBe(true);
+			expect(result.patchedFiles).toEqual(["src/file.ts"]);
+		});
+
+		it("should return applied=false when patch fails to apply", () => {
+			mockDirs.add(".undercity");
+
+			// Create a store with patch data using actual generated signature
+			const store: ErrorFixStore = {
+				patterns: {
+					[testSignature]: {
+						signature: testSignature,
+						category: "typecheck",
+						sampleMessage: testErrorMessage,
+						fixes: [
+							{
+								filesChanged: ["src/file.ts"],
+								editSummary: "Fixed type error",
+								taskId: "task-1",
+								recordedAt: "2024-01-01T00:00:00.000Z",
+								patchData: "--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+new",
+							},
+						],
+						occurrences: 1,
+						fixSuccesses: 0,
+						firstSeen: "2024-01-01T00:00:00.000Z",
+						lastSeen: "2024-01-01T00:00:00.000Z",
+					},
+				},
+				pending: [],
+				failures: [],
+				version: "1.0",
+				lastUpdated: "2024-01-01T00:00:00.000Z",
+			};
+			mockFiles.set(".undercity/error-fix-patterns.json", JSON.stringify(store));
+
+			// Mock git apply to fail
+			mockExecResult = new Error("patch does not apply");
+
+			const result = tryAutoRemediate("typecheck", testErrorMessage, "/some/dir");
+
+			expect(result.attempted).toBe(true);
+			expect(result.applied).toBe(false);
+			expect(result.error).toContain("patch does not apply");
+		});
+
+		it("should skip remediation when success rate is too low", () => {
+			mockDirs.add(".undercity");
+
+			// Create a store with low success rate patch using actual generated signature
+			const store: ErrorFixStore = {
+				patterns: {
+					[testSignature]: {
+						signature: testSignature,
+						category: "typecheck",
+						sampleMessage: testErrorMessage,
+						fixes: [
+							{
+								filesChanged: ["src/file.ts"],
+								editSummary: "Fixed type error",
+								taskId: "task-1",
+								recordedAt: "2024-01-01T00:00:00.000Z",
+								patchData: "--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+new",
+								autoApplyCount: 5,
+								autoApplySuccessRate: 0.1, // Only 10% success rate
+							},
+						],
+						occurrences: 1,
+						fixSuccesses: 0,
+						firstSeen: "2024-01-01T00:00:00.000Z",
+						lastSeen: "2024-01-01T00:00:00.000Z",
+					},
+				},
+				pending: [],
+				failures: [],
+				version: "1.0",
+				lastUpdated: "2024-01-01T00:00:00.000Z",
+			};
+			mockFiles.set(".undercity/error-fix-patterns.json", JSON.stringify(store));
+
+			const result = tryAutoRemediate("typecheck", testErrorMessage, "/some/dir");
+
+			expect(result.attempted).toBe(false);
+			expect(result.applied).toBe(false);
+			expect(result.signature).toBe(testSignature);
+		});
+
+		it("should update success rate after successful application", () => {
+			mockDirs.add(".undercity");
+
+			// Create a store with patch data using actual generated signature
+			const store: ErrorFixStore = {
+				patterns: {
+					[testSignature]: {
+						signature: testSignature,
+						category: "typecheck",
+						sampleMessage: testErrorMessage,
+						fixes: [
+							{
+								filesChanged: ["src/file.ts"],
+								editSummary: "Fixed type error",
+								taskId: "task-1",
+								recordedAt: "2024-01-01T00:00:00.000Z",
+								patchData: "--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+new",
+								autoApplyCount: 2,
+								autoApplySuccessRate: 0.5,
+							},
+						],
+						occurrences: 1,
+						fixSuccesses: 0,
+						firstSeen: "2024-01-01T00:00:00.000Z",
+						lastSeen: "2024-01-01T00:00:00.000Z",
+					},
+				},
+				pending: [],
+				failures: [],
+				version: "1.0",
+				lastUpdated: "2024-01-01T00:00:00.000Z",
+			};
+			mockFiles.set(".undercity/error-fix-patterns.json", JSON.stringify(store));
+
+			// Mock git apply to succeed
+			mockExecResult = "";
+
+			tryAutoRemediate("typecheck", testErrorMessage, "/some/dir");
+
+			// Verify stats were updated
+			const updatedStore = loadErrorFixStore();
+			const pattern = updatedStore.patterns[testSignature];
+			expect(pattern.fixes[0].autoApplyCount).toBe(3);
+			// Success rate should increase: 0.5 * 0.7 + 0.3 = 0.65
+			expect(pattern.fixes[0].autoApplySuccessRate).toBeCloseTo(0.65, 2);
+		});
+
+		it("should update success rate after failed application", () => {
+			mockDirs.add(".undercity");
+
+			// Create a store with patch data using actual generated signature
+			const store: ErrorFixStore = {
+				patterns: {
+					[testSignature]: {
+						signature: testSignature,
+						category: "typecheck",
+						sampleMessage: testErrorMessage,
+						fixes: [
+							{
+								filesChanged: ["src/file.ts"],
+								editSummary: "Fixed type error",
+								taskId: "task-1",
+								recordedAt: "2024-01-01T00:00:00.000Z",
+								patchData: "--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+new",
+								autoApplyCount: 2,
+								autoApplySuccessRate: 0.5,
+							},
+						],
+						occurrences: 1,
+						fixSuccesses: 0,
+						firstSeen: "2024-01-01T00:00:00.000Z",
+						lastSeen: "2024-01-01T00:00:00.000Z",
+					},
+				},
+				pending: [],
+				failures: [],
+				version: "1.0",
+				lastUpdated: "2024-01-01T00:00:00.000Z",
+			};
+			mockFiles.set(".undercity/error-fix-patterns.json", JSON.stringify(store));
+
+			// Mock git apply to fail
+			mockExecResult = new Error("patch does not apply");
+
+			tryAutoRemediate("typecheck", testErrorMessage, "/some/dir");
+
+			// Verify stats were updated
+			const updatedStore = loadErrorFixStore();
+			const pattern = updatedStore.patterns[testSignature];
+			expect(pattern.fixes[0].autoApplyCount).toBe(3);
+			// Success rate should decrease: 0.5 * 0.7 = 0.35
+			expect(pattern.fixes[0].autoApplySuccessRate).toBeCloseTo(0.35, 2);
+		});
+
+		it("should prefer higher success rate fixes", () => {
+			mockDirs.add(".undercity");
+
+			// Create a store with multiple fixes using actual generated signature
+			const store: ErrorFixStore = {
+				patterns: {
+					[testSignature]: {
+						signature: testSignature,
+						category: "typecheck",
+						sampleMessage: testErrorMessage,
+						fixes: [
+							{
+								filesChanged: ["src/old-fix.ts"],
+								editSummary: "Old fix",
+								taskId: "task-1",
+								recordedAt: "2024-01-01T00:00:00.000Z",
+								patchData: "--- a/old\n+++ b/old\n@@ -1 +1 @@\n-x\n+y",
+								autoApplyCount: 5,
+								autoApplySuccessRate: 0.4,
+							},
+							{
+								filesChanged: ["src/better-fix.ts"],
+								editSummary: "Better fix",
+								taskId: "task-2",
+								recordedAt: "2024-01-02T00:00:00.000Z",
+								patchData: "--- a/better\n+++ b/better\n@@ -1 +1 @@\n-a\n+b",
+								autoApplyCount: 3,
+								autoApplySuccessRate: 0.8,
+							},
+						],
+						occurrences: 2,
+						fixSuccesses: 0,
+						firstSeen: "2024-01-01T00:00:00.000Z",
+						lastSeen: "2024-01-02T00:00:00.000Z",
+					},
+				},
+				pending: [],
+				failures: [],
+				version: "1.0",
+				lastUpdated: "2024-01-02T00:00:00.000Z",
+			};
+			mockFiles.set(".undercity/error-fix-patterns.json", JSON.stringify(store));
+
+			// Mock git apply to succeed
+			mockExecResult = "";
+
+			const result = tryAutoRemediate("typecheck", testErrorMessage, "/some/dir");
+
+			// Should use the better fix (higher success rate)
+			expect(result.applied).toBe(true);
+			expect(result.patchedFiles).toEqual(["src/better-fix.ts"]);
 		});
 	});
 });

@@ -7,6 +7,7 @@
  * Storage: .undercity/error-fix-patterns.json
  */
 
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -27,6 +28,12 @@ export interface ErrorFix {
 	taskId: string;
 	/** When this fix was recorded */
 	recordedAt: string;
+	/** Git-style unified diff that can be applied with git apply (for auto-remediation) */
+	patchData?: string;
+	/** Success rate when this fix was auto-applied (0-1) */
+	autoApplySuccessRate?: number;
+	/** Number of times this fix was auto-applied */
+	autoApplyCount?: number;
 }
 
 /**
@@ -254,19 +261,74 @@ export function recordPendingError(
 }
 
 /**
+ * Options for recording a successful fix
+ */
+export interface RecordSuccessfulFixOptions {
+	taskId: string;
+	filesChanged: string[];
+	editSummary: string;
+	/** Working directory to capture git diff from (enables auto-remediation) */
+	workingDirectory?: string;
+	/** Base commit to diff against (defaults to HEAD~1) */
+	baseCommit?: string;
+	stateDir?: string;
+}
+
+/**
+ * Capture git diff for changed files (for auto-remediation)
+ */
+function captureGitDiff(files: string[], workingDirectory: string, baseCommit?: string): string | undefined {
+	if (files.length === 0) return undefined;
+
+	try {
+		// Get diff for specific files
+		const base = baseCommit || "HEAD~1";
+		const args = ["diff", base, "HEAD", "--", ...files];
+		const diff = execFileSync("git", args, {
+			encoding: "utf-8",
+			cwd: workingDirectory,
+			timeout: 10000,
+		});
+
+		// Limit diff size to prevent bloated storage (max 10KB)
+		if (diff.length > 10240) {
+			return undefined; // Too large to store
+		}
+
+		return diff.trim() || undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
  * Record a successful fix for a pending error
  * Call this when verification passes after a previous failure
  */
 export function recordSuccessfulFix(
-	taskId: string,
-	filesChanged: string[],
-	editSummary: string,
+	taskIdOrOptions: string | RecordSuccessfulFixOptions,
+	filesChanged?: string[],
+	editSummary?: string,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): void {
-	const store = loadErrorFixStore(stateDir);
+	// Support both positional args (legacy) and options object
+	let opts: RecordSuccessfulFixOptions;
+	if (typeof taskIdOrOptions === "object") {
+		opts = taskIdOrOptions;
+	} else {
+		opts = {
+			taskId: taskIdOrOptions,
+			filesChanged: filesChanged!,
+			editSummary: editSummary!,
+			stateDir,
+		};
+	}
+
+	const actualStateDir = opts.stateDir ?? DEFAULT_STATE_DIR;
+	const store = loadErrorFixStore(actualStateDir);
 
 	// Find pending error for this task
-	const pendingIndex = store.pending.findIndex((p) => p.taskId === taskId);
+	const pendingIndex = store.pending.findIndex((p) => p.taskId === opts.taskId);
 	if (pendingIndex === -1) {
 		return; // No pending error to resolve
 	}
@@ -276,15 +338,22 @@ export function recordSuccessfulFix(
 
 	if (pattern) {
 		// Determine which files were actually changed to fix the error
-		const newFiles = filesChanged.filter((f) => !pending.filesBeforeFix.includes(f));
-		const relevantFiles = newFiles.length > 0 ? newFiles : filesChanged.slice(0, 5);
+		const newFiles = opts.filesChanged.filter((f) => !pending.filesBeforeFix.includes(f));
+		const relevantFiles = newFiles.length > 0 ? newFiles : opts.filesChanged.slice(0, 5);
+
+		// Capture git diff if working directory provided (enables auto-remediation)
+		let patchData: string | undefined;
+		if (opts.workingDirectory && relevantFiles.length > 0) {
+			patchData = captureGitDiff(relevantFiles, opts.workingDirectory, opts.baseCommit);
+		}
 
 		// Add the fix
 		pattern.fixes.push({
 			filesChanged: relevantFiles,
-			editSummary: editSummary.slice(0, 200),
-			taskId,
+			editSummary: opts.editSummary.slice(0, 200),
+			taskId: opts.taskId,
 			recordedAt: new Date().toISOString(),
+			patchData,
 		});
 
 		// Keep only the most recent/successful fixes (max 5)
@@ -296,7 +365,7 @@ export function recordSuccessfulFix(
 	// Remove from pending
 	store.pending.splice(pendingIndex, 1);
 
-	saveErrorFixStore(store, stateDir);
+	saveErrorFixStore(store, actualStateDir);
 }
 
 /**
@@ -438,6 +507,142 @@ export function findFixSuggestions(
 	const suggestions = [...pattern.fixes].reverse();
 
 	return { pattern, suggestions };
+}
+
+/**
+ * Result of attempting auto-remediation
+ */
+export interface AutoRemediationResult {
+	/** Whether remediation was attempted (had matching pattern with patch) */
+	attempted: boolean;
+	/** Whether the patch was successfully applied */
+	applied: boolean;
+	/** Error signature that was matched */
+	signature?: string;
+	/** Files that were patched */
+	patchedFiles?: string[];
+	/** Error message if application failed */
+	error?: string;
+}
+
+/**
+ * Try to auto-remediate an error using learned fix patterns
+ *
+ * Looks up the error signature, finds fixes with patch data,
+ * and attempts to apply the patch. Only patches with good
+ * track records (high autoApplySuccessRate) are attempted.
+ *
+ * @param category - Error category (typecheck, lint, test, build)
+ * @param message - Error message
+ * @param workingDirectory - Directory to apply patches in
+ * @param stateDir - State directory for error-fix patterns
+ * @returns Result indicating whether remediation was attempted/successful
+ */
+export function tryAutoRemediate(
+	category: string,
+	message: string,
+	workingDirectory: string,
+	stateDir: string = DEFAULT_STATE_DIR,
+): AutoRemediationResult {
+	const store = loadErrorFixStore(stateDir);
+	const signature = generateErrorSignature(category, message);
+	const pattern = store.patterns[signature];
+
+	// No pattern or no fixes
+	if (!pattern || pattern.fixes.length === 0) {
+		return { attempted: false, applied: false };
+	}
+
+	// Find fixes with patch data, sorted by success rate then recency
+	const fixesWithPatches = pattern.fixes
+		.filter((f) => f.patchData)
+		.sort((a, b) => {
+			// Prefer higher success rate
+			const rateA = a.autoApplySuccessRate ?? 0.5;
+			const rateB = b.autoApplySuccessRate ?? 0.5;
+			if (rateB !== rateA) return rateB - rateA;
+			// Then prefer more recent
+			return new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime();
+		});
+
+	if (fixesWithPatches.length === 0) {
+		return { attempted: false, applied: false };
+	}
+
+	// Only attempt if success rate is reasonable (> 30%) or never tried
+	const bestFix = fixesWithPatches[0];
+	const successRate = bestFix.autoApplySuccessRate ?? 0.5;
+	if (bestFix.autoApplyCount && bestFix.autoApplyCount > 2 && successRate < 0.3) {
+		// This patch has failed too often, skip auto-remediation
+		return { attempted: false, applied: false, signature };
+	}
+
+	// Attempt to apply the patch
+	try {
+		// First, check if the patch would apply cleanly
+		execFileSync("git", ["apply", "--check", "-"], {
+			input: bestFix.patchData,
+			cwd: workingDirectory,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+
+		// Patch would apply cleanly, so apply it for real
+		execFileSync("git", ["apply", "-"], {
+			input: bestFix.patchData,
+			cwd: workingDirectory,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+
+		// Update success tracking
+		updateAutoApplyStats(signature, true, stateDir);
+
+		return {
+			attempted: true,
+			applied: true,
+			signature,
+			patchedFiles: bestFix.filesChanged,
+		};
+	} catch (error) {
+		// Patch failed to apply (code has diverged)
+		updateAutoApplyStats(signature, false, stateDir);
+
+		return {
+			attempted: true,
+			applied: false,
+			signature,
+			error: error instanceof Error ? error.message : String(error),
+		};
+	}
+}
+
+/**
+ * Update auto-apply statistics for a pattern
+ */
+function updateAutoApplyStats(signature: string, success: boolean, stateDir: string = DEFAULT_STATE_DIR): void {
+	try {
+		const store = loadErrorFixStore(stateDir);
+		const pattern = store.patterns[signature];
+
+		if (!pattern || pattern.fixes.length === 0) return;
+
+		// Update the most recent fix with patch data
+		const fixWithPatch = pattern.fixes.find((f) => f.patchData);
+		if (fixWithPatch) {
+			const count = (fixWithPatch.autoApplyCount ?? 0) + 1;
+			const currentRate = fixWithPatch.autoApplySuccessRate ?? 0.5;
+			// Exponential moving average for success rate
+			const newRate = success ? currentRate * 0.7 + 0.3 : currentRate * 0.7;
+
+			fixWithPatch.autoApplyCount = count;
+			fixWithPatch.autoApplySuccessRate = newRate;
+
+			saveErrorFixStore(store, stateDir);
+		}
+	} catch {
+		// Silent failure - stats update is non-critical
+	}
 }
 
 /**
