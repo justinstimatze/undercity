@@ -70,9 +70,10 @@ export const mixedCommands: CommandModule = {
 			.action((options: GrindOptions) => handleGrind(options));
 
 		// Limits command - quick snapshot of usage (use 'watch' for live monitoring)
+		// NOTE: Consider using 'status' for session overview or 'watch' for live monitoring
 		program
 			.command("limits")
-			.description("Show current usage snapshot (use 'watch' for live dashboard)")
+			.description("[Deprecated: use 'status'] Show current usage snapshot")
 			.action(() => handleLimits());
 
 		// Usage command - fetch Claude Max usage from claude.ai
@@ -87,9 +88,10 @@ export const mixedCommands: CommandModule = {
 			});
 
 		// Pulse command - quick state check
+		// NOTE: Consider using 'status' for session overview
 		program
 			.command("pulse")
-			.description("Quick state check: active workers, queue, health, attention items (JSON default)")
+			.description("[Deprecated: use 'status'] Quick state check with workers and queue")
 			.option("-w, --watch", "Live updating (like htop)")
 			.action((options: PulseOptions, cmd) => {
 				// Inherit --human from parent program if set
@@ -98,9 +100,10 @@ export const mixedCommands: CommandModule = {
 			});
 
 		// Brief command - narrative summary
+		// NOTE: Consider using 'status --events' for recent activity
 		program
 			.command("brief")
-			.description("Narrative summary: accomplishments, failures, blockers, recommendations (JSON default)")
+			.description("[Deprecated: use 'status'] Narrative summary of recent activity")
 			.option("--hours <n>", "Time window in hours (default: 24)", "24")
 			.action((options: BriefOptions, cmd) => {
 				const parentOpts = cmd.parent?.opts() || {};
@@ -211,9 +214,10 @@ export const mixedCommands: CommandModule = {
 			.action((options: IndexOptions) => handleIndex(options));
 
 		// Introspect command - analyze own metrics and performance
+		// NOTE: Consider using 'metrics' for overview, 'insights' for recommendations
 		program
 			.command("introspect")
-			.description("Analyze own metrics: success rates, routing accuracy, escalation patterns")
+			.description("[See also: metrics, insights] Self-analysis with success rates and routing")
 			.option("-j, --json", "Output raw JSON for agent consumption")
 			.option("-n, --limit <n>", "Only analyze last N task records")
 			.option("--since <date>", "Only analyze records since date (YYYY-MM-DD)")

@@ -90,28 +90,36 @@ undercity plans my-plan.md --unlink "task-123"
 undercity plans my-plan.md --complete
 ```
 
-**Secondary commands** (debugging, inspection):
+**Monitoring** (choose ONE based on need):
 ```bash
-# Monitoring
-undercity status                           # Current state (JSON)
-undercity watch                            # Live TUI dashboard
-undercity usage                            # Claude Max usage from claude.ai
-undercity usage --login                    # One-time browser auth setup
+# Quick checks (pick one)
+undercity status                           # Session summary: running/complete/failed counts
+undercity usage                            # Claude Max usage from claude.ai (external API)
 
-# Learning & intelligence
+# Live monitoring
+undercity watch                            # TUI dashboard (htop-style, real-time)
+
+# First-time setup
+undercity usage --login                    # One-time browser auth for usage tracking
+```
+
+**Learning & Intelligence**:
+```bash
 undercity knowledge "query"                # Search accumulated learnings
+undercity patterns                         # View all learning patterns (files, errors, decisions)
 undercity decide                           # View/resolve pending decisions
-undercity patterns                         # Task→file correlations
-undercity tuning                           # View learned routing profile
-undercity introspect                       # Analyze own metrics
+```
 
-# Analysis
-undercity metrics                          # Performance metrics
-undercity insights                         # Routing recommendations
-undercity semantic-check                   # Semantic density analysis
+**Analysis** (run periodically, not during grind):
+```bash
+undercity metrics                          # Performance overview
+undercity introspect                       # Self-analysis: success rates, routing, escalation
+undercity insights                         # Routing recommendations from historical data
+```
 
-# Task board management
-undercity reconcile                        # Mark done tasks as complete
+**Task board management**:
+```bash
+undercity reconcile                        # Mark done tasks as complete (syncs with git)
 undercity triage                           # Analyze board for issues
 undercity prune                            # Remove stale/duplicate tasks
 ```
@@ -130,6 +138,34 @@ pnpm daemon:start                          # Start HTTP daemon
 pnpm daemon:status                         # Check status
 pnpm daemon:logs                           # View logs
 ```
+
+## Command Decision Tree
+
+**"Is grind running?"** → `undercity status` or `undercity watch`
+**"How much usage left?"** → `undercity usage`
+**"What went wrong?"** → `undercity status --events`
+**"Why did task X fail?"** → `undercity knowledge "task X error"`
+**"What should I work on?"** → `undercity pm --propose`
+**"Is my code healthy?"** → `undercity metrics` then `undercity introspect`
+
+## Learning Systems Integration
+
+Undercity has 5 learning systems that compound knowledge across tasks:
+
+| System | Stored In | When Updated | When Used |
+|--------|-----------|--------------|-----------|
+| **Knowledge Base** | `knowledge.json` | After task completion | Planning, PM decisions, worker context |
+| **Task→File Patterns** | `task-file-patterns.json` | After task completion | File predictions, conflict detection |
+| **Error→Fix Patterns** | `error-fix-patterns.json` | After verification failures | Auto-remediation hints |
+| **Decision Patterns** | `decisions.json` | During planning/execution | PM decision resolution |
+| **Capability Ledger** | `routing-profile.json` | After task completion | Model routing recommendations |
+
+**How they connect:**
+1. Worker completes task → Records knowledge + patterns + ledger updates
+2. New task starts → Injects relevant knowledge + file predictions into context
+3. Planning phase → PM uses knowledge + decisions to resolve questions
+4. Verification fails → Checks error-fix patterns for known solutions
+5. Model routing → Uses ledger to pick optimal model for task type
 
 **MCP Knowledge Tools** (JSON-RPC 2.0 via `POST /mcp`):
 ```bash
