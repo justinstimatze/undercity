@@ -250,6 +250,97 @@ export interface ExtractedLearning {
 }
 
 /**
+ * Configuration for parallel transcript processing
+ */
+export interface ParallelExtractionConfig {
+	/** Enable parallel processing (default: false) */
+	enabled: boolean;
+	/** Character size for each chunk (default: 5000) */
+	chunkSize: number;
+	/** Max concurrent LM requests (default: 3) */
+	maxConcurrentRequests: number;
+	/** Fallback to sequential if transcript < this length (default: 15000) */
+	fallbackThreshold: number;
+}
+
+/**
+ * Split transcript into chunks on sentence boundaries to avoid breaking mid-phrase
+ */
+function splitTranscriptIntoChunks(text: string, chunkSize: number = 5000): string[] {
+	if (text.length <= chunkSize) {
+		return [text];
+	}
+
+	const chunks: string[] = [];
+	let remaining = text;
+
+	while (remaining.length > 0) {
+		if (remaining.length <= chunkSize) {
+			chunks.push(remaining);
+			break;
+		}
+
+		// Find the last sentence boundary within the chunk
+		const chunk = remaining.slice(0, chunkSize);
+		const lastPeriod = Math.max(
+			chunk.lastIndexOf(". "),
+			chunk.lastIndexOf(".\n"),
+			chunk.lastIndexOf("?"),
+			chunk.lastIndexOf("!"),
+		);
+
+		if (lastPeriod > chunkSize * 0.7) {
+			// Good boundary found, split there
+			chunks.push(remaining.slice(0, lastPeriod + 1));
+			remaining = remaining.slice(lastPeriod + 1).trim();
+		} else {
+			// No good boundary, split at char boundary
+			chunks.push(chunk);
+			remaining = remaining.slice(chunkSize).trim();
+		}
+	}
+
+	return chunks.filter((chunk) => chunk.length > 0);
+}
+
+/**
+ * Limit concurrent promises using a simple queue mechanism
+ */
+async function pLimit<T>(concurrency: number, tasks: (() => Promise<T>)[]): Promise<T[]> {
+	const results: T[] = [];
+	let running = 0;
+	let index = 0;
+
+	return new Promise((resolve, reject) => {
+		const next = async () => {
+			if (index >= tasks.length && running === 0) {
+				resolve(results);
+				return;
+			}
+
+			while (running < concurrency && index < tasks.length) {
+				running++;
+				const currentIndex = index;
+				index++;
+
+				try {
+					const result = await tasks[currentIndex]();
+					results[currentIndex] = result;
+				} catch (error) {
+					reject(error);
+					return;
+				}
+
+				running--;
+				next();
+			}
+		};
+
+		next();
+	});
+}
+
+/**
  * Extract learnings from agent conversation text
  */
 export function extractLearnings(text: string): ExtractedLearning[] {
