@@ -188,8 +188,8 @@ export const AtomicitySignature = AxSignature.create(
 	`task:string "The coding task to assess" ->
 	reasoning:string "Step-by-step analysis of the task",
 	isAtomic:boolean "Can this be completed in a single focused session?",
-	confidence:number "Confidence in assessment (0-1)",
-	estimatedFiles:number "Estimated number of files to modify",
+	confidence:number "DECIMAL NUMBER ONLY between 0.0 and 1.0, e.g. 0.85",
+	estimatedFiles:number "Integer count of files to modify, e.g. 3",
 	recommendedModel:string "haiku, sonnet, or opus"`,
 );
 
@@ -232,7 +232,7 @@ export const ComplexitySignature = AxSignature.create(
 	reasoning:string "Step-by-step analysis of task complexity",
 	level:string "trivial, simple, standard, complex, or critical",
 	scope:string "single-file, few-files, many-files, or cross-package",
-	confidence:number "Confidence in assessment (0-1)"`,
+	confidence:number "DECIMAL NUMBER ONLY between 0.0 and 1.0, e.g. 0.75"`,
 );
 
 /**
@@ -247,7 +247,7 @@ export const ReviewTriageSignature = AxSignature.create(
 	riskLevel:string "low, medium, high, or critical",
 	focusAreas:string[] "Specific areas to focus review on",
 	suggestedTier:string "haiku, sonnet, or opus - starting review tier",
-	confidence:number "Confidence in assessment (0-1)"`,
+	confidence:number "DECIMAL NUMBER ONLY between 0.0 and 1.0, e.g. 0.80"`,
 );
 
 /**

@@ -704,7 +704,10 @@ async function reviewExecutionPlan(
 	plan: ExecutionPlan,
 	model: ModelTier,
 	cwd: string,
+	retryCount = 0,
 ): Promise<PlanReview> {
+	const MAX_RETRIES = 1; // Retry once on empty response
+
 	// Pre-validate plan before sending to reviewer
 	const validation = preValidatePlan(plan, cwd);
 
@@ -744,9 +747,11 @@ REVIEW CRITERIA:
 
 If the plan has major issues, set approved=false and provide a revisedPlan.
 If the task should be skipped entirely, set skipExecution.skip=true with reason.
-Verify file existence by checking the filesystem.`;
+Verify file existence by checking the filesystem.
 
-	logger.debug({ task: task.substring(0, 50), model }, "Reviewing execution plan");
+IMPORTANT: You MUST output a JSON response. Do not output an empty response.`;
+
+	logger.debug({ task: task.substring(0, 50), model, retryCount }, "Reviewing execution plan");
 
 	let reviewJson = "";
 
@@ -763,6 +768,22 @@ Verify file existence by checking the filesystem.`;
 		if (message.type === "result" && message.subtype === "success") {
 			reviewJson = message.result;
 		}
+	}
+
+	// Check for empty response and retry if we haven't exceeded retries
+	if (!reviewJson || reviewJson.trim() === "") {
+		if (retryCount < MAX_RETRIES) {
+			logger.warn({ model, retryCount }, "Empty review response, retrying...");
+			// Small delay before retry
+			await new Promise((resolve) => setTimeout(resolve, 1000));
+			return reviewExecutionPlan(task, plan, model, cwd, retryCount + 1);
+		}
+		logger.warn({ model, retryCount }, "Empty review response after retries, rejecting plan");
+		return {
+			approved: false,
+			issues: ["Review returned empty response after retries - rejecting for safety"],
+			suggestions: [],
+		};
 	}
 
 	// Extract JSON from response
