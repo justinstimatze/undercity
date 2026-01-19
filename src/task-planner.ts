@@ -856,7 +856,11 @@ IMPORTANT: You MUST output a JSON response. Do not output an empty response.`;
 
 	// Try to extract rejection signals from text as last resort
 	const lowerResponse = reviewJson.toLowerCase();
-	if (lowerResponse.includes("reject") || lowerResponse.includes("not approved") || lowerResponse.includes("cannot approve")) {
+	if (
+		lowerResponse.includes("reject") ||
+		lowerResponse.includes("not approved") ||
+		lowerResponse.includes("cannot approve")
+	) {
 		logger.info("Detected rejection signal in unparseable response, treating as rejection");
 		return {
 			approved: false,

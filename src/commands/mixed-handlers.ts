@@ -899,7 +899,9 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 	// Prevent concurrent grind execution
 	const lockResult = acquireGrindLock();
 	if (!lockResult.acquired) {
-		output.error(`Another grind process is already running (PID ${lockResult.existingPid}, started ${lockResult.startedAt})`);
+		output.error(
+			`Another grind process is already running (PID ${lockResult.existingPid}, started ${lockResult.startedAt})`,
+		);
 		output.info("Use 'pkill -f undercity' to kill existing processes, or wait for completion");
 		process.exit(1);
 	}
@@ -916,6 +918,14 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		process.exit(143);
 	});
 
+	// Clean up stale workers from killed processes (>30min without checkpoint)
+	const persistence = new Persistence();
+	const staleCleanup = persistence.cleanupStaleWorkers();
+	if (staleCleanup.cleaned > 0) {
+		output.warning(`Cleaned up ${staleCleanup.cleaned} stale worker(s) from previous runs`);
+		output.debug(`Stale task IDs: ${staleCleanup.taskIds.join(", ")}`);
+	}
+
 	const { Orchestrator } = await import("../orchestrator.js");
 	const { startGrindProgress, updateGrindProgress, clearGrindProgress } = await import("../live-metrics.js");
 
@@ -931,9 +941,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		: undefined;
 
 	// Decomposition depth limit (default: 1, meaning subtasks cannot be decomposed further)
-	const maxDecompositionDepth = options.maxDecompositionDepth
-		? Number.parseInt(options.maxDecompositionDepth, 10)
-		: 1;
+	const maxDecompositionDepth = options.maxDecompositionDepth ? Number.parseInt(options.maxDecompositionDepth, 10) : 1;
 
 	const orchestrator = new Orchestrator({
 		maxConcurrent: parallelism,
@@ -1229,14 +1237,28 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			return;
 		}
 
-		// Pre-flight clarity check: warn about vague tasks
+		// Pre-flight clarity check: block fundamentally vague tasks, warn about others
 		output.progress("Assessing task clarity...");
 		const vagueTasks: string[] = [];
+		const blockedTasks: string[] = [];
 
 		for (const task of tasksToProcess) {
 			const clarity = assessTaskClarity(task.objective);
 
-			if (clarity.clarity === "vague") {
+			// Block fundamentally vague tasks immediately
+			if (clarity.tooVague) {
+				output.warning(`Task ${task.id} is too vague to proceed:`);
+				for (const issue of clarity.issues) {
+					output.warning(`  - ${issue}`);
+				}
+				output.info("Suggestions to fix:");
+				for (const suggestion of clarity.suggestions) {
+					output.info(`  → ${suggestion}`);
+				}
+				const { markTaskBlocked } = await import("../task.js");
+				markTaskBlocked(task.id, clarity.tooVagueReason || "Task too vague for autonomous execution");
+				blockedTasks.push(task.id);
+			} else if (clarity.clarity === "vague") {
 				output.warning(`Task ${task.id} may be too vague for autonomous execution:`);
 				for (const issue of clarity.issues) {
 					output.warning(`  - ${issue}`);
@@ -1253,8 +1275,13 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			}
 		}
 
-		// Optionally skip vague tasks (for now, just warn and continue)
-		// In future, could add --strict flag to skip vague tasks
+		// Remove blocked tasks from processing
+		if (blockedTasks.length > 0) {
+			output.warning(`Blocked ${blockedTasks.length} task(s) as too vague - marked as 'blocked' on board`);
+			tasksToProcess = tasksToProcess.filter((t) => !blockedTasks.includes(t.id));
+		}
+
+		// Warn about remaining vague tasks that might still work
 		if (vagueTasks.length > 0) {
 			output.warning(`${vagueTasks.length} task(s) are vague and may require decomposition or escalation`);
 		}
@@ -1268,7 +1295,9 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 				// Skip decomposition if task has reached max depth
 				const taskDepth = task.decompositionDepth ?? 0;
 				if (taskDepth >= maxDecompositionDepth) {
-					output.debug(`Skipping decomposition for "${task.objective.substring(0, 40)}..." (depth ${taskDepth} >= max ${maxDecompositionDepth})`);
+					output.debug(
+						`Skipping decomposition for "${task.objective.substring(0, 40)}..." (depth ${taskDepth} >= max ${maxDecompositionDepth})`,
+					);
 					tasksWithModels.push({
 						...task,
 						recommendedModel: "sonnet", // Default to sonnet for depth-limited tasks
@@ -1278,22 +1307,30 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 
 				const result = await checkAndDecompose(task.objective);
 
-				if (result.action === "decomposed" && result.subtasks && result.subtasks.length > 0) {
-					// Task was decomposed - add subtasks to board
-					output.info(`Decomposed "${task.objective.substring(0, 50)}..." into ${result.subtasks.length} subtasks`);
+				if (result.action === "decomposed") {
+					if (result.subtasks && result.subtasks.length > 0) {
+						// Task was decomposed - add subtasks to board
+						output.info(`Decomposed "${task.objective.substring(0, 50)}..." into ${result.subtasks.length} subtasks`);
 
-					decomposeTaskIntoSubtasks(
-						task.id,
-						result.subtasks.map((st) => ({
-							objective: st.objective,
-							estimatedFiles: st.estimatedFiles,
-							order: st.order,
-						})),
-					);
+						decomposeTaskIntoSubtasks(
+							task.id,
+							result.subtasks.map((st) => ({
+								objective: st.objective,
+								estimatedFiles: st.estimatedFiles,
+								order: st.order,
+							})),
+						);
 
-					// Log subtask creation
-					for (let i = 0; i < result.subtasks.length; i++) {
-						output.debug(`  Subtask ${i + 1}: ${result.subtasks[i].objective.substring(0, 60)}`);
+						// Log subtask creation
+						for (let i = 0; i < result.subtasks.length; i++) {
+							output.debug(`  Subtask ${i + 1}: ${result.subtasks[i].objective.substring(0, 60)}`);
+						}
+					} else {
+						// Decomposition attempted but failed to produce subtasks - task is too vague
+						output.warning(`Task too vague to decompose: "${task.objective.substring(0, 50)}..."`);
+						const { markTaskBlocked } = await import("../task.js");
+						markTaskBlocked(task.id, "Task too vague - decomposition failed to produce actionable subtasks");
+						// Don't add to tasksWithModels - skip this task
 					}
 				} else {
 					// Task is atomic - include with recommended model

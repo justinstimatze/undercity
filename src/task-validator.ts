@@ -962,7 +962,23 @@ export interface ClarityAssessment {
 	issues: string[];
 	/** Suggestions to improve clarity */
 	suggestions: string[];
+	/** True if task is fundamentally too vague to proceed - should be blocked */
+	tooVague?: boolean;
+	/** Reason why task is too vague (if tooVague is true) */
+	tooVagueReason?: string;
 }
+
+/** Patterns for tasks that are fundamentally too vague to proceed */
+const FUNDAMENTALLY_VAGUE_PATTERNS = [
+	/^Phase\s+\d+:/i, // "Phase 5: ..." without context
+	/^Step\s+\d+:/i, // "Step 3: ..." without context
+	/comprehensive\s+\w+\s+suite/i, // "comprehensive test suite" without target
+	/^implement\s+.*\s+system$/i, // "implement X system" without specifics
+	/^create\s+.*\s+(module|feature)$/i, // "create X module" without details
+	/^build\s+.*\s+(infrastructure|architecture)$/i, // Too high-level
+	/^design\s+and\s+implement/i, // Multi-phase task
+	/^research\s+and\s+(implement|build|create)/i, // Multi-phase task
+];
 
 /** Generic action verbs that need specifics */
 const VAGUE_VERBS = [
@@ -1012,6 +1028,25 @@ export function assessTaskClarity(objective: string): ClarityAssessment {
 
 	const trimmedObjective = objective.trim();
 	const wordCount = trimmedObjective.split(/\s+/).length;
+
+	// Check 0: Fundamentally vague patterns that should be blocked immediately
+	for (const pattern of FUNDAMENTALLY_VAGUE_PATTERNS) {
+		if (pattern.test(trimmedObjective)) {
+			const matchedPart = trimmedObjective.match(pattern)?.[0] || "vague pattern";
+			return {
+				clarity: "vague",
+				confidence: 0.9,
+				issues: [`Task matches vague pattern: "${matchedPart}"`],
+				suggestions: [
+					"Specify the exact target (file, module, or feature)",
+					"Define concrete acceptance criteria",
+					"Break down into specific, actionable subtasks",
+				],
+				tooVague: true,
+				tooVagueReason: `Matches vague pattern: ${pattern.source}`,
+			};
+		}
+	}
 
 	// Check 1: Too short
 	if (wordCount < 5) {

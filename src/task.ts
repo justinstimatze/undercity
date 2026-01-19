@@ -1071,6 +1071,39 @@ export function markTaskObsolete(paramsOrId: MarkTaskObsoleteParams | string, re
 }
 
 /**
+ * Mark a task as blocked (needs clarification or waiting on dependency)
+ */
+export interface MarkTaskBlockedParams {
+	id: string;
+	reason: string;
+	path?: string;
+}
+export function markTaskBlocked(params: MarkTaskBlockedParams): void;
+export function markTaskBlocked(id: string, reason: string, path?: string): void;
+export function markTaskBlocked(paramsOrId: MarkTaskBlockedParams | string, reason?: string, path?: string): void {
+	let id: string;
+	let actualReason: string;
+	let actualPath: string;
+
+	if (typeof paramsOrId === "object") {
+		({ id, reason: actualReason, path: actualPath = DEFAULT_TASK_BOARD_PATH } = paramsOrId);
+	} else {
+		id = paramsOrId;
+		actualReason = reason!;
+		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
+	}
+
+	updateTask(
+		id,
+		(task) => {
+			task.status = "blocked";
+			task.error = actualReason;
+		},
+		actualPath,
+	);
+}
+
+/**
  * Get task board summary
  */
 export function getTaskBoardSummary(): {

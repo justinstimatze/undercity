@@ -12,7 +12,7 @@
  */
 
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { gitLogger } from "./logger.js";
 import type { WorktreeInfo } from "./types.js";
@@ -321,6 +321,26 @@ export class WorktreeManager {
 				gitLogger.warn(
 					{ sessionId, error: String(copyError) },
 					"Failed to copy .undercity/ to worktree - agents may edit wrong files",
+				);
+			}
+
+			// Explicitly copy AST index if it exists (ensures it's available for context selection)
+			try {
+				const astIndexSource = join(this.repoRoot, ".undercity", "ast-index.json");
+				const astIndexDest = join(worktreePath, ".undercity", "ast-index.json");
+				if (existsSync(astIndexSource)) {
+					// Ensure dest directory exists
+					const destDir = join(worktreePath, ".undercity");
+					if (!existsSync(destDir)) {
+						mkdirSync(destDir, { recursive: true });
+					}
+					copyFileSync(astIndexSource, astIndexDest);
+					gitLogger.debug({ sessionId }, "Copied AST index to worktree");
+				}
+			} catch (astCopyError) {
+				gitLogger.warn(
+					{ sessionId, error: String(astCopyError) },
+					"Failed to copy AST index to worktree - context selection may be slower",
 				);
 			}
 

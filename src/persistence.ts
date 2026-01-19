@@ -935,6 +935,81 @@ export class Persistence {
 	}
 
 	/**
+	 * Clean up stale workers that haven't had activity in the specified time.
+	 * This handles orphaned workers from killed grind processes.
+	 *
+	 * @param staleThresholdMs How long without activity before considered stale (default: 30 minutes)
+	 * @returns Info about cleaned up tasks
+	 */
+	cleanupStaleWorkers(staleThresholdMs: number = 30 * 60 * 1000): { cleaned: number; taskIds: string[] } {
+		const now = Date.now();
+		const cleaned: string[] = [];
+
+		try {
+			const activeTasks = this.scanActiveTasks();
+
+			for (const task of activeTasks) {
+				// Determine most recent activity timestamp
+				let lastActivity: number | null = null;
+
+				// Check checkpoint first (more recent than startedAt)
+				if (task.previousCheckpoint?.savedAt) {
+					const savedAt = new Date(task.previousCheckpoint.savedAt).getTime();
+					if (!Number.isNaN(savedAt)) {
+						lastActivity = savedAt;
+					}
+				}
+
+				// Fall back to startedAt
+				if (lastActivity === null && task.startedAt) {
+					const startedAt = new Date(task.startedAt).getTime();
+					if (!Number.isNaN(startedAt)) {
+						lastActivity = startedAt;
+					}
+				}
+
+				// If no timestamp at all, treat as stale
+				if (lastActivity === null) {
+					persistenceLogger.info({ taskId: task.taskId }, "Removing stale worker with no timestamps");
+					this.removeActiveTask(task.taskId);
+					cleaned.push(task.taskId);
+					continue;
+				}
+
+				// Check if stale
+				const ageMs = now - lastActivity;
+				if (ageMs > staleThresholdMs) {
+					const ageMinutes = Math.round(ageMs / 60000);
+					persistenceLogger.info(
+						{ taskId: task.taskId, ageMinutes, lastActivity: new Date(lastActivity).toISOString() },
+						"Removing stale worker",
+					);
+					this.removeActiveTask(task.taskId);
+					cleaned.push(task.taskId);
+				}
+			}
+
+			if (cleaned.length > 0) {
+				persistenceLogger.info({ count: cleaned.length, taskIds: cleaned }, "Cleaned up stale workers");
+			}
+		} catch (error) {
+			persistenceLogger.warn({ error: String(error) }, "Error during stale worker cleanup");
+		}
+
+		return { cleaned: cleaned.length, taskIds: cleaned };
+	}
+
+	/**
+	 * Remove a single active task (helper for cleanup)
+	 */
+	private removeActiveTask(taskId: string): void {
+		const filePath = join(this.activeDir, `${taskId}.state`);
+		if (existsSync(filePath)) {
+			unlinkSync(filePath);
+		}
+	}
+
+	/**
 	 * Clear all active and completed tasks for a batch
 	 */
 	clearBatch(batchId: string): void {
