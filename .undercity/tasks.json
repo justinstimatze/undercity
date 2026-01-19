@@ -311,12 +311,10 @@
     },
     {
       "id": "task-mka7chrr-udp0",
-      "objective": "[optimization] Convert low-density prose to tables/lists in documentation",
-      "status": "failed",
-      "priority": 900,
-      "createdAt": "2026-01-11T20:44:18.807Z",
-      "completedAt": "2026-01-13T05:41:32.264Z",
-      "error": "Task failed"
+      "objective": "Run semantic-check and convert flagged prose sections to markdown tables in .claude/rules/*.md files",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-11T20:44:18.807Z"
     },
     {
       "id": "task-mkab2aof-ygpz",
@@ -797,12 +795,10 @@
     },
     {
       "id": "task-mkc5yg5g-e91740",
-      "objective": "[audit] Review streaming log output for agent monitoring - ensure logs are optimally useful for AI agent monitoring, remove stale debug output, improve signal-to-noise ratio",
-      "status": "failed",
-      "priority": 800,
-      "createdAt": "2026-01-13T05:40:56.261Z",
-      "completedAt": "2026-01-13T09:16:57.483Z",
-      "error": "Error: Verification failed for task-mkcdlp5r-c3aea6: Error: Command failed: pnpm test --run\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject invalid action types\n\u001b[22m\u001b[39mInvalid meta-task action: explode\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject missing reason\n\u001b[22m\u001b[39mMissing reason in recommendation\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject invalid confidence scores\n\u001b[22m\u001b[39mInvalid confidence: \u001b[33m1.5\u001b[39m\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject negative confidence scores\n\u001b[22m\u001b[39mInvalid confidence: \u001b[33m-0.5\u001b[39m\n\n(node:2286241) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nfatal: not a git repository (or any parent up to mount point /)\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n\n\u001b[31m⎯⎯⎯⎯⎯⎯⎯\u001b[39m\u001b[1m\u001b[41m Failed Tests 1 \u001b[49m\u001b[22m\u001b[31m⎯⎯⎯⎯⎯⎯⎯\u001b[39m\n\n\u001b[41m\u001b[1m FAIL \u001b[22m\u001b[49m src/__tests__/integration/cli-smoke.test.ts\u001b[2m > \u001b[22mCLI Smoke Tests\u001b[2m > \u001b[22mTask Board Commands\u001b[2m > \u001b[22madd command adds task to board\n\u001b[31m\u001b[1mError\u001b[22m: Command failed: node /home/justin/Documents/undercity/.undercity/worktrees/task-mkcdlp5r-c3aea6/bin/undercity.js add Test task from smoke test\n(node:2287858) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nerror: too many arguments for 'add'. Expected 1 argument but got 5.\n\u001b[39m\n\u001b[36m \u001b[2m❯\u001b[22m runCli src/__tests__/integration/cli-smoke.test.ts:\u001b[2m21:9\u001b[22m\u001b[39m\n    \u001b[90m 19| \u001b[39m */\u001b[39m\n    \u001b[90m 20| \u001b[39mfunction runCli(args: string[], options: { cwd?: string } = {}): strin…\n    \u001b[90m 21| \u001b[39m \u001b[35mreturn\u001b[39m \u001b[34mexecFileSync\u001b[39m(\u001b[32m\"node\"\u001b[39m\u001b[33m,\u001b[39m [\u001b[33mCLI_PATH\u001b[39m\u001b[33m,\u001b[39m \u001b[33m...\u001b[39margs]\u001b[33m,\u001b[39m {\n    \u001b[90m   | \u001b[39m        \u001b[31m^\u001b[39m\n    \u001b[90m 22| \u001b[39m  encoding\u001b[33m:\u001b[39m \u001b[32m\"utf-8\"\u001b[39m\u001b[33m,\u001b[39m\n    \u001b[90m 23| \u001b[39m  cwd\u001b[33m:\u001b[39m options\u001b[33m.\u001b[39mcwd\u001b[33m,\u001b[39m\n\u001b[90m \u001b[2m❯\u001b[22m src/__tests__/integration/cli-smoke.test.ts:\u001b[2m138:4\u001b[22m\u001b[39m\n\n\u001b[31m\u001b[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\u001b[22m\u001b[39m\n\n"
+      "objective": "Audit worker logging: ensure sessionLogger calls include structured data (taskId, model, phase) for debugging stuck agents",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-13T05:40:56.261Z"
     },
     {
       "id": "task-mkc7gjnn-327a6e",
@@ -828,16 +824,14 @@
     },
     {
       "id": "task-mkc7gjnn-387c3e",
-      "objective": "Add new prompt experiment variants to experiments.json file",
-      "status": "failed",
-      "priority": 850.3,
+      "objective": "Add 3 prompt variants to experiments.json: concise-prompt, detailed-prompt, structured-prompt for A/B testing",
+      "status": "pending",
+      "priority": 500,
       "createdAt": "2026-01-13T06:23:00.227Z",
       "parentId": "task-mkc4zfrj-162578",
       "estimatedFiles": [
         "experiments.json"
-      ],
-      "completedAt": "2026-01-13T07:22:42.573Z",
-      "error": "Task failed"
+      ]
     },
     {
       "id": "task-mkcd0vv6-b5a8b4",
@@ -854,33 +848,6 @@
       "priority": 72,
       "createdAt": "2026-01-13T09:47:36.930Z",
       "completedAt": "2026-01-13T09:49:50.762Z"
-    },
-    {
-      "id": "task-mkcf95fx-206222",
-      "objective": "[test] Add a JSDoc comment to the TaskWorker constructor in src/worker.ts",
-      "status": "failed",
-      "priority": 73,
-      "createdAt": "2026-01-13T10:01:12.141Z",
-      "completedAt": "2026-01-13T10:03:37.725Z",
-      "error": "Error: Merge into local main failed for task-mkcf98y3-575e09: Error: Command failed: git merge --ff-only b395651fb695021c9d7795971a6ee4bb51fe5e13\nerror: Your local changes to the following files would be overwritten by merge:\n\tsrc/worker.ts\nPlease commit your changes or stash them before you merge.\nAborting\n"
-    },
-    {
-      "id": "task-mkcfkhqc-7e68e9",
-      "objective": "[test] Add JSDoc to constructor in worker.ts",
-      "status": "failed",
-      "priority": 74,
-      "createdAt": "2026-01-13T10:10:01.284Z",
-      "completedAt": "2026-01-13T10:13:29.168Z",
-      "error": "Error: Merge into local main failed for task-mkcfklwu-5d0365: Error: Command failed: git merge --ff-only 96ad7d495f07da808486a669ded41245347b39fb\nerror: Your local changes to the following files would be overwritten by merge:\n\tsrc/worker.ts\nPlease commit your changes or stash them before you merge.\nAborting\n"
-    },
-    {
-      "id": "task-mkcfqda6-304e20",
-      "objective": "[test] Fix the typo in src/output.ts line 1 - add space after colon",
-      "status": "failed",
-      "priority": 75,
-      "createdAt": "2026-01-13T10:14:35.454Z",
-      "completedAt": "2026-01-13T10:17:05.910Z",
-      "error": "Task failed"
     },
     {
       "id": "task-mkcfyk5j-9110c1",
@@ -916,45 +883,37 @@
     },
     {
       "id": "task-mkd28ut5-2322d6",
-      "objective": "Improve context selection - use AST index more aggressively to reduce token usage in worker prompts",
-      "status": "failed",
-      "priority": 80,
-      "createdAt": "2026-01-13T20:44:49.529Z",
-      "completedAt": "2026-01-14T00:41:30.486Z",
-      "error": "Task failed"
+      "objective": "Improve worker context: use ASTIndexManager.findRelevantSymbols() to include type definitions in agent prompt",
+      "status": "pending",
+      "priority": 600,
+      "createdAt": "2026-01-13T20:44:49.529Z"
     },
     {
       "id": "task-mkd28v4n-9579cf",
-      "objective": "Tune self-tuning thresholds - review feedback-metrics and routing profile for better model selection",
-      "status": "failed",
-      "priority": 81,
-      "createdAt": "2026-01-13T20:44:49.943Z",
-      "completedAt": "2026-01-14T01:11:11.592Z",
-      "error": "Error: Verification failed for task-mkdbmuwb-4c97f4: Error: Command failed: pnpm test --run\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject invalid action types\n\u001b[22m\u001b[39mInvalid meta-task action: explode\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject missing reason\n\u001b[22m\u001b[39mMissing reason in recommendation\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject invalid confidence scores\n\u001b[22m\u001b[39mInvalid confidence: \u001b[33m1.5\u001b[39m\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject negative confidence scores\n\u001b[22m\u001b[39mInvalid confidence: \u001b[33m-0.5\u001b[39m\n\n(node:2937353) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n\u001b[90mstderr\u001b[2m | src/__tests__/api-usage-guard.test.ts\u001b[2m > \u001b[22m\u001b[2mApiUsageGuard\u001b[2m > \u001b[22m\u001b[2mrecordRateLimitHit\u001b[2m > \u001b[22m\u001b[2mshould record rate limit hit and pause\n\u001b[22m\u001b[39m🚨 Rate limit hit for sonnet: {\n  timestamp: \u001b[35m2026-01-14T01:10:45.830Z\u001b[39m,\n  usage: {\n    last5Hours: \u001b[33m0\u001b[39m,\n    currentWeek: \u001b[33m0\u001b[39m,\n    last5HoursSonnet: \u001b[33m0\u001b[39m,\n    currentWeekSonnet: \u001b[33m0\u001b[39m\n  },\n  error: \u001b[32m'429 Too Many Requests'\u001b[39m,\n  apiLimitInfo: {}\n}\n\n\u001b[90mstderr\u001b[2m | src/__tests__/api-usage-guard.test.ts\u001b[2m > \u001b[22m\u001b[2mApiUsageGuard\u001b[2m > \u001b[22m\u001b[2mguard\u001b[2m > \u001b[22m\u001b[2mshould handle 429 errors\n\u001b[22m\u001b[39m🚨 Rate limit hit for sonnet: {\n  timestamp: \u001b[35m2026-01-14T01:10:45.855Z\u001b[39m,\n  usage: {\n    last5Hours: \u001b[33m0\u001b[39m,\n    currentWeek: \u001b[33m0\u001b[39m,\n    last5HoursSonnet: \u001b[33m0\u001b[39m,\n    currentWeekSonnet: \u001b[33m0\u001b[39m\n  },\n  error: \u001b[32m'Error: 429 Too Many Requests'\u001b[39m,\n  apiLimitInfo: {}\n}\n\n\n\u001b[31m⎯⎯⎯⎯⎯⎯⎯\u001b[39m\u001b[1m\u001b[41m Failed Tests 3 \u001b[49m\u001b[22m\u001b[31m⎯⎯⎯⎯⎯⎯⎯\u001b[39m\n\n\u001b[41m\u001b[1m FAIL \u001b[22m\u001b[49m src/__tests__/integration/worktree-manager.test.ts\u001b[2m > \u001b[22mWorktreeManager Integration Tests\u001b[2m > \u001b[22mcreateWorktree\u001b[2m > \u001b[22mshould create a new worktree\n\u001b[31m\u001b[1mAssertionError\u001b[22m: expected false to be true // Object.is equality\u001b[39m\n\n\u001b[32m- Expected\u001b[39m\n\u001b[31m+ Received\u001b[39m\n\n\u001b[32m- true\u001b[39m\n\u001b[31m+ false\u001b[39m\n\n\u001b[36m \u001b[2m❯\u001b[22m src/__tests__/integration/worktree-manager.test.ts:\u001b[2m161:34\u001b[22m\u001b[39m\n    \u001b[90m159| \u001b[39m\n    \u001b[90m160| \u001b[39m   \u001b[90m// Verify worktree exists on disk\u001b[39m\n    \u001b[90m161| \u001b[39m   \u001b[34mexpect\u001b[39m(\u001b[34mexistsSync\u001b[39m(info\u001b[33m.\u001b[39mpath))\u001b[33m.\u001b[39m\u001b[34mtoBe\u001b[39m(\u001b[35mtrue\u001b[39m)\u001b[33m;\u001b[39m\n    \u001b[90m   | \u001b[39m                                 \u001b[31m^\u001b[39m\n    \u001b[90m162| \u001b[39m\n    \u001b[90m163| \u001b[39m   \u001b[90m// Verify branch is active in the worktree\u001b[39m\n\n\u001b[31m\u001b[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯\u001b[22m\u001b[39m\n\n\u001b[41m\u001b[1m FAIL \u001b[22m\u001b[49m src/__tests__/integration/worktree-manager.test.ts\u001b[2m > \u001b[22mWorktreeManager Integration Tests\u001b[2m > \u001b[22mcreateWorktree\u001b[2m > \u001b[22mshould throw error if worktree already exists\n\u001b[31m\u001b[1mAssertionError\u001b[22m: expected function to throw an error, but it didn't\u001b[39m\n\u001b[36m \u001b[2m❯\u001b[22m src/__tests__/integration/worktree-manager.test.ts:\u001b[2m179:52\u001b[22m\u001b[39m\n    \u001b[90m177| \u001b[39m\n    \u001b[90m178| \u001b[39m   \u001b[90m// Try to create again\u001b[39m\n    \u001b[90m179| \u001b[39m   expect(() => manager.createWorktree(sessionId)).toThrow(WorktreeErr…\n    \u001b[90m   | \u001b[39m                                                   \u001b[31m^\u001b[39m\n    \u001b[90m180| \u001b[39m  })\u001b[33m;\u001b[39m\n    \u001b[90m181| \u001b[39m\n\n\u001b[31m\u001b[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯\u001b[22m\u001b[39m\n\n\u001b[41m\u001b[1m FAIL \u001b[22m\u001b[49m src/__tests__/integration/worktree-manager.test.ts\u001b[2m > \u001b[22mWorktreeManager Integration Tests\u001b[2m > \u001b[22mremoveWorktree\u001b[2m > \u001b[22mshould remove an existing worktree\n\u001b[31m\u001b[1mAssertionError\u001b[22m: expected false to be true // Object.is equality\u001b[39m\n\n\u001b[32m- Expected\u001b[39m\n\u001b[31m+ Received\u001b[39m\n\n\u001b[32m- true\u001b[39m\n\u001b[31m+ false\u001b[39m\n\n\u001b[36m \u001b[2m❯\u001b[22m src/__tests__/integration/worktree-manager.test.ts:\u001b[2m200:34\u001b[22m\u001b[39m\n    \u001b[90m198| \u001b[39m   \u001b[90m// Create worktree\u001b[39m\n    \u001b[90m199| \u001b[39m   \u001b[35mconst\u001b[39m info \u001b[33m=\u001b[39m manager\u001b[33m.\u001b[39m\u001b[34mcreateWorktree\u001b[39m(sessionId)\u001b[33m;\u001b[39m\n    \u001b[90m200| \u001b[39m   \u001b[34mexpect\u001b[39m(\u001b[34mexistsSync\u001b[39m(info\u001b[33m.\u001b[39mpath))\u001b[33m.\u001b[39m\u001b[34mtoBe\u001b[39m(\u001b[35mtrue\u001b[39m)\u001b[33m;\u001b[39m\n    \u001b[90m   | \u001b[39m                                 \u001b[31m^\u001b[39m\n    \u001b[90m201| \u001b[39m\n    \u001b[90m202| \u001b[39m   \u001b[90m// Remove worktree\u001b[39m\n\n\u001b[31m\u001b[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯\u001b[22m\u001b[39m\n\n"
+      "objective": "Tune routing thresholds in self-tuning.ts: adjust minSuccessRate and minSamples based on current routing-profile.json data",
+      "status": "pending",
+      "priority": 600,
+      "createdAt": "2026-01-13T20:44:49.943Z"
     },
     {
       "id": "task-mkd28vgb-5c45ae",
-      "objective": "Batch similar tasks - enhance task scheduler to group related tasks and share context",
-      "status": "failed",
-      "priority": 82,
-      "createdAt": "2026-01-13T20:44:50.363Z",
-      "completedAt": "2026-01-14T01:11:11.591Z",
-      "error": "Error: Verification failed for task-mkdbg81t-b5afdd: Error: Command failed: pnpm test --run\n\u001b[90mstderr\u001b[2m | src/__tests__/api-usage-guard.test.ts\u001b[2m > \u001b[22m\u001b[2mApiUsageGuard\u001b[2m > \u001b[22m\u001b[2mrecordRateLimitHit\u001b[2m > \u001b[22m\u001b[2mshould record rate limit hit and pause\n\u001b[22m\u001b[39m🚨 Rate limit hit for sonnet: {\n  timestamp: \u001b[35m2026-01-14T01:10:11.216Z\u001b[39m,\n  usage: {\n    last5Hours: \u001b[33m0\u001b[39m,\n    currentWeek: \u001b[33m0\u001b[39m,\n    last5HoursSonnet: \u001b[33m0\u001b[39m,\n    currentWeekSonnet: \u001b[33m0\u001b[39m\n  },\n  error: \u001b[32m'429 Too Many Requests'\u001b[39m,\n  apiLimitInfo: {}\n}\n\n\u001b[90mstderr\u001b[2m | src/__tests__/api-usage-guard.test.ts\u001b[2m > \u001b[22m\u001b[2mApiUsageGuard\u001b[2m > \u001b[22m\u001b[2mguard\u001b[2m > \u001b[22m\u001b[2mshould handle 429 errors\n\u001b[22m\u001b[39m🚨 Rate limit hit for sonnet: {\n  timestamp: \u001b[35m2026-01-14T01:10:11.226Z\u001b[39m,\n  usage: {\n    last5Hours: \u001b[33m0\u001b[39m,\n    currentWeek: \u001b[33m0\u001b[39m,\n    last5HoursSonnet: \u001b[33m0\u001b[39m,\n    currentWeekSonnet: \u001b[33m0\u001b[39m\n  },\n  error: \u001b[32m'Error: 429 Too Many Requests'\u001b[39m,\n  apiLimitInfo: {}\n}\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject invalid action types\n\u001b[22m\u001b[39mInvalid meta-task action: explode\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject missing reason\n\u001b[22m\u001b[39mMissing reason in recommendation\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject invalid confidence scores\n\u001b[22m\u001b[39mInvalid confidence: \u001b[33m1.5\u001b[39m\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject negative confidence scores\n\u001b[22m\u001b[39mInvalid confidence: \u001b[33m-0.5\u001b[39m\n\n(node:2934275) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n\n\u001b[31m⎯⎯⎯⎯⎯⎯⎯\u001b[39m\u001b[1m\u001b[41m Failed Tests 3 \u001b[49m\u001b[22m\u001b[31m⎯⎯⎯⎯⎯⎯⎯\u001b[39m\n\n\u001b[41m\u001b[1m FAIL \u001b[22m\u001b[49m src/__tests__/integration/worktree-manager.test.ts\u001b[2m > \u001b[22mWorktreeManager Integration Tests\u001b[2m > \u001b[22mremoveWorktree\u001b[2m > \u001b[22mshould handle force removal\n\u001b[31m\u001b[1mError\u001b[22m: ENOENT: no such file or directory, open '/tmp/undercity-worktrees/L3RtcC93b3Jr/session-force-1768353021766/uncommitted.txt'\u001b[39m\n\u001b[36m \u001b[2m❯\u001b[22m src/__tests__/integration/worktree-manager.test.ts:\u001b[2m233:4\u001b[22m\u001b[39m\n    \u001b[90m231| \u001b[39m\n    \u001b[90m232| \u001b[39m   \u001b[90m// Make changes in worktree (uncommitted)\u001b[39m\n    \u001b[90m233| \u001b[39m   \u001b[34mwriteFileSync\u001b[39m(\u001b[34mjoin\u001b[39m(info\u001b[33m.\u001b[39mpath\u001b[33m,\u001b[39m \u001b[32m\"uncommitted.txt\"\u001b[39m)\u001b[33m,\u001b[39m \u001b[32m\"test\"\u001b[39m)\u001b[33m;\u001b[39m\n    \u001b[90m   | \u001b[39m   \u001b[31m^\u001b[39m\n    \u001b[90m234| \u001b[39m\n    \u001b[90m235| \u001b[39m   \u001b[90m// Force remove should work\u001b[39m\n\n\u001b[31m\u001b[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯\u001b[22m\u001b[39m\n\n\u001b[41m\u001b[1m FAIL \u001b[22m\u001b[49m src/__tests__/integration/worktree-manager.test.ts\u001b[2m > \u001b[22mWorktreeManager Integration Tests\u001b[2m > \u001b[22mlistWorktrees\u001b[2m > \u001b[22mshould include created worktrees\n\u001b[31m\u001b[1mAssertionError\u001b[22m: expected undefined to be defined\u001b[39m\n\u001b[36m \u001b[2m❯\u001b[22m src/__tests__/integration/worktree-manager.test.ts:\u001b[2m263:28\u001b[22m\u001b[39m\n    \u001b[90m261| \u001b[39m   const sessionWorktree = worktrees.find((w) => w.path.includes(sessi…\n    \u001b[90m262| \u001b[39m\n    \u001b[90m263| \u001b[39m   \u001b[34mexpect\u001b[39m(sessionWorktree)\u001b[33m.\u001b[39m\u001b[34mtoBeDefined\u001b[39m()\u001b[33m;\u001b[39m\n    \u001b[90m   | \u001b[39m                           \u001b[31m^\u001b[39m\n    \u001b[90m264| \u001b[39m   expect(sessionWorktree?.branch).toBe(manager.getWorktreeBranchName(…\n    \u001b[90m265| \u001b[39m  })\u001b[33m;\u001b[39m\n\n\u001b[31m\u001b[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯\u001b[22m\u001b[39m\n\n\u001b[41m\u001b[1m FAIL \u001b[22m\u001b[49m src/__tests__/integration/worktree-manager.test.ts\u001b[2m > \u001b[22mWorktreeManager Integration Tests\u001b[2m > \u001b[22memergencyCleanup\u001b[2m > \u001b[22mshould remove all session worktrees\n\u001b[31m\u001b[1mAssertionError\u001b[22m: expected 1 to be 2 // Object.is equality\u001b[39m\n\n\u001b[32m- Expected\u001b[39m\n\u001b[31m+ Received\u001b[39m\n\n\u001b[32m- 2\u001b[39m\n\u001b[31m+ 1\u001b[39m\n\n\u001b[36m \u001b[2m❯\u001b[22m src/__tests__/integration/worktree-manager.test.ts:\u001b[2m371:55\u001b[22m\u001b[39m\n    \u001b[90m369| \u001b[39m\n    \u001b[90m370| \u001b[39m   \u001b[90m// Verify they exist\u001b[39m\n    \u001b[90m371| \u001b[39m   \u001b[34mexpect\u001b[39m(manager\u001b[33m.\u001b[39m\u001b[34mgetActiveSessionWorktrees\u001b[39m()\u001b[33m.\u001b[39mlength)\u001b[33m.\u001b[39m\u001b[34mtoBe\u001b[39m(\u001b[34m2\u001b[39m)\u001b[33m;\u001b[39m\n    \u001b[90m   | \u001b[39m                                                      \u001b[31m^\u001b[39m\n    \u001b[90m372| \u001b[39m\n    \u001b[90m373| \u001b[39m   \u001b[90m// Emergency cleanup\u001b[39m\n\n\u001b[31m\u001b[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯\u001b[22m\u001b[39m\n\n"
+      "objective": "Add task grouping to TaskScheduler: group tasks by shared file patterns from task-file-patterns.json for batched context",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-13T20:44:50.363Z"
     },
     {
       "id": "task-mkd28vrm-56e4a6",
-      "objective": "Reduce verification overhead - skip lint/format for trivial changes, cache verification results",
-      "status": "failed",
-      "priority": 83,
-      "createdAt": "2026-01-13T20:44:50.770Z",
-      "completedAt": "2026-01-14T00:41:30.485Z",
-      "error": "Error: Rebase failed for task-mkd9frk6-c44a8b: Error: Command failed: git rebase FETCH_HEAD\nerror: cannot rebase: You have unstaged changes.\nerror: Please commit or stash them.\n"
+      "objective": "Add verification caching: skip lint/typecheck if no .ts files changed, cache results keyed by file content hash",
+      "status": "pending",
+      "priority": 600,
+      "createdAt": "2026-01-13T20:44:50.770Z"
     },
     {
       "id": "task-mkd28w3r-683751",
-      "objective": "Agent memory/learning - persist successful task patterns for few-shot examples",
-      "status": "failed",
-      "priority": 84,
+      "objective": "Add few-shot examples to ax-training.json: extract successful task patterns (prompt, files changed, outcome) for prompt optimization",
+      "status": "pending",
+      "priority": 600,
       "createdAt": "2026-01-13T20:44:51.207Z",
       "isDecomposed": true,
       "subtaskIds": [
@@ -963,18 +922,14 @@
         "task-mkd8voxm-5a7dfd",
         "task-mkd8voxm-b6b2d7",
         "task-mkd8voxm-3fb7c8"
-      ],
-      "completedAt": "2026-01-14T01:11:11.590Z",
-      "error": "Error: Rebase failed for task-mkdb1z3p-40f85f: Error: Command failed: git rebase FETCH_HEAD\nRebasing (1/1)\rerror: could not apply 91a31a3... Agent memory/learning - persist successful task pa...\nhint: Resolve all conflicts manually, mark them as resolved with\nhint: \"git add/rm <conflicted_files>\", then run \"git rebase --continue\".\nhint: You can instead skip this commit: run \"git rebase --skip\".\nhint: To abort and get back to the state before \"git rebase\", run \"git rebase --abort\".\nhint: Disable this message with \"git config set advice.mergeConflict false\"\nCould not apply 91a31a3... Agent memory/learning - persist successful task pa...\n"
+      ]
     },
     {
       "id": "task-mkd3np2y-e33506",
-      "objective": "Expand experiment framework for automated A/B testing - add maxTurns, maxAttempts, maxRetriesPerTier, complexityRouting to ExperimentVariant; add statistical significance calculation; add auto-conclude when confident; improve CLI for creating/monitoring experiments",
-      "status": "failed",
-      "priority": 85,
-      "createdAt": "2026-01-13T21:24:21.563Z",
-      "completedAt": "2026-01-14T01:11:11.588Z",
-      "error": "Error: Verification failed for task-mkdap8co-e97315: Error: Command failed: pnpm test --run\n\u001b[90mstderr\u001b[2m | src/__tests__/api-usage-guard.test.ts\u001b[2m > \u001b[22m\u001b[2mApiUsageGuard\u001b[2m > \u001b[22m\u001b[2mrecordRateLimitHit\u001b[2m > \u001b[22m\u001b[2mshould record rate limit hit and pause\n\u001b[22m\u001b[39m🚨 Rate limit hit for sonnet: {\n  timestamp: \u001b[35m2026-01-14T01:09:39.859Z\u001b[39m,\n  usage: {\n    last5Hours: \u001b[33m0\u001b[39m,\n    currentWeek: \u001b[33m0\u001b[39m,\n    last5HoursSonnet: \u001b[33m0\u001b[39m,\n    currentWeekSonnet: \u001b[33m0\u001b[39m\n  },\n  error: \u001b[32m'429 Too Many Requests'\u001b[39m,\n  apiLimitInfo: {}\n}\n\n\u001b[90mstderr\u001b[2m | src/__tests__/api-usage-guard.test.ts\u001b[2m > \u001b[22m\u001b[2mApiUsageGuard\u001b[2m > \u001b[22m\u001b[2mguard\u001b[2m > \u001b[22m\u001b[2mshould handle 429 errors\n\u001b[22m\u001b[39m🚨 Rate limit hit for sonnet: {\n  timestamp: \u001b[35m2026-01-14T01:09:39.871Z\u001b[39m,\n  usage: {\n    last5Hours: \u001b[33m0\u001b[39m,\n    currentWeek: \u001b[33m0\u001b[39m,\n    last5HoursSonnet: \u001b[33m0\u001b[39m,\n    currentWeekSonnet: \u001b[33m0\u001b[39m\n  },\n  error: \u001b[32m'Error: 429 Too Many Requests'\u001b[39m,\n  apiLimitInfo: {}\n}\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject invalid action types\n\u001b[22m\u001b[39mInvalid meta-task action: explode\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject missing reason\n\u001b[22m\u001b[39mMissing reason in recommendation\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject invalid confidence scores\n\u001b[22m\u001b[39mInvalid confidence: \u001b[33m1.5\u001b[39m\n\n\u001b[90mstderr\u001b[2m | src/__tests__/task-schema.test.ts\u001b[2m > \u001b[22m\u001b[2mtask-schema\u001b[2m > \u001b[22m\u001b[2mparseMetaTaskResult\u001b[2m > \u001b[22m\u001b[2mshould reject negative confidence scores\n\u001b[22m\u001b[39mInvalid confidence: \u001b[33m-0.5\u001b[39m\n\n(node:2931132) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n\n\u001b[31m⎯⎯⎯⎯⎯⎯⎯\u001b[39m\u001b[1m\u001b[41m Failed Tests 2 \u001b[49m\u001b[22m\u001b[31m⎯⎯⎯⎯⎯⎯⎯\u001b[39m\n\n\u001b[41m\u001b[1m FAIL \u001b[22m\u001b[49m src/__tests__/integration/worktree-manager.test.ts\u001b[2m > \u001b[22mWorktreeManager Integration Tests\u001b[2m > \u001b[22mcleanupOrphanedWorktrees\u001b[2m > \u001b[22mshould remove worktrees not in active session list\n\u001b[31m\u001b[1mAssertionError\u001b[22m: expected false to be true // Object.is equality\u001b[39m\n\n\u001b[32m- Expected\u001b[39m\n\u001b[31m+ Received\u001b[39m\n\n\u001b[32m- true\u001b[39m\n\u001b[31m+ false\u001b[39m\n\n\u001b[36m \u001b[2m❯\u001b[22m src/__tests__/integration/worktree-manager.test.ts:\u001b[2m355:49\u001b[22m\u001b[39m\n    \u001b[90m353| \u001b[39m\n    \u001b[90m354| \u001b[39m   \u001b[90m// Active should remain\u001b[39m\n    \u001b[90m355| \u001b[39m   \u001b[34mexpect\u001b[39m(manager\u001b[33m.\u001b[39m\u001b[34mhasWorktree\u001b[39m(activeSessionId))\u001b[33m.\u001b[39m\u001b[34mtoBe\u001b[39m(\u001b[35mtrue\u001b[39m)\u001b[33m;\u001b[39m\n    \u001b[90m   | \u001b[39m                                                \u001b[31m^\u001b[39m\n    \u001b[90m356| \u001b[39m  })\u001b[33m;\u001b[39m\n    \u001b[90m357| \u001b[39m })\u001b[33m;\u001b[39m\n\n\u001b[31m\u001b[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯\u001b[22m\u001b[39m\n\n\u001b[41m\u001b[1m FAIL \u001b[22m\u001b[49m src/__tests__/integration/worktree-manager.test.ts\u001b[2m > \u001b[22mWorktreeManager Integration Tests\u001b[2m > \u001b[22memergencyCleanup\u001b[2m > \u001b[22mshould remove all session worktrees\n\u001b[31m\u001b[1mAssertionError\u001b[22m: expected 1 to be 2 // Object.is equality\u001b[39m\n\n\u001b[32m- Expected\u001b[39m\n\u001b[31m+ Received\u001b[39m\n\n\u001b[32m- 2\u001b[39m\n\u001b[31m+ 1\u001b[39m\n\n\u001b[36m \u001b[2m❯\u001b[22m src/__tests__/integration/worktree-manager.test.ts:\u001b[2m371:55\u001b[22m\u001b[39m\n    \u001b[90m369| \u001b[39m\n    \u001b[90m370| \u001b[39m   \u001b[90m// Verify they exist\u001b[39m\n    \u001b[90m371| \u001b[39m   \u001b[34mexpect\u001b[39m(manager\u001b[33m.\u001b[39m\u001b[34mgetActiveSessionWorktrees\u001b[39m()\u001b[33m.\u001b[39mlength)\u001b[33m.\u001b[39m\u001b[34mtoBe\u001b[39m(\u001b[34m2\u001b[39m)\u001b[33m;\u001b[39m\n    \u001b[90m   | \u001b[39m                                                      \u001b[31m^\u001b[39m\n    \u001b[90m372| \u001b[39m\n    \u001b[90m373| \u001b[39m   \u001b[90m// Emergency cleanup\u001b[39m\n\n\u001b[31m\u001b[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯\u001b[22m\u001b[39m\n\n"
+      "objective": "Add experiment variants to experiments.json: maxTurns (5,10,15), maxAttempts (5,7,9), maxRetriesPerTier (2,3,4)",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-13T21:24:21.563Z"
     },
     {
       "id": "task-mkd3plyd-34f927",
@@ -1032,41 +987,6 @@
       "resolution": "Parent task decomposed but subtasks failed; feature needs redesign"
     },
     {
-      "id": "task-mkd6czy0-4ecb16",
-      "objective": "Add a JSDoc comment to the prepareContext function in src/context.ts explaining what it does",
-      "status": "failed",
-      "priority": 92,
-      "createdAt": "2026-01-13T22:40:01.272Z",
-      "completedAt": "2026-01-13T22:42:22.678Z",
-      "error": "Task failed"
-    },
-    {
-      "id": "task-mkd6i2lh-c5f8e4",
-      "objective": "In src/config/limits.ts, define an interface for API usage limits with properties for total limit, warning threshold, and current usage",
-      "status": "failed",
-      "priority": 91.1,
-      "createdAt": "2026-01-13T22:43:57.989Z",
-      "parentId": "task-mkd58vjq-4e6a1f",
-      "estimatedFiles": [
-        "src/config/limits.ts"
-      ],
-      "completedAt": "2026-01-14T00:41:30.482Z",
-      "error": "Task failed"
-    },
-    {
-      "id": "task-mkd6i2lh-08e33b",
-      "objective": "In src/services/usage-tracker.ts, create a UsageTracker class with methods to increment usage, check against thresholds, and determine if grinding should be paused",
-      "status": "failed",
-      "priority": 91.2,
-      "createdAt": "2026-01-13T22:43:57.989Z",
-      "parentId": "task-mkd58vjq-4e6a1f",
-      "estimatedFiles": [
-        "src/services/usage-tracker.ts"
-      ],
-      "completedAt": "2026-01-14T00:41:30.479Z",
-      "error": "Task failed"
-    },
-    {
       "id": "task-mkd6i2lh-e6d02a",
       "objective": "In src/middleware/api-usage-guard.ts, implement middleware to intercept API calls, update usage tracking, and automatically pause grinding when approaching limits",
       "status": "complete",
@@ -1085,15 +1005,6 @@
       "priority": 96,
       "createdAt": "2026-01-13T23:13:32.921Z",
       "completedAt": "2026-01-13T23:19:43.318Z"
-    },
-    {
-      "id": "task-mkd8mbki-d02f9f",
-      "objective": "Add a comment to the extractKeywords function in src/knowledge.ts explaining its purpose",
-      "status": "failed",
-      "priority": 97,
-      "createdAt": "2026-01-13T23:43:15.474Z",
-      "completedAt": "2026-01-13T23:56:32.653Z",
-      "error": "Task failed"
     },
     {
       "id": "task-mkd8voxm-3347b8",
@@ -1168,33 +1079,6 @@
       "completedAt": "2026-01-14T05:13:34.073Z"
     },
     {
-      "id": "task-mkda9fyj-b67175",
-      "objective": "Add a one-line comment to extractTaskKeywords in task-file-patterns.ts explaining it extracts keywords from task descriptions",
-      "status": "failed",
-      "priority": 104,
-      "createdAt": "2026-01-14T00:29:13.867Z",
-      "completedAt": "2026-01-14T05:05:53.552Z",
-      "error": "Error: Merge into local main failed for task-mkdk3jj7-3fa3e7: Error: Command failed: git merge --ff-only cf09972f926a9b77079180d98a03da2b638666e2\nerror: Your local changes to the following files would be overwritten by merge:\n\tsrc/grind-events.ts\nPlease commit your changes or stash them before you merge.\nAborting\n"
-    },
-    {
-      "id": "task-mkdaeb24-c10ee2",
-      "objective": "Add a short comment to getFilesFromLastCommit explaining it returns files changed in the last commit",
-      "status": "failed",
-      "priority": 105,
-      "createdAt": "2026-01-14T00:33:00.796Z",
-      "completedAt": "2026-01-14T05:04:34.711Z",
-      "error": "Error: Merge into local main failed for task-mkdk13xi-496bcf: Error: Command failed: git merge --ff-only ad6e081e996b2b9bec6181da90ea0a84e7131932\nerror: Your local changes to the following files would be overwritten by merge:\n\tsrc/grind-events.ts\nPlease commit your changes or stash them before you merge.\nAborting\n"
-    },
-    {
-      "id": "task-mkdanenc-cd98cf",
-      "objective": "Add a comment to the STOP_WORDS constant in task-file-patterns.ts explaining these are filtered from task descriptions",
-      "status": "failed",
-      "priority": 106,
-      "createdAt": "2026-01-14T00:40:05.353Z",
-      "completedAt": "2026-01-14T05:04:34.708Z",
-      "error": "Error: Merge into local main failed for task-mkdjzlzs-163b25: Error: Command failed: git merge --ff-only bbf516369a5fc96d26037be11ab24bb5306cf660\nerror: Your local changes to the following files would be overwritten by merge:\n\tsrc/grind-events.ts\nPlease commit your changes or stash them before you merge.\nAborting\n"
-    },
-    {
       "id": "task-mkdanigy-752fc2",
       "objective": "Add a comment to the PATTERNS_FILE constant in error-fix-patterns.ts explaining it stores error-fix correlations",
       "status": "complete",
@@ -1205,17 +1089,15 @@
     {
       "id": "task-mkk2t342-720237",
       "objective": "Implement PreToolUse hook for knowledge injection: create a hook that intercepts tool calls and injects relevant context from error-fix-patterns, task-file-patterns, and knowledge.json",
-      "status": "failed",
-      "priority": 7,
-      "createdAt": "2026-01-18T18:34:56.642Z",
-      "completedAt": "2026-01-18T18:38:27.117Z",
-      "error": "Tier error: Error: Parent task not found: task-mkk2u80b-4ab3be"
+      "status": "pending",
+      "priority": 800,
+      "createdAt": "2026-01-18T18:34:56.642Z"
     },
     {
       "id": "task-mkk2tacq-f36200",
       "objective": "Create queryable knowledge tool: expose knowledge.json as searchable MCP tool that workers can query for relevant learnings during task execution",
       "status": "pending",
-      "priority": 7,
+      "priority": 700,
       "createdAt": "2026-01-18T18:35:06.026Z",
       "isDecomposed": true,
       "subtaskIds": [
@@ -1229,18 +1111,10 @@
       ]
     },
     {
-      "id": "task-mkk2u7zo-af5cba",
-      "objective": "Examine knowledge.json structure and understand existing content organization",
-      "status": "pending",
-      "priority": 7.1,
-      "createdAt": "2026-01-18T18:35:49.620Z",
-      "parentId": "task-mkk2tacq-f36200"
-    },
-    {
       "id": "task-mkk2u7zo-af24b6",
-      "objective": "Design MCP server interface with search endpoint specifications",
+      "objective": "[research] Design MCP server interface with search endpoint specifications",
       "status": "pending",
-      "priority": 7.2,
+      "priority": 900,
       "createdAt": "2026-01-18T18:35:49.620Z",
       "parentId": "task-mkk2tacq-f36200"
     },
@@ -1248,7 +1122,7 @@
       "id": "task-mkk2u7zo-b2fc2a",
       "objective": "Implement text search and filtering logic for knowledge queries",
       "status": "pending",
-      "priority": 7.3,
+      "priority": 800,
       "createdAt": "2026-01-18T18:35:49.620Z",
       "parentId": "task-mkk2tacq-f36200",
       "isDecomposed": true,
@@ -1329,351 +1203,351 @@
       "id": "task-mkk32dj5-2e720c",
       "objective": "Add delta knowledge extraction: only process new learnings from sessions, not re-process entire history (inspired by Nexus delta distillation)",
       "status": "pending",
-      "priority": 4,
+      "priority": 700,
       "createdAt": "2026-01-18T18:42:10.049Z"
     },
     {
       "id": "task-mkk32dye-afcf3d",
       "objective": "Add contradiction detection: surface conflicting decisions/learnings in knowledge.json (e.g. 'use X for auth' vs 'avoid X for auth')",
       "status": "pending",
-      "priority": 4,
+      "priority": 700,
       "createdAt": "2026-01-18T18:42:10.598Z"
     },
     {
       "id": "task-mkk32ecy-1083fa",
       "objective": "Add vector similarity to knowledge search: embed learnings for semantic 'find related' queries beyond keyword matching",
       "status": "pending",
-      "priority": 3,
+      "priority": 700,
       "createdAt": "2026-01-18T18:42:11.122Z"
     },
     {
       "id": "task-mkk32esa-ace8da",
       "objective": "Expose knowledge via REST API: JSON endpoints for querying decisions/learnings (agent-consumable, no HTML)",
       "status": "pending",
-      "priority": 3,
+      "priority": 700,
       "createdAt": "2026-01-18T18:42:11.674Z"
     },
     {
       "id": "task-mkk32f7l-7295fc",
       "objective": "Add session transcript capture hook: auto-distill grind session transcripts into knowledge.json on completion",
       "status": "pending",
-      "priority": 5,
+      "priority": 700,
       "createdAt": "2026-01-18T18:42:12.225Z"
     },
     {
       "id": "task-mkk32fma-31471e",
       "objective": "Add identity resolution for knowledge: track who/what (human vs AI) authored each learning, enable 'what did X decide' queries",
       "status": "pending",
-      "priority": 2,
+      "priority": 700,
       "createdAt": "2026-01-18T18:42:12.754Z"
     },
     {
       "id": "task-mkk32lc5-ac550b",
       "objective": "Add universal webhook endpoint for knowledge ingestion: accept JSON from GitHub PRs, Slack, Linear with AI-powered understanding",
       "status": "pending",
-      "priority": 2,
+      "priority": 700,
       "createdAt": "2026-01-18T18:42:20.166Z"
     },
     {
       "id": "task-mkk32lqw-c4db14",
       "objective": "Categorize knowledge into decisions vs learnings: decisions are choices made, learnings are insights discovered (not action items)",
       "status": "pending",
-      "priority": 4,
+      "priority": 700,
       "createdAt": "2026-01-18T18:42:20.696Z"
     },
     {
       "id": "task-mkk36a9k-530b83",
       "objective": "RLM-style knowledge exploration: let agents write Python code to programmatically explore knowledge.json instead of just keyword search (treat knowledge as REPL environment object)",
       "status": "pending",
-      "priority": 4,
+      "priority": 700,
       "createdAt": "2026-01-18T18:45:12.440Z"
     },
     {
       "id": "task-mkk36ap6-0fff45",
       "objective": "Recursive session distillation: for large transcripts (>10K tokens), use RLM-style chunking + recursive summarization before knowledge extraction",
       "status": "pending",
-      "priority": 4,
+      "priority": 700,
       "createdAt": "2026-01-18T18:45:13.002Z"
     },
     {
       "id": "task-mkk36b3n-7e9898",
       "objective": "Context budget based on RLM findings: inject knowledge in chunks with verification sub-calls to prevent context rot degradation",
       "status": "pending",
-      "priority": 3,
+      "priority": 700,
       "createdAt": "2026-01-18T18:45:13.523Z"
     },
     {
       "id": "task-mkk36bhs-3bb661",
       "objective": "Recursive knowledge synthesis: for complex queries, decompose into sub-queries, recursively gather answers, then synthesize (RLM pattern)",
       "status": "pending",
-      "priority": 3,
+      "priority": 700,
       "createdAt": "2026-01-18T18:45:14.032Z"
     },
     {
       "id": "task-mkk36bvy-c7f018",
       "objective": "Progressive knowledge building: stream learnings to knowledge.json as session progresses, not just at end (RLM progressive output pattern)",
       "status": "pending",
-      "priority": 3,
+      "priority": 700,
       "createdAt": "2026-01-18T18:45:14.542Z"
     },
     {
       "id": "task-mkk36i5e-fa3211",
       "objective": "Verification sub-calls for contradiction detection: use RLM-style recursive queries to verify knowledge consistency across entries",
       "status": "pending",
-      "priority": 3,
+      "priority": 700,
       "createdAt": "2026-01-18T18:45:22.658Z"
     },
     {
       "id": "task-mkk36ik3-626503",
       "objective": "Semantic chunking for knowledge storage: partition learnings by topic/domain using RLM semantic partitioning, not just flat list",
       "status": "pending",
-      "priority": 3,
+      "priority": 700,
       "createdAt": "2026-01-18T18:45:23.187Z"
     },
     {
       "id": "task-mkk36iyd-5c1263",
       "objective": "Async parallel knowledge distillation: process multiple transcript chunks simultaneously (RLM suggests async LM calls for 3x speedup)",
       "status": "pending",
-      "priority": 2,
+      "priority": 700,
       "createdAt": "2026-01-18T18:45:23.701Z"
     },
     {
       "id": "task-mkk3fssl-50140d",
       "objective": "Auto-generate 'signs for Ralph': after N failures of same type, auto-append warning to worker prompts (error-fix-patterns → prompt injection)",
       "status": "pending",
-      "priority": 5,
+      "priority": 400,
       "createdAt": "2026-01-18T18:52:36.357Z"
     },
     {
       "id": "task-mkk3ft7p-e5cdcf",
       "objective": "Prompt evolution from knowledge: inject relevant learnings/decisions into worker prompts automatically (accumulated knowledge → better Ralph)",
       "status": "pending",
-      "priority": 5,
+      "priority": 700,
       "createdAt": "2026-01-18T18:52:36.901Z"
     },
     {
       "id": "task-mkk3ftmk-014c77",
       "objective": "Detect deterministic failure modes: classify recurring errors into fixable categories, generate targeted prompt patches (Ralph tuning)",
       "status": "pending",
-      "priority": 4,
+      "priority": 400,
       "createdAt": "2026-01-18T18:52:37.436Z"
     },
     {
       "id": "task-mkk3fu0s-979981",
       "objective": "Eventual consistency metrics: track convergence rate per task type, identify which tasks need more 'signs' vs model escalation",
       "status": "pending",
-      "priority": 3,
+      "priority": 400,
       "createdAt": "2026-01-18T18:52:37.948Z"
     },
     {
       "id": "task-mkk3fuf6-cf9ef2",
       "objective": "Graduate to 'New Ralph': after accumulating enough learnings for a domain, generate optimized domain-specific prompts (prompt distillation)",
       "status": "pending",
-      "priority": 3,
+      "priority": 700,
       "createdAt": "2026-01-18T18:52:38.466Z"
     },
     {
       "id": "task-mkk3g0ah-86a463",
       "objective": "Recursive Ralph with knowledge: use RLM-style decomposition + Nexus knowledge injection for complex tasks (all three patterns combined)",
       "status": "pending",
-      "priority": 4,
+      "priority": 700,
       "createdAt": "2026-01-18T18:52:46.073Z"
     },
     {
       "id": "task-mkk3g0p6-0b52d1",
       "objective": "Operator skill metrics: track which prompt patterns correlate with success, surface 'LLM mirror' insights to improve prompting",
       "status": "pending",
-      "priority": 2,
+      "priority": 600,
       "createdAt": "2026-01-18T18:52:46.602Z"
     },
     {
       "id": "task-mkk3jge7-2be421",
       "objective": "Add Witness patrol: periodic check for stuck workers, trigger recovery or escalation (Gas Town pattern)",
       "status": "pending",
-      "priority": 4,
+      "priority": 400,
       "createdAt": "2026-01-18T18:55:26.911Z"
     },
     {
       "id": "task-mkk3jgse-f0f366",
       "objective": "Add workflow Formulas: TOML-defined reusable task patterns (e.g., 'release', 'refactor-module') that expand to task sequences",
       "status": "pending",
-      "priority": 3,
+      "priority": 400,
       "createdAt": "2026-01-18T18:55:27.422Z"
     },
     {
       "id": "task-mkk3jh6f-d5ccc9",
       "objective": "Add Molecules: durable chained workflows that survive crashes, track multi-step processes as linked beads",
       "status": "pending",
-      "priority": 3,
+      "priority": 400,
       "createdAt": "2026-01-18T18:55:27.927Z"
     },
     {
       "id": "task-mkk3jhk2-8695ff",
       "objective": "Add Seance: query previous grind sessions for context/decisions (combine with Nexus knowledge capture)",
       "status": "pending",
-      "priority": 3,
+      "priority": 700,
       "createdAt": "2026-01-18T18:55:28.418Z"
     },
     {
       "id": "task-mkk3jhyh-b06bd0",
       "objective": "Add Boot the Dog: watchdog for the daemon watchdog, ensure daemon itself stays healthy",
       "status": "pending",
-      "priority": 2,
+      "priority": 400,
       "createdAt": "2026-01-18T18:55:28.937Z"
     },
     {
       "id": "task-mkk3jicm-dfbcd1",
       "objective": "Add inter-worker messaging (Nudge): allow workers to signal each other for coordination without going through orchestrator",
       "status": "pending",
-      "priority": 2,
+      "priority": 400,
       "createdAt": "2026-01-18T18:55:29.446Z"
     },
     {
       "id": "task-mkk3jry2-0f37e1",
       "objective": "GUPP + Ralph loop: 'If there is work on your Hook, YOU MUST RUN IT' - make grind more aggressive about processing available work",
       "status": "pending",
-      "priority": 4,
+      "priority": 400,
       "createdAt": "2026-01-18T18:55:41.882Z"
     },
     {
       "id": "task-mkk3jsbw-1dc5c8",
       "objective": "NDI via knowledge: achieve Nondeterministic Idempotence by recording all decisions/learnings, replay to get consistent outcomes",
       "status": "pending",
-      "priority": 3,
+      "priority": 700,
       "createdAt": "2026-01-18T18:55:42.380Z"
     },
     {
       "id": "task-mkk3jspp-aa4c69",
       "objective": "Refinery with learning: AI-powered merge conflict resolution that learns from past resolutions (Gas Town Refinery + error-fix patterns)",
       "status": "pending",
-      "priority": 3,
+      "priority": 700,
       "createdAt": "2026-01-18T18:55:42.877Z"
     },
     {
       "id": "task-mkk3jt3g-89f4eb",
       "objective": "Formulas from patterns: auto-generate workflow Formulas from frequently co-occurring task sequences in history",
       "status": "pending",
-      "priority": 2,
+      "priority": 400,
       "createdAt": "2026-01-18T18:55:43.372Z"
     },
     {
       "id": "task-mkk3jth6-a2f39f",
       "objective": "Seance + RLM: recursively query past sessions to build context for complex tasks (Gas Town Seance + RLM decomposition)",
       "status": "pending",
-      "priority": 2,
+      "priority": 400,
       "createdAt": "2026-01-18T18:55:43.866Z"
     },
     {
       "id": "task-mkk3lycc-b104df",
       "objective": "[vision] Federated learning network: share anonymized learnings across undercity instances (opt-in), build collective intelligence without exposing proprietary code",
       "status": "pending",
-      "priority": 2,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:23.484Z"
     },
     {
       "id": "task-mkk3lysv-c3822f",
       "objective": "[vision] Predictive task generation: infer what human will want next from patterns (time-of-day, recent commits, calendar), propose before asked",
       "status": "pending",
-      "priority": 2,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:24.079Z"
     },
     {
       "id": "task-mkk3lzbh-bb724d",
       "objective": "[vision] Adversarial self-improvement: spawn 'red team' agent to find weaknesses in completed work, proactively harden before merge",
       "status": "pending",
-      "priority": 2,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:24.749Z"
     },
     {
       "id": "task-mkk3lzst-f9d82b",
       "objective": "[vision] Economic optimizer: track cost-per-value (tokens spent vs impact delivered), auto-adjust routing to maximize ROI not just success rate",
       "status": "pending",
-      "priority": 2,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:25.373Z"
     },
     {
       "id": "task-mkk3m0a6-f7f584",
       "objective": "[vision] Emergent specialization: let workers naturally specialize based on success patterns, create 'expert' prompt variants per domain",
       "status": "pending",
-      "priority": 2,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:25.998Z"
     },
     {
       "id": "task-mkk3m0qb-5c4ab8",
       "objective": "[vision] Self-modifying orchestration: orchestrator evolves its own strategies (retry logic, routing, decomposition) based on meta-metrics",
       "status": "pending",
-      "priority": 2,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:26.579Z"
     },
     {
       "id": "task-mkk3maj4-21ca91",
       "objective": "[vision] Temporal scheduling intelligence: learn when tasks succeed best (time of day, after which commits, sprint phase), auto-schedule for optimal timing",
       "status": "pending",
-      "priority": 2,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:39.280Z"
     },
     {
       "id": "task-mkk3mb3f-86921a",
       "objective": "[vision] Counterfactual reasoning: 'what if we had chosen X?' - simulate alternate decisions using knowledge graph, inform future choices",
       "status": "pending",
-      "priority": 1,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:40.011Z"
     },
     {
       "id": "task-mkk3mbkj-956ac1",
       "objective": "[vision] Code archaeology agent: analyze git history + decisions to understand WHY code evolved, inject 'institutional memory' into context",
       "status": "pending",
-      "priority": 2,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:40.627Z"
     },
     {
       "id": "task-mkk3mc2e-7285fb",
       "objective": "[vision] Autonomous codebase gardening: proactively identify and fix tech debt, refactoring opportunities, security issues without being asked",
       "status": "pending",
-      "priority": 2,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:41.271Z"
     },
     {
       "id": "task-mkk3mcjg-008e33",
       "objective": "[vision] Intent completion: from partial/ambiguous instructions, predict full intent using past decisions + codebase patterns, confirm with human",
       "status": "pending",
-      "priority": 2,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:41.884Z"
     },
     {
       "id": "task-mkk3md26-259187",
       "objective": "[vision] Meta-orchestration layer: orchestrate multiple undercity instances across repos, share context, coordinate cross-repo changes",
       "status": "pending",
-      "priority": 1,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:42.558Z"
     },
     {
       "id": "task-mkk3mioy-4d2e63",
       "objective": "[vision] Dream mode: during idle time, agents 'dream' - replay past sessions, discover patterns, consolidate learnings, wake up smarter",
       "status": "pending",
-      "priority": 1,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:49.858Z"
     },
     {
       "id": "task-mkk3mj5t-b7ea94",
       "objective": "[vision] Skill acquisition: detect unknown frameworks/tools in tasks, spawn research agent to learn them, add to capability set without retraining",
       "status": "pending",
-      "priority": 2,
+      "priority": 100,
       "createdAt": "2026-01-18T18:57:50.465Z"
     },
     {
       "id": "task-mkkhk0yg-84c7e1",
-      "objective": "Analyze codebase structure and identify where search/filter logic should be implemented",
+      "objective": "[research] Analyze codebase structure and identify where search/filter logic should be implemented",
       "status": "pending",
-      "priority": 7.3999999999999995,
+      "priority": 900,
       "createdAt": "2026-01-19T01:27:48.184Z",
       "parentId": "task-mkk2u7zo-b2fc2a"
     },
     {
       "id": "task-mkkhk0yg-f8bb1f",
-      "objective": "Design search algorithm approach (full-text search, keyword matching, relevance ranking)",
+      "objective": "[research] Design search algorithm approach (full-text search, keyword matching, relevance ranking)",
       "status": "pending",
-      "priority": 7.5,
+      "priority": 900,
       "createdAt": "2026-01-19T01:27:48.184Z",
       "parentId": "task-mkk2u7zo-b2fc2a"
     },
@@ -1681,7 +1555,7 @@
       "id": "task-mkkhk0yg-04b634",
       "objective": "Design filter schema and criteria structure",
       "status": "pending",
-      "priority": 7.6,
+      "priority": 400,
       "createdAt": "2026-01-19T01:27:48.184Z",
       "parentId": "task-mkk2u7zo-b2fc2a"
     },
@@ -1689,7 +1563,7 @@
       "id": "task-mkkhk0yg-c112eb",
       "objective": "Implement text tokenization and indexing for search",
       "status": "pending",
-      "priority": 7.7,
+      "priority": 800,
       "createdAt": "2026-01-19T01:27:48.184Z",
       "parentId": "task-mkk2u7zo-b2fc2a"
     },
@@ -1697,7 +1571,7 @@
       "id": "task-mkkhk0yg-9b5c3d",
       "objective": "Implement search query parsing and matching logic",
       "status": "pending",
-      "priority": 7.8,
+      "priority": 800,
       "createdAt": "2026-01-19T01:27:48.184Z",
       "parentId": "task-mkk2u7zo-b2fc2a"
     },
@@ -1705,7 +1579,7 @@
       "id": "task-mkkhk0yg-1bd031",
       "objective": "Implement relevance scoring and result ranking",
       "status": "pending",
-      "priority": 7.9,
+      "priority": 400,
       "createdAt": "2026-01-19T01:27:48.184Z",
       "parentId": "task-mkk2u7zo-b2fc2a"
     },
@@ -1713,7 +1587,7 @@
       "id": "task-mkkhk0yg-157add",
       "objective": "Implement filter criteria evaluation and application",
       "status": "pending",
-      "priority": 8,
+      "priority": 400,
       "createdAt": "2026-01-19T01:27:48.184Z",
       "parentId": "task-mkk2u7zo-b2fc2a"
     },
@@ -1721,50 +1595,707 @@
       "id": "task-mkkhk0yg-1e4cc1",
       "objective": "Integrate search and filter components into query handler",
       "status": "pending",
-      "priority": 8.1,
+      "priority": 400,
       "createdAt": "2026-01-19T01:27:48.184Z",
       "parentId": "task-mkk2u7zo-b2fc2a"
     },
     {
       "id": "task-mkkhk0yg-3a1245",
       "objective": "Create unit tests for search algorithm",
-      "status": "pending",
+      "status": "complete",
       "priority": 8.2,
       "createdAt": "2026-01-19T01:27:48.184Z",
-      "parentId": "task-mkk2u7zo-b2fc2a"
+      "parentId": "task-mkk2u7zo-b2fc2a",
+      "completedAt": "2026-01-19T02:01:18.913Z"
     },
     {
       "id": "task-mkkhk0yg-6c29b0",
       "objective": "Create unit tests for filter logic",
       "status": "pending",
-      "priority": 8.3,
+      "priority": 500,
       "createdAt": "2026-01-19T01:27:48.184Z",
-      "parentId": "task-mkk2u7zo-b2fc2a"
+      "parentId": "task-mkk2u7zo-b2fc2a",
+      "isDecomposed": true,
+      "subtaskIds": [
+        "task-mkkiia5q-210412",
+        "task-mkkiia5q-1cf0cf",
+        "task-mkkiia5q-31f000",
+        "task-mkkiia5q-2ca953",
+        "task-mkkiia5q-35cf5f",
+        "task-mkkiia5q-3969fe",
+        "task-mkkiia5q-a87b80"
+      ]
     },
     {
       "id": "task-mkkhk0yg-dd9ff0",
       "objective": "Create integration tests for combined search and filtering",
-      "status": "pending",
+      "status": "complete",
       "priority": 8.4,
       "createdAt": "2026-01-19T01:27:48.184Z",
-      "parentId": "task-mkk2u7zo-b2fc2a"
+      "parentId": "task-mkk2u7zo-b2fc2a",
+      "isDecomposed": true,
+      "subtaskIds": [
+        "task-mkkisq2t-e8f82d",
+        "task-mkkisq2t-377260",
+        "task-mkkisq2t-fda9de",
+        "task-mkkisq2t-caa07b",
+        "task-mkkisq2t-957cc0",
+        "task-mkkisq2t-5eabef"
+      ],
+      "completedAt": "2026-01-19T02:02:47.724Z"
     },
     {
       "id": "task-mkkhk0yg-39fa16",
       "objective": "Add error handling and edge case management",
       "status": "pending",
-      "priority": 8.5,
+      "priority": 400,
       "createdAt": "2026-01-19T01:27:48.185Z",
-      "parentId": "task-mkk2u7zo-b2fc2a"
+      "parentId": "task-mkk2u7zo-b2fc2a",
+      "isDecomposed": true,
+      "subtaskIds": [
+        "task-mkkihvl4-630522",
+        "task-mkkihvl4-6637e9",
+        "task-mkkihvl4-5bb8d3",
+        "task-mkkihvl4-255d2c",
+        "task-mkkihvl4-9f51c5",
+        "task-mkkihvl4-7e4163",
+        "task-mkkihvl4-059892",
+        "task-mkkihvl4-41aa7d",
+        "task-mkkihvl4-46c243",
+        "task-mkkihvl4-c29609"
+      ]
     },
     {
       "id": "task-mkkhk0yh-05af37",
       "objective": "Document search and filter API and usage patterns",
-      "status": "pending",
+      "status": "complete",
       "priority": 8.6,
       "createdAt": "2026-01-19T01:27:48.185Z",
-      "parentId": "task-mkk2u7zo-b2fc2a"
+      "parentId": "task-mkk2u7zo-b2fc2a",
+      "completedAt": "2026-01-19T02:01:18.910Z"
+    },
+    {
+      "id": "task-mkkihvl4-630522",
+      "objective": "Identify all critical functions and API endpoints that lack error handling",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-19T01:54:07.528Z",
+      "parentId": "task-mkkhk0yg-39fa16"
+    },
+    {
+      "id": "task-mkkihvl4-6637e9",
+      "objective": "Add input validation and type checking to function parameters across the codebase",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-19T01:54:07.528Z",
+      "parentId": "task-mkkhk0yg-39fa16"
+    },
+    {
+      "id": "task-mkkihvl4-5bb8d3",
+      "objective": "Implement try-catch blocks and error recovery mechanisms in async operations",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-19T01:54:07.528Z",
+      "parentId": "task-mkkhk0yg-39fa16"
+    },
+    {
+      "id": "task-mkkihvl4-255d2c",
+      "objective": "Add boundary condition checks for array/list operations (empty arrays, null values, out-of-bounds access)",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-19T01:54:07.528Z",
+      "parentId": "task-mkkhk0yg-39fa16"
+    },
+    {
+      "id": "task-mkkihvl4-9f51c5",
+      "objective": "Handle null/undefined reference errors in object property access",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-19T01:54:07.528Z",
+      "parentId": "task-mkkhk0yg-39fa16"
+    },
+    {
+      "id": "task-mkkihvl4-7e4163",
+      "objective": "Implement error logging and monitoring infrastructure",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-19T01:54:07.528Z",
+      "parentId": "task-mkkhk0yg-39fa16"
+    },
+    {
+      "id": "task-mkkihvl4-059892",
+      "objective": "Add user-facing error messages and graceful degradation UI states",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-19T01:54:07.528Z",
+      "parentId": "task-mkkhk0yg-39fa16"
+    },
+    {
+      "id": "task-mkkihvl4-41aa7d",
+      "objective": "Create unit tests for error scenarios and edge cases",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T01:54:07.528Z",
+      "parentId": "task-mkkhk0yg-39fa16",
+      "isDecomposed": true,
+      "subtaskIds": [
+        "task-mkkjy2v9-2cfdd3",
+        "task-mkkjy2v9-0b00cc",
+        "task-mkkjy2v9-b5c097",
+        "task-mkkjy2v9-58eb8a",
+        "task-mkkjy2v9-da01fe",
+        "task-mkkjy2v9-ce98a0",
+        "task-mkkjy2v9-e6a7ca",
+        "task-mkkjy2v9-3f528a",
+        "task-mkkjy2v9-c9a2eb",
+        "task-mkkjy2v9-5190f0"
+      ]
+    },
+    {
+      "id": "task-mkkihvl4-46c243",
+      "objective": "Document error handling patterns and edge case management guidelines",
+      "status": "complete",
+      "priority": 9.4,
+      "createdAt": "2026-01-19T01:54:07.528Z",
+      "parentId": "task-mkkhk0yg-39fa16",
+      "completedAt": "2026-01-19T02:39:16.857Z"
+    },
+    {
+      "id": "task-mkkihvl4-c29609",
+      "objective": "Review and test the implementation against common failure scenarios",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T01:54:07.528Z",
+      "parentId": "task-mkkhk0yg-39fa16",
+      "isDecomposed": true,
+      "subtaskIds": [
+        "task-mkkjxhsc-56ec1a",
+        "task-mkkjxhsc-9a68b8",
+        "task-mkkjxhsc-ecaebc",
+        "task-mkkjxhsc-f00f42",
+        "task-mkkjxhsc-6cc6e7",
+        "task-mkkjxhsc-06cfe9",
+        "task-mkkjxhsc-e88bf7",
+        "task-mkkjxhsc-35104d",
+        "task-mkkjxhsc-26fa45",
+        "task-mkkjxhsc-474550"
+      ]
+    },
+    {
+      "id": "task-mkkiia5q-210412",
+      "objective": "Identify all filter logic implementations in the codebase using code search",
+      "status": "pending",
+      "priority": 800,
+      "createdAt": "2026-01-19T01:54:26.414Z",
+      "parentId": "task-mkkhk0yg-6c29b0"
+    },
+    {
+      "id": "task-mkkiia5q-1cf0cf",
+      "objective": "Analyze the filter logic to understand input types, output types, and edge cases",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-19T01:54:26.414Z",
+      "parentId": "task-mkkhk0yg-6c29b0"
+    },
+    {
+      "id": "task-mkkiia5q-31f000",
+      "objective": "Create test file(s) with appropriate structure and test framework setup",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T01:54:26.414Z",
+      "parentId": "task-mkkhk0yg-6c29b0"
+    },
+    {
+      "id": "task-mkkiia5q-2ca953",
+      "objective": "Write unit tests covering normal filter cases",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T01:54:26.414Z",
+      "parentId": "task-mkkhk0yg-6c29b0"
+    },
+    {
+      "id": "task-mkkiia5q-35cf5f",
+      "objective": "Write unit tests covering boundary conditions and edge cases",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T01:54:26.414Z",
+      "parentId": "task-mkkhk0yg-6c29b0"
+    },
+    {
+      "id": "task-mkkiia5q-3969fe",
+      "objective": "Write unit tests covering error handling and invalid inputs",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T01:54:26.414Z",
+      "parentId": "task-mkkhk0yg-6c29b0"
+    },
+    {
+      "id": "task-mkkiia5q-a87b80",
+      "objective": "Run tests to verify they pass and check code coverage",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T01:54:26.414Z",
+      "parentId": "task-mkkhk0yg-6c29b0"
+    },
+    {
+      "id": "task-mkkisq2t-e8f82d",
+      "objective": "Create base integration test structure with proper fixtures and helpers",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:02:33.605Z",
+      "parentId": "task-mkkhk0yg-dd9ff0"
+    },
+    {
+      "id": "task-mkkisq2t-377260",
+      "objective": "Implement knowledge search + filter tests (keywords + confidence/category)",
+      "status": "pending",
+      "priority": 800,
+      "createdAt": "2026-01-19T02:02:33.605Z",
+      "parentId": "task-mkkhk0yg-dd9ff0"
+    },
+    {
+      "id": "task-mkkisq2t-fda9de",
+      "objective": "Implement oracle search + filter tests (query + category filtering)",
+      "status": "pending",
+      "priority": 800,
+      "createdAt": "2026-01-19T02:02:33.605Z",
+      "parentId": "task-mkkhk0yg-dd9ff0"
+    },
+    {
+      "id": "task-mkkisq2t-caa07b",
+      "objective": "Implement MCP protocol tests for combined search/filter requests",
+      "status": "pending",
+      "priority": 800,
+      "createdAt": "2026-01-19T02:02:33.605Z",
+      "parentId": "task-mkkhk0yg-dd9ff0"
+    },
+    {
+      "id": "task-mkkisq2t-957cc0",
+      "objective": "Add performance and edge case tests for combined operations",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:02:33.605Z",
+      "parentId": "task-mkkhk0yg-dd9ff0"
+    },
+    {
+      "id": "task-mkkisq2t-5eabef",
+      "objective": "Add regression tests to ensure filters don't break existing search behavior",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:02:33.605Z",
+      "parentId": "task-mkkhk0yg-dd9ff0"
+    },
+    {
+      "id": "task-mkkjxhsc-56ec1a",
+      "objective": "Identify common failure scenarios applicable to the codebase (network errors, timeouts, invalid inputs, resource constraints, edge cases)",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-19T02:34:15.756Z",
+      "parentId": "task-mkkihvl4-c29609"
+    },
+    {
+      "id": "task-mkkjxhsc-9a68b8",
+      "objective": "Locate and review the main implementation files to understand current error handling patterns",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-19T02:34:15.756Z",
+      "parentId": "task-mkkihvl4-c29609"
+    },
+    {
+      "id": "task-mkkjxhsc-ecaebc",
+      "objective": "Identify existing test files and testing frameworks in use",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:15.756Z",
+      "parentId": "task-mkkihvl4-c29609"
+    },
+    {
+      "id": "task-mkkjxhsc-f00f42",
+      "objective": "Create or update test cases for network/connectivity failures",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:15.756Z",
+      "parentId": "task-mkkihvl4-c29609"
+    },
+    {
+      "id": "task-mkkjxhsc-6cc6e7",
+      "objective": "Create or update test cases for timeout and performance failures",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:15.756Z",
+      "parentId": "task-mkkihvl4-c29609"
+    },
+    {
+      "id": "task-mkkjxhsc-06cfe9",
+      "objective": "Create or update test cases for invalid input and validation failures",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:15.756Z",
+      "parentId": "task-mkkihvl4-c29609"
+    },
+    {
+      "id": "task-mkkjxhsc-e88bf7",
+      "objective": "Create or update test cases for resource and boundary condition failures",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:15.756Z",
+      "parentId": "task-mkkihvl4-c29609"
+    },
+    {
+      "id": "task-mkkjxhsc-35104d",
+      "objective": "Execute all test suites and collect results",
+      "status": "complete",
+      "priority": 10.3,
+      "createdAt": "2026-01-19T02:34:15.756Z",
+      "parentId": "task-mkkihvl4-c29609",
+      "completedAt": "2026-01-19T03:05:58.558Z"
+    },
+    {
+      "id": "task-mkkjxhsc-26fa45",
+      "objective": "Analyze test coverage and identify untested failure paths",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:15.756Z",
+      "parentId": "task-mkkihvl4-c29609"
+    },
+    {
+      "id": "task-mkkjxhsc-474550",
+      "objective": "Document findings, gaps, and recommendations for improvement",
+      "status": "pending",
+      "priority": 600,
+      "createdAt": "2026-01-19T02:34:15.756Z",
+      "parentId": "task-mkkihvl4-c29609",
+      "isDecomposed": true,
+      "subtaskIds": [
+        "task-mkkkv5ro-229932",
+        "task-mkkkv5ro-183e82",
+        "task-mkkkv5ro-6f46e1",
+        "task-mkkkv5ro-345ea0",
+        "task-mkkkv5ro-f1a9e7",
+        "task-mkkkv5ro-385001",
+        "task-mkkkv5ro-aebe53"
+      ]
+    },
+    {
+      "id": "task-mkkjy2v9-2cfdd3",
+      "objective": "Explore the codebase to identify modules and functions that need error scenario testing",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:43.077Z",
+      "parentId": "task-mkkihvl4-41aa7d"
+    },
+    {
+      "id": "task-mkkjy2v9-0b00cc",
+      "objective": "Analyze existing code to identify potential error points, boundary conditions, and edge cases",
+      "status": "pending",
+      "priority": 400,
+      "createdAt": "2026-01-19T02:34:43.077Z",
+      "parentId": "task-mkkihvl4-41aa7d"
+    },
+    {
+      "id": "task-mkkjy2v9-b5c097",
+      "objective": "Design test cases for null/undefined inputs, invalid types, and missing parameters",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:43.077Z",
+      "parentId": "task-mkkihvl4-41aa7d"
+    },
+    {
+      "id": "task-mkkjy2v9-58eb8a",
+      "objective": "Design test cases for boundary conditions (empty collections, zero values, maximum values)",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:43.077Z",
+      "parentId": "task-mkkihvl4-41aa7d"
+    },
+    {
+      "id": "task-mkkjy2v9-da01fe",
+      "objective": "Design test cases for resource constraints and error handling paths",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:43.077Z",
+      "parentId": "task-mkkihvl4-41aa7d"
+    },
+    {
+      "id": "task-mkkjy2v9-ce98a0",
+      "objective": "Implement unit tests for error scenarios using appropriate testing framework",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:43.077Z",
+      "parentId": "task-mkkihvl4-41aa7d"
+    },
+    {
+      "id": "task-mkkjy2v9-e6a7ca",
+      "objective": "Implement unit tests for edge cases with comprehensive assertions",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:43.077Z",
+      "parentId": "task-mkkihvl4-41aa7d"
+    },
+    {
+      "id": "task-mkkjy2v9-3f528a",
+      "objective": "Set up mocks and stubs for external dependencies in error tests",
+      "status": "pending",
+      "priority": 500,
+      "createdAt": "2026-01-19T02:34:43.077Z",
+      "parentId": "task-mkkihvl4-41aa7d"
+    },
+    {
+      "id": "task-mkkjy2v9-c9a2eb",
+      "objective": "Run tests to verify they execute correctly and catch intended failures",
+      "status": "complete",
+      "priority": 10.200000000000001,
+      "createdAt": "2026-01-19T02:34:43.077Z",
+      "parentId": "task-mkkihvl4-41aa7d",
+      "completedAt": "2026-01-19T03:10:03.887Z"
+    },
+    {
+      "id": "task-mkkjy2v9-5190f0",
+      "objective": "Review test coverage to ensure error scenarios and edge cases are adequately covered",
+      "status": "complete",
+      "priority": 10.3,
+      "createdAt": "2026-01-19T02:34:43.077Z",
+      "parentId": "task-mkkihvl4-41aa7d",
+      "completedAt": "2026-01-19T03:07:30.338Z"
+    },
+    {
+      "id": "task-mkkkv5ro-229932",
+      "objective": "Explore existing documentation structure and inventory all documentation files",
+      "status": "pending",
+      "priority": 300,
+      "createdAt": "2026-01-19T03:00:26.484Z",
+      "parentId": "task-mkkjxhsc-474550"
+    },
+    {
+      "id": "task-mkkkv5ro-183e82",
+      "objective": "Analyze documentation coverage for all major features and components",
+      "status": "pending",
+      "priority": 300,
+      "createdAt": "2026-01-19T03:00:26.484Z",
+      "parentId": "task-mkkjxhsc-474550"
+    },
+    {
+      "id": "task-mkkkv5ro-6f46e1",
+      "objective": "Identify gaps in documentation (missing topics, unclear sections, outdated information)",
+      "status": "pending",
+      "priority": 300,
+      "createdAt": "2026-01-19T03:00:26.484Z",
+      "parentId": "task-mkkjxhsc-474550"
+    },
+    {
+      "id": "task-mkkkv5ro-345ea0",
+      "objective": "Assess documentation quality metrics (clarity, completeness, accuracy, accessibility)",
+      "status": "pending",
+      "priority": 300,
+      "createdAt": "2026-01-19T03:00:26.484Z",
+      "parentId": "task-mkkjxhsc-474550"
+    },
+    {
+      "id": "task-mkkkv5ro-f1a9e7",
+      "objective": "Document current state findings with specific examples and locations",
+      "status": "pending",
+      "priority": 300,
+      "createdAt": "2026-01-19T03:00:26.484Z",
+      "parentId": "task-mkkjxhsc-474550"
+    },
+    {
+      "id": "task-mkkkv5ro-385001",
+      "objective": "Compile list of improvement recommendations prioritized by impact and effort",
+      "status": "pending",
+      "priority": 600,
+      "createdAt": "2026-01-19T03:00:26.484Z",
+      "parentId": "task-mkkjxhsc-474550"
+    },
+    {
+      "id": "task-mkkkv5ro-aebe53",
+      "objective": "Create summary report with findings, gaps analysis, and recommendations for improvement",
+      "status": "pending",
+      "priority": 600,
+      "createdAt": "2026-01-19T03:00:26.484Z",
+      "parentId": "task-mkkjxhsc-474550"
+    },
+    {
+      "id": "task-mkkpxj0c-e528e4",
+      "objective": "Audit all error handling blocks for corresponding test coverage",
+      "status": "pending",
+      "priority": 900,
+      "createdAt": "2026-01-19T05:22:15.036Z",
+      "tags": [
+        "testing",
+        "error-handling",
+        "coverage",
+        "high-priority"
+      ]
+    },
+    {
+      "id": "task-mkkpxj0f-2dd27f",
+      "objective": "Implement mutation testing in CI/CD pipeline for critical modules",
+      "status": "pending",
+      "priority": 800,
+      "createdAt": "2026-01-19T05:22:15.039Z",
+      "tags": [
+        "testing",
+        "mutation-testing",
+        "ci-cd",
+        "quality"
+      ]
+    },
+    {
+      "id": "task-mkkpxj0n-289e52",
+      "objective": "Add branch coverage metrics and set 75% threshold for critical paths",
+      "status": "pending",
+      "priority": 850,
+      "createdAt": "2026-01-19T05:22:15.047Z",
+      "tags": [
+        "testing",
+        "coverage",
+        "metrics",
+        "ci-cd"
+      ]
+    },
+    {
+      "id": "task-mkkpxj0p-8bef83",
+      "objective": "Create negative test suite for boundary conditions and invalid inputs",
+      "status": "pending",
+      "priority": 800,
+      "createdAt": "2026-01-19T05:22:15.049Z",
+      "tags": [
+        "testing",
+        "negative-testing",
+        "edge-cases",
+        "reliability"
+      ]
+    },
+    {
+      "id": "task-mkkpxj0r-99c04d",
+      "objective": "Integrate coverage visualization tool with red-green highlighting in code reviews",
+      "status": "pending",
+      "priority": 700,
+      "createdAt": "2026-01-19T05:22:15.051Z",
+      "tags": [
+        "testing",
+        "code-review",
+        "tooling",
+        "visibility"
+      ]
+    },
+    {
+      "id": "task-mkkrgogz-c6cd8a",
+      "objective": "[refactor] Add JSON Schema validation for tasks.json with automated validation on load",
+      "status": "pending",
+      "priority": 800,
+      "createdAt": "2026-01-19T06:05:08.195Z",
+      "tags": [
+        "validation",
+        "schema",
+        "tooling",
+        "developer-experience"
+      ]
+    },
+    {
+      "id": "task-mkkrgoh1-1979ab",
+      "objective": "[optimization] Implement task index cache to reduce O(n) scans on task board queries",
+      "status": "pending",
+      "priority": 850,
+      "createdAt": "2026-01-19T06:05:08.197Z",
+      "tags": [
+        "performance",
+        "scalability",
+        "indexing"
+      ]
+    },
+    {
+      "id": "task-mkkrgoh3-a6cb09",
+      "objective": "[stabilization] Add schema versioning and migration system for tasks.json backwards compatibility",
+      "status": "pending",
+      "priority": 750,
+      "createdAt": "2026-01-19T06:05:08.199Z",
+      "tags": [
+        "migrations",
+        "backwards-compatibility",
+        "versioning"
+      ]
+    },
+    {
+      "id": "task-mkkrgoh7-4e6e3e",
+      "objective": "[grind] Implement task archival system - move completed tasks >30 days to monthly archive files",
+      "status": "pending",
+      "priority": 700,
+      "createdAt": "2026-01-19T06:05:08.203Z",
+      "tags": [
+        "archival",
+        "maintenance",
+        "data-management"
+      ]
+    },
+    {
+      "id": "task-mkkrgoha-a7709e",
+      "objective": "[verify] Add comprehensive task validation on load with detailed error reporting",
+      "status": "pending",
+      "priority": 820,
+      "createdAt": "2026-01-19T06:05:08.206Z",
+      "tags": [
+        "validation",
+        "error-handling",
+        "data-integrity"
+      ]
+    },
+    {
+      "id": "task-mkkt9kks-3e92f3",
+      "objective": "[research] Examine knowledge.json structure and understand existing content organization",
+      "status": "complete",
+      "priority": 1000,
+      "createdAt": "2026-01-19T06:55:35.788Z",
+      "completedAt": "2026-01-19T06:57:30.177Z"
+    },
+    {
+      "id": "task-mkktbfod-3f5fc3",
+      "objective": "Create knowledge.json with agent capabilities, workflows, and system concepts",
+      "status": "pending",
+      "priority": 800,
+      "createdAt": "2026-01-19T06:57:02.749Z",
+      "tags": [
+        "documentation",
+        "knowledge-base",
+        "ai-integration"
+      ]
+    },
+    {
+      "id": "task-mkktbfof-0ac053",
+      "objective": "Implement JSON Schema validation for knowledge.json structure",
+      "status": "pending",
+      "priority": 750,
+      "createdAt": "2026-01-19T06:57:02.751Z",
+      "tags": [
+        "validation",
+        "schema",
+        "developer-experience"
+      ]
+    },
+    {
+      "id": "task-mkktbfon-8b0781",
+      "objective": "Add knowledge.json validation to CI/CD pipeline and pre-commit hooks",
+      "status": "pending",
+      "priority": 700,
+      "createdAt": "2026-01-19T06:57:02.760Z",
+      "tags": [
+        "ci-cd",
+        "automation",
+        "quality-assurance"
+      ]
+    },
+    {
+      "id": "task-mkktbfop-434e9a",
+      "objective": "Document knowledge.json structure and usage patterns in ARCHITECTURE.md",
+      "status": "pending",
+      "priority": 650,
+      "createdAt": "2026-01-19T06:57:02.761Z",
+      "tags": [
+        "documentation",
+        "architecture",
+        "onboarding"
+      ]
     }
   ],
-  "lastUpdated": "2026-01-19T01:48:22.787Z"
+  "lastUpdated": "2026-01-19T06:57:30.177Z"
 }
