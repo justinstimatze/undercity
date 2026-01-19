@@ -279,6 +279,8 @@ export interface AddTaskOptions {
 	skipDuplicateCheck?: boolean;
 	/** Task IDs this task depends on */
 	dependsOn?: string[];
+	/** Tags for categorization */
+	tags?: string[];
 }
 
 /**
@@ -562,6 +564,7 @@ export function addTask(
 	let handoffContext: HandoffContext | undefined;
 	let skipDuplicateCheck = false;
 	let dependsOn: string[] | undefined;
+	let tags: string[] | undefined;
 	let taskPath = path;
 
 	if (typeof priorityOrOptions === "number") {
@@ -571,6 +574,7 @@ export function addTask(
 		handoffContext = priorityOrOptions.handoffContext;
 		skipDuplicateCheck = priorityOrOptions.skipDuplicateCheck ?? false;
 		dependsOn = priorityOrOptions.dependsOn;
+		tags = priorityOrOptions.tags;
 		taskPath = priorityOrOptions.path ?? path;
 	}
 
@@ -593,6 +597,7 @@ export function addTask(
 			createdAt: new Date(),
 			handoffContext,
 			dependsOn,
+			tags,
 		};
 		board.tasks.push(task);
 		saveTaskBoard(board, taskPath);

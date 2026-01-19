@@ -35,6 +35,7 @@ import { type ContextBriefing, type ContextMode, prepareContext } from "./contex
 import { captureDecision, parseAgentOutputForDecisions, updateDecisionOutcome } from "./decision-tracker.js";
 import { dualLogger } from "./dual-logger.js";
 import { generateToolsPrompt } from "./efficiency-tools.js";
+import { pmResearch, type PMResearchResult } from "./automated-pm.js";
 import {
 	clearPendingError,
 	formatFixSuggestionsForPrompt,
@@ -55,7 +56,7 @@ import { MetricsTracker } from "./metrics.js";
 import * as output from "./output.js";
 import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
 import { runEscalatingReview, type UnresolvedTicket } from "./review.js";
-import type { HandoffContext } from "./task.js";
+import { addTask, type HandoffContext } from "./task.js";
 import { formatCoModificationHints, formatFileSuggestionsForPrompt, recordTaskFiles } from "./task-file-patterns.js";
 import { formatExecutionPlanAsContext, planTaskWithReview, type TieredPlanResult } from "./task-planner.js";
 import { extractMetaTaskType, isMetaTask, isResearchTask, parseResearchResult } from "./task-schema.js";
@@ -672,6 +673,12 @@ export class TaskWorker {
 			if (planResult) return planResult;
 		}
 
+		// Route research tasks through automated PM
+		// PM does web research, writes design doc, and generates follow-up tasks
+		if (this.isCurrentTaskResearch) {
+			return this.runPMResearchTask(task, taskId, startTime);
+		}
+
 		// Prepare context and assess complexity
 		const { reviewLevel, phaseTimings } = await this.prepareContextAndAssessComplexity(task, taskId);
 
@@ -1197,6 +1204,170 @@ export class TaskWorker {
 		this.lastFeedback =
 			"You must write your research findings to the specified markdown file. Please create the file with your findings.";
 		return null;
+	}
+
+	/**
+	 * Run PM-based research for research tasks
+	 * Uses automated PM to research topic, write design doc, and generate follow-up tasks
+	 */
+	private async runPMResearchTask(
+		task: string,
+		taskId: string,
+		startTime: number,
+	): Promise<TaskResult> {
+		output.workerPhase(taskId, "pm-research");
+		sessionLogger.info({ taskId, task }, "Running PM-based research");
+
+		// Extract topic from task (remove [research] prefix)
+		const topic = task.replace(/^\[research\]\s*/i, "").trim();
+
+		try {
+			// Run PM research
+			const result = await pmResearch(topic, this.workingDirectory);
+
+			// Generate filename from topic
+			const slug = topic
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, "-")
+				.replace(/^-|-$/g, "")
+				.slice(0, 50);
+			const timestamp = new Date().toISOString().split("T")[0];
+			const outputPath = join(this.workingDirectory, ".undercity", "research", `${timestamp}-${slug}.md`);
+
+			// Ensure research directory exists
+			const researchDir = join(this.workingDirectory, ".undercity", "research");
+			if (!existsSync(researchDir)) {
+				mkdirSync(researchDir, { recursive: true });
+			}
+
+			// Write structured design doc
+			const designDoc = this.formatPMResearchAsDesignDoc(topic, result);
+			writeFileSync(outputPath, designDoc);
+			sessionLogger.info({ taskId, outputPath }, "PM research design doc written");
+
+			// Add generated task proposals to board
+			const addedTasks: string[] = [];
+			for (const proposal of result.taskProposals) {
+				try {
+					const newTask = addTask(proposal.objective, {
+						priority: proposal.suggestedPriority || 5,
+						tags: proposal.tags,
+					});
+					addedTasks.push(newTask.id);
+					sessionLogger.info({ taskId: newTask.id, objective: proposal.objective }, "Added follow-up task from PM research");
+				} catch (error) {
+					sessionLogger.warn({ error: String(error), proposal }, "Failed to add task proposal");
+				}
+			}
+
+			output.info(`PM research complete: ${result.findings.length} findings, ${addedTasks.length} tasks added`, { taskId });
+
+			// Commit the research output
+			let commitSha: string | undefined;
+			if (this.autoCommit) {
+				try {
+					execFileSync("git", ["add", outputPath], { cwd: this.workingDirectory });
+					const commitMsg = `[research] ${topic.slice(0, 50)}`;
+					execFileSync("git", ["commit", "-m", commitMsg], { cwd: this.workingDirectory });
+					commitSha = execFileSync("git", ["rev-parse", "HEAD"], {
+						cwd: this.workingDirectory,
+						encoding: "utf-8",
+					}).trim();
+				} catch {
+					// Commit may fail if no changes - that's ok
+				}
+			}
+
+			return {
+				task,
+				status: "complete",
+				model: "sonnet", // PM research uses sonnet
+				attempts: 1,
+				durationMs: Date.now() - startTime,
+				commitSha,
+				researchResult: {
+					summary: `Research on: ${topic}`,
+					findings: result.findings.map((f) => ({
+						finding: f,
+						confidence: 0.8,
+						category: "fact" as const,
+					})),
+					nextSteps: [
+						...result.recommendations,
+						...addedTasks.map((id) => `Task ${id} added to board`),
+					],
+					sources: result.sources,
+				},
+			};
+		} catch (error) {
+			sessionLogger.error({ error: String(error), taskId }, "PM research failed");
+			return {
+				task,
+				status: "failed",
+				model: "sonnet",
+				attempts: 1,
+				error: `PM research failed: ${String(error)}`,
+				durationMs: Date.now() - startTime,
+			};
+		}
+	}
+
+	/**
+	 * Format PM research result as a structured design document
+	 */
+	private formatPMResearchAsDesignDoc(topic: string, result: PMResearchResult): string {
+		const lines: string[] = [
+			`# Research: ${topic}`,
+			"",
+			`_Generated by automated PM on ${new Date().toISOString()}_`,
+			"",
+			"## Summary",
+			"",
+		];
+
+		if (result.findings.length > 0) {
+			lines.push("### Key Findings");
+			lines.push("");
+			for (const finding of result.findings) {
+				lines.push(`- ${finding}`);
+			}
+			lines.push("");
+		}
+
+		if (result.recommendations.length > 0) {
+			lines.push("### Recommendations");
+			lines.push("");
+			for (const rec of result.recommendations) {
+				lines.push(`- ${rec}`);
+			}
+			lines.push("");
+		}
+
+		if (result.sources.length > 0) {
+			lines.push("### Sources");
+			lines.push("");
+			for (const source of result.sources) {
+				lines.push(`- ${source}`);
+			}
+			lines.push("");
+		}
+
+		if (result.taskProposals.length > 0) {
+			lines.push("## Generated Tasks");
+			lines.push("");
+			for (const proposal of result.taskProposals) {
+				lines.push(`### ${proposal.objective}`);
+				lines.push("");
+				lines.push(`**Rationale:** ${proposal.rationale}`);
+				lines.push(`**Priority:** ${proposal.suggestedPriority}`);
+				if (proposal.tags && proposal.tags.length > 0) {
+					lines.push(`**Tags:** ${proposal.tags.join(", ")}`);
+				}
+				lines.push("");
+			}
+		}
+
+		return lines.join("\n");
 	}
 
 	/**

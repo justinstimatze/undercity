@@ -283,7 +283,7 @@ export function debug(message: string, data?: Record<string, unknown>): void {
  */
 export function workerPhase(
 	taskId: string,
-	phase: "planning" | "analyzing" | "executing" | "verifying" | "committing" | "reviewing" | "parsing",
+	phase: "planning" | "analyzing" | "executing" | "verifying" | "committing" | "reviewing" | "parsing" | "pm-research",
 	data?: Record<string, unknown>,
 ): void {
 	const phaseMessages: Record<string, string> = {
@@ -294,6 +294,7 @@ export function workerPhase(
 		committing: "Committing changes...",
 		reviewing: "Running review passes...",
 		parsing: "Parsing result...",
+		"pm-research": "Running PM research...",
 	};
 	outputEvent({
 		type: "worker_phase",
