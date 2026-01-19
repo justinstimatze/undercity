@@ -2207,8 +2207,13 @@ INSTRUCTIONS:
 3. Cite sources when possible
 4. Provide actionable insights
 
-OUTPUT:
-Write your findings to: ${outputPath}
+OUTPUT FILE: ${outputPath}
+
+CRITICAL - Follow these steps to write the output file:
+1. First, run: mkdir -p .undercity/research (to ensure directory exists)
+2. Check if ${outputPath} already exists using Read tool
+3. If the file exists, read it first, then use Edit or Write to update it
+4. If the file does NOT exist, you can create it with Write
 
 Use this markdown structure:
 \`\`\`markdown
@@ -2674,7 +2679,22 @@ RULES:
 						if (pendingTool) {
 							this.pendingWriteTools.delete(block.tool_use_id);
 							const isError = block.is_error === true;
-							const contentHasError = block.content?.toLowerCase().includes("error") ?? false;
+							// Handle both string and array content types from Anthropic API
+							const contentStr =
+								typeof block.content === "string"
+									? block.content
+									: Array.isArray(block.content)
+										? (block.content as Array<string | { text?: string }>)
+												.map((c: string | { text?: string }) =>
+													typeof c === "string" ? c : c.text || "",
+												)
+												.join("")
+										: "";
+							// Only count as error if it's a tool_use_error, not just contains "error" in success message
+							const contentHasError =
+								contentStr.includes("<tool_use_error>") ||
+								(contentStr.toLowerCase().includes("error") &&
+									!contentStr.toLowerCase().includes("successfully"));
 							const succeeded = !isError && !contentHasError;
 
 							if (succeeded) {
@@ -2708,9 +2728,9 @@ RULES:
 							} else {
 								// Check if this is a no-op edit (content already correct)
 								const isNoOpEdit =
-									block.content?.includes("exactly the same") ||
-									block.content?.includes("No changes to make") ||
-									block.content?.includes("already exists");
+									contentStr.includes("exactly the same") ||
+									contentStr.includes("No changes to make") ||
+									contentStr.includes("already exists");
 								if (isNoOpEdit) {
 									this.noOpEditCount++;
 									sessionLogger.debug(
@@ -2727,7 +2747,7 @@ RULES:
 											tool: pendingTool.name,
 											filePath: pendingTool.filePath,
 											isError,
-											contentPreview: block.content?.slice(0, 100),
+											contentPreview: contentStr.slice(0, 100),
 										},
 										"Write tool FAILED - not counting",
 									);
