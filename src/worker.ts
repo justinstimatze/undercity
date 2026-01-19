@@ -1307,12 +1307,7 @@ export class TaskWorker {
 			const primaryCategory = errorCategories[0] || "unknown";
 			const errorMessage = verification.issues.slice(0, 3).join("; ");
 
-			const remediation = tryAutoRemediate(
-				primaryCategory,
-				errorMessage,
-				this.workingDirectory,
-				this.stateDir,
-			);
+			const remediation = tryAutoRemediate(primaryCategory, errorMessage, this.workingDirectory, this.stateDir);
 
 			this.autoRemediationAttempted = true;
 
@@ -1654,7 +1649,9 @@ export class TaskWorker {
 			...verification.issues,
 			...verification.feedback
 				.split("\n")
-				.filter((line) => line.includes("error") || line.includes("Error") || line.includes("FAIL") || line.includes("✗"))
+				.filter(
+					(line) => line.includes("error") || line.includes("Error") || line.includes("FAIL") || line.includes("✗"),
+				)
 				.slice(0, 10),
 		];
 		try {

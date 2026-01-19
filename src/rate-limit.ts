@@ -5,6 +5,7 @@
  * Logs tokens per task, models usage over time, and captures 429 events.
  */
 
+import * as output from "./output.js";
 import type {
 	RateLimitConfig,
 	RateLimitHit,
@@ -14,7 +15,6 @@ import type {
 	TimeWindow,
 	TokenUsage,
 } from "./types.js";
-import * as output from "./output.js";
 
 /**
  * Default rate limit configuration
