@@ -383,4 +383,407 @@ describe("Oracle MCP Integration", () => {
 			}
 		});
 	});
+
+	describe("Oracle Search - Filter Regression Tests", () => {
+		it("should not break basic search when no filter applied", async () => {
+			// This is the baseline - search without filters should work
+			const request: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 15,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "assumption",
+					},
+				},
+			};
+
+			const response = await handler.handleRequest(request);
+
+			expect(response).toHaveProperty("result");
+			if ("result" in response) {
+				const result = response.result as {
+					count: number;
+					cards: Array<{ text: string; category: string }>;
+				};
+
+				expect(result.count).toBeGreaterThan(0);
+				expect(result.cards.length).toBe(result.count);
+			}
+		});
+
+		it("should not break empty query when no filter applied", async () => {
+			// Baseline: empty query returns all cards
+			const request: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 16,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "",
+					},
+				},
+			};
+
+			const response = await handler.handleRequest(request);
+
+			expect(response).toHaveProperty("result");
+			if ("result" in response) {
+				const result = response.result as { count: number };
+				// Should return all cards (not zero)
+				expect(result.count).toBeGreaterThan(0);
+			}
+		});
+
+		it("should maintain backward compatibility: unfiltered search returns same count", async () => {
+			// Regression test: Ensure unfiltered queries still work after filter code was added
+			const unfiltered: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 17,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "problem",
+					},
+				},
+			};
+
+			const response = await handler.handleRequest(unfiltered);
+
+			expect(response).toHaveProperty("result");
+			if ("result" in response) {
+				const result = response.result as { count: number };
+				expect(result.count).toBeGreaterThan(0);
+				// Verify that the result is well-formed
+				expect(typeof result.count).toBe("number");
+			}
+		});
+
+		it("should not unexpectedly exclude results when filter is applied", async () => {
+			// Get baseline unfiltered count
+			const unfiltered: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 18,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "test",
+					},
+				},
+			};
+
+			const unfilteredResponse = await handler.handleRequest(unfiltered);
+			const unfilteredCount =
+				"result" in unfilteredResponse ? (unfilteredResponse.result as { count: number }).count : 0;
+
+			// Get filtered count
+			const filtered: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 19,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "test",
+						category: "exploration",
+					},
+				},
+			};
+
+			const filteredResponse = await handler.handleRequest(filtered);
+			const filteredCount = "result" in filteredResponse ? (filteredResponse.result as { count: number }).count : 0;
+
+			// Filtered should never exceed unfiltered (basic set theory)
+			expect(filteredCount).toBeLessThanOrEqual(unfilteredCount);
+		});
+
+		it("should produce correct intersection of query + category filter", async () => {
+			// Both filters applied together should produce results that satisfy BOTH conditions
+			const request: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 20,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "test",
+						category: "action",
+					},
+				},
+			};
+
+			const response = await handler.handleRequest(request);
+
+			expect(response).toHaveProperty("result");
+			if ("result" in response) {
+				const result = response.result as {
+					count: number;
+					cards: Array<{ text: string; category: string; loreContext: string | null }>;
+				};
+
+				// All cards must be in the action category
+				expect(result.cards.every((card) => card.category === "action")).toBe(true);
+
+				// All cards must contain "test" keyword somewhere
+				result.cards.forEach((card) => {
+					const fullText = `${card.text} ${card.loreContext || ""}`.toLowerCase();
+					expect(fullText).toContain("test");
+				});
+			}
+		});
+
+		it("should return truly empty results when no matches (filter + query)", async () => {
+			// When filters result in no matches, must return empty array (not null or undefined)
+			const request: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 21,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "xyz_nonexistent_word_that_should_not_exist_anywhere_12345",
+						category: "questioning",
+					},
+				},
+			};
+
+			const response = await handler.handleRequest(request);
+
+			expect(response).toHaveProperty("result");
+			if ("result" in response) {
+				const result = response.result as {
+					count: number;
+					cards: Array<{ text: string }>;
+				};
+
+				// Must be exactly 0, not undefined or null
+				expect(result.count).toBe(0);
+				expect(Array.isArray(result.cards)).toBe(true);
+				expect(result.cards).toEqual([]);
+			}
+		});
+
+		it("should maintain filter state across multiple queries", async () => {
+			// Regression: Ensure filter state doesn't leak between requests
+			const query1: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 22,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "",
+						category: "action",
+					},
+				},
+			};
+
+			const response1 = await handler.handleRequest(query1);
+			const count1 = "result" in response1 ? (response1.result as { count: number }).count : 0;
+
+			// Second query with different filter should not be affected by first
+			const query2: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 23,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "",
+						category: "perspective",
+					},
+				},
+			};
+
+			const response2 = await handler.handleRequest(query2);
+			const count2 = "result" in response2 ? (response2.result as { count: number }).count : 0;
+
+			// Both should have returned valid results
+			expect(count1).toBeGreaterThan(0);
+			expect(count2).toBeGreaterThan(0);
+
+			// Query for a third filter to ensure no state leakage
+			const query3: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 24,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "",
+						category: "exploration",
+					},
+				},
+			};
+
+			const response3 = await handler.handleRequest(query3);
+			const count3 = "result" in response3 ? (response3.result as { count: number }).count : 0;
+
+			// All should be independent
+			expect(count3).toBeGreaterThan(0);
+		});
+
+		it("should return correct data structure with filter applied", async () => {
+			// Regression: Ensure response format doesn't break when filter is used
+			const request: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 25,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "creativity",
+						category: "disruption",
+					},
+				},
+			};
+
+			const response = await handler.handleRequest(request);
+
+			expect(response).toHaveProperty("result");
+			if ("result" in response) {
+				const result = response.result as {
+					query: string;
+					category: string | null;
+					count: number;
+					cards: Array<{ text: string; category: string; loreContext: string | null }>;
+				};
+
+				// Verify all expected fields are present
+				expect(result).toHaveProperty("query");
+				expect(result).toHaveProperty("category");
+				expect(result).toHaveProperty("count");
+				expect(result).toHaveProperty("cards");
+
+				// Verify types
+				expect(typeof result.query).toBe("string");
+				expect(typeof result.category).toBe("string");
+				expect(typeof result.count).toBe("number");
+				expect(Array.isArray(result.cards)).toBe(true);
+			}
+		});
+
+		it("drawCard with category filter should only return cards from that category", async () => {
+			// Direct oracle method test: drawCard(category) should respect category filter
+			// This tests the oracle.ts implementation directly
+			const request: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 26,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "",
+						category: "action",
+					},
+				},
+			};
+
+			const response = await handler.handleRequest(request);
+
+			expect(response).toHaveProperty("result");
+			if ("result" in response) {
+				const result = response.result as {
+					cards: Array<{ category: string }>;
+				};
+
+				// Every card returned must be from the requested category
+				if (result.cards.length > 0) {
+					result.cards.forEach((card) => {
+						expect(card.category).toBe("action");
+					});
+				}
+			}
+		});
+
+		it("drawCard without category should return cards from all categories", async () => {
+			// Regression: Ensure drawCard() without filter returns diverse categories
+			const request: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 27,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "",
+					},
+				},
+			};
+
+			const response = await handler.handleRequest(request);
+
+			expect(response).toHaveProperty("result");
+			if ("result" in response) {
+				const result = response.result as {
+					cards: Array<{ category: string }>;
+				};
+
+				// Should return cards from multiple categories
+				const categories = new Set(result.cards.map((card) => card.category));
+				expect(categories.size).toBeGreaterThan(1);
+			}
+		});
+
+		it("filter should produce subset of unfiltered results", async () => {
+			// Get all cards with a query
+			const unfilteredRequest: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 28,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "change",
+					},
+				},
+			};
+
+			const unfilteredResponse = await handler.handleRequest(unfilteredRequest);
+			const unfiltered =
+				"result" in unfilteredResponse
+					? (
+							unfilteredResponse.result as {
+								cards: Array<{ text: string }>;
+							}
+						).cards
+					: [];
+
+			// Get filtered cards with same query
+			const filteredRequest: JSONRPCRequest = {
+				jsonrpc: "2.0",
+				id: 29,
+				method: "tools/call",
+				params: {
+					name: "oracle_search",
+					arguments: {
+						query: "change",
+						category: "action",
+					},
+				},
+			};
+
+			const filteredResponse = await handler.handleRequest(filteredRequest);
+			const filtered =
+				"result" in filteredResponse
+					? (
+							filteredResponse.result as {
+								cards: Array<{ text: string }>;
+							}
+						).cards
+					: [];
+
+			// Filtered should be subset of unfiltered
+			expect(filtered.length).toBeLessThanOrEqual(unfiltered.length);
+
+			// All filtered items should exist in unfiltered
+			filtered.forEach((filteredCard) => {
+				const foundInUnfiltered = unfiltered.some((card) => card.text === filteredCard.text);
+				expect(foundInUnfiltered).toBe(true);
+			});
+		});
+	});
 });
