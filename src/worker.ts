@@ -3026,22 +3026,34 @@ RULES:
 				return { shouldEscalate: false, reason: "task may already be complete (no-op edits detected)" };
 			}
 
-			// At opus with multiple no-write attempts: fail fast to save tokens
-			// Task is likely fundamentally vague, not just needing a smarter model
-			if (this.currentModel === "opus" && this.consecutiveNoWriteAttempts >= 2) {
-				sessionLogger.warn(
-					{ consecutiveNoWrites: this.consecutiveNoWriteAttempts },
-					"Opus tier with repeated no-write attempts - forcing failure to save tokens",
-				);
+			// NO_CHANGES is a task quality problem, not a model capability problem.
+			// Data shows: tasks escalated to opus on no_changes have 34.6% success vs 95.2% for
+			// tasks that started at opus. Escalating wastes expensive opus tokens.
+			//
+			// Strategy: allow 1 retry at same tier (agent may need clearer instructions in retry),
+			// then fail fast. Don't escalate to next tier for no_changes.
+			const maxNoChangeRetries = 2;
+
+			if (this.consecutiveNoWriteAttempts < maxNoChangeRetries) {
 				return {
 					shouldEscalate: false,
-					reason: `opus with ${this.consecutiveNoWriteAttempts} consecutive no-write attempts - task may need decomposition`,
-					forceFailure: true,
+					reason: `no changes made, retry ${this.consecutiveNoWriteAttempts + 1}/${maxNoChangeRetries} at ${this.currentModel}`,
 				};
 			}
 
-			// Otherwise agent is stuck, escalate
-			return { shouldEscalate: true, reason: "no changes made" };
+			// After retries exhausted, fail fast - don't escalate
+			sessionLogger.warn(
+				{
+					consecutiveNoWrites: this.consecutiveNoWriteAttempts,
+					model: this.currentModel,
+				},
+				"No changes after retries - failing fast (task likely needs clarification, not escalation)",
+			);
+			return {
+				shouldEscalate: false,
+				reason: `${this.consecutiveNoWriteAttempts} consecutive no-change attempts - task may need decomposition or clarification`,
+				forceFailure: true,
+			};
 		}
 
 		// At opus tier, use maxOpusRetries for more attempts (no escalation available)
