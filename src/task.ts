@@ -162,6 +162,7 @@ export interface Task {
 	parentId?: string; // ID of parent task (if this is a subtask)
 	subtaskIds?: string[]; // IDs of subtasks (if this was decomposed)
 	isDecomposed?: boolean; // True if this task was decomposed into subtasks
+	decompositionDepth?: number; // How many levels of decomposition from root (0 = top-level)
 
 	// Handoff context from Claude Code session
 	handoffContext?: HandoffContext;
@@ -1473,6 +1474,9 @@ export function decomposeTaskIntoSubtasks(
 		const subtaskIds: string[] = [];
 		const basePriority = parentTask.priority ?? 999;
 
+		// Calculate depth for subtasks (parent depth + 1)
+		const subtaskDepth = (parentTask.decompositionDepth ?? 0) + 1;
+
 		for (const subtask of actualSubtasks) {
 			const subtaskId = generateTaskId();
 			const newTask: Task = {
@@ -1482,6 +1486,7 @@ export function decomposeTaskIntoSubtasks(
 				priority: basePriority + subtask.order * 0.1, // Preserve order within parent's priority
 				createdAt: new Date(),
 				parentId: parentTaskId,
+				decompositionDepth: subtaskDepth,
 				estimatedFiles: subtask.estimatedFiles,
 				// Inherit some properties from parent
 				tags: parentTask.tags,

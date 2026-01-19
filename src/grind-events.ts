@@ -67,6 +67,7 @@ interface GrindStartEvent extends BaseEvent {
 	tasks: number;
 	parallelism: number;
 	models: Record<string, number>; // e.g., { haiku: 3, sonnet: 2 }
+	pid?: number; // Process ID for liveness check
 }
 
 /**
@@ -246,6 +247,7 @@ export function logGrindStart(options: {
 		tasks: options.taskCount,
 		parallelism: options.parallelism,
 		models: options.modelDistribution || {},
+		pid: process.pid,
 	});
 }
 
@@ -379,6 +381,7 @@ export function getLastGrindSummary(): {
 	batchId?: string;
 	startedAt?: string;
 	endedAt?: string;
+	pid?: number;
 	ok: number;
 	fail: number;
 	merged: number;
@@ -432,6 +435,7 @@ export function getLastGrindSummary(): {
 		batchId: start.batch,
 		startedAt: start.ts,
 		endedAt: end?.ts,
+		pid: start.pid,
 		ok: end?.ok ?? completes.length,
 		fail: end?.fail ?? failures.length,
 		merged: end?.merged ?? 0,
@@ -600,6 +604,20 @@ export type GrindEventType_Legacy =
 	| "rate_limit_hit"
 	| "error";
 
+/**
+ * Check if a process with given PID is still running
+ */
+function isProcessAlive(pid: number): boolean {
+	try {
+		// Sending signal 0 tests if process exists without actually signaling it
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		// ESRCH = no such process, EPERM = exists but no permission (still alive)
+		return false;
+	}
+}
+
 export function getCurrentGrindStatus(): {
 	isRunning: boolean;
 	batchId?: string;
@@ -625,8 +643,15 @@ export function getCurrentGrindStatus(): {
 		};
 	}
 
+	// Determine if grind is actually running
+	// If no endedAt, check if the process is still alive
+	let isRunning = !summary.endedAt;
+	if (isRunning && summary.pid) {
+		isRunning = isProcessAlive(summary.pid);
+	}
+
 	return {
-		isRunning: !summary.endedAt,
+		isRunning,
 		batchId: summary.batchId,
 		startedAt: summary.startedAt,
 		tasksQueued: 0,

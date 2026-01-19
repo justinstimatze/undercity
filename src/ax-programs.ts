@@ -144,9 +144,13 @@ export function formatProjectContext(ctx: ProjectContext): string {
 const INVALID_SUBTASK_PATTERNS = [
 	/^clarify\b/i, // "Clarify project context..."
 	/^determine\s+(if|whether)\b/i, // "Determine if..."
+	/^define\s+what\b/i, // "Define what 'X' means..."
+	/^define\s+\w+\s+means\b/i, // "Define scope means..."
 	/\?$/, // Ends with question mark
 	/^is\s+this\b/i, // "Is this for..."
-	/^what\s+(is|are|should)\b/i, // "What is the..." "What should..."
+	/^what\s+(is|are|should|does)\b/i, // "What is the..." "What should..." "What does..."
+	/^how\s+(should|do|does|will|would|can)\b/i, // "How should we..." "How do we..."
+	/^where\s+(should|is|are|do)\b/i, // "Where should..." "Where is..."
 	/^which\s+(one|approach)\b/i, // "Which one..." "Which approach..."
 	/^should\s+(we|i|the)\b/i, // "Should we..."
 	/^do\s+we\s+(need|have|want)\b/i, // "Do we need..."
@@ -154,7 +158,8 @@ const INVALID_SUBTASK_PATTERNS = [
 	/^verify\s+with\b/i, // "Verify with stakeholder..."
 	/^ask\s+(the|about)\b/i, // "Ask the user..."
 	/^check\s+with\b/i, // "Check with..."
-	/^\d+\.\s*(clarify|determine|confirm|ask|check)\b/i, // "1. Clarify..."
+	// Numbered questions (e.g., "1. Clarify...", "2. Define what...")
+	/^\d+\.\s*(clarify|determine|confirm|ask|check|define\s+what|is\s+this|what|how\s+should|where)\b/i,
 ];
 
 /**

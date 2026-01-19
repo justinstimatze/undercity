@@ -803,28 +803,74 @@ IMPORTANT: You MUST output a JSON response. Do not output an empty response.`;
 		};
 	}
 
-	// Extract JSON from response
-	const jsonMatch = reviewJson.match(/```json\s*([\s\S]*?)\s*```/);
-	if (jsonMatch) {
+	// Try multiple parsing strategies
+	const parseAttempts: Array<() => PlanReview | null> = [
+		// 1. Extract JSON from markdown code block
+		() => {
+			const jsonMatch = reviewJson.match(/```json\s*([\s\S]*?)\s*```/);
+			if (jsonMatch) {
+				return JSON.parse(jsonMatch[1]) as PlanReview;
+			}
+			return null;
+		},
+		// 2. Extract JSON from generic code block
+		() => {
+			const codeMatch = reviewJson.match(/```\s*([\s\S]*?)\s*```/);
+			if (codeMatch && codeMatch[1].trim().startsWith("{")) {
+				return JSON.parse(codeMatch[1]) as PlanReview;
+			}
+			return null;
+		},
+		// 3. Find JSON object anywhere in response
+		() => {
+			const jsonObjMatch = reviewJson.match(/\{[\s\S]*"approved"[\s\S]*\}/);
+			if (jsonObjMatch) {
+				return JSON.parse(jsonObjMatch[0]) as PlanReview;
+			}
+			return null;
+		},
+		// 4. Parse entire response as JSON
+		() => JSON.parse(reviewJson) as PlanReview,
+	];
+
+	for (const attempt of parseAttempts) {
 		try {
-			return JSON.parse(jsonMatch[1]) as PlanReview;
-		} catch (e) {
-			logger.warn({ error: String(e) }, "Failed to parse review JSON");
+			const result = attempt();
+			if (result && typeof result.approved === "boolean") {
+				return result;
+			}
+		} catch {
+			// Continue to next attempt
 		}
 	}
 
-	// Fallback
-	try {
-		return JSON.parse(reviewJson) as PlanReview;
-	} catch {
-		// Reject on review parse failure - safer to block than merge something invalid
-		logger.warn({ reviewJson: reviewJson.substring(0, 200) }, "Review parsing failed, rejecting plan");
+	// All parsing failed - log full response for debugging
+	logger.warn(
+		{
+			responseLength: reviewJson.length,
+			responsePreview: reviewJson.substring(0, 500),
+			responseEnd: reviewJson.length > 500 ? reviewJson.substring(reviewJson.length - 200) : undefined,
+		},
+		"Review parsing failed after all attempts",
+	);
+
+	// Try to extract rejection signals from text as last resort
+	const lowerResponse = reviewJson.toLowerCase();
+	if (lowerResponse.includes("reject") || lowerResponse.includes("not approved") || lowerResponse.includes("cannot approve")) {
+		logger.info("Detected rejection signal in unparseable response, treating as rejection");
 		return {
 			approved: false,
-			issues: ["Review parsing failed - rejecting for safety"],
+			issues: ["Review parsing failed - detected rejection signals in response"],
 			suggestions: [],
 		};
 	}
+
+	// Default to rejection for safety
+	return {
+		approved: false,
+		issues: ["Review parsing failed - rejecting for safety"],
+		suggestions: [],
+	};
 }
 
 /**

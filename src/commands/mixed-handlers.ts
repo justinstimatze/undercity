@@ -2,7 +2,7 @@
  * Command handlers for mixed commands
  * Extracted from mixed.ts to reduce complexity
  */
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
@@ -64,6 +64,79 @@ function formatDuration(ms: number): string {
 	return `${seconds}s`;
 }
 
+const GRIND_LOCK_FILE = ".undercity/grind.lock";
+
+interface GrindLock {
+	pid: number;
+	startedAt: string;
+}
+
+/**
+ * Check if a process is still running
+ */
+function isProcessRunning(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Acquire exclusive lock for grind execution
+ * Returns true if lock acquired, false if another grind is running
+ */
+function acquireGrindLock(): { acquired: boolean; existingPid?: number; startedAt?: string } {
+	// Check for existing lock
+	if (existsSync(GRIND_LOCK_FILE)) {
+		try {
+			const lockData: GrindLock = JSON.parse(readFileSync(GRIND_LOCK_FILE, "utf-8"));
+			// Check if process is still alive
+			if (isProcessRunning(lockData.pid)) {
+				return { acquired: false, existingPid: lockData.pid, startedAt: lockData.startedAt };
+			}
+			// Stale lock - process is dead, we can take over
+			output.debug(`Removing stale grind lock (PID ${lockData.pid} no longer running)`);
+		} catch {
+			// Corrupted lock file - remove it
+			output.debug("Removing corrupted grind lock file");
+		}
+	}
+
+	// Create lock file
+	const lock: GrindLock = {
+		pid: process.pid,
+		startedAt: new Date().toISOString(),
+	};
+
+	// Ensure directory exists
+	const dir = dirname(GRIND_LOCK_FILE);
+	if (!existsSync(dir)) {
+		mkdirSync(dir, { recursive: true });
+	}
+
+	writeFileSync(GRIND_LOCK_FILE, JSON.stringify(lock, null, 2));
+	return { acquired: true };
+}
+
+/**
+ * Release the grind lock
+ */
+function releaseGrindLock(): void {
+	try {
+		if (existsSync(GRIND_LOCK_FILE)) {
+			// Only remove if we own the lock
+			const lockData: GrindLock = JSON.parse(readFileSync(GRIND_LOCK_FILE, "utf-8"));
+			if (lockData.pid === process.pid) {
+				unlinkSync(GRIND_LOCK_FILE);
+			}
+		}
+	} catch {
+		// Ignore errors during cleanup
+	}
+}
+
 // Type definitions for command options
 export interface GrindOptions {
 	count?: string;
@@ -84,6 +157,8 @@ export interface GrindOptions {
 	maxRetriesPerTier?: string;
 	maxReviewPasses?: string;
 	maxOpusReviewPasses?: string;
+	// Decomposition depth limit (default: 1, meaning only top-level tasks can be decomposed)
+	maxDecompositionDepth?: string;
 }
 
 export interface InitOptions {
@@ -821,6 +896,26 @@ export async function handleBrief(options: BriefOptions): Promise<void> {
  * Use `undercity add "task"` to queue tasks, then `grind` to process them.
  */
 export async function handleGrind(options: GrindOptions): Promise<void> {
+	// Prevent concurrent grind execution
+	const lockResult = acquireGrindLock();
+	if (!lockResult.acquired) {
+		output.error(`Another grind process is already running (PID ${lockResult.existingPid}, started ${lockResult.startedAt})`);
+		output.info("Use 'pkill -f undercity' to kill existing processes, or wait for completion");
+		process.exit(1);
+	}
+
+	// Ensure lock is released on exit
+	const cleanupLock = () => releaseGrindLock();
+	process.on("exit", cleanupLock);
+	process.on("SIGINT", () => {
+		cleanupLock();
+		process.exit(130);
+	});
+	process.on("SIGTERM", () => {
+		cleanupLock();
+		process.exit(143);
+	});
+
 	const { Orchestrator } = await import("../orchestrator.js");
 	const { startGrindProgress, updateGrindProgress, clearGrindProgress } = await import("../live-metrics.js");
 
@@ -834,6 +929,11 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 	const maxOpusReviewPasses = options.maxOpusReviewPasses
 		? Number.parseInt(options.maxOpusReviewPasses, 10)
 		: undefined;
+
+	// Decomposition depth limit (default: 1, meaning subtasks cannot be decomposed further)
+	const maxDecompositionDepth = options.maxDecompositionDepth
+		? Number.parseInt(options.maxDecompositionDepth, 10)
+		: 1;
 
 	const orchestrator = new Orchestrator({
 		maxConcurrent: parallelism,
@@ -1165,6 +1265,17 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			output.progress("Checking task atomicity and complexity...");
 
 			for (const task of tasksToProcess) {
+				// Skip decomposition if task has reached max depth
+				const taskDepth = task.decompositionDepth ?? 0;
+				if (taskDepth >= maxDecompositionDepth) {
+					output.debug(`Skipping decomposition for "${task.objective.substring(0, 40)}..." (depth ${taskDepth} >= max ${maxDecompositionDepth})`);
+					tasksWithModels.push({
+						...task,
+						recommendedModel: "sonnet", // Default to sonnet for depth-limited tasks
+					});
+					continue;
+				}
+
 				const result = await checkAndDecompose(task.objective);
 
 				if (result.action === "decomposed" && result.subtasks && result.subtasks.length > 0) {
