@@ -289,26 +289,35 @@ export function createTaskDecomposer(): AxGen {
 	const gen = new AxGen(DecompositionSignature);
 	gen.setInstruction(`You break complex tasks into atomic subtasks.
 
-CRITICAL: Use the projectContext to determine the correct language and file extensions!
-- If project is TypeScript, use .ts/.tsx extensions (NOT .py)
-- If project is Python, use .py extensions (NOT .ts)
-- If project is Go, use .go extensions
-- Match the project's conventions, not generic examples
+CRITICAL - READ projectContext FIRST:
+The projectContext field tells you EXACTLY what language this project uses.
+You MUST use the file extensions from projectContext.fileExtensions.
+NEVER use extensions from a different language than projectContext.language.
 
-RULES:
+LANGUAGE RULES:
+- If projectContext says "typescript" → use ONLY .ts/.tsx (NEVER .py, .go, .rs)
+- If projectContext says "python" → use ONLY .py (NEVER .ts, .js)
+- If projectContext says "go" → use ONLY .go
+- If projectContext says "rust" → use ONLY .rs
+- VIOLATION: Using wrong language extensions = TASK FAILURE
+
+SUBTASK RULES:
 1. Each subtask should modify 1 file (2-3 max for tightly coupled changes)
 2. INCLUDE FILE PATH in each objective: "In src/auth.ts, add validation..."
 3. Make objectives specific and unambiguous
 4. Create 2-5 subtasks (fewer is better)
 5. Order by dependency (prerequisites first)
-6. USE CORRECT FILE EXTENSIONS based on projectContext
 
-EXAMPLES (for TypeScript projects):
+EXAMPLE (when projectContext.language = "typescript"):
 GOOD: "In src/types.ts, add the UserRole enum with values ADMIN, USER, GUEST"
-BAD: "In types.py, add UserRole class" (wrong language!)
-BAD: "Update the types" (which file? what types?)
+BAD: "In types.py, add UserRole class" ← WRONG! Project is TypeScript, not Python!
 
-Think through the task structure in the reasoning field before listing subtasks.`);
+EXAMPLE (when projectContext.language = "python"):
+GOOD: "In src/models.py, add the UserRole class"
+BAD: "In src/models.ts, add the UserRole type" ← WRONG! Project is Python, not TypeScript!
+
+Think through the task structure in the reasoning field before listing subtasks.
+Verify each subtask uses correct file extensions for the projectContext.language.`);
 	return gen;
 }
 

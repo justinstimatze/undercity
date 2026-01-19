@@ -1298,9 +1298,42 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 
 		// Dry-run mode: show what would execute without running
 		if (options.dryRun) {
-			output.header("Dry Run", "Showing what would execute");
+			output.header("Dry Run", "Showing validation results and execution plan");
 
-			output.summary("Tasks to Execute", [
+			// Show validation summary
+			const validatedCount = tasksWithModels.length;
+			const skippedCount = invalidTasks.length;
+			const vagueCount = vagueTasks.length;
+
+			output.summary("Validation Results", [
+				{ label: "Tasks validated", value: validatedCount },
+				{ label: "Tasks skipped (invalid)", value: skippedCount },
+				{ label: "Tasks flagged (vague)", value: vagueCount },
+			]);
+
+			// Show invalid tasks with reasons
+			if (invalidTasks.length > 0) {
+				console.log("\n⚠ INVALID TASKS (would be skipped):");
+				for (const taskId of invalidTasks) {
+					const task = tasksToProcess.find((t) => t.id === taskId);
+					if (task) {
+						console.log(`  - [${taskId}] ${task.objective.substring(0, 60)}`);
+					}
+				}
+			}
+
+			// Show vague tasks
+			if (vagueTasks.length > 0) {
+				console.log("\n⚠ VAGUE TASKS (may need decomposition):");
+				for (const taskId of vagueTasks) {
+					const task = tasksToProcess.find((t) => t.id === taskId);
+					if (task) {
+						console.log(`  - [${taskId}] ${task.objective.substring(0, 60)}`);
+					}
+				}
+			}
+
+			output.summary("Execution Plan", [
 				{ label: "Total tasks", value: tasksWithModels.length },
 				{ label: "Haiku", value: tasksByModel.haiku.length },
 				{ label: "Sonnet", value: tasksByModel.sonnet.length },
@@ -1314,12 +1347,15 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 				if (tierTasks.length > 0) {
 					console.log(`\n${tier.toUpperCase()} tier (${tierTasks.length} tasks):`);
 					for (const task of tierTasks) {
-						console.log(`  - ${task.objective.substring(0, 70)}${task.objective.length > 70 ? "..." : ""}`);
+						console.log(
+							`  - [${task.id.substring(0, 8)}] ${task.objective.substring(0, 65)}${task.objective.length > 65 ? "..." : ""}`,
+						);
 					}
 				}
 			}
 
-			console.log("\nNo tasks were executed (dry-run mode)");
+			console.log("\n✓ No tasks were executed (dry-run mode)");
+			console.log("  Run without --dry-run to execute these tasks");
 			return;
 		}
 

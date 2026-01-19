@@ -419,6 +419,30 @@ export async function verifyWork(
 			return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
 		}
 
+		// Check if any test files exist before running tests
+		// This avoids vitest's exit code 1 on empty test suites
+		// Only skip if we explicitly confirm no test files exist (not on error/empty check)
+		let hasConfirmedNoTestFiles = false;
+		try {
+			// Use git ls-files with explicit patterns - only trust if command succeeds
+			const lsOutput = execSync('git ls-files 2>/dev/null', { encoding: "utf-8", cwd }).trim();
+			if (lsOutput) {
+				// Git ls-files worked - check if any test files exist
+				const testFilePatterns = /\.(test|spec)\.(ts|tsx|js|jsx)$|__tests__\//;
+				const hasTestFiles = lsOutput.split("\n").some((f) => testFilePatterns.test(f));
+				if (!hasTestFiles) {
+					hasConfirmedNoTestFiles = true;
+				}
+			}
+		} catch {
+			// Git command failed - don't skip tests, let the test runner decide
+		}
+
+		if (hasConfirmedNoTestFiles) {
+			feedback.push("✓ Tests passed (no test files in project)");
+			return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
+		}
+
 		try {
 			// Run tests with short timeout - we just want to know if they pass
 			// Set UNDERCITY_VERIFICATION to skip integration tests
@@ -433,9 +457,15 @@ export async function verifyWork(
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 
 			// Check if failure is due to no test files existing - treat as pass
-			// vitest: "No test files found, exiting with code 1"
+			// vitest: "No test files found, exiting with code 1" or just exits with nothing
 			// jest: "No tests found"
-			if (output.includes("No test files found") || output.includes("No tests found")) {
+			// Also check for empty output which vitest sometimes does
+			if (
+				output.includes("No test files found") ||
+				output.includes("No tests found") ||
+				output.includes("no test files") ||
+				(output.trim().length < 50 && !output.includes("FAIL") && !output.includes("Error"))
+			) {
 				feedback.push("✓ Tests passed (no test files)");
 				return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
 			}

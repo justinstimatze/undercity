@@ -22,6 +22,21 @@
  * Multi-agent orchestrator for Claude Max - Gas Town for normal people.
  */
 
+// Handle EPIPE gracefully - occurs when piping to head/tail/etc and they close early
+// e.g., `undercity tasks --all | head` would crash without this
+process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+	if (err.code === "EPIPE") {
+		process.exit(0);
+	}
+	throw err;
+});
+process.stderr.on("error", (err: NodeJS.ErrnoException) => {
+	if (err.code === "EPIPE") {
+		process.exit(0);
+	}
+	throw err;
+});
+
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

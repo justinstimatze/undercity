@@ -30,6 +30,33 @@ export interface TaskValidationResult {
 }
 
 /**
+ * Common language/technology names that should NOT be extracted as paths
+ * These often appear in patterns like "in TypeScript" or "in Python"
+ */
+const LANGUAGE_KEYWORDS = new Set([
+	"typescript",
+	"javascript",
+	"python",
+	"rust",
+	"go",
+	"java",
+	"ruby",
+	"php",
+	"swift",
+	"kotlin",
+	"scala",
+	"elixir",
+	"haskell",
+	"clojure",
+	"react",
+	"vue",
+	"angular",
+	"node",
+	"deno",
+	"bun",
+]);
+
+/**
  * Extract file paths from a task objective
  * Looks for patterns like:
  * - "In src/foo/bar.ts, ..."
@@ -41,9 +68,14 @@ export function extractPathsFromObjective(objective: string): string[] {
 	const paths: string[] = [];
 
 	// Pattern 1: "In path/to/file.ext, ..." or "in path/to/file.ext"
+	// Must contain a "/" to be a path, otherwise it might be "in TypeScript"
 	const inPattern = /\b[Ii]n\s+([\w./-]+\.\w+)/g;
 	for (const match of objective.matchAll(inPattern)) {
-		paths.push(match[1]);
+		const candidate = match[1];
+		// Must contain "/" to be a path, and not be a language keyword
+		if (candidate.includes("/") && !LANGUAGE_KEYWORDS.has(candidate.toLowerCase())) {
+			paths.push(candidate);
+		}
 	}
 
 	// Pattern 2: Explicit file paths with extensions
@@ -168,15 +200,23 @@ function findCorrectPath(incorrectPath: string, repoRoot: string): string | null
 
 /**
  * Known output directories that tasks are allowed to create
- * These are directories where agents create output (research docs, etc.)
+ * These are directories where agents create output (research docs, code, etc.)
  */
 const ALLOWED_OUTPUT_DIRECTORIES = [
+	// Documentation directories
 	"docs/research",
 	"docs/design",
+	"docs/",
 	".undercity/research",
 	"research",
 	"output",
 	"generated",
+	// Source code directories (agents can create new modules)
+	"src/",
+	"lib/",
+	"test/",
+	"tests/",
+	"__tests__/",
 ];
 
 /**
@@ -269,15 +309,22 @@ function validatePath(path: string, repoRoot: string, isCreationTask: boolean = 
 
 /**
  * Patterns that indicate a task is creating new files/content
+ * These patterns should match anywhere in the objective, including after prefixes like "Design:"
  */
 const CREATION_TASK_PATTERNS = [
 	/^\[research\]/i,
 	/\bresearch\b/i,
-	/\bcreate\b/i,
+	/\bcreate\b/i, // Matches "Create" anywhere, including "Design: Create..."
 	/\bgenerate\b/i,
 	/\bwrite\s+(?:a\s+)?(?:new\s+)?(?:design|doc|report|spec)/i,
 	/\bsave\s+(?:to|in)\b/i,
 	/\boutput\s+(?:to|in)\b/i,
+	/\binitial(?:ize)?\b/i, // "initial schema", "initialize project"
+	/\bscaffold\b/i,
+	/\bbootstrap\b/i,
+	/\bnew\s+(?:file|module|component|schema|project)/i,
+	/\bsetup\b/i,
+	/\bdesign:/i, // Tasks with "Design:" prefix are design/creation tasks
 ];
 
 /**

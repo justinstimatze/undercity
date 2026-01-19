@@ -1835,7 +1835,9 @@ export class Orchestrator {
 		const statusOutput = execGitInDir(["status", "--porcelain"], worktreePath);
 		const conflictedFiles = statusOutput
 			.split("\n")
-			.filter((line) => line.startsWith("UU") || line.startsWith("AA") || line.startsWith("DU") || line.startsWith("UD"))
+			.filter(
+				(line) => line.startsWith("UU") || line.startsWith("AA") || line.startsWith("DU") || line.startsWith("UD"),
+			)
 			.map((line) => line.slice(3).trim());
 
 		if (conflictedFiles.length === 0) {
