@@ -1,0 +1,1424 @@
+
+> undercity@0.1.0 test:coverage /tmp/undercity-worktrees/L2hvbWUvanVz/task-mkkwc0ox-a0d970
+> vitest --run --coverage
+
+
+[1m[46m RUN [49m[22m [36mv4.0.16 [39m[90m/tmp/undercity-worktrees/L2hvbWUvanVz/task-mkkwc0ox-a0d970[39m
+      [2mCoverage enabled with [22m[33mv8[39m
+
+ [2m[90m↓[39m[22m src/__tests__/integration/worktree-manager.test.ts [2m([22m[2m26 tests[22m[2m | [22m[33m26 skipped[39m[2m)[22m
+[08:28:34] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+[08:28:34] [32mINFO[39m: [36mDual logging stopped[39m
+[08:28:34] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+[08:28:34] [32mINFO[39m: [36mDual logging stopped[39m
+[08:28:34] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+ [2m[90m↓[39m[22m src/__tests__/integration/merge-queue.test.ts [2m([22m[2m25 tests[22m[2m | [22m[33m25 skipped[39m[2m)[22m
+[08:28:35] [32mINFO[39m: [36mDual logging stopped[39m
+[08:28:35] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+[08:28:35] [32mINFO[39m: [36mDual logging stopped[39m
+[08:28:35] [32mINFO[39m: [36mLocal tool detected - using minimal model[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "run format"
+    [35massessmentType[39m: "local_tool"
+    [35mrecommendedModel[39m: "haiku"
+    [35mlocalToolCommand[39m: "pnpm format"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "typo"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "haiku"
+    [35mscore[39m: -1
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "simple fix for button color"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 3
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "small change to config"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 3
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "clean up unused imports"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 3
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "fix typo in README"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "haiku"
+    [35mscore[39m: -3
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "fix bug in user login"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 5
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "enhance the logging system"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 5
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "migrate database schema"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 7
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "update across multiple packages"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 8
+    [35mscope[39m: "cross-package"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "redesign the API layer"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 7
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "fix security vulnerability"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "opus"
+    [35mscore[39m: 11
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "refactor authentication system"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "opus"
+    [35mscore[39m: 15
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "update payment processing logic"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "opus"
+    [35mscore[39m: 11
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "fix production database issue"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "opus"
+    [35mscore[39m: 11
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "fix bug in this file"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 4
+    [35mscope[39m: "single-file"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "update server and client packages"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 5
+    [35mscope[39m: "cross-package"
+[08:28:35] [32mINFO[39m: [36mNo task description provided - using default model[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "Empty task description"
+    [35massessmentType[39m: "empty_task"
+    [35mrecommendedModel[39m: "haiku"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "fix"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "haiku"
+    [35mscore[39m: 1
+    [35mscope[39m: "few-files"
+[08:28:35] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "refactor authentication security critical"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "opus"
+    [35mscore[39m: 27
+    [35mscope[39m: "few-files"
+[08:28:35] [34mDEBUG[39m: [36mNot enough metrics data for adjustment, using default model[39m
+    [35mmodule[39m: "session"
+    [35mtotalTasks[39m: 0
+    [35mminSamples[39m: 3
+[08:28:35] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+[08:28:35] [32mINFO[39m: [36mDual logging stopped[39m
+[08:28:35] [34mDEBUG[39m: [36mNot enough metrics data for adjustment, using default model[39m
+    [35mmodule[39m: "session"
+    [35mtotalTasks[39m: 2
+    [35mminSamples[39m: 3
+ [2m[90m↓[39m[22m src/__tests__/integration/grind-flow.test.ts [2m([22m[2m3 tests[22m[2m | [22m[33m3 skipped[39m[2m)[22m
+ [32m✓[39m src/__tests__/complexity.test.ts [2m([22m[2m59 tests[22m[2m)[22m[32m 134[2mms[22m[39m
+[08:28:35] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+[08:28:35] [32mINFO[39m: [36mDual logging stopped[39m
+    [35msessionId[39m: "test-session-123"
+[08:28:35] [32mINFO[39m: [36mLog rotated[39m
+    [35marchivePath[39m: ".test-undercity/logs/session-test-session-123-2026-01-19T08-28-35-402Z.log"
+    [35msessionId[39m: "test-session-123"
+ [32m✓[39m src/__tests__/ast-index.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 98[2mms[22m[39m
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mSaved AST index[39m
+    [35mmodule[39m: "ast-index"
+    [35mfileCount[39m: 1
+[08:28:35] [34mDEBUG[39m: [36mLoaded AST index[39m
+    [35mmodule[39m: "ast-index"
+    [35mfileCount[39m: 1
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mUpdating stale files[39m
+    [35mmodule[39m: "ast-index"
+    [35mcount[39m: 1
+[08:28:35] [34mDEBUG[39m: [36mSaved AST index[39m
+    [35mmodule[39m: "ast-index"
+    [35mfileCount[39m: 2
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+ [32m✓[39m src/__tests__/file-tracker.test.ts [2m([22m[2m53 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+[08:28:35] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+[08:28:35] [32mINFO[39m: [36mDual logging stopped[39m
+    [35msessionId[39m: "test-session-123"
+[08:28:35] [32mINFO[39m: [36mLog rotated[39m
+    [35marchivePath[39m: ".test-undercity/logs/session-test-session-123-2026-01-19T08-28-35-609Z.log"
+    [35msessionId[39m: "test-session-123"
+ [32m✓[39m src/__tests__/efficiency-tools.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 70[2mms[22m[39m
+ [32m✓[39m src/__tests__/dual-logger.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 948[2mms[22m[39m
+     [33m[2m✓[22m[39m should rotate logs when session ends [33m 305[2mms[22m[39m
+ [32m✓[39m src/__tests__/decision-tracker.test.ts [2m([22m[2m46 tests[22m[2m)[22m[33m 1128[2mms[22m[39m
+       [33m[2m✓[22m[39m should keep only last 500 resolved decisions [33m 1090[2mms[22m[39m
+ [32m✓[39m src/__tests__/knowledge.test.ts [2m([22m[2m79 tests[22m[2m)[22m[32m 71[2mms[22m[39m
+ [32m✓[39m src/__tests__/task.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m src/__tests__/error-fix-patterns.test.ts [2m([22m[2m106 tests[22m[2m)[22m[32m 81[2mms[22m[39m
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/test"
+    [35mstepId[39m: "step-1"
+    [35magentId[39m: "agent-1"
+    [35mmodifiedFilesCount[39m: 0
+ [32m✓[39m src/__tests__/git.test.ts [2m([22m[2m65 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/test"
+    [35mstepId[39m: "step-1"
+    [35magentId[39m: "agent-1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mRetry config updated[39m
+    [35mmodule[39m: "git"
+    [35mconfig[39m: {
+      "enabled": false,
+      "maxRetries": 10,
+      "baseDelayMs": 1000,
+      "maxDelayMs": 30000
+    }
+[08:28:36] [34mDEBUG[39m: [36mRetry config updated[39m
+    [35mmodule[39m: "git"
+    [35mconfig[39m: {
+      "enabled": true,
+      "maxRetries": 7,
+      "baseDelayMs": 1000,
+      "maxDelayMs": 30000
+    }
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/b"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/c"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/b"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/b"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/b"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/c"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/b"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/c"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/d"
+    [35mstepId[39m: "t4"
+    [35magentId[39m: "a4"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch2"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/test"
+    [35mstepId[39m: "step-123"
+    [35magentId[39m: "agent-1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch2"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch3"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch4"
+    [35mstepId[39m: "t4"
+    [35magentId[39m: "a4"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch2"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch3"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch2"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch3"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch2"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch3"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch4"
+    [35mstepId[39m: "t4"
+    [35magentId[39m: "a4"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch5"
+    [35mstepId[39m: "t5"
+    [35magentId[39m: "a5"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch6"
+    [35mstepId[39m: "t6"
+    [35magentId[39m: "a6"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch7"
+    [35mstepId[39m: "t7"
+    [35magentId[39m: "a7"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch8"
+    [35mstepId[39m: "t8"
+    [35magentId[39m: "a8"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch2"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch3"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch2"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch3"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch0"
+    [35mstepId[39m: "t0"
+    [35magentId[39m: "a0"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch2"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch3"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch4"
+    [35mstepId[39m: "t4"
+    [35magentId[39m: "a4"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch5"
+    [35mstepId[39m: "t5"
+    [35magentId[39m: "a5"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch6"
+    [35mstepId[39m: "t6"
+    [35magentId[39m: "a6"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch7"
+    [35mstepId[39m: "t7"
+    [35magentId[39m: "a7"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch8"
+    [35mstepId[39m: "t8"
+    [35magentId[39m: "a8"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch9"
+    [35mstepId[39m: "t9"
+    [35magentId[39m: "a9"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch10"
+    [35mstepId[39m: "t10"
+    [35magentId[39m: "a10"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch11"
+    [35mstepId[39m: "t11"
+    [35magentId[39m: "a11"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch12"
+    [35mstepId[39m: "t12"
+    [35magentId[39m: "a12"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch13"
+    [35mstepId[39m: "t13"
+    [35magentId[39m: "a13"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch14"
+    [35mstepId[39m: "t14"
+    [35magentId[39m: "a14"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch15"
+    [35mstepId[39m: "t15"
+    [35magentId[39m: "a15"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch16"
+    [35mstepId[39m: "t16"
+    [35magentId[39m: "a16"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch17"
+    [35mstepId[39m: "t17"
+    [35magentId[39m: "a17"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch18"
+    [35mstepId[39m: "t18"
+    [35magentId[39m: "a18"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch19"
+    [35mstepId[39m: "t19"
+    [35magentId[39m: "a19"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch20"
+    [35mstepId[39m: "t20"
+    [35magentId[39m: "a20"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch21"
+    [35mstepId[39m: "t21"
+    [35magentId[39m: "a21"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch22"
+    [35mstepId[39m: "t22"
+    [35magentId[39m: "a22"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch23"
+    [35mstepId[39m: "t23"
+    [35magentId[39m: "a23"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch24"
+    [35mstepId[39m: "t24"
+    [35magentId[39m: "a24"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch25"
+    [35mstepId[39m: "t25"
+    [35magentId[39m: "a25"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch26"
+    [35mstepId[39m: "t26"
+    [35magentId[39m: "a26"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch27"
+    [35mstepId[39m: "t27"
+    [35magentId[39m: "a27"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch28"
+    [35mstepId[39m: "t28"
+    [35magentId[39m: "a28"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch29"
+    [35mstepId[39m: "t29"
+    [35magentId[39m: "a29"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch30"
+    [35mstepId[39m: "t30"
+    [35magentId[39m: "a30"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch31"
+    [35mstepId[39m: "t31"
+    [35magentId[39m: "a31"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch32"
+    [35mstepId[39m: "t32"
+    [35magentId[39m: "a32"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch33"
+    [35mstepId[39m: "t33"
+    [35magentId[39m: "a33"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch34"
+    [35mstepId[39m: "t34"
+    [35magentId[39m: "a34"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch35"
+    [35mstepId[39m: "t35"
+    [35magentId[39m: "a35"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch36"
+    [35mstepId[39m: "t36"
+    [35magentId[39m: "a36"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch37"
+    [35mstepId[39m: "t37"
+    [35magentId[39m: "a37"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch38"
+    [35mstepId[39m: "t38"
+    [35magentId[39m: "a38"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch39"
+    [35mstepId[39m: "t39"
+    [35magentId[39m: "a39"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch40"
+    [35mstepId[39m: "t40"
+    [35magentId[39m: "a40"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch41"
+    [35mstepId[39m: "t41"
+    [35magentId[39m: "a41"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch42"
+    [35mstepId[39m: "t42"
+    [35magentId[39m: "a42"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch43"
+    [35mstepId[39m: "t43"
+    [35magentId[39m: "a43"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch44"
+    [35mstepId[39m: "t44"
+    [35magentId[39m: "a44"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch45"
+    [35mstepId[39m: "t45"
+    [35magentId[39m: "a45"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch46"
+    [35mstepId[39m: "t46"
+    [35magentId[39m: "a46"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch47"
+    [35mstepId[39m: "t47"
+    [35magentId[39m: "a47"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch48"
+    [35mstepId[39m: "t48"
+    [35magentId[39m: "a48"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch49"
+    [35mstepId[39m: "t49"
+    [35magentId[39m: "a49"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch2"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[08:28:36] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch3"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+ [32m✓[39m src/__tests__/cache.test.ts [2m([22m[2m39 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+[08:28:36] [33mWARN[39m: [36mSpelling issues detected (non-blocking)[39m
+    [35mmodule[39m: "verification"
+    [35merrorCount[39m: 2
+    [35merrors[39m: [
+      "spelling error: teh -> the",
+      "spelling error: wiht -> with"
+    ]
+ [32m✓[39m src/__tests__/verification.test.ts [2m([22m[2m39 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m src/__tests__/feedback-metrics.test.ts [2m([22m[2m33 tests[22m[2m)[22m[32m 43[2mms[22m[39m
+ [32m✓[39m src/__tests__/persistence.test.ts [2m([22m[2m51 tests[22m[2m)[22m[32m 28[2mms[22m[39m
+[08:28:36] [34mDEBUG[39m: [36mSaved flute result to cache[39m
+    [35mmodule[39m: "persistence"
+    [35mkey[39m: "fp-hash:goal-hash"
+    [35mgoalText[39m: "test goal"
+[08:28:36] [32mINFO[39m: [36mCleared flute cache[39m
+    [35mmodule[39m: "persistence"
+ [32m✓[39m src/__tests__/task-board-analyzer.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "validation",
+      "maxResults": 5
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "validation api",
+      "maxResults": 5
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": 123,
+      "maxResults": 5
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "test",
+      "maxResults": "five"
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "test",
+      "maxResults": 25
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "test"
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-123",
+      "category": "pattern",
+      "content": "Test learning content",
+      "keywords": [
+        "test",
+        "learning"
+      ]
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": 123,
+      "category": "pattern",
+      "content": "Test",
+      "keywords": [
+        "test"
+      ]
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-1",
+      "category": "invalid-category",
+      "content": "Test",
+      "keywords": [
+        "test"
+      ]
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-1",
+      "category": "pattern",
+      "content": 123,
+      "keywords": [
+        "test"
+      ]
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-1",
+      "category": "pattern",
+      "content": "Test",
+      "keywords": "not-an-array"
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-1",
+      "category": "pattern",
+      "content": "Test with structured data",
+      "keywords": [
+        "test"
+      ],
+      "structured": {
+        "file": "src/test.ts",
+        "pattern": "const x = 1;",
+        "approach": "Simple approach"
+      }
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-1",
+      "category": "pattern",
+      "content": "Test",
+      "keywords": [
+        "test"
+      ],
+      "structured": {
+        "file": 123
+      }
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_stats"
+    [35mparams[39m: {}
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_stats"
+    [35mparams[39m: {}
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_stats"
+    [35mparams[39m: {}
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": [
+        "learn-mkkwl6sf-bb28xe"
+      ],
+      "taskSuccess": true
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": [
+        "learn-mkkwl6sf-htcqmq"
+      ],
+      "taskSuccess": false
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": "not-an-array",
+      "taskSuccess": true
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": [
+        "learn-mkkwl6sg-3rcg7c"
+      ],
+      "taskSuccess": "yes"
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": [
+        "learn-mkkwl6sh-5qqdow",
+        "learn-mkkwl6sh-4fzkht"
+      ],
+      "taskSuccess": true
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": [],
+      "taskSuccess": true
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "unknown_tool"
+    [35mparams[39m: {}
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "test",
+      "maxResults": 999
+    }
+[08:28:36] [31mERROR[39m: [36mMCP request error[39m
+    [35mmodule[39m: "server"
+    [35mrequest[39m: {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/call",
+      "params": {
+        "name": "knowledge_search",
+        "arguments": {
+          "query": "test",
+          "maxResults": 999
+        }
+      }
+    }
+    error: {}
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-integration",
+      "category": "pattern",
+      "content": "Integration test learning",
+      "keywords": [
+        "integration",
+        "test"
+      ]
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "integration test",
+      "maxResults": 5
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": [
+        "learn-mkkwl6sj-rewvdw"
+      ],
+      "taskSuccess": true
+    }
+[08:28:36] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_stats"
+    [35mparams[39m: {}
+ [32m✓[39m src/__tests__/mcp-protocol.test.ts [2m([22m[2m37 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m src/__tests__/capability-ledger.test.ts [2m([22m[2m45 tests[22m[2m)[22m[32m 28[2mms[22m[39m
+ [32m✓[39m src/__tests__/task-scheduler.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2misBlocking[2m > [22m[2mshould return true when tracker is paused
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T08:28:36.737Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T08:28:36.759Z"}
+{"type":"status","message":"Resume at: 1/19/2026, 1:28:36 AM","timestamp":"2026-01-19T08:28:36.760Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T08:28:36.760Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/19/2026, 1:28:36 AM)","timestamp":"2026-01-19T08:28:36.760Z"}
+
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mcheckUsage[2m > [22m[2mshould return error when tracker is paused
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T08:28:36.762Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T08:28:36.762Z"}
+{"type":"status","message":"Resume at: 1/19/2026, 1:28:36 AM","timestamp":"2026-01-19T08:28:36.762Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T08:28:36.762Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/19/2026, 1:28:36 AM)","timestamp":"2026-01-19T08:28:36.762Z"}
+
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mrecordRateLimitHit[2m > [22m[2mshould record rate limit hit and pause
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T08:28:36.770Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T08:28:36.770Z"}
+{"type":"status","message":"Resume at: 1/19/2026, 1:28:36 AM","timestamp":"2026-01-19T08:28:36.770Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T08:28:36.770Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/19/2026, 1:28:36 AM)","timestamp":"2026-01-19T08:28:36.770Z"}
+
+[90mstderr[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mrecordRateLimitHit[2m > [22m[2mshould record rate limit hit and pause
+[22m[39m🚨 Rate limit hit for sonnet: {
+  timestamp: [35m2026-01-19T08:28:36.768Z[39m,
+  usage: {
+    last5Hours: [33m0[39m,
+    currentWeek: [33m0[39m,
+    last5HoursSonnet: [33m0[39m,
+    currentWeekSonnet: [33m0[39m
+  },
+  error: [32m'429 Too Many Requests'[39m,
+  apiLimitInfo: {}
+}
+
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mguard[2m > [22m[2mshould not execute when blocked
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T08:28:36.780Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T08:28:36.780Z"}
+{"type":"status","message":"Resume at: 1/19/2026, 1:28:36 AM","timestamp":"2026-01-19T08:28:36.780Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T08:28:36.780Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/19/2026, 1:28:36 AM)","timestamp":"2026-01-19T08:28:36.780Z"}
+
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mguard[2m > [22m[2mshould handle 429 errors
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T08:28:36.782Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T08:28:36.783Z"}
+{"type":"status","message":"Resume at: 1/19/2026, 1:28:36 AM","timestamp":"2026-01-19T08:28:36.783Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T08:28:36.783Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/19/2026, 1:28:36 AM)","timestamp":"2026-01-19T08:28:36.783Z"}
+
+[90mstderr[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mguard[2m > [22m[2mshould handle 429 errors
+[22m[39m🚨 Rate limit hit for sonnet: {
+  timestamp: [35m2026-01-19T08:28:36.782Z[39m,
+  usage: {
+    last5Hours: [33m0[39m,
+    currentWeek: [33m0[39m,
+    last5HoursSonnet: [33m0[39m,
+    currentWeekSonnet: [33m0[39m
+  },
+  error: [32m'Error: 429 Too Many Requests'[39m,
+  apiLimitInfo: {}
+}
+
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mresume[2m > [22m[2mshould clear pause state
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T08:28:36.784Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T08:28:36.784Z"}
+{"type":"status","message":"Resume at: 1/19/2026, 1:28:36 AM","timestamp":"2026-01-19T08:28:36.784Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T08:28:36.784Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/19/2026, 1:28:36 AM)","timestamp":"2026-01-19T08:28:36.784Z"}
+{"type":"success","message":"Resumed from rate limit pause","timestamp":"2026-01-19T08:28:36.784Z"}
+
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mgetPauseState[2m > [22m[2mshould return pause state from tracker
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T08:28:36.785Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T08:28:36.785Z"}
+{"type":"status","message":"Resume at: 1/19/2026, 1:28:36 AM","timestamp":"2026-01-19T08:28:36.785Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T08:28:36.785Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/19/2026, 1:28:36 AM)","timestamp":"2026-01-19T08:28:36.785Z"}
+
+ [32m✓[39m src/__tests__/api-usage-guard.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 53[2mms[22m[39m
+ [32m✓[39m src/__tests__/self-tuning.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m src/__tests__/output.test.ts [2m([22m[2m44 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+[90mstderr[2m | src/__tests__/task-schema.test.ts[2m > [22m[2mtask-schema[2m > [22m[2mparseMetaTaskResult[2m > [22m[2mshould reject invalid action types
+[22m[39mInvalid meta-task action: explode
+
+[90mstderr[2m | src/__tests__/task-schema.test.ts[2m > [22m[2mtask-schema[2m > [22m[2mparseMetaTaskResult[2m > [22m[2mshould reject missing reason
+[22m[39mMissing reason in recommendation
+
+[90mstderr[2m | src/__tests__/task-schema.test.ts[2m > [22m[2mtask-schema[2m > [22m[2mparseMetaTaskResult[2m > [22m[2mshould reject invalid confidence scores
+[22m[39mInvalid confidence: [33m1.5[39m
+
+[90mstderr[2m | src/__tests__/task-schema.test.ts[2m > [22m[2mtask-schema[2m > [22m[2mparseMetaTaskResult[2m > [22m[2mshould reject negative confidence scores
+[22m[39mInvalid confidence: [33m-0.5[39m
+
+ [32m✓[39m src/__tests__/task-schema.test.ts [2m([22m[2m42 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m src/__tests__/plan-parser.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m src/__tests__/config.test.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mAST index empty, cannot use as primary source[39m
+    [35mmodule[39m: "session"
+[08:28:35] [34mDEBUG[39m: [36mAST index insufficient, falling back to file search[39m
+    [35mmodule[39m: "session"
+[08:28:35] [34mDEBUG[39m: [36mContext preparation complete[39m
+    [35mmodule[39m: "session"
+    [35mmode[39m: "compact"
+    [35mtokenBudget[39m: 4000
+    [35mtokenBudgetUsed[39m: 383
+    [35mtargetFiles[39m: 0
+    [35msymbolStubs[39m: 0
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mAST index empty, cannot use as primary source[39m
+    [35mmodule[39m: "session"
+[08:28:35] [34mDEBUG[39m: [36mAST index insufficient, falling back to file search[39m
+    [35mmodule[39m: "session"
+[08:28:35] [34mDEBUG[39m: [36mContext preparation complete[39m
+    [35mmodule[39m: "session"
+    [35mmode[39m: "compact"
+    [35mtokenBudget[39m: 4000
+    [35mtokenBudgetUsed[39m: 487
+    [35mtargetFiles[39m: 0
+    [35msymbolStubs[39m: 0
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mAST index empty, cannot use as primary source[39m
+    [35mmodule[39m: "session"
+[08:28:35] [34mDEBUG[39m: [36mAST index insufficient, falling back to file search[39m
+    [35mmodule[39m: "session"
+[08:28:35] [34mDEBUG[39m: [36mContext preparation complete[39m
+    [35mmodule[39m: "session"
+    [35mmode[39m: "compact"
+    [35mtokenBudget[39m: 4000
+    [35mtokenBudgetUsed[39m: 620
+    [35mtargetFiles[39m: 1
+    [35msymbolStubs[39m: 0
+[08:28:35] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:35] [34mDEBUG[39m: [36mAST index empty, cannot use as primary source[39m
+    [35mmodule[39m: "session"
+[08:28:35] [34mDEBUG[39m: [36mAST index insufficient, falling back to file search[39m
+    [35mmodule[39m: "session"
+[08:28:35] [34mDEBUG[39m: [36mContext preparation complete[39m
+    [35mmodule[39m: "session"
+    [35mmode[39m: "compact"
+    [35mtokenBudget[39m: 4000
+    [35mtokenBudgetUsed[39m: 390
+    [35mtargetFiles[39m: 0
+    [35msymbolStubs[39m: 0
+[08:28:37] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[08:28:37] [34mDEBUG[39m: [36mAST index empty, cannot use as primary source[39m
+    [35mmodule[39m: "session"
+[08:28:37] [34mDEBUG[39m: [36mAST index insufficient, falling back to file search[39m
+    [35mmodule[39m: "session"
+[08:28:37] [34mDEBUG[39m: [36mContext preparation complete[39m
+    [35mmodule[39m: "session"
+    [35mmode[39m: "compact"
+    [35mtokenBudget[39m: 4000
+    [35mtokenBudgetUsed[39m: 366
+    [35mtargetFiles[39m: 0
+    [35msymbolStubs[39m: 0
+ [32m✓[39m src/__tests__/cli.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m src/__tests__/context.test.ts [2m([22m[2m63 tests[22m[2m)[22m[33m 1747[2mms[22m[39m
+       [33m[2m✓[22m[39m extracts function signatures from TypeScript file [33m 1557[2mms[22m[39m
+ [32m✓[39m src/__tests__/task-analyzer.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m src/__tests__/oracle-mcp-integration.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/__tests__/fast-path.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/__tests__/orchestrator-validation.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/__tests__/integration/cli-smoke.test.ts [2m([22m[2m16 tests[22m[2m)[22m[33m 8498[2mms[22m[39m
+       [33m[2m✓[22m[39m --help exits 0 and shows usage [33m 884[2mms[22m[39m
+       [33m[2m✓[22m[39m --version exits 0 and shows version [33m 859[2mms[22m[39m
+       [33m[2m✓[22m[39m help command works [33m 853[2mms[22m[39m
+       [33m[2m✓[22m[39m help for specific command works [33m 529[2mms[22m[39m
+       [33m[2m✓[22m[39m tasks command works with empty board [33m 421[2mms[22m[39m
+       [33m[2m✓[22m[39m limits command works [33m 422[2mms[22m[39m
+       [33m[2m✓[22m[39m status command works [33m 429[2mms[22m[39m
+       [33m[2m✓[22m[39m config command works [33m 427[2mms[22m[39m
+       [33m[2m✓[22m[39m task-status command works [33m 432[2mms[22m[39m
+       [33m[2m✓[22m[39m metrics command works [33m 422[2mms[22m[39m
+       [33m[2m✓[22m[39m daemon status works [33m 438[2mms[22m[39m
+       [33m[2m✓[22m[39m add command adds task to board [33m 428[2mms[22m[39m
+       [33m[2m✓[22m[39m task-analyze command works [33m 417[2mms[22m[39m
+       [33m[2m✓[22m[39m triage command works [33m 434[2mms[22m[39m
+       [33m[2m✓[22m[39m unknown command shows error [33m 522[2mms[22m[39m
+       [33m[2m✓[22m[39m add without goal shows error [33m 550[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m31 passed[39m[22m[2m | [22m[33m3 skipped[39m[90m (34)[39m
+[2m      Tests [22m [1m[32m1097 passed[39m[22m[2m | [22m[33m54 skipped[39m[90m (1151)[39m
+[2m   Start at [22m 00:28:34
+[2m   Duration [22m 9.44s[2m (transform 2.12s, setup 0ms, import 4.91s, tests 13.32s, environment 6ms)[22m
+
+[34m % [39m[2mCoverage report from [22m[33mv8[39m
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   32.81 |    28.35 |   38.55 |    32.8 |                   
+ src               |   33.73 |    29.15 |   39.59 |   33.61 |                   
+  ...ing-review.ts |       0 |        0 |       0 |       0 | 43-443            
+  ast-index.ts     |   70.19 |     49.1 |   78.43 |   71.47 | ...74-776,785,792 
+  automated-pm.ts  |       0 |        0 |       0 |       0 | 61-540            
+  ax-agent-sdk.ts  |    3.27 |        0 |       0 |    3.33 | 32-226,239-249    
+  ax-programs.ts   |    4.21 |        0 |       0 |    4.21 | 149-1169          
+  cache.ts         |   78.74 |     65.9 |   86.95 |   78.68 | ...97-100,196-239 
+  ...ity-ledger.ts |   91.66 |     86.2 |     100 |   91.48 | ...89-491,497-499 
+  claude-usage.ts  |       0 |        0 |       0 |       0 | 44-389            
+  complexity.ts    |   48.77 |    49.74 |    62.5 |    48.6 | ...1020,1100-1313 
+  config.ts        |     100 |    97.77 |     100 |     100 | 228               
+  context.ts       |   62.04 |    52.65 |   63.15 |   63.42 | ...1190,1195,1199 
+  dashboard.ts     |       0 |        0 |       0 |       0 | 27-454            
+  ...on-tracker.ts |   56.89 |       60 |   53.84 |   57.27 | ...80-391,433-568 
+  dual-logger.ts   |   77.96 |    63.33 |    92.3 |   81.81 | ...92,146,170-176 
+  ...ency-tools.ts |   97.91 |       90 |     100 |   97.72 | 129               
+  ...x-patterns.ts |   77.31 |    71.85 |   83.33 |   78.04 | ...47,565,699-778 
+  experiment.ts    |       0 |        0 |       0 |       0 | 24-327            
+  fast-path.ts     |   81.42 |    63.15 |   83.33 |   83.58 | ...31,141,161,196 
+  ...ck-metrics.ts |   91.22 |    74.86 |   81.08 |   91.05 | ...78,762,806-810 
+  file-tracker.ts  |   97.48 |    88.33 |     100 |   97.43 | ...09,570,576,582 
+  git.ts           |   16.86 |    21.27 |   21.05 |   16.96 | ...77-525,565-572 
+  grind-events.ts  |       0 |        0 |       0 |       0 | 17-628            
+  ...-extractor.ts |       0 |        0 |       0 |       0 | 32-446            
+  knowledge.ts     |   93.81 |    88.57 |     100 |   93.54 | ...17,134,146-149 
+  live-metrics.ts  |   48.91 |    47.14 |      40 |   48.91 | ...51-269,291-350 
+  logger.ts        |     100 |    66.66 |     100 |     100 | 16-17             
+  mcp-protocol.ts  |    96.7 |    90.78 |     100 |   96.62 | 175,183,186       
+  mcp-tools.ts     |     100 |      100 |     100 |     100 |                   
+  merge-queue.ts   |   10.85 |    10.52 |   28.33 |   10.16 | ...,739-1043,1071 
+  meta-tasks.ts    |       0 |        0 |       0 |       0 | 15-325            
+  ...-dashboard.ts |       0 |        0 |       0 |       0 | 43-468            
+  metrics.ts       |       0 |        0 |       0 |       0 | 32-805            
+  oracle.ts        |   25.42 |    36.84 |      20 |   24.52 | ...19-352,360-365 
+  orchestrator.ts  |       0 |        0 |       0 |       0 | 111-2226          
+  output.ts        |   76.52 |    60.71 |   94.28 |   78.57 | ...57-558,568-572 
+  persistence.ts   |   32.72 |    17.43 |   47.74 |   32.62 | ...1195,1211-1289 
+  plan-link.ts     |       0 |        0 |       0 |       0 | 13-415            
+  plan-parser.ts   |   96.12 |    93.42 |     100 |   97.27 | 84-88,326         
+  ...t-variants.ts |       0 |        0 |       0 |       0 | 41-357            
+  rate-limit.ts    |    52.1 |    32.36 |   63.46 |   52.04 | ...36-939,948-951 
+  review.ts        |       0 |        0 |       0 |       0 | 99-536            
+  self-tuning.ts   |    57.6 |    39.18 |   77.77 |    57.6 | ...17-321,327-345 
+  server.ts        |       0 |        0 |       0 |       0 | 33-505            
+  task-analyzer.ts |   94.69 |    94.78 |     100 |   95.83 | ...07,281,328,343 
+  ...d-analyzer.ts |    86.5 |     77.1 |   89.65 |   87.58 | ...43,462,472-480 
+  ...decomposer.ts |       0 |        0 |       0 |       0 | 19-206            
+  ...e-patterns.ts |       0 |        0 |       0 |       0 | 14-789            
+  task-planner.ts  |       0 |        0 |       0 |       0 | 36-1079           
+  ...-scheduler.ts |   97.31 |       89 |     100 |   98.11 | 343-349,430       
+  task-schema.ts   |   70.31 |    71.42 |   66.66 |   70.49 | ...60,173,401-447 
+  ...-validator.ts |       0 |        0 |       0 |       0 | 41-506            
+  task.ts          |   41.74 |    22.18 |   44.14 |   42.85 | ...1540,1569-1753 
+  ts-analysis.ts   |   35.13 |    22.22 |      50 |   37.31 | ...43-258,271-301 
+  types.ts         |      25 |        0 |       0 |      25 | 1199-1207         
+  ...cation-cli.ts |       0 |        0 |       0 |       0 | 14-31             
+  verification.ts  |    74.6 |    63.09 |   88.23 |   75.52 | ...00-501,580-641 
+  ...alize-html.ts |       0 |        0 |       0 |       0 | 12-371            
+  visualize.ts     |       0 |        0 |       0 |       0 | 11-347            
+  worker.ts        |       0 |        0 |       0 |       0 | 79-3208           
+  ...ee-manager.ts |       0 |        0 |       0 |       0 | 26-593            
+ src/middleware    |   66.19 |    48.97 |   84.61 |   66.19 |                   
+  ...sage-guard.ts |   66.19 |    48.97 |   84.61 |   66.19 | ...74-288,308-325 
+ ...antic-analyzer |       0 |        0 |       0 |       0 |                   
+  analyzer.ts      |       0 |        0 |       0 |       0 | 16-265            
+  cli.ts           |       0 |        0 |       0 |       0 | 14-156            
+  detectors.ts     |       0 |        0 |       0 |       0 | 9-187             
+  ...-extractor.ts |       0 |        0 |       0 |       0 | 10-167            
+  fixer.ts         |       0 |        0 |       0 |       0 | 10-71             
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  tokenizer.ts     |       0 |      100 |       0 |       0 | 8-19              
+  types.ts         |       0 |        0 |       0 |       0 |                   
+-------------------|---------|----------|---------|---------|-------------------
