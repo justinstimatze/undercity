@@ -14,6 +14,7 @@
 
 import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { getTaskIndex } from "./task-index.js";
 
 const LOCK_TIMEOUT_MS = 30000; // 30 seconds - lock considered stale after this
 const LOCK_RETRY_DELAY_MS = 50; // Initial retry delay
@@ -259,6 +260,9 @@ export function saveTaskBoard(board: TaskBoard, path: string = DEFAULT_TASK_BOAR
 		// Atomically rename temporary file to target file
 		// This ensures the file is never in a partially written state
 		renameSync(tempPath, path);
+
+		// Invalidate task index cache after write
+		getTaskIndex(path).invalidateAll();
 	} catch (error) {
 		// Clean up temporary file if it exists
 		if (existsSync(tempPath)) {
@@ -1134,14 +1138,16 @@ export function removeTasks(paramsOrIds: RemoveTasksParams | string[], path?: st
 
 /**
  * Get all tasks
+ * Uses index cache to avoid redundant file reads
  */
 export function getAllTasks(): Task[] {
-	return loadTaskBoard().tasks;
+	return getTaskIndex().getAllTasks();
 }
 
 /**
  * Get ready tasks for parallel execution
  * Returns pending tasks sorted by priority, limited to the specified count
+ * Uses task index for O(1) status lookup + O(k) scoring (k = result count)
  */
 export function getReadyTasksForBatch(params: GetReadyTasksParams): Task[];
 export function getReadyTasksForBatch(count?: number): Task[];
@@ -1157,71 +1163,8 @@ export function getReadyTasksForBatch(paramsOrCount?: GetReadyTasksParams | numb
 		actualPath = DEFAULT_TASK_BOARD_PATH;
 	}
 
-	const board = loadTaskBoard(actualPath);
-	const pendingTasks = board.tasks.filter(
-		(task) =>
-			task.status === "pending" &&
-			!task.isDecomposed && // Skip decomposed tasks - execute subtasks instead
-			(!task.dependsOn ||
-				task.dependsOn.every((depId) => board.tasks.find((t) => t.id === depId && t.status === "complete"))),
-	);
-
-	// Compute priority with more sophisticated scoring
-	const scoredTasks = pendingTasks.map((task) => {
-		let score = task.priority ?? 999;
-
-		// Boost priority based on tags
-		const boostTags: { [key: string]: number } = {
-			critical: -50, // Highest priority
-			bugfix: -30,
-			security: -25,
-			performance: -20,
-			refactor: -10,
-		};
-
-		if (task.tags) {
-			for (const tag of task.tags) {
-				if (boostTags[tag.toLowerCase()]) {
-					score += boostTags[tag.toLowerCase()];
-				}
-			}
-		}
-
-		// Penalize old tasks
-		const daysSinceCreation = (Date.now() - new Date(task.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-		score += Math.min(daysSinceCreation * 0.5, 30);
-
-		return { task, score };
-	});
-
-	// Sort by score
-	const sortedTasks = scoredTasks.sort((a, b) => a.score - b.score);
-
-	// Select compatible tasks with minimal file/package overlap
-	const selectedTasks: Task[] = [];
-	const usedPackages = new Set<string>();
-	const usedFiles = new Set<string>();
-
-	for (const { task } of sortedTasks) {
-		if (selectedTasks.length >= count) break;
-
-		// Check package and file conflicts
-		const taskPackages = task.computedPackages ?? task.packageHints ?? [];
-		const taskFiles = task.estimatedFiles ?? [];
-
-		const hasConflict =
-			taskPackages.some((pkg) => usedPackages.has(pkg)) || taskFiles.some((file) => usedFiles.has(file));
-
-		if (!hasConflict) {
-			selectedTasks.push(task);
-
-			// Mark packages and files as used
-			for (const pkg of taskPackages) usedPackages.add(pkg);
-			for (const file of taskFiles) usedFiles.add(file);
-		}
-	}
-
-	return selectedTasks;
+	// Use task index for optimized query
+	return getTaskIndex(actualPath).getReadyTasksForBatch(count);
 }
 
 /**
@@ -1286,6 +1229,7 @@ export function getTaskSetStatus(taskIds: string[]): {
 
 /**
  * Get task board analytics for optimization insights
+ * Uses task index for O(1) status/package lookups instead of O(n) scans
  */
 export function getTaskBoardAnalytics(): {
 	totalTasks: number;
@@ -1293,8 +1237,8 @@ export function getTaskBoardAnalytics(): {
 	parallelizationOpportunities: number;
 	topConflictingPackages: string[];
 } {
-	const board = loadTaskBoard();
-	const completedTasks = board.tasks.filter((q) => q.status === "complete");
+	const index = getTaskIndex();
+	const completedTasks = index.getTasksByStatus("complete");
 
 	// Calculate average completion time
 	let totalTime = 0;
@@ -1309,25 +1253,15 @@ export function getTaskBoardAnalytics(): {
 	const averageCompletionTime = validTimes > 0 ? totalTime / validTimes : 0;
 
 	// Count pending tasks as parallelization opportunities
-	const pendingTasks = board.tasks.filter((q) => q.status === "pending").length;
+	const pendingTasks = index.getTasksByStatus("pending").length;
 
-	// Collect package hints for conflict analysis
-	const packageCounts = new Map<string, number>();
-	for (const task of board.tasks) {
-		const packages = task.computedPackages || task.packageHints || [];
-		for (const pkg of packages) {
-			packageCounts.set(pkg, (packageCounts.get(pkg) || 0) + 1);
-		}
-	}
+	// Get top conflicting packages from index (O(1) lookup)
+	const topConflictingPackages = index.getTopConflictingPackages(5);
 
-	// Get top conflicting packages (most frequently touched)
-	const topConflictingPackages = Array.from(packageCounts.entries())
-		.sort((a, b) => b[1] - a[1])
-		.slice(0, 5)
-		.map(([pkg]) => pkg);
+	const summary = index.getSummary();
 
 	return {
-		totalTasks: board.tasks.length,
+		totalTasks: summary.totalTasks,
 		averageCompletionTime,
 		parallelizationOpportunities: pendingTasks,
 		topConflictingPackages,
@@ -1529,6 +1463,7 @@ export function completeParentIfAllSubtasksDone(
 
 /**
  * Get task by ID
+ * Uses task index for O(1) lookup instead of O(n) scan
  */
 export function getTaskById(params: GetTaskByIdParams): Task | undefined;
 export function getTaskById(taskId: string, path?: string): Task | undefined;
@@ -1543,8 +1478,7 @@ export function getTaskById(paramsOrTaskId: GetTaskByIdParams | string, path?: s
 		actualPath = path ?? DEFAULT_TASK_BOARD_PATH;
 	}
 
-	const board = loadTaskBoard(actualPath);
-	return board.tasks.find((t) => t.id === taskId);
+	return getTaskIndex(actualPath).getTaskById(taskId);
 }
 
 /**

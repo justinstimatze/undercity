@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-01-19T08:39:06.601Z",
+  "timestamp": "2026-01-19T08:56:48.065Z",
   "reason": "Stuck in no_checkpoint phase",
-  "attempt": 1,
+  "attempt": 2,
   "message": "Health check detected inactivity. Please continue or report status."
 }
