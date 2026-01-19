@@ -260,39 +260,74 @@ export function findFilesImporting(symbolName: string, cwd: string): string[] {
 }
 
 /**
- * Get the full definition of a type by name
+ * Get the full definition of a type by name from a specific file
+ *
+ * @param typeName - The name of the type/interface to find
+ * @param cwd - Working directory (repo root)
+ * @param filePath - Optional specific file to search in (from AST index)
+ * @param maxLength - Maximum length before truncation (default: 500)
  */
-export function getTypeDefinition(typeName: string, cwd: string): string | null {
+export function getTypeDefinition(
+	typeName: string,
+	cwd: string,
+	filePath?: string,
+	maxLength: number = 500,
+): string | null {
 	const project = getTsMorphProject(cwd);
 	if (!project) {
 		return null;
 	}
 
 	try {
-		// Common locations to check
-		const schemaPath = path.join(cwd, "common/schema/index.ts");
+		// If specific file provided, search there first
+		const filesToCheck: string[] = [];
+		if (filePath) {
+			const fullPath = path.isAbsolute(filePath) ? filePath : path.join(cwd, filePath);
+			if (fs.existsSync(fullPath)) {
+				filesToCheck.push(fullPath);
+			}
+		}
 
-		if (fs.existsSync(schemaPath)) {
+		// Fall back to common schema location
+		const schemaPath = path.join(cwd, "common/schema/index.ts");
+		if (fs.existsSync(schemaPath) && !filesToCheck.includes(schemaPath)) {
+			filesToCheck.push(schemaPath);
+		}
+
+		// Also check src/types.ts (common in many projects)
+		const typesPath = path.join(cwd, "src/types.ts");
+		if (fs.existsSync(typesPath) && !filesToCheck.includes(typesPath)) {
+			filesToCheck.push(typesPath);
+		}
+
+		for (const checkPath of filesToCheck) {
 			let sourceFile: SourceFile;
 			try {
-				sourceFile = project.addSourceFileAtPath(schemaPath);
+				sourceFile = project.addSourceFileAtPath(checkPath);
 			} catch {
-				sourceFile = project.getSourceFile(schemaPath) as SourceFile;
-				if (!sourceFile) return null;
+				sourceFile = project.getSourceFile(checkPath) as SourceFile;
+				if (!sourceFile) continue;
 			}
 
 			// Look for interface
 			const iface = sourceFile.getInterface(typeName);
 			if (iface) {
 				const text = iface.getText();
-				return text.length > 500 ? `${text.slice(0, 497)}...` : text;
+				return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
 			}
 
 			// Look for type alias
 			const typeAlias = sourceFile.getTypeAlias(typeName);
 			if (typeAlias) {
 				const text = typeAlias.getText();
-				return text.length > 500 ? `${text.slice(0, 497)}...` : text;
+				return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
+			}
+
+			// Look for enum
+			const enumDecl = sourceFile.getEnum(typeName);
+			if (enumDecl) {
+				const text = enumDecl.getText();
+				return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
 			}
 		}
 

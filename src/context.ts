@@ -379,7 +379,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getASTIndex } from "./ast-index.js";
 import { sessionLogger } from "./logger.js";
-import { extractFunctionSignaturesWithTypes } from "./ts-analysis.js";
+import { extractFunctionSignaturesWithTypes, getTypeDefinition } from "./ts-analysis.js";
 
 /**
  * Context mode - controls verbosity/size of context
@@ -1083,18 +1083,47 @@ async function tryASTIndexFirst(
 		}
 		briefing.impactedFiles = [...new Set(allImpacted)].filter((f) => !briefing.targetFiles.includes(f)).slice(0, 8);
 
-		// 6. Enrich type definitions from index (only if task mentions types)
+		// 6. Enrich type definitions from index - extract FULL definitions for worker context
+		// This is critical for tasks that modify or use types - the worker needs to understand the structure
 		const typeTerms = searchTerms.filter((t) => /^[A-Z][a-zA-Z0-9]*$/.test(t) && t.length > 2);
-		for (const typeName of typeTerms.slice(0, 5)) {
+		const maxTypeLength = mode === "minimal" ? 200 : mode === "compact" ? 400 : 600;
+		let typeDefsAdded = 0;
+		const maxTypeDefs = mode === "minimal" ? 2 : mode === "compact" ? 4 : 8;
+
+		for (const typeName of typeTerms.slice(0, 8)) {
+			if (typeDefsAdded >= maxTypeDefs) break;
+
 			const info = index.getSymbolInfo(typeName);
-			if (info && (info.kind === "interface" || info.kind === "type")) {
-				if (!briefing.typeDefinitions.includes(typeName)) {
-					// In compact mode, just use the name; in full mode, include signature
-					if (mode === "compact" || mode === "minimal") {
-						briefing.typeDefinitions.push(typeName);
-					} else {
-						const sig = info.signature ? `: ${info.signature}` : "";
-						briefing.typeDefinitions.push(`${typeName}${sig}`);
+			if (info && (info.kind === "interface" || info.kind === "type" || info.kind === "enum")) {
+				// Find the file where this type is defined
+				const files = index.findSymbolDefinition(typeName);
+				const filePath = files.length > 0 ? files[0] : undefined;
+
+				// Get the full type definition source code
+				const fullDef = getTypeDefinition(typeName, repoRoot, filePath, maxTypeLength);
+				if (fullDef && !briefing.typeDefinitions.includes(fullDef)) {
+					briefing.typeDefinitions.push(fullDef);
+					typeDefsAdded++;
+					sessionLogger.debug({ typeName, file: filePath }, "Added full type definition to context");
+				}
+			}
+		}
+
+		// Also extract types from type-only imports in target files (critical dependencies)
+		for (const providerFile of typeProviders.slice(0, 3)) {
+			if (typeDefsAdded >= maxTypeDefs) break;
+
+			const fileInfo = index.getFileInfo(providerFile);
+			if (fileInfo) {
+				// Get exported types from this file
+				for (const exp of fileInfo.exports) {
+					if (typeDefsAdded >= maxTypeDefs) break;
+					if (exp.kind === "interface" || exp.kind === "type" || exp.kind === "enum") {
+						const fullDef = getTypeDefinition(exp.name, repoRoot, providerFile, maxTypeLength);
+						if (fullDef && !briefing.typeDefinitions.includes(fullDef)) {
+							briefing.typeDefinitions.push(fullDef);
+							typeDefsAdded++;
+						}
 					}
 				}
 			}

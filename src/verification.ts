@@ -425,7 +425,7 @@ export async function verifyWork(
 		let hasConfirmedNoTestFiles = false;
 		try {
 			// Use git ls-files with explicit patterns - only trust if command succeeds
-			const lsOutput = execSync('git ls-files 2>/dev/null', { encoding: "utf-8", cwd }).trim();
+			const lsOutput = execSync("git ls-files 2>/dev/null", { encoding: "utf-8", cwd }).trim();
 			if (lsOutput) {
 				// Git ls-files worked - check if any test files exist
 				const testFilePatterns = /\.(test|spec)\.(ts|tsx|js|jsx)$|__tests__\//;
