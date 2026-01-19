@@ -1616,6 +1616,7 @@ export class Orchestrator {
 
 		// Merge worktree changes into local main
 		// Since worktree already rebased onto local main, this should fast-forward
+		let didStash = false;
 		try {
 			// Get the current commit SHA before detaching
 			const commitSha = execGitInDir(["rev-parse", "HEAD"], worktreePath).trim();
@@ -1625,11 +1626,19 @@ export class Orchestrator {
 			execGitInDir(["checkout", "--detach"], worktreePath);
 
 			// Check if main repo has uncommitted changes that would block merge
+			// Exclude .undercity/ files since they're managed by the orchestrator
 			const mainStatus = execGitInDir(["status", "--porcelain"], mainRepo);
-			if (mainStatus.trim()) {
+			const nonUndercityChanges = mainStatus
+				.split("\n")
+				.filter((line) => line.trim() && !line.includes(".undercity/"))
+				.join("\n");
+
+			if (nonUndercityChanges.trim()) {
 				output.warning(`Main repo has uncommitted changes, stashing before merge for ${taskId}`);
 				try {
+					// Only stash tracked changes outside .undercity/
 					execGitInDir(["stash", "push", "-m", `Auto-stash before merging ${taskId}`], mainRepo);
+					didStash = true;
 				} catch (stashError) {
 					throw new Error(`Cannot merge: main repo has uncommitted changes and stash failed: ${stashError}`);
 				}
@@ -1640,7 +1649,28 @@ export class Orchestrator {
 			execGitInDir(["merge", "--ff-only", commitSha], mainRepo);
 
 			output.debug(`Merged ${taskId} into local main (${commitSha.slice(0, 7)})`);
+
+			// Restore stashed changes after successful merge
+			if (didStash) {
+				try {
+					execGitInDir(["stash", "pop"], mainRepo);
+					output.debug(`Restored stashed changes after merge for ${taskId}`);
+				} catch (popError) {
+					// Stash pop might fail if there are conflicts with merged changes
+					// Log the issue but don't fail the merge - the changes are in the stash
+					output.warning(`Could not auto-restore stashed changes after ${taskId} merge: ${popError}`);
+					output.info(`Run 'git stash pop' manually to restore your changes`);
+				}
+			}
 		} catch (mergeError) {
+			// If merge failed and we stashed, try to restore the stash
+			if (didStash) {
+				try {
+					execGitInDir(["stash", "pop"], mainRepo);
+				} catch {
+					// Silent failure - stash is still available
+				}
+			}
 			throw new Error(`Merge into local main failed for ${taskId}: ${mergeError}`);
 		}
 	}
