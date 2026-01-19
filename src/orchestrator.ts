@@ -35,6 +35,7 @@ import {
 	saveTaskBoard,
 	type Task,
 } from "./task.js";
+import { findRelevantFiles } from "./task-file-patterns.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
 import type {
 	ActiveTaskState,
@@ -45,7 +46,6 @@ import type {
 	TaskAssignment,
 	TaskCheckpoint,
 } from "./types.js";
-import { findRelevantFiles } from "./task-file-patterns.js";
 import { type TaskResult, TaskWorker } from "./worker.js";
 import { WorktreeManager } from "./worktree-manager.js";
 

@@ -1520,8 +1520,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 								}
 							} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
 								// Use actual error from task result, with fallbacks
-								const errorMsg =
-									taskResult.mergeError || taskResult.result?.error || "Task failed";
+								const errorMsg = taskResult.mergeError || taskResult.result?.error || "Task failed";
 								// Build last attempt context for future retries
 								const lastAttempt: LastAttemptContext = {
 									model: taskResult.result?.model ?? modelTier,
