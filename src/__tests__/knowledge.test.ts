@@ -12,7 +12,7 @@
  * - Edge cases and integration scenarios
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -85,6 +85,57 @@ describe("knowledge.ts", () => {
 			const kb = loadKnowledge(tempDir);
 			expect(kb.learnings).toEqual([]);
 			expect(kb.version).toBe("1.0");
+		});
+
+		it("should return default when knowledge base validation fails", () => {
+			// Write invalid knowledge base (missing required fields)
+			const invalidKB = {
+				learnings: [
+					{
+						id: "learn-123",
+						// Missing required fields like taskId, category, etc.
+					},
+				],
+				version: "1.0",
+				lastUpdated: new Date().toISOString(),
+			};
+
+			const path = join(tempDir, "knowledge.json");
+			writeFileSync(path, JSON.stringify(invalidKB), "utf-8");
+
+			// Should return default KB instead of invalid one
+			const kb = loadKnowledge(tempDir);
+			expect(kb.learnings).toEqual([]);
+			expect(kb.version).toBe("1.0");
+		});
+
+		it("should accept old knowledge base without version field", () => {
+			// Write old-format knowledge base (backward compatibility)
+			const oldKB = {
+				learnings: [
+					{
+						id: "learn-123",
+						taskId: "task-456",
+						category: "pattern",
+						content: "Old learning",
+						keywords: ["old"],
+						confidence: 0.5,
+						usedCount: 0,
+						successCount: 0,
+						createdAt: new Date().toISOString(),
+					},
+				],
+				// No version or lastUpdated fields
+			};
+
+			const path = join(tempDir, "knowledge.json");
+			writeFileSync(path, JSON.stringify(oldKB), "utf-8");
+
+			// Should load successfully and add default version/lastUpdated
+			const kb = loadKnowledge(tempDir);
+			expect(kb.learnings).toHaveLength(1);
+			expect(kb.version).toBe("1.0");
+			expect(kb.lastUpdated).toBeDefined();
 		});
 
 		it("should update lastUpdated timestamp on save", () => {

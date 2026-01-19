@@ -10,6 +10,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { validateKnowledgeBase } from "./knowledge-validator.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
 const KNOWLEDGE_FILE = "knowledge.json";
@@ -103,16 +104,30 @@ export function loadKnowledge(stateDir: string = DEFAULT_STATE_DIR): KnowledgeBa
 
 	try {
 		const content = readFileSync(path, "utf-8");
-		const parsed = JSON.parse(content) as KnowledgeBase;
-		// Validate structure
-		if (!Array.isArray(parsed.learnings)) {
+		const parsed = JSON.parse(content);
+
+		// Validate structure using validator
+		const validationResult = validateKnowledgeBase(parsed);
+
+		if (!validationResult.valid) {
+			// Log validation issues but continue with default KB
+			console.warn("Knowledge base validation failed, using default:", validationResult.issues[0]?.message);
 			return {
 				learnings: [],
 				version: "1.0",
 				lastUpdated: new Date().toISOString(),
 			};
 		}
-		return parsed;
+
+		// Ensure version and lastUpdated exist for backward compatibility
+		if (!parsed.version) {
+			parsed.version = "1.0";
+		}
+		if (!parsed.lastUpdated) {
+			parsed.lastUpdated = new Date().toISOString();
+		}
+
+		return parsed as KnowledgeBase;
 	} catch {
 		return {
 			learnings: [],
@@ -135,6 +150,16 @@ function saveKnowledge(kb: KnowledgeBase, stateDir: string = DEFAULT_STATE_DIR):
 	}
 
 	kb.lastUpdated = new Date().toISOString();
+
+	// Validate before saving
+	const validationResult = validateKnowledgeBase(kb);
+	if (!validationResult.valid) {
+		const errorMessage = validationResult.issues
+			.filter((i) => i.severity === "error")
+			.map((i) => `${i.path}: ${i.message}`)
+			.join("; ");
+		throw new Error(`Cannot save invalid knowledge base: ${errorMessage}`);
+	}
 
 	try {
 		writeFileSync(tempPath, JSON.stringify(kb, null, 2), {
