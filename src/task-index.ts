@@ -404,6 +404,7 @@ export class TaskIndex {
 			byStatus: {
 				pending: this.byStatus.get("pending")?.length || 0,
 				in_progress: this.byStatus.get("in_progress")?.length || 0,
+				decomposed: this.byStatus.get("decomposed")?.length || 0,
 				complete: this.byStatus.get("complete")?.length || 0,
 				failed: this.byStatus.get("failed")?.length || 0,
 				blocked: this.byStatus.get("blocked")?.length || 0,

@@ -96,14 +96,16 @@ export interface ParallelTaskResult {
 	merged: boolean;
 	mergeError?: string;
 	modifiedFiles?: string[]; // Files modified by this task
+	decomposed?: boolean; // Task was decomposed into subtasks (not executed)
 }
 
 export interface ParallelBatchResult {
 	results: ParallelTaskResult[];
-	successful: number;
+	successful: number; // Tasks that executed successfully (not decomposed)
 	failed: number;
 	merged: number;
 	mergeFailed: number;
+	decomposed: number; // Tasks that were decomposed into subtasks (not executed)
 	durationMs: number;
 }
 
@@ -310,6 +312,7 @@ export class Orchestrator {
 				failed: 1,
 				merged: 0,
 				mergeFailed: 0,
+				decomposed: 0,
 				durationMs: Date.now() - startTime,
 			};
 		}
@@ -337,6 +340,7 @@ export class Orchestrator {
 			failed: 0,
 			merged: 0,
 			mergeFailed: 0,
+			decomposed: 0,
 			durationMs: Date.now() - startTime,
 		};
 	}
@@ -664,6 +668,7 @@ export class Orchestrator {
 				failed: 0,
 				merged: 0,
 				mergeFailed: 0,
+				decomposed: 0,
 				durationMs: Date.now() - startTime,
 			};
 		}
@@ -718,6 +723,7 @@ export class Orchestrator {
 				failed: result.status === "complete" ? 0 : 1,
 				merged: result.status === "complete" ? 1 : 0,
 				mergeFailed: 0,
+				decomposed: 0,
 				durationMs: Date.now() - startTime,
 			};
 		} catch (err) {
@@ -739,6 +745,7 @@ export class Orchestrator {
 				failed: 1,
 				merged: 0,
 				mergeFailed: 0,
+				decomposed: 0,
 				durationMs: Date.now() - startTime,
 			};
 		}
@@ -777,6 +784,7 @@ export class Orchestrator {
 				failed: 0,
 				merged: 0,
 				mergeFailed: 0,
+				decomposed: 0,
 				durationMs: 0,
 			};
 		}
@@ -791,6 +799,7 @@ export class Orchestrator {
 				failed: 0,
 				merged: 0,
 				mergeFailed: 0,
+				decomposed: 0,
 				durationMs: Date.now() - startTime,
 			};
 		}
@@ -1180,14 +1189,15 @@ export class Orchestrator {
 							})),
 						});
 						output.info(`Created subtasks: ${subtaskIds.join(", ")}`, { taskId: originalTaskId });
-						// Return early - task is now decomposed, not failed
+						// Return early - task is now decomposed into subtasks
 						return {
 							task,
 							taskId,
-							result: { ...result, status: "complete" }, // Treat as success (decomposed)
+							result: { ...result, status: "failed", error: "DECOMPOSED" }, // Not a real failure, just decomposed
 							worktreePath,
 							branch,
 							merged: false, // No merge needed for decomposed tasks
+							decomposed: true, // Track separately from executed tasks
 							modifiedFiles,
 						};
 					} catch (decomposeError) {
@@ -1319,7 +1329,8 @@ export class Orchestrator {
 	 * Merge successful tasks serially
 	 */
 	private async mergeSuccessfulTasks(results: ParallelTaskResult[]): Promise<void> {
-		const successfulTasks = results.filter((r) => r.result?.status === "complete" && r.branch);
+		// Only merge tasks that completed execution (not decomposed)
+		const successfulTasks = results.filter((r) => r.result?.status === "complete" && r.branch && !r.decomposed);
 
 		if (successfulTasks.length === 0) {
 			return;
@@ -1446,18 +1457,24 @@ export class Orchestrator {
 	 * Display execution summary
 	 */
 	private displaySummary(results: ParallelTaskResult[], durationMs: number): void {
-		const successful = results.filter((r) => r.result?.status === "complete").length;
-		const failed = results.filter((r) => r.result?.status === "failed" || r.result === null).length;
+		// Decomposed tasks are tracked separately from executed tasks
+		const decomposed = results.filter((r) => r.decomposed).length;
+		const executed = results.filter((r) => r.result?.status === "complete" && !r.decomposed);
+		const successful = executed.length;
+		// Failed excludes decomposed tasks (they're not real failures)
+		const failed = results.filter((r) => (r.result?.status === "failed" || r.result === null) && !r.decomposed).length;
 		const merged = results.filter((r) => r.merged).length;
-		const successfulTasks = results.filter((r) => r.result?.status === "complete" && r.branch);
-		const mergeFailed = successfulTasks.length - merged;
+		const mergeFailed = executed.filter((r) => r.branch).length - merged;
 
 		const summaryItems: Array<{ label: string; value: string | number; status?: "good" | "bad" | "neutral" }> = [
-			{ label: "Successful", value: successful, status: successful > 0 ? "good" : "neutral" },
+			{ label: "Executed", value: successful, status: successful > 0 ? "good" : "neutral" },
 			{ label: "Failed", value: failed, status: failed > 0 ? "bad" : "neutral" },
 			{ label: "Merged", value: merged },
 			{ label: "Duration", value: `${Math.round(durationMs / 1000)}s` },
 		];
+		if (decomposed > 0) {
+			summaryItems.push({ label: "Decomposed", value: decomposed, status: "neutral" });
+		}
 		if (mergeFailed > 0) {
 			summaryItems.push({ label: "Merge failed", value: mergeFailed, status: "bad" });
 		}
@@ -1507,10 +1524,14 @@ export class Orchestrator {
 	 * Build the final batch result object
 	 */
 	private buildBatchResult(results: ParallelTaskResult[], durationMs: number): ParallelBatchResult {
-		const successful = results.filter((r) => r.result?.status === "complete").length;
-		const failed = results.filter((r) => r.result?.status === "failed" || r.result === null).length;
+		// Decomposed tasks are tracked separately (they weren't actually executed)
+		const decomposed = results.filter((r) => r.decomposed).length;
+		// Successful = executed and completed (excludes decomposed)
+		const successful = results.filter((r) => r.result?.status === "complete" && !r.decomposed).length;
+		// Failed = failed or null result (excludes decomposed - they're not real failures)
+		const failed = results.filter((r) => (r.result?.status === "failed" || r.result === null) && !r.decomposed).length;
 		const merged = results.filter((r) => r.merged).length;
-		const successfulTasks = results.filter((r) => r.result?.status === "complete" && r.branch);
+		const successfulTasks = results.filter((r) => r.result?.status === "complete" && r.branch && !r.decomposed);
 		const mergeFailed = successfulTasks.length - merged;
 
 		return {
@@ -1519,6 +1540,7 @@ export class Orchestrator {
 			failed,
 			merged,
 			mergeFailed,
+			decomposed,
 			durationMs,
 		};
 	}

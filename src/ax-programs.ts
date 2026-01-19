@@ -134,6 +134,48 @@ export function formatProjectContext(ctx: ProjectContext): string {
 }
 
 // ============================================================================
+// Subtask Filtering
+// ============================================================================
+
+/**
+ * Patterns that indicate a subtask is actually a question/clarification request
+ * These should be handled by PM decision-making, not converted to subtasks
+ */
+const INVALID_SUBTASK_PATTERNS = [
+	/^clarify\b/i, // "Clarify project context..."
+	/^determine\s+(if|whether)\b/i, // "Determine if..."
+	/\?$/, // Ends with question mark
+	/^is\s+this\b/i, // "Is this for..."
+	/^what\s+(is|are|should)\b/i, // "What is the..." "What should..."
+	/^which\s+(one|approach)\b/i, // "Which one..." "Which approach..."
+	/^should\s+(we|i|the)\b/i, // "Should we..."
+	/^do\s+we\s+(need|have|want)\b/i, // "Do we need..."
+	/^confirm\b/i, // "Confirm the..."
+	/^verify\s+with\b/i, // "Verify with stakeholder..."
+	/^ask\s+(the|about)\b/i, // "Ask the user..."
+	/^check\s+with\b/i, // "Check with..."
+	/^\d+\.\s*(clarify|determine|confirm|ask|check)\b/i, // "1. Clarify..."
+];
+
+/**
+ * Filter out question-like subtasks from decomposition output
+ * Questions should be handled by PM decisions, not as subtasks
+ */
+export function filterQuestionSubtasks(subtasks: string[]): string[] {
+	return subtasks.filter((subtask) => {
+		const trimmed = subtask.trim();
+		// Check each invalid pattern
+		for (const pattern of INVALID_SUBTASK_PATTERNS) {
+			if (pattern.test(trimmed)) {
+				logger.debug({ subtask: trimmed.slice(0, 50), pattern: pattern.source }, "Filtered question-like subtask");
+				return false;
+			}
+		}
+		return true;
+	});
+}
+
+// ============================================================================
 // Program Signatures
 // ============================================================================
 
@@ -633,8 +675,19 @@ export async function decomposeTaskAx(
 
 		const result = await decomposer.forward(ai, { task, projectContext });
 
+		// Filter out question-like subtasks (these should be PM decisions, not subtasks)
+		const rawSubtasks = Array.isArray(result.subtasks) ? result.subtasks.map(String) : [];
+		const filteredSubtasks = filterQuestionSubtasks(rawSubtasks);
+
+		if (filteredSubtasks.length < rawSubtasks.length) {
+			logger.info(
+				{ filtered: rawSubtasks.length - filteredSubtasks.length },
+				"Filtered out question-like subtasks from decomposition",
+			);
+		}
+
 		const output = {
-			subtasks: Array.isArray(result.subtasks) ? result.subtasks.map(String) : [],
+			subtasks: filteredSubtasks,
 			reasoning: String(result.reasoning || ""),
 		};
 
@@ -854,6 +907,10 @@ export async function createPlanAx(
 
 		const result = await creator.forward(ai, { task, contextBriefing });
 
+		// Filter out question-like subtasks from suggested decomposition
+		const rawSubtasks = Array.isArray(result.suggestedSubtasks) ? result.suggestedSubtasks.map(String) : [];
+		const filteredSubtasks = filterQuestionSubtasks(rawSubtasks);
+
 		const output = {
 			filesToRead: Array.isArray(result.filesToRead) ? result.filesToRead.map(String) : [],
 			filesToModify: Array.isArray(result.filesToModify) ? result.filesToModify.map(String) : [],
@@ -864,7 +921,7 @@ export async function createPlanAx(
 			alreadyComplete: Boolean(result.alreadyComplete),
 			alreadyCompleteReason: String(result.alreadyCompleteReason || ""),
 			needsDecomposition: Boolean(result.needsDecomposition),
-			suggestedSubtasks: Array.isArray(result.suggestedSubtasks) ? result.suggestedSubtasks.map(String) : [],
+			suggestedSubtasks: filteredSubtasks,
 			reasoning: String(result.reasoning || ""),
 		};
 

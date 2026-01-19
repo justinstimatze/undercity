@@ -440,7 +440,7 @@ export function summary(
 export interface TaskResultSummary {
 	task: string;
 	taskId: string;
-	status: "completed" | "failed" | "merged";
+	status: "completed" | "failed" | "merged" | "decomposed";
 	modifiedFiles?: string[];
 	error?: string;
 }
@@ -452,9 +452,10 @@ export interface TaskResultSummary {
 export interface GrindResultsSummary {
 	batchId?: string;
 	totalTasks: number;
-	successful: number;
+	successful: number; // Tasks that executed successfully (not decomposed)
 	failed: number;
 	merged: number;
+	decomposed?: number; // Tasks that were decomposed into subtasks
 	durationMs: number;
 	tasks: TaskResultSummary[];
 }

@@ -335,7 +335,7 @@ describe("task.ts", () => {
 
 			expect(completed).toBe(false);
 			const updatedParent = getTaskById(parent.id, tasksPath);
-			expect(updatedParent?.status).toBe("pending");
+			expect(updatedParent?.status).toBe("decomposed");
 		});
 	});
 

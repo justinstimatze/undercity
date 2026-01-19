@@ -1447,6 +1447,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		let totalSuccessful = 0;
 		let totalFailed = 0;
 		let totalMerged = 0;
+		let totalDecomposed = 0;
 		let totalDurationMs = 0;
 
 		// Track task results for structured output
@@ -1568,6 +1569,20 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 					for (const taskResult of result.results) {
 						const taskId = objectiveToQuestId.get(taskResult.task);
 						if (taskId) {
+							// Decomposed tasks are handled separately - status already set by decomposeTaskIntoSubtasks
+							if (taskResult.decomposed) {
+								output.info(`Task decomposed into subtasks`, { taskId });
+								completedCount++;
+								updateGrindProgress(completedCount, totalToProcess);
+								taskResults.push({
+									task: taskResult.task,
+									taskId,
+									status: "decomposed",
+									modifiedFiles: [],
+								});
+								continue;
+							}
+
 							if (taskResult.merged) {
 								markTaskComplete(taskId);
 								output.taskComplete(taskId, `Task merged (${modelTier})`);
@@ -1683,6 +1698,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 					totalSuccessful += result.successful;
 					totalFailed += result.failed;
 					totalMerged += result.merged;
+					totalDecomposed += result.decomposed;
 					totalDurationMs += result.durationMs;
 				}
 			} catch (tierError) {
@@ -1758,14 +1774,24 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			durationMs: totalDurationMs,
 		});
 
-		output.summary("Grind Session Complete", [
-			{ label: "Total processed", value: tasksWithModels.length + tasksProcessed },
-			{ label: "Successful", value: totalSuccessful, status: totalSuccessful > 0 ? "good" : "neutral" },
-			{ label: "Failed", value: totalFailed, status: totalFailed > 0 ? "bad" : "neutral" },
+		const summaryItems = [
+			{
+				label: "Executed",
+				value: totalSuccessful,
+				status: totalSuccessful > 0 ? ("good" as const) : ("neutral" as const),
+			},
+			{ label: "Failed", value: totalFailed, status: totalFailed > 0 ? ("bad" as const) : ("neutral" as const) },
 			{ label: "Merged", value: totalMerged },
-			{ label: "Model distribution", value: modelCounts },
-			{ label: "Duration", value: `${Math.round(totalDurationMs / 60000)} minutes` },
-		]);
+		];
+		if (totalDecomposed > 0) {
+			summaryItems.push({ label: "Decomposed", value: totalDecomposed, status: "neutral" as const });
+		}
+		summaryItems.push(
+			{ label: "Model distribution", value: modelCounts as unknown as number, status: "neutral" as const },
+			{ label: "Duration", value: Math.round(totalDurationMs / 60000) as number, status: "neutral" as const },
+		);
+
+		output.summary("Grind Session Complete", summaryItems);
 
 		// Output structured results for calling session to parse
 		output.grindComplete({
@@ -1774,6 +1800,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			successful: totalSuccessful,
 			failed: totalFailed,
 			merged: totalMerged,
+			decomposed: totalDecomposed,
 			durationMs: totalDurationMs,
 			tasks: taskResults,
 		});

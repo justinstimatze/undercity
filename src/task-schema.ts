@@ -215,6 +215,7 @@ export function isPlanTask(objective: string): boolean {
 export type TaskStatus =
 	| "pending"
 	| "in_progress"
+	| "decomposed" // Parent task that has been split into subtasks (waiting for subtasks to complete)
 	| "complete"
 	| "failed"
 	| "blocked"

@@ -129,6 +129,7 @@ export interface Task {
 	status:
 		| "pending"
 		| "in_progress"
+		| "decomposed" // Parent task split into subtasks (waiting for subtasks to complete)
 		| "complete"
 		| "failed"
 		| "blocked"
@@ -1466,7 +1467,7 @@ export function decomposeTaskIntoSubtasks(
 
 		// Mark parent as decomposed (no longer directly executable)
 		parentTask.isDecomposed = true;
-		parentTask.status = "pending"; // Keep pending but won't be picked up due to isDecomposed
+		parentTask.status = "decomposed"; // Explicit status: waiting for subtasks to complete
 
 		// Create subtasks
 		const subtaskIds: string[] = [];

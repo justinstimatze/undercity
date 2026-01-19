@@ -779,10 +779,11 @@ Verify file existence by checking the filesystem.`;
 	try {
 		return JSON.parse(reviewJson) as PlanReview;
 	} catch {
-		// Don't block on review parse failure
+		// Reject on review parse failure - safer to block than merge something invalid
+		logger.warn({ reviewJson: reviewJson.substring(0, 200) }, "Review parsing failed, rejecting plan");
 		return {
-			approved: true,
-			issues: ["Review parsing failed - approving by default"],
+			approved: false,
+			issues: ["Review parsing failed - rejecting for safety"],
 			suggestions: [],
 		};
 	}
