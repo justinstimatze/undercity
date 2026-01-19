@@ -65,6 +65,35 @@ const DEFAULT_THRESHOLDS: Record<ModelTier, RoutingThreshold> = {
 const HAIKU_BLOCKED_COMPLEXITY: ComplexityLevel[] = ["complex", "critical"];
 
 /**
+ * Configuration constants for confidence-based threshold tuning
+ * These control how minSamples and minSuccessRate adapt based on data confidence
+ */
+
+/** Minimum samples threshold below which we apply conservative tuning */
+const CONFIDENCE_LOW_THRESHOLD = 3;
+
+/** Minimum samples threshold above which we apply aggressive tuning */
+const CONFIDENCE_HIGH_THRESHOLD = 10;
+
+/** MinSamples to require for low-confidence estimates (small sample size) */
+const MIN_SAMPLES_LOW = 5;
+
+/** MinSamples to require for high-confidence estimates (large sample size) */
+const MIN_SAMPLES_HIGH = 20;
+
+/** Sample size at which confidence interval becomes very reliable (scaling max) */
+const SAMPLE_SIZE_CONSERVATIVE = 5;
+
+/** Sample size at which we can be aggressive with thresholds (scaling max) */
+const SAMPLE_SIZE_AGGRESSIVE = 15;
+
+/** Success rate threshold below which a tier should be skipped (low performance) */
+const SKIP_SUCCESS_RATE_THRESHOLD = 0.4;
+
+/** Minimum samples before considering skipping a tier based on low success rate */
+const SKIP_MIN_SAMPLES = 5;
+
+/**
  * Load routing profile from disk
  */
 export function loadRoutingProfile(basePath: string = process.cwd()): RoutingProfile | null {
@@ -148,6 +177,50 @@ export function shouldSkipModel(
 }
 
 /**
+ * Compute the Wilson score interval width for a binomial proportion.
+ *
+ * The Wilson score interval provides a confidence interval for success rate estimates
+ * from small sample sizes. It works well even when success rate is near 0% or 100%.
+ *
+ * A wider interval indicates less confidence in the observed rate (more uncertainty).
+ * A narrower interval indicates more confidence (less uncertainty).
+ *
+ * This is used to adapt minSuccessRate: when confidence is low (wide interval),
+ * we use a more conservative threshold. When confidence is high (narrow interval),
+ * we can be more aggressive.
+ *
+ * @param successful Number of successful outcomes
+ * @param total Total number of outcomes
+ * @returns Width of Wilson score interval (0-1). Higher = less confident.
+ */
+function computeBinomialConfidence(successful: number, total: number): number {
+	if (total === 0) {
+		return 1; // Maximum uncertainty when no data
+	}
+
+	// Edge cases: all success or all failure (uncertainty depends on sample size)
+	if (successful === 0 || successful === total) {
+		// For extreme cases, confidence decreases with smaller sample size
+		// Return a value that scales inversely with sample size
+		return Math.min(1, 1 / Math.sqrt(total));
+	}
+
+	const p = successful / total;
+	const z = 1.96; // 95% confidence level (standard choice)
+
+	// Wilson score interval formula
+	const denominator = 1 + (z * z) / total;
+	const pHat = (p + (z * z) / (2 * total)) / denominator;
+	const variance = ((p * (1 - p)) / total + (z * z) / (4 * total * total)) / (denominator * denominator);
+
+	const marginOfError = z * Math.sqrt(variance);
+
+	// Return the width of the confidence interval (which is 2 * marginOfError)
+	// Capped at 1 to stay within [0, 1] bounds
+	return Math.min(1, 2 * marginOfError);
+}
+
+/**
  * Compute optimal thresholds from historical metrics
  */
 export function computeOptimalThresholds(basePath: string = process.cwd()): RoutingProfile {
@@ -168,26 +241,77 @@ export function computeOptimalThresholds(basePath: string = process.cwd()): Rout
 				continue;
 			}
 
-			// Determine if this tier should be skipped
-			// Skip if success rate is very low AND we have enough samples
-			const shouldSkip = combo.rate < 0.4 && combo.total >= 5;
+			// Determine if this tier should be skipped based on performance.
+			// Skip only if success rate is very low AND we have enough samples to be confident.
+			// Using configurable thresholds: SKIP_SUCCESS_RATE_THRESHOLD and SKIP_MIN_SAMPLES
+			const shouldSkip = combo.rate < SKIP_SUCCESS_RATE_THRESHOLD && combo.total >= SKIP_MIN_SAMPLES;
 
-			// Adjust minimum success rate based on observed performance
-			// If this tier consistently succeeds, we can lower the threshold
-			// If it consistently fails, raise the threshold (or skip it)
-			let minSuccessRate = DEFAULT_THRESHOLDS[model].minSuccessRate;
+			// Compute minSuccessRate using confidence-based approach.
+			// Instead of fixed +/-0.1 adjustments, we use binomial confidence intervals
+			// to adapt thresholds based on how confident we are in the observed success rate.
+			//
+			// Key insight: small sample sizes have wide confidence intervals (high uncertainty),
+			// so we use more conservative thresholds. Large sample sizes have narrow intervals
+			// (high confidence), allowing more aggressive thresholds.
+			//
+			// For example:
+			// - If we see 2/3 successes (67%), the 95% confidence interval is very wide.
+			//   We don't know if true rate is 20% or 90%, so we use a conservative threshold.
+			// - If we see 67/100 successes, the 95% confidence interval is much narrower.
+			//   We're confident the true rate is around 67%, so we can use an aggressive threshold.
 
-			if (combo.rate > 0.9 && combo.total >= 5) {
-				// Excellent performance - lower threshold to allow more tasks
-				minSuccessRate = Math.max(0.5, minSuccessRate - 0.1);
-			} else if (combo.rate < 0.5 && combo.total >= 5) {
-				// Poor performance - raise threshold
-				minSuccessRate = Math.min(0.9, minSuccessRate + 0.1);
+			const baseThreshold = DEFAULT_THRESHOLDS[model].minSuccessRate;
+
+			// Compute confidence interval width using Wilson score interval (robust for small samples)
+			const confidenceWidth = computeBinomialConfidence(combo.successful, combo.total);
+
+			// Adapt minSuccessRate based on confidence:
+			// - High confidence (narrow interval) -> more aggressive (lower threshold)
+			// - Low confidence (wide interval) -> more conservative (higher threshold)
+			//
+			// We use the confidence interval width to modulate the adjustment.
+			// The adjustment is proportional to confidence: high confidence allows lower rate,
+			// low confidence forces higher rate.
+			let minSuccessRate = baseThreshold;
+
+			if (combo.rate > 0.85) {
+				// Good performance observed
+				// How much to lower the threshold depends on how confident we are
+				const adjustment = confidenceWidth * 0.15; // Scale adjustment by confidence
+				minSuccessRate = Math.max(0.5, baseThreshold - adjustment);
+			} else if (combo.rate < 0.55) {
+				// Poor performance observed
+				// How much to raise the threshold depends on how confident we are
+				const adjustment = confidenceWidth * 0.15; // Scale adjustment by confidence
+				minSuccessRate = Math.min(0.9, baseThreshold + adjustment);
+			}
+
+			// Compute adaptive minSamples based on sample size.
+			// Rationale: small sample sizes provide less reliable estimates and need more
+			// confirmation before using learned thresholds. As sample size grows, estimates
+			// become more reliable and we can reduce the required confirmation count.
+			//
+			// Scaling: linear interpolation between MIN_SAMPLES_LOW and MIN_SAMPLES_HIGH
+			// based on where combo.total falls within the confidence threshold range.
+			let minSamples = MIN_SAMPLES_LOW;
+
+			if (combo.total < CONFIDENCE_LOW_THRESHOLD) {
+				// Very small sample - use conservative minimum
+				minSamples = MIN_SAMPLES_LOW;
+			} else if (combo.total >= CONFIDENCE_HIGH_THRESHOLD) {
+				// Large sample - can use aggressive minimum
+				minSamples = MIN_SAMPLES_HIGH;
+			} else {
+				// Medium sample - scale linearly between low and high
+				const range = CONFIDENCE_HIGH_THRESHOLD - CONFIDENCE_LOW_THRESHOLD;
+				const position = combo.total - CONFIDENCE_LOW_THRESHOLD;
+				const fraction = position / range;
+				minSamples = Math.round(MIN_SAMPLES_LOW + (MIN_SAMPLES_HIGH - MIN_SAMPLES_LOW) * fraction);
 			}
 
 			thresholds[key] = {
 				minSuccessRate,
-				minSamples: Math.min(combo.total, 10), // Use available samples, cap at 10
+				minSamples,
 				skip: shouldSkip,
 			};
 		}
