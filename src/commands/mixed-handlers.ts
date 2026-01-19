@@ -1237,27 +1237,65 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			return;
 		}
 
-		// Pre-flight clarity check: block fundamentally vague tasks, warn about others
+		// Pre-flight clarity check: route vague tasks to PM, warn about others
 		output.progress("Assessing task clarity...");
 		const vagueTasks: string[] = [];
 		const blockedTasks: string[] = [];
+		const decomposedTasks: string[] = [];
 
 		for (const task of tasksToProcess) {
 			const clarity = assessTaskClarity(task.objective);
 
-			// Block fundamentally vague tasks immediately
+			// Route fundamentally vague tasks to PM for intelligent decomposition
 			if (clarity.tooVague) {
-				output.warning(`Task ${task.id} is too vague to proceed:`);
+				output.warning(`Task ${task.id} is vague - routing to PM for decomposition:`);
 				for (const issue of clarity.issues) {
 					output.warning(`  - ${issue}`);
 				}
-				output.info("Suggestions to fix:");
-				for (const suggestion of clarity.suggestions) {
-					output.info(`  → ${suggestion}`);
+
+				try {
+					const { pmIdeate } = await import("../automated-pm.js");
+					output.progress(`PM analyzing: "${task.objective.substring(0, 50)}..."`);
+
+					const ideation = await pmIdeate(task.objective, process.cwd(), ".undercity");
+
+					if (ideation.proposals.length > 0) {
+						// PM successfully decomposed the vague task
+						output.success(`PM generated ${ideation.proposals.length} specific subtask(s)`);
+
+						// Add proposals as subtasks
+						const { decomposeTaskIntoSubtasks } = await import("../task.js");
+						const subtasks = ideation.proposals.map((p, idx) => ({
+							objective: p.objective,
+							order: idx + 1,
+						}));
+						decomposeTaskIntoSubtasks(task.id, subtasks);
+
+						output.info("Subtasks created:");
+						for (const proposal of ideation.proposals) {
+							output.info(`  → ${proposal.objective.substring(0, 70)}...`);
+						}
+
+						// Task is now decomposed, will be skipped in main loop
+						decomposedTasks.push(task.id);
+					} else {
+						// PM couldn't help - fall back to blocking
+						output.warning("PM couldn't generate specific subtasks - blocking task");
+						const { markTaskBlocked } = await import("../task.js");
+						markTaskBlocked(task.id, "PM could not decompose vague task into actionable subtasks");
+						blockedTasks.push(task.id);
+					}
+				} catch (pmError) {
+					// PM failed - fall back to blocking with suggestions
+					output.warning(`PM decomposition failed: ${pmError instanceof Error ? pmError.message : String(pmError)}`);
+					output.info("Suggestions to fix manually:");
+					for (const suggestion of clarity.suggestions) {
+						output.info(`  → ${suggestion}`);
+					}
+					const { markTaskBlocked } = await import("../task.js");
+					markTaskBlocked(task.id, clarity.tooVagueReason || "Task too vague for autonomous execution");
+					blockedTasks.push(task.id);
 				}
-				const { markTaskBlocked } = await import("../task.js");
-				markTaskBlocked(task.id, clarity.tooVagueReason || "Task too vague for autonomous execution");
-				blockedTasks.push(task.id);
 			} else if (clarity.clarity === "vague") {
 				output.warning(`Task ${task.id} may be too vague for autonomous execution:`);
 				for (const issue of clarity.issues) {
@@ -1275,10 +1313,14 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			}
 		}
 
-		// Remove blocked tasks from processing
+		// Remove blocked and decomposed tasks from processing
 		if (blockedTasks.length > 0) {
-			output.warning(`Blocked ${blockedTasks.length} task(s) as too vague - marked as 'blocked' on board`);
+			output.warning(`Blocked ${blockedTasks.length} task(s) - could not decompose`);
 			tasksToProcess = tasksToProcess.filter((t) => !blockedTasks.includes(t.id));
+		}
+		if (decomposedTasks.length > 0) {
+			output.success(`PM decomposed ${decomposedTasks.length} vague task(s) into specific subtasks`);
+			tasksToProcess = tasksToProcess.filter((t) => !decomposedTasks.includes(t.id));
 		}
 
 		// Warn about remaining vague tasks that might still work
