@@ -45,6 +45,7 @@ import type {
 	TaskAssignment,
 	TaskCheckpoint,
 } from "./types.js";
+import { findRelevantFiles } from "./task-file-patterns.js";
 import { type TaskResult, TaskWorker } from "./worker.js";
 import { WorktreeManager } from "./worktree-manager.js";
 
@@ -1027,6 +1028,11 @@ export class Orchestrator {
 			}
 		}
 
+		// Warn about predicted file conflicts in this batch
+		if (preparedTasks.length > 1) {
+			this.warnPredictedConflicts(preparedTasks);
+		}
+
 		return preparedTasks;
 	}
 
@@ -1495,6 +1501,74 @@ export class Orchestrator {
 		}
 
 		return conflicts;
+	}
+
+	/**
+	 * Paths that are prone to merge conflicts when modified in parallel
+	 */
+	private static CONFLICT_PRONE_PATHS = [".claude/rules/", ".claude/", "docs/", "ARCHITECTURE.md", "README.md"];
+
+	/**
+	 * Detect predicted file conflicts before tasks execute
+	 * Uses task-file patterns to predict what files each task will modify,
+	 * then warns about potential conflicts on documentation/rules files
+	 */
+	private detectPredictedConflicts(
+		tasks: Array<{ task: string; taskId: string }>,
+	): Array<{ file: string; tasks: string[]; severity: "warning" | "error" }> {
+		const predictedConflicts: Array<{ file: string; tasks: string[]; severity: "warning" | "error" }> = [];
+
+		// Get predicted files for each task
+		const taskPredictions = new Map<string, string[]>();
+		for (const { task, taskId } of tasks) {
+			const relevant = findRelevantFiles(task, 10);
+			const predictedFiles = relevant.map((r) => r.file);
+			taskPredictions.set(taskId, predictedFiles);
+		}
+
+		// Build file -> tasks map
+		const fileToTasks = new Map<string, Array<{ taskId: string; task: string }>>();
+		for (const { task, taskId } of tasks) {
+			const files = taskPredictions.get(taskId) || [];
+			for (const file of files) {
+				const existing = fileToTasks.get(file) || [];
+				existing.push({ taskId, task });
+				fileToTasks.set(file, existing);
+			}
+		}
+
+		// Find files with multiple tasks (potential conflicts)
+		for (const [file, taskInfos] of fileToTasks) {
+			if (taskInfos.length > 1) {
+				// Determine severity based on file path
+				const isConflictProne = Orchestrator.CONFLICT_PRONE_PATHS.some((path) => file.includes(path));
+				predictedConflicts.push({
+					file,
+					tasks: taskInfos.map((t) => t.task.substring(0, 50)),
+					severity: isConflictProne ? "error" : "warning",
+				});
+			}
+		}
+
+		return predictedConflicts;
+	}
+
+	/**
+	 * Warn about predicted conflicts before batch execution
+	 */
+	private warnPredictedConflicts(batchTasks: Array<{ task: string; taskId: string }>): void {
+		const conflicts = this.detectPredictedConflicts(batchTasks);
+
+		// Filter to only conflict-prone files (docs/rules)
+		const highSeverityConflicts = conflicts.filter((c) => c.severity === "error");
+
+		if (highSeverityConflicts.length > 0) {
+			output.warning(`Predicted file conflicts detected in batch (may cause merge issues):`);
+			for (const conflict of highSeverityConflicts.slice(0, 3)) {
+				output.warning(`  ${conflict.file}: ${conflict.tasks.length} tasks`);
+			}
+			output.info(`Consider running tasks that modify docs/rules files serially (--parallel 1)`);
+		}
 	}
 
 	/**

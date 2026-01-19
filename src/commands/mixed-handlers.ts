@@ -179,6 +179,23 @@ function getErrorCategoryFromVerification(verification?: {
 }
 
 /**
+ * Determine error category from task result, including planning failures
+ */
+function getErrorCategory(
+	error?: string,
+	verification?: { typecheckPassed: boolean; testsPassed: boolean; lintPassed: boolean },
+): string {
+	// Check for planning-phase errors first
+	if (error) {
+		if (error.startsWith("PLAN_REJECTED")) return "planning";
+		if (error.startsWith("NEEDS_DECOMPOSITION") || error === "NEEDS_DECOMPOSITION") return "decomposition";
+		if (error.includes("already complete")) return "already_complete";
+	}
+	// Fall back to verification-based categorization
+	return getErrorCategoryFromVerification(verification);
+}
+
+/**
  * Handle the pulse command - quick state check
  *
  * Shows active workers, queue status, health metrics, and items needing attention.
@@ -1502,11 +1519,13 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 									recordAtomicityOutcome(taskResult.task, atomicityResult, true);
 								}
 							} else if (taskResult.mergeError || taskResult.result?.status === "failed") {
-								const errorMsg = taskResult.mergeError || "Task failed";
+								// Use actual error from task result, with fallbacks
+								const errorMsg =
+									taskResult.mergeError || taskResult.result?.error || "Task failed";
 								// Build last attempt context for future retries
 								const lastAttempt: LastAttemptContext = {
 									model: taskResult.result?.model ?? modelTier,
-									category: getErrorCategoryFromVerification(taskResult.result?.verification),
+									category: getErrorCategory(taskResult.result?.error, taskResult.result?.verification),
 									error: errorMsg,
 									filesModified: taskResult.modifiedFiles ?? [],
 									attemptedAt: new Date(),

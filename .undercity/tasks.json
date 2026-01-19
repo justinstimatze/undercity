@@ -1250,39 +1250,80 @@
       "status": "pending",
       "priority": 7.3,
       "createdAt": "2026-01-18T18:35:49.620Z",
-      "parentId": "task-mkk2tacq-f36200"
+      "parentId": "task-mkk2tacq-f36200",
+      "isDecomposed": true,
+      "subtaskIds": [
+        "task-mkkhk0yg-84c7e1",
+        "task-mkkhk0yg-f8bb1f",
+        "task-mkkhk0yg-04b634",
+        "task-mkkhk0yg-c112eb",
+        "task-mkkhk0yg-9b5c3d",
+        "task-mkkhk0yg-1bd031",
+        "task-mkkhk0yg-157add",
+        "task-mkkhk0yg-1e4cc1",
+        "task-mkkhk0yg-3a1245",
+        "task-mkkhk0yg-6c29b0",
+        "task-mkkhk0yg-dd9ff0",
+        "task-mkkhk0yg-39fa16",
+        "task-mkkhk0yh-05af37"
+      ]
     },
     {
       "id": "task-mkk2u7zo-288910",
       "objective": "Create MCP tool definition and request handlers for knowledge search",
-      "status": "pending",
+      "status": "complete",
       "priority": 7.4,
       "createdAt": "2026-01-18T18:35:49.620Z",
-      "parentId": "task-mkk2tacq-f36200"
+      "parentId": "task-mkk2tacq-f36200",
+      "completedAt": "2026-01-19T01:42:27.843Z"
     },
     {
       "id": "task-mkk2u7zo-afd25d",
       "objective": "Write integration code to expose the search tool through MCP protocol",
-      "status": "pending",
+      "status": "complete",
       "priority": 7.5,
       "createdAt": "2026-01-18T18:35:49.620Z",
-      "parentId": "task-mkk2tacq-f36200"
+      "parentId": "task-mkk2tacq-f36200",
+      "completedAt": "2026-01-19T01:42:27.840Z"
     },
     {
       "id": "task-mkk2u7zo-37e48d",
       "objective": "Create usage documentation and examples for workers querying knowledge",
-      "status": "pending",
+      "status": "complete",
       "priority": 7.6,
       "createdAt": "2026-01-18T18:35:49.620Z",
-      "parentId": "task-mkk2tacq-f36200"
+      "parentId": "task-mkk2tacq-f36200",
+      "completedAt": "2026-01-19T01:36:21.059Z"
     },
     {
       "id": "task-mkk2u7zo-213435",
       "objective": "Test knowledge search with sample queries and edge cases",
-      "status": "pending",
+      "status": "obsolete",
       "priority": 7.7,
       "createdAt": "2026-01-18T18:35:49.620Z",
-      "parentId": "task-mkk2tacq-f36200"
+      "parentId": "task-mkk2tacq-f36200",
+      "completedAt": "2026-01-19T01:48:22.787Z",
+      "error": "Task failed",
+      "lastAttempt": {
+        "model": "haiku",
+        "category": "unknown",
+        "error": "Task failed",
+        "filesModified": [
+          ".claude/rules/01-undercity.md",
+          ".claude/rules/05-codebase-map.md",
+          "src/__tests__/error-fix-patterns.test.ts",
+          "src/commands/plan-handlers.ts",
+          "src/commands/task.ts",
+          "src/context.ts",
+          "src/error-fix-patterns.ts",
+          "src/orchestrator.ts",
+          "src/plan-link.ts",
+          "src/rate-limit.ts",
+          "src/worker.ts"
+        ],
+        "attemptedAt": "2026-01-19T01:36:21.056Z",
+        "attemptCount": 0
+      }
     },
     {
       "id": "task-mkk32dj5-2e720c",
@@ -1619,7 +1660,111 @@
       "status": "pending",
       "priority": 2,
       "createdAt": "2026-01-18T18:57:50.465Z"
+    },
+    {
+      "id": "task-mkkhk0yg-84c7e1",
+      "objective": "Analyze codebase structure and identify where search/filter logic should be implemented",
+      "status": "pending",
+      "priority": 7.3999999999999995,
+      "createdAt": "2026-01-19T01:27:48.184Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
+    },
+    {
+      "id": "task-mkkhk0yg-f8bb1f",
+      "objective": "Design search algorithm approach (full-text search, keyword matching, relevance ranking)",
+      "status": "pending",
+      "priority": 7.5,
+      "createdAt": "2026-01-19T01:27:48.184Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
+    },
+    {
+      "id": "task-mkkhk0yg-04b634",
+      "objective": "Design filter schema and criteria structure",
+      "status": "pending",
+      "priority": 7.6,
+      "createdAt": "2026-01-19T01:27:48.184Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
+    },
+    {
+      "id": "task-mkkhk0yg-c112eb",
+      "objective": "Implement text tokenization and indexing for search",
+      "status": "pending",
+      "priority": 7.7,
+      "createdAt": "2026-01-19T01:27:48.184Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
+    },
+    {
+      "id": "task-mkkhk0yg-9b5c3d",
+      "objective": "Implement search query parsing and matching logic",
+      "status": "pending",
+      "priority": 7.8,
+      "createdAt": "2026-01-19T01:27:48.184Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
+    },
+    {
+      "id": "task-mkkhk0yg-1bd031",
+      "objective": "Implement relevance scoring and result ranking",
+      "status": "pending",
+      "priority": 7.9,
+      "createdAt": "2026-01-19T01:27:48.184Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
+    },
+    {
+      "id": "task-mkkhk0yg-157add",
+      "objective": "Implement filter criteria evaluation and application",
+      "status": "pending",
+      "priority": 8,
+      "createdAt": "2026-01-19T01:27:48.184Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
+    },
+    {
+      "id": "task-mkkhk0yg-1e4cc1",
+      "objective": "Integrate search and filter components into query handler",
+      "status": "pending",
+      "priority": 8.1,
+      "createdAt": "2026-01-19T01:27:48.184Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
+    },
+    {
+      "id": "task-mkkhk0yg-3a1245",
+      "objective": "Create unit tests for search algorithm",
+      "status": "pending",
+      "priority": 8.2,
+      "createdAt": "2026-01-19T01:27:48.184Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
+    },
+    {
+      "id": "task-mkkhk0yg-6c29b0",
+      "objective": "Create unit tests for filter logic",
+      "status": "pending",
+      "priority": 8.3,
+      "createdAt": "2026-01-19T01:27:48.184Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
+    },
+    {
+      "id": "task-mkkhk0yg-dd9ff0",
+      "objective": "Create integration tests for combined search and filtering",
+      "status": "pending",
+      "priority": 8.4,
+      "createdAt": "2026-01-19T01:27:48.184Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
+    },
+    {
+      "id": "task-mkkhk0yg-39fa16",
+      "objective": "Add error handling and edge case management",
+      "status": "pending",
+      "priority": 8.5,
+      "createdAt": "2026-01-19T01:27:48.185Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
+    },
+    {
+      "id": "task-mkkhk0yh-05af37",
+      "objective": "Document search and filter API and usage patterns",
+      "status": "pending",
+      "priority": 8.6,
+      "createdAt": "2026-01-19T01:27:48.185Z",
+      "parentId": "task-mkk2u7zo-b2fc2a"
     }
   ],
-  "lastUpdated": "2026-01-18T18:57:50.465Z"
+  "lastUpdated": "2026-01-19T01:48:22.787Z"
 }

@@ -27,6 +27,8 @@ export type FailureReason =
 	| "verification_tests" // Test failures
 	| "verification_lint" // Lint errors
 	| "verification_build" // Build failed
+	| "planning" // Failed during plan creation/review
+	| "decomposition" // Failed during task decomposition
 	| "max_attempts" // Exhausted all attempts
 	| "rebase_conflict" // Conflict during rebase
 	| "merge_conflict" // Conflict during merge
@@ -166,6 +168,13 @@ function writeEvent(event: GrindEvent): void {
 export function categorizeFailure(error: string): FailureReason {
 	const e = error.toLowerCase();
 
+	// Check for planning-phase failures first (these have specific markers)
+	if (e.includes("plan_rejected") || e.includes("plan rejected") || e.includes("planning failed")) {
+		return "planning";
+	}
+	if (e.includes("needs_decomposition") || e.includes("decomposition failed") || e.includes("parent task not found")) {
+		return "decomposition";
+	}
 	if (e.includes("0 writes") || e.includes("no changes") || e.includes("no_changes")) {
 		return "no_changes";
 	}
@@ -390,6 +399,8 @@ export function getLastGrindSummary(): {
 		verification_tests: 0,
 		verification_lint: 0,
 		verification_build: 0,
+		planning: 0,
+		decomposition: 0,
 		max_attempts: 0,
 		rebase_conflict: 0,
 		merge_conflict: 0,
