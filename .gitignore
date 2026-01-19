@@ -7,9 +7,10 @@ dist/
 # Test coverage
 coverage/
 
-# Runtime state (but track tasks.json - the work queue)
+# Runtime state (but track tasks.json and research docs)
 .undercity/*
 !.undercity/tasks.json
+!.undercity/research/
 
 # IDE
 .vscode/
