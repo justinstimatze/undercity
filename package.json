@@ -52,6 +52,7 @@
     "codescene:pr": "cs review --base-branch main",
     "security": "bash ./scripts/security-scan.sh",
     "verify": "tsx src/verification-cli.ts",
+    "validate:knowledge": "tsx src/knowledge-validation-cli.ts",
     "security:full": "gitleaks detect --no-git && semgrep scan --config auto ./src",
     "push": "bash ./scripts/push-and-watch.sh"
   },

@@ -58,5 +58,8 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Validate knowledge.json
+        run: pnpm validate:knowledge
+
       - name: Test
         run: pnpm test

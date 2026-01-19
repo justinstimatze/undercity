@@ -68,6 +68,7 @@ export interface VerificationTiming {
 	format?: number;
 	security?: number;
 	spell?: number;
+	knowledgeValidation?: number;
 	gitDiff?: number;
 	typecheck?: number;
 	lint?: number;
@@ -87,6 +88,7 @@ export interface VerificationResult {
 	lintPassed: boolean;
 	spellPassed: boolean;
 	codeHealthPassed: boolean;
+	knowledgeValidationPassed: boolean;
 	filesChanged: number;
 	linesChanged: number;
 	issues: string[];
@@ -220,6 +222,41 @@ export async function verifyWork(
 		}
 	}
 	if (profileOpt) timing.spell = Date.now() - stepStart;
+
+	// Knowledge validation - validate knowledge.json integrity
+	stepStart = Date.now();
+	let knowledgeValidationPassed = true;
+	if (!skipOptionalChecks) {
+		try {
+			// Run knowledge validation CLI
+			execSync("pnpm exec tsx src/knowledge-validation-cli.ts 2>&1", {
+				encoding: "utf-8",
+				cwd,
+				timeout: 10000,
+			});
+			feedbackParts.push("✓ Knowledge validation passed");
+		} catch (error) {
+			// Knowledge validation is blocking if files exist and are invalid
+			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
+			// If no files found, that's OK (new repos)
+			if (output.includes("No knowledge.json files found")) {
+				feedbackParts.push("✓ Knowledge validation passed (no files)");
+			} else {
+				// Actual validation errors - this is blocking
+				knowledgeValidationPassed = false;
+				issues.push("Knowledge validation failed");
+				// Extract error summary
+				const errorLines = output
+					.split("\n")
+					.filter((l) => l.includes("✗") || l.includes("error"))
+					.slice(0, 5);
+				feedbackParts.push(`✗ KNOWLEDGE VALIDATION FAILED:\n${errorLines.join("\n")}`);
+				logger.error({ output: output.slice(0, 500) }, "Knowledge validation failed");
+			}
+		}
+	}
+	if (profileOpt) timing.knowledgeValidation = Date.now() - stepStart;
+
 	let codeHealthPassed = true;
 	let filesChanged = 0;
 	let linesChanged = 0;
@@ -501,7 +538,7 @@ export async function verifyWork(
 		logger.info(
 			{
 				timing,
-				breakdown: `format=${timing.format}ms security=${timing.security}ms spell=${timing.spell}ms git=${timing.gitDiff}ms typecheck=${timing.typecheck}ms lint=${timing.lint}ms tests=${timing.tests}ms build=${timing.build}ms health=${timing.codeHealth}ms`,
+				breakdown: `format=${timing.format}ms security=${timing.security}ms spell=${timing.spell}ms knowledge=${timing.knowledgeValidation}ms git=${timing.gitDiff}ms typecheck=${timing.typecheck}ms lint=${timing.lint}ms tests=${timing.tests}ms build=${timing.build}ms health=${timing.codeHealth}ms`,
 			},
 			`Verification completed in ${timing.total}ms`,
 		);
@@ -510,8 +547,9 @@ export async function verifyWork(
 	// Build final feedback
 	const feedback = feedbackParts.join("\n");
 
-	// Pass if: changes were made AND all critical checks passed
-	const passed = filesChanged > 0 && typecheckPassed && buildPassed && testsPassed && lintPassed;
+	// Pass if: changes were made AND all critical checks passed (including knowledge validation)
+	const passed =
+		filesChanged > 0 && typecheckPassed && buildPassed && testsPassed && lintPassed && knowledgeValidationPassed;
 
 	// Warnings are non-blocking issues that the agent could fix
 	const hasWarnings = passed && (!spellPassed || !codeHealthPassed);
@@ -523,6 +561,7 @@ export async function verifyWork(
 		lintPassed,
 		spellPassed,
 		codeHealthPassed,
+		knowledgeValidationPassed,
 		filesChanged,
 		linesChanged,
 		issues,
