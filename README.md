@@ -23,13 +23,77 @@
 | Pattern Learning | Task→file correlations | `.undercity/task-file-patterns.json` |
 | Error Fix Learning | Error→fix patterns | `.undercity/error-fix-patterns.json` |
 
-## Quick Setup
+## Installation
+
+### Prerequisites
+
+| Requirement | Version | Check Command |
+|-------------|---------|---------------|
+| Node.js | 24+ | `node --version` |
+| pnpm | 9+ | `pnpm --version` |
+| Git | 2.20+ | `git --version` |
+| Claude Max subscription | Active | Required for OAuth |
+
+### For Humans (Manual Setup)
 
 ```bash
+# 1. Clone and build
 git clone https://github.com/justinstimatze/undercity.git
 cd undercity
-pnpm install && pnpm build
-ln -sf $(pwd)/bin/undercity.js ~/.local/bin/undercity
+pnpm install
+pnpm build
+
+# 2. Add to PATH (choose one)
+ln -sf $(pwd)/bin/undercity.js ~/.local/bin/undercity  # Linux
+# OR add to shell profile:
+echo 'export PATH="$PATH:/path/to/undercity/bin"' >> ~/.bashrc
+
+# 3. Initialize in your project
+cd /path/to/your/project
+undercity init
+
+# 4. Authenticate with Claude Max (one-time)
+undercity usage --login
+# This opens a browser for Claude.ai OAuth login
+
+# 5. Verify installation
+undercity --version
+undercity tasks  # Should show empty task board
+```
+
+### For Claude Code (Agent Setup)
+
+Undercity integrates with Claude Code via the `/undercity` skill. To enable:
+
+```bash
+# In your project directory, ensure undercity is in PATH
+which undercity  # Should return path to undercity binary
+
+# Initialize undercity state
+undercity init
+
+# Copy the skill file to your project (optional - enables /undercity command)
+mkdir -p .claude/skills
+cp /path/to/undercity/.claude/skills/undercity.md .claude/skills/
+```
+
+**Claude Code workflow:**
+1. Add tasks: `undercity add "task description"`
+2. Start autonomous execution: `undercity grind`
+3. Monitor progress: `undercity watch` or `undercity pulse`
+4. Check results: `undercity brief`
+
+See [docs/claude-code-integration.md](docs/claude-code-integration.md) for detailed agent workflow.
+
+### Quick Verification
+
+```bash
+# Test basic commands
+undercity --help              # Show all commands
+undercity tasks               # View task board (should be empty)
+undercity add "Test task"     # Add a test task
+undercity tasks               # Should show 1 pending task
+undercity remove <task-id>    # Clean up test task
 ```
 
 ## Task Operations

@@ -26,6 +26,41 @@ Claude Code delegates to Undercity for autonomous execution. Undercity runs cont
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## Getting Started (For Agents)
+
+### Check Availability
+
+```bash
+# Verify undercity is installed and accessible
+which undercity        # Should return path
+undercity --version    # Should show version number
+```
+
+### First-Time Setup
+
+If undercity isn't initialized in the current project:
+
+```bash
+undercity init         # Creates .undercity/ directory
+```
+
+### Quick Start
+
+```bash
+# 1. Add tasks to the board
+undercity add "Implement user authentication"
+undercity add "Add unit tests for auth module" --priority 100
+
+# 2. Start autonomous execution
+undercity grind                    # Process 1 task
+undercity grind -n 5               # Process up to 5 tasks
+undercity grind --parallel 3       # Run 3 concurrent workers
+
+# 3. Check progress
+undercity pulse                    # Quick JSON status
+undercity brief                    # Narrative summary
+```
+
 ## Commands
 
 ### Monitoring (JSON default)
@@ -53,9 +88,13 @@ Claude Code delegates to Undercity for autonomous execution. Undercity runs cont
 
 | Command | Purpose | Output |
 |---------|---------|--------|
-| `add "task" --context <file>` | Delegate with context | Task ID |
+| `add "task"` | Add task to board | Task ID |
+| `add "task" --context <file>` | Add with handoff context | Task ID |
+| `add "task" --priority 100` | Add with priority (lower = higher) | Task ID |
+| `tasks` | View all tasks | Task list |
 | `tasks --status pending` | View pending tasks | Task list |
-| `complete <id> --reason "..."` | Mark task complete | - |
+| `complete <id>` | Mark task complete | - |
+| `remove <id>` | Remove task from board | - |
 
 All commands output JSON by default for programmatic use. Use `--human` for readable output.
 
@@ -83,15 +122,17 @@ undercity grind              # Start autonomous processing
 ## Data Flow
 
 ### Claude Code → Undercity
-- **Tasks**: `undercity add "objective"`
-- **Context**: `--context file.json` with handoff data
-- **Decisions**: `undercity decide --resolve <id> --decision "choice"`
+- **Tasks**: `undercity add "objective"` - add work to the board
+- **Context**: `--context file.json` - pass structured handoff data
+- **Priority**: `--priority 100` - control execution order (lower = sooner)
+- **Decisions**: `undercity decide --resolve <id> --decision "choice"` - provide judgment
 
 ### Undercity → Claude Code
 - **Status**: `undercity pulse` returns queue, health, attention items
 - **Summary**: `undercity brief` returns accomplishments, failures, recommendations
 - **Decisions**: `undercity decide` returns pending decisions needing judgment
 - **Knowledge**: `undercity knowledge "query"` returns relevant learnings
+- **Research**: `.undercity/research/` contains PM-generated design docs
 
 ## Rate Limit Awareness
 
@@ -113,11 +154,32 @@ Query with: `undercity knowledge "search term"`
 
 Learnings are injected into future task prompts when relevant.
 
+## Research Tasks
+
+Tasks prefixed with `[research]` are routed through the automated PM system:
+
+```bash
+undercity add "[research] Investigate caching strategies for API responses"
+```
+
+**What happens:**
+1. PM researches the topic (web search, codebase analysis)
+2. Generates a design doc in `.undercity/research/`
+3. Creates follow-up implementation tasks automatically
+4. Original task marked complete
+
+**Reading research results:**
+```bash
+ls .undercity/research/                    # List design docs
+cat .undercity/research/2026-01-19-*.md    # Read specific doc
+```
+
 ## State Files
 
 | File | Purpose | Tracked |
 |------|---------|---------|
 | `tasks.json` | Task board | Yes |
+| `research/` | PM-generated design docs | Yes |
 | `knowledge.json` | Accumulated learnings | No |
 | `decisions.json` | Decision history | No |
 | `task-file-patterns.json` | Task→file correlations | No |

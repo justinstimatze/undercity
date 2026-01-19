@@ -1,18 +1,33 @@
 # Undercity
 
-Undercity is a multi-agent orchestrator for parallel task execution. It manages a task board and runs multiple Claude agents in isolated git worktrees to complete tasks concurrently.
+Undercity is a multi-agent orchestrator for parallel task execution. It manages a task board and runs multiple Claude agents in isolated git worktrees to complete tasks concurrently with automatic verification and learning.
 
 ## Quick Reference
 
 ```bash
+# Task management
 undercity tasks                    # View task board
-undercity tasks add "description"  # Add a task
-undercity grind                    # Run tasks (default: 1 task, sequential)
+undercity add "description"        # Add a task
+undercity add "task" -p 100        # Add with priority (lower = higher)
+undercity remove <task-id>         # Remove a task
+
+# Execution
+undercity grind                    # Run tasks (default: 1 task)
 undercity grind --parallel 3       # Run 3 agents in parallel
 undercity grind -n 5               # Process up to 5 tasks total
 undercity grind --parallel 3 -n 10 # 3 parallel agents, 10 tasks max
-undercity watch                    # Monitor running grind session
 undercity drain                    # Graceful stop: finish current, start no more
+
+# Monitoring
+undercity watch                    # Live TUI dashboard
+undercity pulse                    # Quick JSON status
+undercity brief                    # Narrative summary of recent work
+undercity usage                    # Live Claude Max usage from claude.ai
+
+# Learning & intelligence
+undercity knowledge "query"        # Search accumulated learnings
+undercity decide                   # View pending decisions
+undercity patterns                 # Task→file correlations
 ```
 
 ## Task Board
@@ -63,18 +78,22 @@ undercity tasks          # Current task board state
 cat .undercity/parallel-recovery.json  # Details of current/last grind run
 ```
 
-## Adding Tasks Programmatically
+## Adding Tasks
 
-You can add tasks directly to `.undercity/tasks.json` or use the CLI:
+Use the CLI (preferred) or edit `.undercity/tasks.json` directly:
 
 ```bash
 # Single task
-undercity tasks add "Fix authentication timeout in login flow"
+undercity add "Fix authentication timeout in login flow"
 
 # With priority (lower = higher priority)
-undercity tasks add "Critical security fix" --priority 0
+undercity add "Critical security fix" --priority 0
 
-# Multiple tasks (edit tasks.json directly)
+# With context file (JSON with handoff data)
+undercity add "Implement feature X" --context handoff.json
+
+# Bulk import from file (one task per line)
+undercity load tasks.txt
 ```
 
 ## Editing Tasks
