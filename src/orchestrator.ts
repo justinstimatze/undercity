@@ -1166,11 +1166,21 @@ export class Orchestrator {
 			const { reason, suggestedSubtasks } = result.needsDecomposition;
 			if (suggestedSubtasks && suggestedSubtasks.length > 0) {
 				// Use the original task ID from the board, not the worktree ID
-				const originalTaskId = this.originalTaskIds.get(task);
+				let originalTaskId = this.originalTaskIds.get(task);
 				if (!originalTaskId) {
-					// Cannot decompose without a valid parent task ID from the board
-					// This happens when task was passed as string without board lookup
-					output.warning(`Cannot decompose task: no board task ID found (task may have been passed as string)`, {
+					// Fallback: lookup from board by objective (handles recovery path where only strings are passed)
+					const board = loadTaskBoard();
+					const matchingTask = board.tasks.find((t) => t.objective === task);
+					if (matchingTask) {
+						originalTaskId = matchingTask.id;
+						// Cache it for future lookups
+						this.originalTaskIds.set(task, originalTaskId);
+						output.debug(`Resolved task ID from board fallback lookup`, { taskId: originalTaskId });
+					}
+				}
+				if (!originalTaskId) {
+					// Still no ID - cannot decompose (task not on board)
+					output.warning(`Cannot decompose task: no board task ID found`, {
 						taskId,
 						task: task.substring(0, 50),
 					});
