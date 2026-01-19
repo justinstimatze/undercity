@@ -171,8 +171,16 @@ class ContextCache {
 	 * Find previous fixes for similar errors
 	 */
 	findSimilarFixes(errorPattern: string): ErrorFix[] {
+		// Defensive: validate input
+		if (!errorPattern || typeof errorPattern !== "string") {
+			return [];
+		}
+
 		const key = this.normalizeErrorPattern(errorPattern);
-		return (this.errorFixes.get(key) || []).filter((f) => f.success);
+		const fixes = this.errorFixes.get(key) || [];
+
+		// Defensive: filter for valid error fix objects
+		return Array.isArray(fixes) ? fixes.filter((f) => f && typeof f.success === "boolean" && f.success) : [];
 	}
 
 	/**

@@ -65,16 +65,24 @@ async function gatherPMContext(decision: DecisionPoint, stateDir: string): Promi
 		projectPatterns: [],
 	};
 
+	// Defensive: validate decision point
+	if (!decision || typeof decision !== "object") {
+		return context;
+	}
+
 	// Find similar past decisions
 	try {
 		const similar = findSimilarDecisions(decision.keywords, 5, stateDir);
-		context.similarDecisions = similar
-			.filter((d) => d.resolution.outcome)
-			.map((d) => ({
-				question: d.question,
-				decision: d.resolution.decision,
-				outcome: d.resolution.outcome || "unknown",
-			}));
+		// Defensive: filter for valid similar decisions with outcomes
+		if (Array.isArray(similar)) {
+			context.similarDecisions = similar
+				.filter((d) => d && d.resolution && d.resolution.outcome && typeof d.question === "string")
+				.map((d) => ({
+					question: d.question,
+					decision: d.resolution.decision || "unknown",
+					outcome: d.resolution.outcome || "unknown",
+				}));
+		}
 	} catch {
 		// Continue without similar decisions
 	}
@@ -82,7 +90,12 @@ async function gatherPMContext(decision: DecisionPoint, stateDir: string): Promi
 	// Search knowledge base
 	try {
 		const knowledge = findRelevantLearnings(decision.question, 5, stateDir);
-		context.relevantKnowledge = knowledge.map((learning) => learning.content);
+		// Defensive: filter for valid learning objects
+		if (Array.isArray(knowledge)) {
+			context.relevantKnowledge = knowledge
+				.filter((learning) => learning && typeof learning.content === "string")
+				.map((learning) => learning.content);
+		}
 	} catch {
 		// Continue without knowledge
 	}
@@ -90,7 +103,10 @@ async function gatherPMContext(decision: DecisionPoint, stateDir: string): Promi
 	// Find relevant files
 	try {
 		const files = findRelevantFiles(decision.question, 3, stateDir);
-		context.relevantFiles = files.map((f) => f.file);
+		// Defensive: filter for valid file objects
+		if (Array.isArray(files)) {
+			context.relevantFiles = files.filter((f) => f && typeof f.file === "string").map((f) => f.file);
+		}
 	} catch {
 		// Continue without files
 	}
@@ -98,8 +114,14 @@ async function gatherPMContext(decision: DecisionPoint, stateDir: string): Promi
 	// Get project patterns (from task-file stats)
 	try {
 		const stats = getTaskFileStats(stateDir);
-		if (stats.riskyKeywords.length > 0) {
-			context.projectPatterns.push(`Risky keywords to watch: ${stats.riskyKeywords.map((k) => k.keyword).join(", ")}`);
+		// Defensive: validate stats object and riskyKeywords array
+		if (stats && Array.isArray(stats.riskyKeywords) && stats.riskyKeywords.length > 0) {
+			const riskyKeywordStrs = stats.riskyKeywords
+				.filter((k) => k && typeof k.keyword === "string")
+				.map((k) => k.keyword);
+			if (riskyKeywordStrs.length > 0) {
+				context.projectPatterns.push(`Risky keywords to watch: ${riskyKeywordStrs.join(", ")}`);
+			}
 		}
 	} catch {
 		// Continue without patterns
@@ -414,13 +436,18 @@ export async function pmPropose(
 
 	// Get recent completed tasks to understand what's been done
 	const allTasks = getAllTasks();
-	const completedRecently = allTasks
+	// Defensive: validate tasks array and filter for valid task objects
+	const validTasks = Array.isArray(allTasks)
+		? allTasks.filter((t) => t && typeof t.status === "string" && typeof t.objective === "string")
+		: [];
+
+	const completedRecently = validTasks
 		.filter((t) => t.status === "complete")
 		.slice(-20)
 		.map((t) => t.objective)
 		.join("\n");
 
-	const pendingTasks = allTasks
+	const pendingTasks = validTasks
 		.filter((t) => t.status === "pending")
 		.map((t) => t.objective)
 		.join("\n");
@@ -518,15 +545,24 @@ export async function pmIdeate(
 	const proposals = await pmPropose(`${topic}\n\nResearch findings:\n${researchContext}`, cwd, stateDir);
 
 	// Combine research-derived proposals with codebase-derived proposals
-	const allProposals = [...research.taskProposals, ...proposals];
+	// Defensive: filter for valid proposal objects before combining
+	const validResearchProposals = Array.isArray(research.taskProposals)
+		? research.taskProposals.filter((p) => p && typeof p.objective === "string")
+		: [];
+	const validProposals = Array.isArray(proposals) ? proposals.filter((p) => p && typeof p.objective === "string") : [];
+	const allProposals = [...validResearchProposals, ...validProposals];
 
 	// Deduplicate by objective similarity (simple check)
-	const uniqueProposals = allProposals.filter(
-		(p, i) =>
-			allProposals.findIndex((other) =>
-				other.objective.toLowerCase().includes(p.objective.toLowerCase().substring(0, 30)),
-			) === i,
-	);
+	const uniqueProposals = allProposals.filter((p, i) => {
+		if (!p || typeof p.objective !== "string") return false;
+		const pObjectiveStart = p.objective.toLowerCase().substring(0, 30);
+		return (
+			allProposals.findIndex(
+				(other) =>
+					other && typeof other.objective === "string" && other.objective.toLowerCase().includes(pObjectiveStart),
+			) === i
+		);
+	});
 
 	sessionLogger.info(
 		{

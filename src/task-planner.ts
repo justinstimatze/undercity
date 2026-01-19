@@ -784,10 +784,7 @@ IMPORTANT: You MUST output a JSON response. Do not output an empty response.`;
 
 	// Log diagnostic info if we got an empty response
 	if (!reviewJson || reviewJson.trim() === "") {
-		logger.warn(
-			{ model, retryCount, messageCount, lastError },
-			"Plan review returned empty - diagnostic info",
-		);
+		logger.warn({ model, retryCount, messageCount, lastError }, "Plan review returned empty - diagnostic info");
 	}
 
 	// Check for empty response and retry if we haven't exceeded retries

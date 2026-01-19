@@ -183,42 +183,91 @@ export class ASTIndexManager {
 	 * Find files that a given file imports (local only)
 	 */
 	findImports(filePath: string): string[] {
+		if (!filePath || typeof filePath !== "string") {
+			return [];
+		}
+
 		const normalizedPath = this.normalizePath(filePath);
 		const fileInfo = this.index.files[normalizedPath];
 		if (!fileInfo) return [];
 
-		return fileInfo.imports.filter((i) => i.resolvedPath).map((i) => i.resolvedPath as string);
+		// Defensive: ensure imports array exists and filter for valid resolved paths
+		if (!Array.isArray(fileInfo.imports)) {
+			return [];
+		}
+
+		return fileInfo.imports
+			.filter((i) => i && i.resolvedPath && typeof i.resolvedPath === "string")
+			.map((i) => i.resolvedPath as string);
 	}
 
 	/**
 	 * Get exported symbol info by name
 	 */
 	getSymbolInfo(symbolName: string): ExportedSymbol | null {
+		// Defensive: validate symbol name
+		if (!symbolName || typeof symbolName !== "string") {
+			return null;
+		}
+
 		const files = this.findSymbolDefinition(symbolName);
-		if (files.length === 0) return null;
+		if (!Array.isArray(files) || files.length === 0) return null;
 
 		const fileInfo = this.index.files[files[0]];
 		if (!fileInfo) return null;
 
-		return fileInfo.exports.find((e) => e.name === symbolName) || null;
+		// Defensive: ensure exports is an array
+		if (!Array.isArray(fileInfo.exports)) {
+			return null;
+		}
+
+		return fileInfo.exports.find((e) => e && e.name === symbolName) || null;
 	}
 
 	/**
 	 * Get all exports from a file
 	 */
 	getFileExports(filePath: string): ExportedSymbol[] {
+		// Defensive: validate file path
+		if (!filePath || typeof filePath !== "string") {
+			return [];
+		}
+
 		const normalizedPath = this.normalizePath(filePath);
-		return this.index.files[normalizedPath]?.exports || [];
+		const fileInfo = this.index.files[normalizedPath];
+
+		// Defensive: ensure exports is an array
+		if (!fileInfo || !Array.isArray(fileInfo.exports)) {
+			return [];
+		}
+
+		return fileInfo.exports;
 	}
 
 	/**
 	 * Search symbols by pattern
 	 */
 	searchSymbols(pattern: RegExp): ExportedSymbol[] {
+		// Defensive: validate pattern
+		if (!pattern || !(pattern instanceof RegExp)) {
+			return [];
+		}
+
 		const results: ExportedSymbol[] = [];
-		for (const fileInfo of Object.values(this.index.files)) {
+		const files = Object.values(this.index.files);
+
+		// Defensive: ensure files is an array
+		if (!Array.isArray(files)) {
+			return [];
+		}
+
+		for (const fileInfo of files) {
+			if (!fileInfo || !Array.isArray(fileInfo.exports)) {
+				continue;
+			}
+
 			for (const exp of fileInfo.exports) {
-				if (pattern.test(exp.name)) {
+				if (exp && exp.name && typeof exp.name === "string" && pattern.test(exp.name)) {
 					results.push(exp);
 				}
 			}
