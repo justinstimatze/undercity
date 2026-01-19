@@ -341,6 +341,511 @@ export function formatValidationIssues(taskId: string, result: TaskValidationRes
 }
 
 // ==========================================================================
+// Task Board Validation
+// ==========================================================================
+
+/**
+ * Validation severity levels
+ */
+export type ValidationSeverity = "error" | "warning" | "info";
+
+/**
+ * Validation error categories
+ */
+export type ValidationCategory =
+	| "missing_field"
+	| "invalid_enum"
+	| "invalid_date"
+	| "invalid_reference"
+	| "orphaned_subtask"
+	| "circular_dependency"
+	| "inconsistent_state"
+	| "empty_value";
+
+/**
+ * Detailed validation report for a single task
+ */
+export interface TaskValidationReport {
+	taskId: string;
+	severity: ValidationSeverity;
+	category: ValidationCategory;
+	message: string;
+	suggestion?: string;
+	field?: string;
+}
+
+/**
+ * Overall validation report for task board
+ */
+export interface BoardValidationReport {
+	valid: boolean;
+	totalTasks: number;
+	validTasks: number;
+	invalidTasks: number;
+	issues: TaskValidationReport[];
+	statistics: {
+		byCategory: Record<ValidationCategory, number>;
+		bySeverity: Record<ValidationSeverity, number>;
+	};
+}
+
+/**
+ * Valid task statuses
+ */
+const VALID_STATUSES = new Set([
+	"pending",
+	"in_progress",
+	"complete",
+	"failed",
+	"blocked",
+	"duplicate",
+	"canceled",
+	"obsolete",
+]);
+
+/**
+ * Validate a single task object
+ * Returns array of validation issues
+ */
+export function validateTaskObject(task: unknown, allTasks: unknown[]): TaskValidationReport[] {
+	const issues: TaskValidationReport[] = [];
+
+	// Type guard: ensure task is an object
+	if (typeof task !== "object" || task === null) {
+		issues.push({
+			taskId: "unknown",
+			severity: "error",
+			category: "missing_field",
+			message: "Task is not an object",
+			suggestion: "Remove this invalid entry from tasks.json",
+		});
+		return issues;
+	}
+
+	const t = task as Record<string, unknown>;
+	const taskId = typeof t.id === "string" ? t.id : "unknown";
+
+	// Required fields validation
+	if (typeof t.id !== "string") {
+		issues.push({
+			taskId,
+			severity: "error",
+			category: "missing_field",
+			field: "id",
+			message: "Task missing required field: id",
+			suggestion: "Add a unique task ID or remove this task",
+		});
+	} else if (t.id.trim().length === 0) {
+		issues.push({
+			taskId,
+			severity: "error",
+			category: "empty_value",
+			field: "id",
+			message: "Task ID is empty",
+			suggestion: "Add a unique task ID or remove this task",
+		});
+	}
+
+	if (typeof t.objective !== "string") {
+		issues.push({
+			taskId,
+			severity: "error",
+			category: "missing_field",
+			field: "objective",
+			message: "Task missing required field: objective",
+			suggestion: "Add a task objective or remove this task",
+		});
+	} else if (t.objective.trim().length === 0) {
+		issues.push({
+			taskId,
+			severity: "error",
+			category: "empty_value",
+			field: "objective",
+			message: "Task objective is empty",
+			suggestion: "Add a meaningful objective or remove this task",
+		});
+	}
+
+	if (typeof t.status !== "string") {
+		issues.push({
+			taskId,
+			severity: "error",
+			category: "missing_field",
+			field: "status",
+			message: "Task missing required field: status",
+			suggestion: "Set task status to 'pending' or remove this task",
+		});
+	} else if (!VALID_STATUSES.has(t.status)) {
+		issues.push({
+			taskId,
+			severity: "error",
+			category: "invalid_enum",
+			field: "status",
+			message: `Invalid task status: "${t.status}"`,
+			suggestion: `Use one of: ${[...VALID_STATUSES].join(", ")}`,
+		});
+	}
+
+	// Date validation
+	if (t.createdAt) {
+		if (typeof t.createdAt !== "string") {
+			issues.push({
+				taskId,
+				severity: "warning",
+				category: "invalid_date",
+				field: "createdAt",
+				message: "createdAt is not a string",
+				suggestion: "Should be ISO 8601 date string",
+			});
+		} else {
+			const date = new Date(t.createdAt);
+			if (Number.isNaN(date.getTime())) {
+				issues.push({
+					taskId,
+					severity: "warning",
+					category: "invalid_date",
+					field: "createdAt",
+					message: "createdAt is not a valid date",
+					suggestion: "Use ISO 8601 format (YYYY-MM-DDTHH:mm:ss.sssZ)",
+				});
+			}
+		}
+	} else {
+		issues.push({
+			taskId,
+			severity: "warning",
+			category: "missing_field",
+			field: "createdAt",
+			message: "Task missing createdAt timestamp",
+			suggestion: "Add current timestamp or remove this task",
+		});
+	}
+
+	if (t.startedAt && typeof t.startedAt === "string") {
+		const date = new Date(t.startedAt);
+		if (Number.isNaN(date.getTime())) {
+			issues.push({
+				taskId,
+				severity: "warning",
+				category: "invalid_date",
+				field: "startedAt",
+				message: "startedAt is not a valid date",
+			});
+		}
+	}
+
+	if (t.completedAt && typeof t.completedAt === "string") {
+		const date = new Date(t.completedAt);
+		if (Number.isNaN(date.getTime())) {
+			issues.push({
+				taskId,
+				severity: "warning",
+				category: "invalid_date",
+				field: "completedAt",
+				message: "completedAt is not a valid date",
+			});
+		}
+	}
+
+	// Dependency validation
+	if (t.dependsOn && Array.isArray(t.dependsOn)) {
+		for (const depId of t.dependsOn) {
+			if (typeof depId !== "string") {
+				issues.push({
+					taskId,
+					severity: "warning",
+					category: "invalid_reference",
+					field: "dependsOn",
+					message: "dependsOn contains non-string task ID",
+				});
+				continue;
+			}
+
+			// Check if dependency exists
+			const depExists = allTasks.some((otherTask) => {
+				return (
+					typeof otherTask === "object" && otherTask !== null && (otherTask as Record<string, unknown>).id === depId
+				);
+			});
+
+			if (!depExists) {
+				issues.push({
+					taskId,
+					severity: "error",
+					category: "invalid_reference",
+					field: "dependsOn",
+					message: `Task depends on non-existent task: ${depId}`,
+					suggestion: "Remove invalid dependency or add the missing task",
+				});
+			}
+		}
+	}
+
+	// Parent/subtask consistency validation
+	if (t.parentId && typeof t.parentId === "string") {
+		// Check if parent exists
+		const parent = allTasks.find((otherTask) => {
+			return (
+				typeof otherTask === "object" && otherTask !== null && (otherTask as Record<string, unknown>).id === t.parentId
+			);
+		});
+
+		if (!parent) {
+			issues.push({
+				taskId,
+				severity: "error",
+				category: "orphaned_subtask",
+				field: "parentId",
+				message: `Orphaned subtask: parent task ${t.parentId} not found`,
+				suggestion: "Remove parentId field or add the missing parent task",
+			});
+		} else {
+			// Check if parent references this subtask
+			const parentObj = parent as Record<string, unknown>;
+			const subtaskIds = parentObj.subtaskIds;
+			if (Array.isArray(subtaskIds) && !subtaskIds.includes(t.id)) {
+				issues.push({
+					taskId,
+					severity: "warning",
+					category: "inconsistent_state",
+					field: "parentId",
+					message: "Parent task does not reference this subtask in its subtaskIds",
+					suggestion: "Update parent's subtaskIds array or remove parentId",
+				});
+			}
+		}
+	}
+
+	if (t.subtaskIds && Array.isArray(t.subtaskIds)) {
+		for (const subtaskId of t.subtaskIds) {
+			if (typeof subtaskId !== "string") {
+				issues.push({
+					taskId,
+					severity: "warning",
+					category: "invalid_reference",
+					field: "subtaskIds",
+					message: "subtaskIds contains non-string task ID",
+				});
+				continue;
+			}
+
+			// Check if subtask exists
+			const subtask = allTasks.find((otherTask) => {
+				return (
+					typeof otherTask === "object" && otherTask !== null && (otherTask as Record<string, unknown>).id === subtaskId
+				);
+			});
+
+			if (!subtask) {
+				issues.push({
+					taskId,
+					severity: "error",
+					category: "invalid_reference",
+					field: "subtaskIds",
+					message: `Task references non-existent subtask: ${subtaskId}`,
+					suggestion: "Remove invalid subtask ID or add the missing subtask",
+				});
+			} else {
+				// Check if subtask references this task as parent
+				const subtaskObj = subtask as Record<string, unknown>;
+				if (subtaskObj.parentId !== t.id) {
+					issues.push({
+						taskId,
+						severity: "warning",
+						category: "inconsistent_state",
+						field: "subtaskIds",
+						message: `Subtask ${subtaskId} does not reference this task as its parent`,
+						suggestion: "Update subtask's parentId field",
+					});
+				}
+			}
+		}
+	}
+
+	return issues;
+}
+
+/**
+ * Detect circular dependencies in task graph
+ */
+function detectCircularDependencies(tasks: unknown[]): TaskValidationReport[] {
+	const issues: TaskValidationReport[] = [];
+	const visited = new Set<string>();
+	const recursionStack = new Set<string>();
+
+	function visit(taskId: string, path: string[]): boolean {
+		if (recursionStack.has(taskId)) {
+			// Found a cycle
+			const cycleStart = path.indexOf(taskId);
+			const cycle = [...path.slice(cycleStart), taskId].join(" -> ");
+			issues.push({
+				taskId,
+				severity: "error",
+				category: "circular_dependency",
+				message: `Circular dependency detected: ${cycle}`,
+				suggestion: "Remove one of the dependencies in the cycle",
+			});
+			return true;
+		}
+
+		if (visited.has(taskId)) {
+			return false; // Already processed
+		}
+
+		visited.add(taskId);
+		recursionStack.add(taskId);
+
+		// Find this task and check its dependencies
+		const task = tasks.find((t) => {
+			return typeof t === "object" && t !== null && (t as Record<string, unknown>).id === taskId;
+		});
+
+		if (task && typeof task === "object") {
+			const t = task as Record<string, unknown>;
+			const deps = t.dependsOn;
+			if (Array.isArray(deps)) {
+				for (const depId of deps) {
+					if (typeof depId === "string") {
+						visit(depId, [...path, taskId]);
+					}
+				}
+			}
+		}
+
+		recursionStack.delete(taskId);
+		return false;
+	}
+
+	// Check all tasks
+	for (const task of tasks) {
+		if (typeof task === "object" && task !== null) {
+			const t = task as Record<string, unknown>;
+			if (typeof t.id === "string" && !visited.has(t.id)) {
+				visit(t.id, []);
+			}
+		}
+	}
+
+	return issues;
+}
+
+/**
+ * Validate entire task board
+ * Returns detailed validation report with statistics
+ */
+export function validateTaskBoard(tasks: unknown[]): BoardValidationReport {
+	const issues: TaskValidationReport[] = [];
+
+	// Validate each task
+	for (const task of tasks) {
+		const taskIssues = validateTaskObject(task, tasks);
+		issues.push(...taskIssues);
+	}
+
+	// Detect circular dependencies
+	const circularIssues = detectCircularDependencies(tasks);
+	issues.push(...circularIssues);
+
+	// Compute statistics
+	const byCategory: Record<ValidationCategory, number> = {
+		missing_field: 0,
+		invalid_enum: 0,
+		invalid_date: 0,
+		invalid_reference: 0,
+		orphaned_subtask: 0,
+		circular_dependency: 0,
+		inconsistent_state: 0,
+		empty_value: 0,
+	};
+
+	const bySeverity: Record<ValidationSeverity, number> = {
+		error: 0,
+		warning: 0,
+		info: 0,
+	};
+
+	for (const issue of issues) {
+		byCategory[issue.category]++;
+		bySeverity[issue.severity]++;
+	}
+
+	// Count valid vs invalid tasks
+	const invalidTaskIds = new Set(issues.filter((i) => i.severity === "error").map((i) => i.taskId));
+	const validTasks = tasks.length - invalidTaskIds.size;
+
+	return {
+		valid: issues.filter((i) => i.severity === "error").length === 0,
+		totalTasks: tasks.length,
+		validTasks,
+		invalidTasks: invalidTaskIds.size,
+		issues,
+		statistics: {
+			byCategory,
+			bySeverity,
+		},
+	};
+}
+
+/**
+ * Format board validation report for display
+ */
+export function formatBoardValidationReport(report: BoardValidationReport): string[] {
+	const lines: string[] = [];
+
+	if (report.valid) {
+		lines.push(`✓ Task board is valid (${report.totalTasks} tasks, no errors)`);
+		if (report.statistics.bySeverity.warning > 0) {
+			lines.push(`  ⚠ ${report.statistics.bySeverity.warning} warnings found`);
+		}
+		return lines;
+	}
+
+	// Summary
+	lines.push(`✗ Task board validation failed`);
+	lines.push(`  Total tasks: ${report.totalTasks}`);
+	lines.push(`  Valid: ${report.validTasks}`);
+	lines.push(`  Invalid: ${report.invalidTasks}`);
+	lines.push(`  Errors: ${report.statistics.bySeverity.error}`);
+	lines.push(`  Warnings: ${report.statistics.bySeverity.warning}`);
+	lines.push("");
+
+	// Group issues by severity and category
+	const errors = report.issues.filter((i) => i.severity === "error");
+	const warnings = report.issues.filter((i) => i.severity === "warning");
+
+	if (errors.length > 0) {
+		lines.push("Errors:");
+		for (const issue of errors.slice(0, 10)) {
+			// Limit to first 10
+			lines.push(`  ✗ ${issue.taskId}: ${issue.message}`);
+			if (issue.suggestion) {
+				lines.push(`    → ${issue.suggestion}`);
+			}
+		}
+		if (errors.length > 10) {
+			lines.push(`  ... and ${errors.length - 10} more errors`);
+		}
+		lines.push("");
+	}
+
+	if (warnings.length > 0) {
+		lines.push("Warnings:");
+		for (const issue of warnings.slice(0, 5)) {
+			// Limit to first 5
+			lines.push(`  ⚠ ${issue.taskId}: ${issue.message}`);
+			if (issue.suggestion) {
+				lines.push(`    → ${issue.suggestion}`);
+			}
+		}
+		if (warnings.length > 5) {
+			lines.push(`  ... and ${warnings.length - 5} more warnings`);
+		}
+	}
+
+	return lines;
+}
+
+// ==========================================================================
 // Task Clarity Assessment
 // ==========================================================================
 

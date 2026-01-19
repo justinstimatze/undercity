@@ -229,7 +229,7 @@ function generateTaskId(): string {
 }
 
 /**
- * Load task board from disk
+ * Load task board from disk with validation
  */
 export function loadTaskBoard(path: string = DEFAULT_TASK_BOARD_PATH): TaskBoard {
 	if (!existsSync(path)) {
@@ -237,8 +237,100 @@ export function loadTaskBoard(path: string = DEFAULT_TASK_BOARD_PATH): TaskBoard
 	}
 	try {
 		const content = readFileSync(path, "utf-8");
-		return JSON.parse(content) as TaskBoard;
-	} catch {
+		const board = JSON.parse(content) as TaskBoard;
+
+		// Validate loaded tasks (graceful degradation - report but don't block)
+		try {
+			// Import validation functions - wrapped in try/catch for test compatibility
+			let validateTaskBoard: (tasks: unknown[]) => unknown;
+			let formatBoardValidationReport: (report: unknown) => string[];
+			try {
+				const validator = require("./task-validator.js");
+				validateTaskBoard = validator.validateTaskBoard;
+				formatBoardValidationReport = validator.formatBoardValidationReport;
+			} catch {
+				// If require fails (in tests), skip validation
+				return board;
+			}
+
+			const validationReport = validateTaskBoard(board.tasks) as {
+				valid: boolean;
+				totalTasks: number;
+				validTasks: number;
+				invalidTasks: number;
+				statistics: {
+					bySeverity: { error: number; warning: number; info: number };
+					byCategory: Record<string, number>;
+				};
+			};
+
+			if (!validationReport.valid || validationReport.statistics.bySeverity.warning > 0) {
+				// Import logger for structured logging
+				let sessionLogger: { child: (ctx: unknown) => { warn: (ctx: unknown, msg: string) => void } };
+				try {
+					const loggerModule = require("./logger.js");
+					sessionLogger = loggerModule.sessionLogger;
+				} catch {
+					// If logger import fails, skip logging
+					return board;
+				}
+
+				const logger = sessionLogger.child({ module: "task-board-validation" });
+
+				// Log validation report
+				logger.warn(
+					{
+						path,
+						totalTasks: validationReport.totalTasks,
+						validTasks: validationReport.validTasks,
+						invalidTasks: validationReport.invalidTasks,
+						errorCount: validationReport.statistics.bySeverity.error,
+						warningCount: validationReport.statistics.bySeverity.warning,
+						errorsByCategory: validationReport.statistics.byCategory,
+					},
+					"Task board validation issues found",
+				);
+
+				// Log detailed report lines for debugging (pino format: message string only)
+				const reportLines = formatBoardValidationReport(validationReport);
+				const reportText = reportLines.join("\n");
+				if (reportText) {
+					logger.warn({ report: reportText }, "Validation report details");
+				}
+			}
+		} catch (validationError) {
+			// If validation fails, log but continue (graceful degradation)
+			try {
+				const loggerModule = require("./logger.js");
+				const logger = loggerModule.sessionLogger.child({ module: "task-board-validation" });
+				logger.error(
+					{
+						error: String(validationError),
+						path,
+					},
+					"Failed to validate task board",
+				);
+			} catch {
+				// Silent failure - logger not available
+			}
+		}
+
+		return board;
+	} catch (error) {
+		// Import logger for structured logging
+		try {
+			const loggerModule = require("./logger.js");
+			const logger = loggerModule.sessionLogger.child({ module: "task-board-load" });
+			logger.error(
+				{
+					error: String(error),
+					path,
+				},
+				"Failed to load task board - returning empty board",
+			);
+		} catch {
+			// Silent failure - logger not available
+		}
 		return { tasks: [], lastUpdated: new Date() };
 	}
 }
