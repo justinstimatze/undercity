@@ -1,0 +1,962 @@
+
+> undercity@0.1.0 test:coverage /tmp/undercity-worktrees/L2hvbWUvanVz/task-mkkkvvoi-ea215c
+> vitest --run --coverage
+
+
+[1m[46m RUN [49m[22m [36mv4.0.16 [39m[90m/tmp/undercity-worktrees/L2hvbWUvanVz/task-mkkkvvoi-ea215c[39m
+      [2mCoverage enabled with [22m[33mv8[39m
+
+ [2m[90m↓[39m[22m src/__tests__/integration/worktree-manager.test.ts [2m([22m[2m26 tests[22m[2m | [22m[33m26 skipped[39m[2m)[22m
+[03:04:07] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+[03:04:07] [32mINFO[39m: [36mDual logging stopped[39m
+[03:04:07] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+[03:04:07] [32mINFO[39m: [36mDual logging stopped[39m
+[03:04:07] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+ [2m[90m↓[39m[22m src/__tests__/integration/merge-queue.test.ts [2m([22m[2m25 tests[22m[2m | [22m[33m25 skipped[39m[2m)[22m
+[03:04:07] [32mINFO[39m: [36mDual logging stopped[39m
+[03:04:07] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+ [2m[90m↓[39m[22m src/__tests__/integration/grind-flow.test.ts [2m([22m[2m3 tests[22m[2m | [22m[33m3 skipped[39m[2m)[22m
+[03:04:07] [32mINFO[39m: [36mLocal tool detected - using minimal model[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "run format"
+    [35massessmentType[39m: "local_tool"
+    [35mrecommendedModel[39m: "haiku"
+    [35mlocalToolCommand[39m: "pnpm format"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "typo"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "haiku"
+    [35mscore[39m: -1
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "simple fix for button color"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 3
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "small change to config"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 3
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "clean up unused imports"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 3
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "fix typo in README"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "haiku"
+    [35mscore[39m: -3
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "fix bug in user login"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 5
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "enhance the logging system"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 5
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "migrate database schema"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 7
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "update across multiple packages"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 8
+    [35mscope[39m: "cross-package"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "redesign the API layer"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 7
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "fix security vulnerability"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "opus"
+    [35mscore[39m: 11
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "refactor authentication system"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "opus"
+    [35mscore[39m: 15
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "update payment processing logic"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "opus"
+    [35mscore[39m: 11
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "fix production database issue"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "opus"
+    [35mscore[39m: 11
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "fix bug in this file"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 4
+    [35mscope[39m: "single-file"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "update server and client packages"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "sonnet"
+    [35mscore[39m: 5
+    [35mscope[39m: "cross-package"
+[03:04:07] [32mINFO[39m: [36mNo task description provided - using default model[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "Empty task description"
+    [35massessmentType[39m: "empty_task"
+    [35mrecommendedModel[39m: "haiku"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "fix"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "haiku"
+    [35mscore[39m: 1
+    [35mscope[39m: "few-files"
+[03:04:07] [37mUSERLVL[39m: [36mComplexity determined by keyword heuristics[39m
+    [35mmodule[39m: "session"
+    [35mtask[39m: "refactor authentication security critical"
+    [35massessmentType[39m: "keyword_assessment"
+    [35mrecommendedModel[39m: "opus"
+    [35mscore[39m: 27
+    [35mscope[39m: "few-files"
+[03:04:07] [32mINFO[39m: [36mDual logging stopped[39m
+[03:04:07] [34mDEBUG[39m: [36mNot enough metrics data for adjustment, using default model[39m
+    [35mmodule[39m: "session"
+    [35mtotalTasks[39m: 0
+    [35mminSamples[39m: 3
+[03:04:07] [34mDEBUG[39m: [36mNot enough metrics data for adjustment, using default model[39m
+    [35mmodule[39m: "session"
+    [35mtotalTasks[39m: 2
+    [35mminSamples[39m: 3
+[03:04:08] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+[03:04:08] [32mINFO[39m: [36mDual logging stopped[39m
+ [32m✓[39m src/__tests__/complexity.test.ts [2m([22m[2m59 tests[22m[2m)[22m[32m 124[2mms[22m[39m
+[03:04:08] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+[03:04:08] [32mINFO[39m: [36mDual logging stopped[39m
+    [35msessionId[39m: "test-session-123"
+[03:04:08] [32mINFO[39m: [36mLog rotated[39m
+    [35marchivePath[39m: ".test-undercity/logs/session-test-session-123-2026-01-19T03-04-08-216Z.log"
+    [35msessionId[39m: "test-session-123"
+ [32m✓[39m src/__tests__/efficiency-tools.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 121[2mms[22m[39m
+[03:04:08] [32mINFO[39m: [36mDual logging started[39m
+    [35msessionId[39m: "test-session-123"
+    [35mlogFile[39m: ".test-undercity/logs/current.log"
+[03:04:08] [32mINFO[39m: [36mDual logging stopped[39m
+    [35msessionId[39m: "test-session-123"
+[03:04:08] [32mINFO[39m: [36mLog rotated[39m
+    [35marchivePath[39m: ".test-undercity/logs/session-test-session-123-2026-01-19T03-04-08-425Z.log"
+    [35msessionId[39m: "test-session-123"
+ [32m✓[39m src/__tests__/dual-logger.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 956[2mms[22m[39m
+     [33m[2m✓[22m[39m should rotate logs when session ends [33m 308[2mms[22m[39m
+ [32m✓[39m src/__tests__/knowledge.test.ts [2m([22m[2m79 tests[22m[2m)[22m[32m 225[2mms[22m[39m
+ [32m✓[39m src/__tests__/error-fix-patterns.test.ts [2m([22m[2m106 tests[22m[2m)[22m[32m 136[2mms[22m[39m
+ [32m✓[39m src/__tests__/decision-tracker.test.ts [2m([22m[2m46 tests[22m[2m)[22m[33m 1508[2mms[22m[39m
+       [33m[2m✓[22m[39m should keep only last 500 resolved decisions [33m 1463[2mms[22m[39m
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2misBlocking[2m > [22m[2mshould return true when tracker is paused
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T03:04:09.314Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T03:04:09.372Z"}
+{"type":"status","message":"Resume at: 1/18/2026, 8:04:09 PM","timestamp":"2026-01-19T03:04:09.372Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T03:04:09.372Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/18/2026, 8:04:09 PM)","timestamp":"2026-01-19T03:04:09.372Z"}
+
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mcheckUsage[2m > [22m[2mshould return error when tracker is paused
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T03:04:09.376Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T03:04:09.376Z"}
+{"type":"status","message":"Resume at: 1/18/2026, 8:04:09 PM","timestamp":"2026-01-19T03:04:09.377Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T03:04:09.377Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/18/2026, 8:04:09 PM)","timestamp":"2026-01-19T03:04:09.377Z"}
+
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mrecordRateLimitHit[2m > [22m[2mshould record rate limit hit and pause
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T03:04:09.388Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T03:04:09.388Z"}
+{"type":"status","message":"Resume at: 1/18/2026, 8:04:09 PM","timestamp":"2026-01-19T03:04:09.388Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T03:04:09.388Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/18/2026, 8:04:09 PM)","timestamp":"2026-01-19T03:04:09.388Z"}
+
+[90mstderr[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mrecordRateLimitHit[2m > [22m[2mshould record rate limit hit and pause
+[22m[39m🚨 Rate limit hit for sonnet: {
+  timestamp: [35m2026-01-19T03:04:09.386Z[39m,
+  usage: {
+    last5Hours: [33m0[39m,
+    currentWeek: [33m0[39m,
+    last5HoursSonnet: [33m0[39m,
+    currentWeekSonnet: [33m0[39m
+  },
+  error: [32m'429 Too Many Requests'[39m,
+  apiLimitInfo: {}
+}
+
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mguard[2m > [22m[2mshould not execute when blocked
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T03:04:09.398Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T03:04:09.399Z"}
+{"type":"status","message":"Resume at: 1/18/2026, 8:04:09 PM","timestamp":"2026-01-19T03:04:09.399Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T03:04:09.399Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/18/2026, 8:04:09 PM)","timestamp":"2026-01-19T03:04:09.399Z"}
+
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mguard[2m > [22m[2mshould handle 429 errors
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T03:04:09.402Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T03:04:09.402Z"}
+{"type":"status","message":"Resume at: 1/18/2026, 8:04:09 PM","timestamp":"2026-01-19T03:04:09.402Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T03:04:09.402Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/18/2026, 8:04:09 PM)","timestamp":"2026-01-19T03:04:09.402Z"}
+
+[90mstderr[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mguard[2m > [22m[2mshould handle 429 errors
+[22m[39m🚨 Rate limit hit for sonnet: {
+  timestamp: [35m2026-01-19T03:04:09.401Z[39m,
+  usage: {
+    last5Hours: [33m0[39m,
+    currentWeek: [33m0[39m,
+    last5HoursSonnet: [33m0[39m,
+    currentWeekSonnet: [33m0[39m
+  },
+  error: [32m'Error: 429 Too Many Requests'[39m,
+  apiLimitInfo: {}
+}
+
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mresume[2m > [22m[2mshould clear pause state
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T03:04:09.405Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T03:04:09.405Z"}
+{"type":"status","message":"Resume at: 1/18/2026, 8:04:09 PM","timestamp":"2026-01-19T03:04:09.405Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T03:04:09.405Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/18/2026, 8:04:09 PM)","timestamp":"2026-01-19T03:04:09.405Z"}
+{"type":"success","message":"Resumed from rate limit pause","timestamp":"2026-01-19T03:04:09.405Z"}
+
+[90mstdout[2m | src/__tests__/api-usage-guard.test.ts[2m > [22m[2mApiUsageGuard[2m > [22m[2mgetPauseState[2m > [22m[2mshould return pause state from tracker
+[22m[39m{"type":"warning","message":"Rate limit hit for sonnet model - pausing sonnet agents only","timestamp":"2026-01-19T03:04:09.406Z"}
+{"type":"status","message":"Rate limit pause: 1:00 remaining (0 agents paused, sonnet model)","timestamp":"2026-01-19T03:04:09.406Z"}
+{"type":"status","message":"Resume at: 1/18/2026, 8:04:09 PM","timestamp":"2026-01-19T03:04:09.406Z"}
+{"type":"status","message":"Per-model status:","timestamp":"2026-01-19T03:04:09.406Z"}
+{"type":"status","message":"  sonnet: 1:00 (until 1/18/2026, 8:04:09 PM)","timestamp":"2026-01-19T03:04:09.406Z"}
+
+ [32m✓[39m src/__tests__/ast-index.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 298[2mms[22m[39m
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+ [32m✓[39m src/__tests__/api-usage-guard.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 122[2mms[22m[39m
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mSaved AST index[39m
+    [35mmodule[39m: "ast-index"
+    [35mfileCount[39m: 1
+[03:04:09] [34mDEBUG[39m: [36mLoaded AST index[39m
+    [35mmodule[39m: "ast-index"
+    [35mfileCount[39m: 1
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:09] [34mDEBUG[39m: [36mUpdating stale files[39m
+    [35mmodule[39m: "ast-index"
+    [35mcount[39m: 1
+[03:04:09] [34mDEBUG[39m: [36mSaved AST index[39m
+    [35mmodule[39m: "ast-index"
+    [35mfileCount[39m: 2
+[03:04:09] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+ [32m✓[39m src/__tests__/self-tuning.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 48[2mms[22m[39m
+ [32m✓[39m src/__tests__/output.test.ts [2m([22m[2m44 tests[22m[2m)[22m[32m 59[2mms[22m[39m
+[03:04:09] [33mWARN[39m: [36mSpelling issues detected (non-blocking)[39m
+    [35mmodule[39m: "verification"
+    [35merrorCount[39m: 2
+    [35merrors[39m: [
+      "spelling error: teh -> the",
+      "spelling error: wiht -> with"
+    ]
+ [32m✓[39m src/__tests__/verification.test.ts [2m([22m[2m39 tests[22m[2m)[22m[32m 85[2mms[22m[39m
+ [32m✓[39m src/__tests__/feedback-metrics.test.ts [2m([22m[2m33 tests[22m[2m)[22m[32m 80[2mms[22m[39m
+ [32m✓[39m src/__tests__/task.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 79[2mms[22m[39m
+ [32m✓[39m src/__tests__/task-board-analyzer.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 67[2mms[22m[39m
+ [32m✓[39m src/__tests__/cli.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 86[2mms[22m[39m
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "validation",
+      "maxResults": 5
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "validation api",
+      "maxResults": 5
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": 123,
+      "maxResults": 5
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "test",
+      "maxResults": "five"
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "test",
+      "maxResults": 25
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "test"
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-123",
+      "category": "pattern",
+      "content": "Test learning content",
+      "keywords": [
+        "test",
+        "learning"
+      ]
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": 123,
+      "category": "pattern",
+      "content": "Test",
+      "keywords": [
+        "test"
+      ]
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-1",
+      "category": "invalid-category",
+      "content": "Test",
+      "keywords": [
+        "test"
+      ]
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-1",
+      "category": "pattern",
+      "content": 123,
+      "keywords": [
+        "test"
+      ]
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-1",
+      "category": "pattern",
+      "content": "Test",
+      "keywords": "not-an-array"
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-1",
+      "category": "pattern",
+      "content": "Test with structured data",
+      "keywords": [
+        "test"
+      ],
+      "structured": {
+        "file": "src/test.ts",
+        "pattern": "const x = 1;",
+        "approach": "Simple approach"
+      }
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-1",
+      "category": "pattern",
+      "content": "Test",
+      "keywords": [
+        "test"
+      ],
+      "structured": {
+        "file": 123
+      }
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_stats"
+    [35mparams[39m: {}
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_stats"
+    [35mparams[39m: {}
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_stats"
+    [35mparams[39m: {}
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": [
+        "learn-mkkkzysj-whpv1b"
+      ],
+      "taskSuccess": true
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": [
+        "learn-mkkkzysk-e0n6m9"
+      ],
+      "taskSuccess": false
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": "not-an-array",
+      "taskSuccess": true
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": [
+        "learn-mkkkzysn-2zeqfy"
+      ],
+      "taskSuccess": "yes"
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": [
+        "learn-mkkkzyso-ixjelc",
+        "learn-mkkkzyso-679boz"
+      ],
+      "taskSuccess": true
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": [],
+      "taskSuccess": true
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "unknown_tool"
+    [35mparams[39m: {}
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "test",
+      "maxResults": 999
+    }
+[03:04:10] [31mERROR[39m: [36mMCP request error[39m
+    [35mmodule[39m: "server"
+    [35mrequest[39m: {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/call",
+      "params": {
+        "name": "knowledge_search",
+        "arguments": {
+          "query": "test",
+          "maxResults": 999
+        }
+      }
+    }
+    error: {}
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_add"
+    [35mparams[39m: {
+      "taskId": "task-integration",
+      "category": "pattern",
+      "content": "Integration test learning",
+      "keywords": [
+        "integration",
+        "test"
+      ]
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_search"
+    [35mparams[39m: {
+      "query": "integration test",
+      "maxResults": 5
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_mark_used"
+    [35mparams[39m: {
+      "learningIds": [
+        "learn-mkkkzyst-ubrnko"
+      ],
+      "taskSuccess": true
+    }
+[03:04:10] [34mDEBUG[39m: [36mMCP tool call[39m
+    [35mmodule[39m: "server"
+    [35mtoolName[39m: "knowledge_stats"
+    [35mparams[39m: {}
+ [32m✓[39m src/__tests__/mcp-protocol.test.ts [2m([22m[2m37 tests[22m[2m)[22m[32m 56[2mms[22m[39m
+[03:04:10] [34mDEBUG[39m: [36mSaved flute result to cache[39m
+    [35mmodule[39m: "persistence"
+    [35mkey[39m: "fp-hash:goal-hash"
+    [35mgoalText[39m: "test goal"
+[03:04:10] [32mINFO[39m: [36mCleared flute cache[39m
+    [35mmodule[39m: "persistence"
+ [32m✓[39m src/__tests__/persistence.test.ts [2m([22m[2m51 tests[22m[2m)[22m[32m 53[2mms[22m[39m
+ [32m✓[39m src/__tests__/cache.test.ts [2m([22m[2m39 tests[22m[2m)[22m[32m 33[2mms[22m[39m
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/test"
+    [35mstepId[39m: "step-1"
+    [35magentId[39m: "agent-1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/test"
+    [35mstepId[39m: "step-1"
+    [35magentId[39m: "agent-1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mRetry config updated[39m
+    [35mmodule[39m: "git"
+    [35mconfig[39m: {
+      "enabled": false,
+      "maxRetries": 10,
+      "baseDelayMs": 1000,
+      "maxDelayMs": 30000
+    }
+[03:04:11] [34mDEBUG[39m: [36mRetry config updated[39m
+    [35mmodule[39m: "git"
+    [35mconfig[39m: {
+      "enabled": true,
+      "maxRetries": 7,
+      "baseDelayMs": 1000,
+      "maxDelayMs": 30000
+    }
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/b"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/c"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/b"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/b"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/b"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/c"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/b"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/c"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/d"
+    [35mstepId[39m: "t4"
+    [35magentId[39m: "a4"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/a"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch2"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "feature/test"
+    [35mstepId[39m: "step-123"
+    [35magentId[39m: "agent-1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch1"
+    [35mstepId[39m: "t1"
+    [35magentId[39m: "a1"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch2"
+    [35mstepId[39m: "t2"
+    [35magentId[39m: "a2"
+    [35mmodifiedFilesCount[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mAdded to merge queue[39m
+    [35mmodule[39m: "git"
+    [35mbranch[39m: "branch3"
+    [35mstepId[39m: "t3"
+    [35magentId[39m: "a3"
+    [35mmodifiedFilesCount[39m: 0
+ [32m✓[39m src/__tests__/git.test.ts [2m([22m[2m54 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+ [32m✓[39m src/__tests__/file-tracker.test.ts [2m([22m[2m53 tests[22m[2m)[22m[32m 74[2mms[22m[39m
+ [32m✓[39m src/__tests__/oracle-mcp-integration.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+[90mstderr[2m | src/__tests__/task-schema.test.ts[2m > [22m[2mtask-schema[2m > [22m[2mparseMetaTaskResult[2m > [22m[2mshould reject invalid action types
+[22m[39mInvalid meta-task action: explode
+
+[90mstderr[2m | src/__tests__/task-schema.test.ts[2m > [22m[2mtask-schema[2m > [22m[2mparseMetaTaskResult[2m > [22m[2mshould reject missing reason
+[22m[39mMissing reason in recommendation
+
+[90mstderr[2m | src/__tests__/task-schema.test.ts[2m > [22m[2mtask-schema[2m > [22m[2mparseMetaTaskResult[2m > [22m[2mshould reject invalid confidence scores
+[22m[39mInvalid confidence: [33m1.5[39m
+
+[90mstderr[2m | src/__tests__/task-schema.test.ts[2m > [22m[2mtask-schema[2m > [22m[2mparseMetaTaskResult[2m > [22m[2mshould reject negative confidence scores
+[22m[39mInvalid confidence: [33m-0.5[39m
+
+ [32m✓[39m src/__tests__/task-schema.test.ts [2m([22m[2m42 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m src/__tests__/config.test.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 40[2mms[22m[39m
+ [32m✓[39m src/__tests__/task-scheduler.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 42[2mms[22m[39m
+ [32m✓[39m src/__tests__/task-analyzer.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 34[2mms[22m[39m
+ [32m✓[39m src/__tests__/capability-ledger.test.ts [2m([22m[2m45 tests[22m[2m)[22m[32m 62[2mms[22m[39m
+[03:04:08] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:08] [34mDEBUG[39m: [36mAST index empty, cannot use as primary source[39m
+    [35mmodule[39m: "session"
+[03:04:08] [34mDEBUG[39m: [36mAST index insufficient, falling back to file search[39m
+    [35mmodule[39m: "session"
+[03:04:08] [34mDEBUG[39m: [36mContext preparation complete[39m
+    [35mmodule[39m: "session"
+    [35mmode[39m: "compact"
+    [35mtokenBudget[39m: 4000
+    [35mtokenBudgetUsed[39m: 383
+    [35mtargetFiles[39m: 0
+    [35msymbolStubs[39m: 0
+[03:04:08] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:08] [34mDEBUG[39m: [36mAST index empty, cannot use as primary source[39m
+    [35mmodule[39m: "session"
+[03:04:08] [34mDEBUG[39m: [36mAST index insufficient, falling back to file search[39m
+    [35mmodule[39m: "session"
+[03:04:08] [34mDEBUG[39m: [36mContext preparation complete[39m
+    [35mmodule[39m: "session"
+    [35mmode[39m: "compact"
+    [35mtokenBudget[39m: 4000
+    [35mtokenBudgetUsed[39m: 487
+    [35mtargetFiles[39m: 0
+    [35msymbolStubs[39m: 0
+[03:04:08] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:08] [34mDEBUG[39m: [36mAST index empty, cannot use as primary source[39m
+    [35mmodule[39m: "session"
+[03:04:08] [34mDEBUG[39m: [36mAST index insufficient, falling back to file search[39m
+    [35mmodule[39m: "session"
+[03:04:08] [34mDEBUG[39m: [36mContext preparation complete[39m
+    [35mmodule[39m: "session"
+    [35mmode[39m: "compact"
+    [35mtokenBudget[39m: 4000
+    [35mtokenBudgetUsed[39m: 620
+    [35mtargetFiles[39m: 1
+    [35msymbolStubs[39m: 0
+[03:04:08] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:08] [34mDEBUG[39m: [36mAST index empty, cannot use as primary source[39m
+    [35mmodule[39m: "session"
+[03:04:08] [34mDEBUG[39m: [36mAST index insufficient, falling back to file search[39m
+    [35mmodule[39m: "session"
+[03:04:08] [34mDEBUG[39m: [36mContext preparation complete[39m
+    [35mmodule[39m: "session"
+    [35mmode[39m: "compact"
+    [35mtokenBudget[39m: 4000
+    [35mtokenBudgetUsed[39m: 390
+    [35mtargetFiles[39m: 0
+    [35msymbolStubs[39m: 0
+[03:04:11] [34mDEBUG[39m: [36mNo existing index found, starting fresh[39m
+    [35mmodule[39m: "ast-index"
+[03:04:11] [34mDEBUG[39m: [36mAST index empty, cannot use as primary source[39m
+    [35mmodule[39m: "session"
+[03:04:11] [34mDEBUG[39m: [36mAST index insufficient, falling back to file search[39m
+    [35mmodule[39m: "session"
+[03:04:11] [34mDEBUG[39m: [36mContext preparation complete[39m
+    [35mmodule[39m: "session"
+    [35mmode[39m: "compact"
+    [35mtokenBudget[39m: 4000
+    [35mtokenBudgetUsed[39m: 366
+    [35mtargetFiles[39m: 0
+    [35msymbolStubs[39m: 0
+ [32m✓[39m src/__tests__/plan-parser.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m src/__tests__/context.test.ts [2m([22m[2m63 tests[22m[2m)[22m[33m 3737[2mms[22m[39m
+       [33m[2m✓[22m[39m extracts function signatures from TypeScript file [33m 3248[2mms[22m[39m
+ [32m✓[39m src/__tests__/orchestrator-validation.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m src/__tests__/fast-path.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m src/__tests__/integration/cli-smoke.test.ts [2m([22m[2m16 tests[22m[2m)[22m[33m 12163[2mms[22m[39m
+       [33m[2m✓[22m[39m --help exits 0 and shows usage [33m 1207[2mms[22m[39m
+       [33m[2m✓[22m[39m --version exits 0 and shows version [33m 1724[2mms[22m[39m
+       [33m[2m✓[22m[39m help command works [33m 1593[2mms[22m[39m
+       [33m[2m✓[22m[39m help for specific command works [33m 740[2mms[22m[39m
+       [33m[2m✓[22m[39m tasks command works with empty board [33m 594[2mms[22m[39m
+       [33m[2m✓[22m[39m limits command works [33m 643[2mms[22m[39m
+       [33m[2m✓[22m[39m status command works [33m 570[2mms[22m[39m
+       [33m[2m✓[22m[39m config command works [33m 513[2mms[22m[39m
+       [33m[2m✓[22m[39m task-status command works [33m 535[2mms[22m[39m
+       [33m[2m✓[22m[39m metrics command works [33m 504[2mms[22m[39m
+       [33m[2m✓[22m[39m daemon status works [33m 557[2mms[22m[39m
+       [33m[2m✓[22m[39m add command adds task to board [33m 518[2mms[22m[39m
+       [33m[2m✓[22m[39m task-analyze command works [33m 680[2mms[22m[39m
+       [33m[2m✓[22m[39m triage command works [33m 542[2mms[22m[39m
+       [33m[2m✓[22m[39m unknown command shows error [33m 603[2mms[22m[39m
+       [33m[2m✓[22m[39m add without goal shows error [33m 604[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m31 passed[39m[22m[2m | [22m[33m3 skipped[39m[90m (34)[39m
+[2m      Tests [22m [1m[32m1086 passed[39m[22m[2m | [22m[33m54 skipped[39m[90m (1140)[39m
+[2m   Start at [22m 19:04:07
+[2m   Duration [22m 13.38s[2m (transform 3.57s, setup 0ms, import 8.41s, tests 20.44s, environment 7ms)[22m
+
+[34m % [39m[2mCoverage report from [22m[33mv8[39m
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   33.07 |     28.5 |   38.66 |   33.07 |                   
+ src               |   34.01 |    29.31 |   39.71 |    33.9 |                   
+  ...ing-review.ts |       0 |        0 |       0 |       0 | 43-443            
+  ast-index.ts     |   70.19 |     49.1 |   78.43 |   71.47 | ...74-776,785,792 
+  automated-pm.ts  |       0 |        0 |       0 |       0 | 61-540            
+  ax-agent-sdk.ts  |    3.27 |        0 |       0 |    3.33 | 32-226,239-249    
+  ax-programs.ts   |    4.21 |        0 |       0 |    4.21 | 149-1169          
+  cache.ts         |   78.74 |     65.9 |   86.95 |   78.68 | ...97-100,196-239 
+  ...ity-ledger.ts |   91.66 |     86.2 |     100 |   91.48 | ...89-491,497-499 
+  claude-usage.ts  |       0 |        0 |       0 |       0 | 44-389            
+  complexity.ts    |   48.77 |    49.74 |    62.5 |    48.6 | ...1020,1100-1313 
+  config.ts        |     100 |    97.77 |     100 |     100 | 228               
+  context.ts       |   62.04 |    52.65 |   63.15 |   63.42 | ...1190,1195,1199 
+  dashboard.ts     |       0 |        0 |       0 |       0 | 27-454            
+  ...on-tracker.ts |   56.89 |       60 |   53.84 |   57.27 | ...80-391,433-568 
+  dual-logger.ts   |   77.96 |    63.33 |    92.3 |   81.81 | ...92,146,170-176 
+  ...ency-tools.ts |   97.91 |       90 |     100 |   97.72 | 129               
+  ...x-patterns.ts |   77.31 |    71.85 |   83.33 |   78.04 | ...47,565,699-778 
+  experiment.ts    |       0 |        0 |       0 |       0 | 24-327            
+  fast-path.ts     |   81.42 |    63.15 |   83.33 |   83.58 | ...31,141,161,196 
+  ...ck-metrics.ts |   91.22 |    74.86 |   81.08 |   91.05 | ...78,762,806-810 
+  file-tracker.ts  |   97.48 |    88.33 |     100 |   97.43 | ...09,570,576,582 
+  git.ts           |   16.86 |    21.27 |   21.05 |   16.96 | ...77-525,565-572 
+  grind-events.ts  |       0 |        0 |       0 |       0 | 17-628            
+  ...-extractor.ts |       0 |        0 |       0 |       0 | 32-446            
+  knowledge.ts     |   93.81 |    88.57 |     100 |   93.54 | ...17,134,146-149 
+  live-metrics.ts  |   48.91 |    47.14 |      40 |   48.91 | ...51-269,291-350 
+  logger.ts        |     100 |    66.66 |     100 |     100 | 16-17             
+  mcp-protocol.ts  |    96.7 |    90.78 |     100 |   96.62 | 175,183,186       
+  mcp-tools.ts     |     100 |      100 |     100 |     100 |                   
+  merge-queue.ts   |   10.85 |    10.52 |   28.33 |   10.16 | ...,739-1043,1071 
+  meta-tasks.ts    |       0 |        0 |       0 |       0 | 15-325            
+  ...-dashboard.ts |       0 |        0 |       0 |       0 | 43-468            
+  metrics.ts       |       0 |        0 |       0 |       0 | 32-805            
+  oracle.ts        |   25.42 |    36.84 |      20 |   24.52 | ...19-352,360-365 
+  orchestrator.ts  |       0 |        0 |       0 |       0 | 110-2185          
+  output.ts        |   76.52 |    60.71 |   94.28 |   78.57 | ...56-557,567-571 
+  persistence.ts   |   32.72 |    17.43 |   47.74 |   32.62 | ...1195,1211-1289 
+  plan-link.ts     |       0 |        0 |       0 |       0 | 13-415            
+  plan-parser.ts   |   96.12 |    93.42 |     100 |   97.27 | 84-88,326         
+  ...t-variants.ts |       0 |        0 |       0 |       0 | 41-357            
+  rate-limit.ts    |    52.1 |    32.36 |   63.46 |   52.04 | ...36-939,948-951 
+  review.ts        |       0 |        0 |       0 |       0 | 99-536            
+  self-tuning.ts   |    57.6 |    39.18 |   77.77 |    57.6 | ...17-321,327-345 
+  server.ts        |       0 |        0 |       0 |       0 | 33-505            
+  task-analyzer.ts |   94.69 |    94.78 |     100 |   95.83 | ...07,281,328,343 
+  ...d-analyzer.ts |    86.5 |     77.1 |   89.65 |   87.58 | ...43,462,472-480 
+  ...decomposer.ts |       0 |        0 |       0 |       0 | 19-206            
+  ...e-patterns.ts |       0 |        0 |       0 |       0 | 14-789            
+  task-planner.ts  |       0 |        0 |       0 |       0 | 36-1079           
+  ...-scheduler.ts |   97.31 |       89 |     100 |   98.11 | 343-349,430       
+  task-schema.ts   |   70.31 |    71.42 |   66.66 |   70.49 | ...60,173,401-447 
+  ...-validator.ts |       0 |        0 |       0 |       0 | 41-506            
+  task.ts          |   41.82 |    22.18 |   44.14 |   42.94 | ...1535,1564-1748 
+  ts-analysis.ts   |   35.13 |    22.22 |      50 |   37.31 | ...43-258,271-301 
+  types.ts         |      25 |        0 |       0 |      25 | 1199-1207         
+  ...cation-cli.ts |       0 |        0 |       0 |       0 | 14-31             
+  verification.ts  |    74.6 |    63.09 |   88.23 |   75.52 | ...00-501,580-641 
+  ...alize-html.ts |       0 |        0 |       0 |       0 | 12-371            
+  visualize.ts     |       0 |        0 |       0 |       0 | 11-347            
+  worker.ts        |       0 |        0 |       0 |       0 | 78-3021           
+  ...ee-manager.ts |       0 |        0 |       0 |       0 | 26-593            
+ src/middleware    |   66.19 |    48.97 |   84.61 |   66.19 |                   
+  ...sage-guard.ts |   66.19 |    48.97 |   84.61 |   66.19 | ...74-288,308-325 
+ ...antic-analyzer |       0 |        0 |       0 |       0 |                   
+  analyzer.ts      |       0 |        0 |       0 |       0 | 16-265            
+  cli.ts           |       0 |        0 |       0 |       0 | 14-156            
+  detectors.ts     |       0 |        0 |       0 |       0 | 9-187             
+  ...-extractor.ts |       0 |        0 |       0 |       0 | 10-167            
+  fixer.ts         |       0 |        0 |       0 |       0 | 10-71             
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  tokenizer.ts     |       0 |      100 |       0 |       0 | 8-19              
+  types.ts         |       0 |        0 |       0 |       0 |                   
+-------------------|---------|----------|---------|---------|-------------------
