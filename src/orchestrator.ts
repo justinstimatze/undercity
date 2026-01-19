@@ -15,8 +15,8 @@
 
 import { execFileSync, execSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, writeFileSync } from "node:fs";
-import { isAbsolute, normalize } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { isAbsolute, join, normalize } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { updateLedger } from "./capability-ledger.js";
 import { type ExperimentManager, getExperimentManager } from "./experiment.js";
@@ -66,6 +66,9 @@ export interface ParallelSoloOptions {
 	maxOpusReviewPasses?: number; // Maximum review passes at opus tier (default: 6)
 	// Worker health monitoring
 	healthCheck?: WorkerHealthConfig;
+	// Repository root directory (default: process.cwd())
+	// CRITICAL: Capture this at CLI invocation time to avoid wrong repo issues
+	repoRoot?: string;
 }
 
 /**
@@ -246,10 +249,14 @@ export class Orchestrator {
 		this.attemptRecovery = healthConfig.attemptRecovery ?? true;
 		this.maxRecoveryAttempts = healthConfig.maxRecoveryAttempts ?? 2;
 
-		this.worktreeManager = new WorktreeManager();
+		// CRITICAL: Capture repo root at CLI invocation time to avoid wrong repo issues
+		// When undercity is installed globally and run from another project, process.cwd()
+		// must be captured here, not later when git commands are executed
+		const repoRoot = options.repoRoot ?? process.cwd();
+		this.worktreeManager = new WorktreeManager({ repoRoot });
 
 		// Check and fix bare repo (can happen due to worktree race conditions)
-		checkAndFixBareRepo();
+		checkAndFixBareRepo(repoRoot);
 
 		// Initialize persistence and trackers
 		this.persistence = new Persistence();
@@ -1678,13 +1685,42 @@ export class Orchestrator {
 		try {
 			execGitInDir(["rebase", "FETCH_HEAD"], worktreePath);
 		} catch (error) {
-			// Abort rebase if it fails
-			try {
-				execGitInDir(["rebase", "--abort"], worktreePath);
-			} catch {
-				// Ignore abort errors
+			const errorStr = String(error);
+
+			// Check if this is a merge conflict that we can try to resolve
+			if (errorStr.includes("conflict") || errorStr.includes("could not apply")) {
+				output.warning(`Rebase conflict for ${taskId}, attempting to resolve...`);
+
+				try {
+					const resolved = await this.attemptRebaseConflictResolution(taskId, worktreePath);
+					if (!resolved) {
+						// Resolution failed, abort and throw
+						try {
+							execGitInDir(["rebase", "--abort"], worktreePath);
+						} catch {
+							// Ignore abort errors
+						}
+						throw new Error(`Rebase failed for ${taskId}: Unable to resolve conflicts`);
+					}
+					output.success(`Resolved rebase conflict for ${taskId}`);
+				} catch (resolveError) {
+					// Resolution failed, abort and throw
+					try {
+						execGitInDir(["rebase", "--abort"], worktreePath);
+					} catch {
+						// Ignore abort errors
+					}
+					throw new Error(`Rebase failed for ${taskId}: ${resolveError}`);
+				}
+			} else {
+				// Not a conflict, abort and throw
+				try {
+					execGitInDir(["rebase", "--abort"], worktreePath);
+				} catch {
+					// Ignore abort errors
+				}
+				throw new Error(`Rebase failed for ${taskId}: ${error}`);
 			}
-			throw new Error(`Rebase failed for ${taskId}: ${error}`);
 		}
 
 		// Run verification after rebase with fix loop (catches any merge issues)
@@ -1787,6 +1823,92 @@ export class Orchestrator {
 				}
 			}
 			throw new Error(`Merge into local main failed for ${taskId}: ${mergeError}`);
+		}
+	}
+
+	/**
+	 * Attempt to resolve rebase conflicts by spawning an agent
+	 * Returns true if conflicts were resolved and rebase continued successfully
+	 */
+	private async attemptRebaseConflictResolution(taskId: string, worktreePath: string): Promise<boolean> {
+		// Get list of conflicted files
+		const statusOutput = execGitInDir(["status", "--porcelain"], worktreePath);
+		const conflictedFiles = statusOutput
+			.split("\n")
+			.filter((line) => line.startsWith("UU") || line.startsWith("AA") || line.startsWith("DU") || line.startsWith("UD"))
+			.map((line) => line.slice(3).trim());
+
+		if (conflictedFiles.length === 0) {
+			output.warning(`No conflicted files found for ${taskId}, rebase may have failed for another reason`);
+			return false;
+		}
+
+		output.info(`Found ${conflictedFiles.length} conflicted file(s) for ${taskId}: ${conflictedFiles.join(", ")}`);
+
+		// Read the conflicted file contents
+		const conflictDetails: string[] = [];
+		for (const file of conflictedFiles.slice(0, 3)) {
+			// Limit to first 3 files
+			try {
+				const content = readFileSync(join(worktreePath, file), "utf-8");
+				// Only include if it has conflict markers
+				if (content.includes("<<<<<<<") && content.includes(">>>>>>>")) {
+					conflictDetails.push(`\n--- ${file} ---\n${content.slice(0, 3000)}`); // Limit content size
+				}
+			} catch {
+				// File might not be readable, skip
+			}
+		}
+
+		const resolvePrompt = `REBASE CONFLICT - You need to resolve merge conflicts in these files:
+
+Conflicted files: ${conflictedFiles.join(", ")}
+
+${conflictDetails.length > 0 ? `Conflict details:${conflictDetails.join("\n")}` : ""}
+
+INSTRUCTIONS:
+1. Read each conflicted file
+2. Understand both the incoming changes (HEAD) and the current changes
+3. Edit the files to integrate both sets of changes, removing ALL conflict markers (<<<<<<<, =======, >>>>>>>)
+4. After resolving all conflicts, run: git add <resolved-files>
+5. Then run: git rebase --continue
+
+Focus ONLY on resolving the conflicts. Integrate changes logically - do not just pick one side.
+
+Working directory: ${worktreePath}`;
+
+		output.info(`Spawning conflict resolution agent for ${taskId}...`);
+
+		try {
+			for await (const message of query({
+				prompt: resolvePrompt,
+				options: {
+					model: "claude-opus-4-5-20251101", // Use Opus for complex conflict resolution
+					permissionMode: "bypassPermissions",
+					allowDangerouslySkipPermissions: true,
+					maxTurns: 10, // Allow more turns for complex resolutions
+					settingSources: ["project"],
+					cwd: worktreePath,
+				},
+			})) {
+				if (message.type === "result" && message.subtype === "success") {
+					output.info(`Conflict resolution agent completed for ${taskId}`);
+				}
+			}
+
+			// Check if rebase is still in progress (failed to continue)
+			try {
+				execGitInDir(["rev-parse", "--verify", "REBASE_HEAD"], worktreePath);
+				// REBASE_HEAD exists, rebase still in progress - agent didn't complete it
+				output.warning(`Rebase still in progress for ${taskId}, agent may not have completed resolution`);
+				return false;
+			} catch {
+				// REBASE_HEAD doesn't exist, rebase completed successfully
+				return true;
+			}
+		} catch (agentError) {
+			output.warning(`Conflict resolution agent failed for ${taskId}: ${agentError}`);
+			return false;
 		}
 	}
 

@@ -218,8 +218,8 @@ export class WorktreeManager {
 		try {
 			// Check multiple ways to detect git repo
 			const checks = [
-				() => execGit(["rev-parse", "--is-inside-work-tree"]),
-				() => execGit(["rev-parse", "--git-dir"]),
+				() => execGit(["rev-parse", "--is-inside-work-tree"], this.repoRoot),
+				() => execGit(["rev-parse", "--git-dir"], this.repoRoot),
 				() => statSync(join(this.repoRoot, ".git")).isDirectory(),
 			];
 
@@ -277,14 +277,14 @@ export class WorktreeManager {
 			// Enable worktreeConfig extension if not already enabled
 			// This allows worktree-specific config without affecting main repo
 			try {
-				execGit(["config", "extensions.worktreeConfig", "true"]);
+				execGit(["config", "extensions.worktreeConfig", "true"], this.repoRoot);
 			} catch {
 				// Ignore if already enabled
 			}
 
 			// Create the worktree with a new branch from local main HEAD
 			gitLogger.debug({ baseBranch }, "Creating worktree from local main HEAD");
-			execGit(["worktree", "add", "-b", branchName, worktreePath, baseBranch]);
+			execGit(["worktree", "add", "-b", branchName, worktreePath, baseBranch], this.repoRoot);
 
 			// Install dependencies in the worktree so verification can run
 			gitLogger.info({ sessionId, worktreePath }, "Installing dependencies in worktree");
@@ -398,7 +398,7 @@ export class WorktreeManager {
 			removeArgs.push(worktreePath);
 
 			try {
-				execGit(removeArgs);
+				execGit(removeArgs, this.repoRoot);
 			} catch (error) {
 				// If worktree remove fails, try to clean up manually
 				if (worktreePathExists(worktreePath)) {
@@ -409,14 +409,14 @@ export class WorktreeManager {
 
 			// Clean up the branch
 			try {
-				execGit(["branch", "-D", branchName]);
+				execGit(["branch", "-D", branchName], this.repoRoot);
 			} catch (error) {
 				gitLogger.warn({ sessionId, branchName, error: String(error) }, "Failed to delete worktree branch");
 			}
 
 			// Prune worktree references
 			try {
-				execGit(["worktree", "prune"]);
+				execGit(["worktree", "prune"], this.repoRoot);
 			} catch (error) {
 				gitLogger.warn({ error: String(error) }, "Failed to prune worktree references");
 			}
@@ -434,7 +434,7 @@ export class WorktreeManager {
 	 */
 	listWorktrees(): Array<{ path: string; branch: string; commit: string }> {
 		try {
-			const output = execGit(["worktree", "list", "--porcelain"]);
+			const output = execGit(["worktree", "list", "--porcelain"], this.repoRoot);
 			if (!output.trim()) {
 				return [];
 			}

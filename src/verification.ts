@@ -430,8 +430,17 @@ export async function verifyWork(
 			});
 			feedback.push("✓ Tests passed");
 		} catch (error) {
-			passed = false;
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
+
+			// Check if failure is due to no test files existing - treat as pass
+			// vitest: "No test files found, exiting with code 1"
+			// jest: "No tests found"
+			if (output.includes("No test files found") || output.includes("No tests found")) {
+				feedback.push("✓ Tests passed (no test files)");
+				return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
+			}
+
+			passed = false;
 
 			// Extract failed test info
 			const failedMatch = output.match(/(\d+) failed/);

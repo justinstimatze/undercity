@@ -167,9 +167,30 @@ function findCorrectPath(incorrectPath: string, repoRoot: string): string | null
 }
 
 /**
- * Validate a single path reference
+ * Known output directories that tasks are allowed to create
+ * These are directories where agents create output (research docs, etc.)
  */
-function validatePath(path: string, repoRoot: string): ValidationIssue | null {
+const ALLOWED_OUTPUT_DIRECTORIES = [
+	"docs/research",
+	"docs/design",
+	".undercity/research",
+	"research",
+	"output",
+	"generated",
+];
+
+/**
+ * Check if a path is in an allowed output directory
+ */
+function isInAllowedOutputDir(path: string): boolean {
+	return ALLOWED_OUTPUT_DIRECTORIES.some((dir) => path.startsWith(dir) || path.startsWith(`./${dir}`));
+}
+
+/**
+ * Validate a single path reference
+ * @param isCreationTask If true, treat missing directories as warnings (task will create them)
+ */
+function validatePath(path: string, repoRoot: string, isCreationTask: boolean = false): ValidationIssue | null {
 	const fullPath = join(repoRoot, path);
 	const parentDir = dirname(fullPath);
 
@@ -179,6 +200,16 @@ function validatePath(path: string, repoRoot: string): ValidationIssue | null {
 	if (hasExtension) {
 		// For files, check if parent directory exists
 		if (!existsSync(parentDir)) {
+			// If this is a creation task or in an allowed output directory, treat as warning
+			if (isCreationTask || isInAllowedOutputDir(path)) {
+				return {
+					type: "missing_directory",
+					severity: "warning",
+					message: `Directory "${dirname(path)}" does not exist yet`,
+					suggestion: `Task will create this directory (allowed output path)`,
+				};
+			}
+
 			// Try to find the correct path
 			const correctPath = findCorrectPath(path, repoRoot);
 
@@ -237,6 +268,26 @@ function validatePath(path: string, repoRoot: string): ValidationIssue | null {
 }
 
 /**
+ * Patterns that indicate a task is creating new files/content
+ */
+const CREATION_TASK_PATTERNS = [
+	/^\[research\]/i,
+	/\bresearch\b/i,
+	/\bcreate\b/i,
+	/\bgenerate\b/i,
+	/\bwrite\s+(?:a\s+)?(?:new\s+)?(?:design|doc|report|spec)/i,
+	/\bsave\s+(?:to|in)\b/i,
+	/\boutput\s+(?:to|in)\b/i,
+];
+
+/**
+ * Check if a task objective indicates file/directory creation
+ */
+function isCreationTask(objective: string): boolean {
+	return CREATION_TASK_PATTERNS.some((pattern) => pattern.test(objective));
+}
+
+/**
  * Validate a task objective before execution
  * If autoFix is true, will attempt to correct invalid paths
  */
@@ -250,8 +301,11 @@ export function validateTask(
 	let correctedObjective = objective;
 	let hasCorrections = false;
 
+	// Detect if this is a creation/research task that may need to create directories
+	const isCreation = isCreationTask(objective);
+
 	for (const path of extractedPaths) {
-		const issue = validatePath(path, repoRoot);
+		const issue = validatePath(path, repoRoot, isCreation);
 		if (issue) {
 			issues.push(issue);
 

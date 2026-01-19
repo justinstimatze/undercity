@@ -25,6 +25,115 @@ import { sessionLogger } from "./logger.js";
 const logger = sessionLogger.child({ module: "ax-programs" });
 
 // ============================================================================
+// Project Language Detection
+// ============================================================================
+
+/**
+ * Detected project language and framework information
+ */
+export interface ProjectContext {
+	language: "typescript" | "javascript" | "python" | "go" | "rust" | "unknown";
+	framework?: string;
+	packageManager?: string;
+	fileExtensions: string[];
+}
+
+/**
+ * Detect project language from common project files
+ * @param cwd Working directory to check (defaults to process.cwd())
+ */
+export function detectProjectLanguage(cwd: string = process.cwd()): ProjectContext {
+	// TypeScript/JavaScript
+	if (existsSync(join(cwd, "package.json"))) {
+		const hasTS =
+			existsSync(join(cwd, "tsconfig.json")) ||
+			existsSync(join(cwd, "tsconfig.build.json")) ||
+			existsSync(join(cwd, "src/index.ts"));
+
+		// Detect package manager
+		let packageManager = "npm";
+		if (existsSync(join(cwd, "pnpm-lock.yaml"))) packageManager = "pnpm";
+		else if (existsSync(join(cwd, "yarn.lock"))) packageManager = "yarn";
+		else if (existsSync(join(cwd, "bun.lockb"))) packageManager = "bun";
+
+		// Detect framework
+		let framework: string | undefined;
+		try {
+			const pkg = JSON.parse(readFileSync(join(cwd, "package.json"), "utf-8"));
+			const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+			if (deps.next) framework = "Next.js";
+			else if (deps.react) framework = "React";
+			else if (deps.vue) framework = "Vue";
+			else if (deps.express) framework = "Express";
+			else if (deps["@nestjs/core"]) framework = "NestJS";
+		} catch {
+			// Ignore package.json parse errors
+		}
+
+		return {
+			language: hasTS ? "typescript" : "javascript",
+			framework,
+			packageManager,
+			fileExtensions: hasTS ? [".ts", ".tsx", ".js", ".jsx"] : [".js", ".jsx"],
+		};
+	}
+
+	// Python
+	if (
+		existsSync(join(cwd, "requirements.txt")) ||
+		existsSync(join(cwd, "pyproject.toml")) ||
+		existsSync(join(cwd, "setup.py"))
+	) {
+		let framework: string | undefined;
+		if (existsSync(join(cwd, "manage.py"))) framework = "Django";
+		else if (existsSync(join(cwd, "app.py")) || existsSync(join(cwd, "main.py"))) {
+			// Could be FastAPI, Flask, etc.
+		}
+
+		return {
+			language: "python",
+			framework,
+			packageManager: existsSync(join(cwd, "poetry.lock")) ? "poetry" : "pip",
+			fileExtensions: [".py"],
+		};
+	}
+
+	// Go
+	if (existsSync(join(cwd, "go.mod"))) {
+		return {
+			language: "go",
+			packageManager: "go mod",
+			fileExtensions: [".go"],
+		};
+	}
+
+	// Rust
+	if (existsSync(join(cwd, "Cargo.toml"))) {
+		return {
+			language: "rust",
+			packageManager: "cargo",
+			fileExtensions: [".rs"],
+		};
+	}
+
+	return {
+		language: "unknown",
+		fileExtensions: [],
+	};
+}
+
+/**
+ * Format project context as a string for prompts
+ */
+export function formatProjectContext(ctx: ProjectContext): string {
+	const parts = [`Language: ${ctx.language}`];
+	if (ctx.framework) parts.push(`Framework: ${ctx.framework}`);
+	if (ctx.packageManager) parts.push(`Package Manager: ${ctx.packageManager}`);
+	parts.push(`File Extensions: ${ctx.fileExtensions.join(", ")}`);
+	return parts.join("\n");
+}
+
+// ============================================================================
 // Program Signatures
 // ============================================================================
 
@@ -44,13 +153,14 @@ export const AtomicitySignature = AxSignature.create(
 
 /**
  * Task decomposition signature
- * Input: complex task
+ * Input: complex task + project context
  * Output: list of atomic subtasks
  */
 export const DecompositionSignature = AxSignature.create(
-	`task:string "The complex task to decompose" ->
+	`task:string "The complex task to decompose",
+	projectContext:string "Project language, framework, and file extensions" ->
 	reasoning:string "Analysis of what needs to be done and why this decomposition makes sense",
-	subtasks:string[] "List of atomic subtask objectives with file paths"`,
+	subtasks:string[] "List of atomic subtask objectives with file paths using correct extensions"`,
 );
 
 /**
@@ -179,14 +289,23 @@ export function createTaskDecomposer(): AxGen {
 	const gen = new AxGen(DecompositionSignature);
 	gen.setInstruction(`You break complex tasks into atomic subtasks.
 
+CRITICAL: Use the projectContext to determine the correct language and file extensions!
+- If project is TypeScript, use .ts/.tsx extensions (NOT .py)
+- If project is Python, use .py extensions (NOT .ts)
+- If project is Go, use .go extensions
+- Match the project's conventions, not generic examples
+
 RULES:
 1. Each subtask should modify 1 file (2-3 max for tightly coupled changes)
 2. INCLUDE FILE PATH in each objective: "In src/auth.ts, add validation..."
 3. Make objectives specific and unambiguous
 4. Create 2-5 subtasks (fewer is better)
 5. Order by dependency (prerequisites first)
+6. USE CORRECT FILE EXTENSIONS based on projectContext
 
+EXAMPLES (for TypeScript projects):
 GOOD: "In src/types.ts, add the UserRole enum with values ADMIN, USER, GUEST"
+BAD: "In types.py, add UserRole class" (wrong language!)
 BAD: "Update the types" (which file? what types?)
 
 Think through the task structure in the reasoning field before listing subtasks.`);
@@ -480,10 +599,14 @@ export async function checkAtomicityAx(
 /**
  * Run task decomposition using Ax program
  * Loads successful examples as few-shot demos for self-improvement
+ * @param task The task to decompose
+ * @param stateDir State directory (default: .undercity)
+ * @param cwd Working directory for project detection (default: process.cwd())
  */
 export async function decomposeTaskAx(
 	task: string,
 	stateDir: string = ".undercity",
+	cwd: string = process.cwd(),
 ): Promise<{
 	subtasks: string[];
 	reasoning: string;
@@ -493,7 +616,13 @@ export async function decomposeTaskAx(
 		// Load program with examples from past successful runs
 		const decomposer = createTaskDecomposerWithExamples(stateDir);
 
-		const result = await decomposer.forward(ai, { task });
+		// Detect project language to provide context
+		const projectCtx = detectProjectLanguage(cwd);
+		const projectContext = formatProjectContext(projectCtx);
+
+		logger.debug({ task: task.slice(0, 50), projectContext }, "Running decomposition with project context");
+
+		const result = await decomposer.forward(ai, { task, projectContext });
 
 		const output = {
 			subtasks: Array.isArray(result.subtasks) ? result.subtasks.map(String) : [],
