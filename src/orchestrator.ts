@@ -22,6 +22,7 @@ import { updateLedger } from "./capability-ledger.js";
 import { type ExperimentManager, getExperimentManager } from "./experiment.js";
 import { FileTracker } from "./file-tracker.js";
 import { checkAndFixBareRepo } from "./git.js";
+import { sessionLogger } from "./logger.js";
 import * as output from "./output.js";
 import { Persistence, readTaskAssignment, writeTaskAssignment } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
@@ -1378,12 +1379,28 @@ export class Orchestrator {
 
 	/**
 	 * Cleanup worktrees after execution
+	 * Preserves worktrees with uncommitted work or failed merges
 	 */
 	private async cleanupWorktrees(results: ParallelTaskResult[]): Promise<void> {
 		output.progress("Cleaning up worktrees...");
+		const preserved: string[] = [];
+
 		for (const r of results) {
 			if (r.taskId && r.worktreePath) {
 				try {
+					// Check if worktree has uncommitted work worth preserving
+					const hasUncommittedWork = this.checkWorktreeHasWork(r.worktreePath);
+					const mergeFailed = r.result?.status === "complete" && !r.merged;
+
+					if (hasUncommittedWork || mergeFailed) {
+						preserved.push(r.worktreePath);
+						sessionLogger.info(
+							{ taskId: r.taskId, worktreePath: r.worktreePath, hasUncommittedWork, mergeFailed },
+							"Preserving worktree with unsaved work",
+						);
+						continue; // Don't remove
+					}
+
 					this.worktreeManager.removeWorktree(r.taskId, true);
 				} catch (err) {
 					if (this.verbose) {
@@ -1391,6 +1408,30 @@ export class Orchestrator {
 					}
 				}
 			}
+		}
+
+		if (preserved.length > 0) {
+			output.warning(`Preserved ${preserved.length} worktree(s) with unsaved work:`);
+			for (const path of preserved) {
+				output.info(`  ${path}`);
+			}
+			output.info("To recover: cd <path> && git status");
+		}
+	}
+
+	/**
+	 * Check if a worktree has uncommitted work worth preserving
+	 */
+	private checkWorktreeHasWork(worktreePath: string): boolean {
+		try {
+			// Check for any changes (staged, unstaged, or untracked)
+			const status = execFileSync("git", ["status", "--porcelain"], {
+				cwd: worktreePath,
+				encoding: "utf-8",
+			}).trim();
+			return status.length > 0;
+		} catch {
+			return false; // Can't check, assume no work
 		}
 	}
 

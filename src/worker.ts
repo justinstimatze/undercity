@@ -24,6 +24,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
+import { type PMResearchResult, pmResearch } from "./automated-pm.js";
 import { recordPlanCreationOutcome, recordPlanReviewOutcome } from "./ax-programs.js";
 import {
 	adjustModelFromMetrics,
@@ -35,7 +36,6 @@ import { type ContextBriefing, type ContextMode, prepareContext } from "./contex
 import { captureDecision, parseAgentOutputForDecisions, updateDecisionOutcome } from "./decision-tracker.js";
 import { dualLogger } from "./dual-logger.js";
 import { generateToolsPrompt } from "./efficiency-tools.js";
-import { pmResearch, type PMResearchResult } from "./automated-pm.js";
 import {
 	clearPendingError,
 	formatFixSuggestionsForPrompt,
@@ -1210,11 +1210,7 @@ export class TaskWorker {
 	 * Run PM-based research for research tasks
 	 * Uses automated PM to research topic, write design doc, and generate follow-up tasks
 	 */
-	private async runPMResearchTask(
-		task: string,
-		taskId: string,
-		startTime: number,
-	): Promise<TaskResult> {
+	private async runPMResearchTask(task: string, taskId: string, startTime: number): Promise<TaskResult> {
 		output.workerPhase(taskId, "pm-research");
 		sessionLogger.info({ taskId, task }, "Running PM-based research");
 
@@ -1254,13 +1250,18 @@ export class TaskWorker {
 						tags: proposal.tags,
 					});
 					addedTasks.push(newTask.id);
-					sessionLogger.info({ taskId: newTask.id, objective: proposal.objective }, "Added follow-up task from PM research");
+					sessionLogger.info(
+						{ taskId: newTask.id, objective: proposal.objective },
+						"Added follow-up task from PM research",
+					);
 				} catch (error) {
 					sessionLogger.warn({ error: String(error), proposal }, "Failed to add task proposal");
 				}
 			}
 
-			output.info(`PM research complete: ${result.findings.length} findings, ${addedTasks.length} tasks added`, { taskId });
+			output.info(`PM research complete: ${result.findings.length} findings, ${addedTasks.length} tasks added`, {
+				taskId,
+			});
 
 			// Commit the research output
 			let commitSha: string | undefined;
@@ -1292,10 +1293,7 @@ export class TaskWorker {
 						confidence: 0.8,
 						category: "fact" as const,
 					})),
-					nextSteps: [
-						...result.recommendations,
-						...addedTasks.map((id) => `Task ${id} added to board`),
-					],
+					nextSteps: [...result.recommendations, ...addedTasks.map((id) => `Task ${id} added to board`)],
 					sources: result.sources,
 				},
 			};
