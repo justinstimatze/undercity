@@ -81,7 +81,7 @@ export {
 	MCPProtocolHandler,
 } from "./mcp-protocol.js";
 // MCP Tools
-export { knowledgeTools, type MCPTool } from "./mcp-tools.js";
+export { knowledgeTools, type MCPTool, oracleTools } from "./mcp-tools.js";
 // Merge queue (extracted from git.ts)
 export { MergeQueue } from "./merge-queue.js";
 // Metrics dashboard

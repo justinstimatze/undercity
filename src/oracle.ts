@@ -283,6 +283,36 @@ export class UndercityOracle {
 	}
 
 	/**
+	 * Search oracle cards by keyword or category
+	 * @param query Search keywords (case-insensitive, matches text or loreContext)
+	 * @param category Optional category filter
+	 * @returns Array of matching oracle cards
+	 */
+	searchCards(query: string, category?: OracleCard["category"]): OracleCard[] {
+		let searchableCards = ORACLE_DECK;
+
+		// Filter by category if specified
+		if (category) {
+			searchableCards = searchableCards.filter((card) => card.category === category);
+		}
+
+		// If no query, return all cards (optionally filtered by category)
+		if (!query || query.trim() === "") {
+			return searchableCards;
+		}
+
+		// Normalize query for case-insensitive matching
+		const normalizedQuery = query.toLowerCase().trim();
+		const keywords = normalizedQuery.split(/\s+/);
+
+		// Filter cards that match any keyword in text or loreContext
+		return searchableCards.filter((card) => {
+			const searchText = `${card.text} ${card.loreContext || ""}`.toLowerCase();
+			return keywords.some((keyword) => searchText.includes(keyword));
+		});
+	}
+
+	/**
 	 * Format card for console display
 	 */
 	formatCard(card: OracleCard): string {

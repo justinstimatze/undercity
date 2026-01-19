@@ -22,7 +22,8 @@ import {
 	markLearningsUsed,
 } from "./knowledge.js";
 import { serverLogger } from "./logger.js";
-import { knowledgeTools, type MCPTool } from "./mcp-tools.js";
+import { knowledgeTools, type MCPTool, oracleTools } from "./mcp-tools.js";
+import { type OracleCard, UndercityOracle } from "./oracle.js";
 
 const _MCP_VERSION = "2025-11-25";
 const JSONRPC_VERSION = "2.0";
@@ -75,16 +76,18 @@ export const JSONRPCErrorCode = {
  */
 export class MCPProtocolHandler {
 	private stateDir: string;
+	private oracle: UndercityOracle;
 
 	constructor(stateDir: string = ".undercity") {
 		this.stateDir = stateDir;
+		this.oracle = new UndercityOracle();
 	}
 
 	/**
 	 * List all available tools (MCP tools/list method)
 	 */
 	listTools(): MCPTool[] {
-		return knowledgeTools;
+		return [...knowledgeTools, ...oracleTools];
 	}
 
 	/**
@@ -102,6 +105,8 @@ export class MCPProtocolHandler {
 				return this.handleKnowledgeStats(params);
 			case "knowledge_mark_used":
 				return this.handleKnowledgeMarkUsed(params);
+			case "oracle_search":
+				return this.handleOracleSearch(params);
 			default:
 				throw new Error(`Unknown tool: ${toolName}`);
 		}
@@ -247,6 +252,38 @@ export class MCPProtocolHandler {
 			success: true,
 			updated: learningIds.length,
 			taskSuccess,
+		};
+	}
+
+	/**
+	 * Handle oracle search request
+	 */
+	private handleOracleSearch(params: Record<string, unknown>): unknown {
+		const { query, category } = params;
+
+		if (typeof query !== "string") {
+			throw new Error("Invalid params: query must be a string");
+		}
+
+		// Validate category if provided
+		if (category !== undefined) {
+			const validCategories = ["questioning", "action", "perspective", "disruption", "exploration"];
+			if (typeof category !== "string" || !validCategories.includes(category)) {
+				throw new Error(`Invalid params: category must be one of: ${validCategories.join(", ")}`);
+			}
+		}
+
+		const cards = this.oracle.searchCards(query, category as OracleCard["category"] | undefined);
+
+		return {
+			query,
+			category: category ?? null,
+			count: cards.length,
+			cards: cards.map((card) => ({
+				text: card.text,
+				category: card.category,
+				loreContext: card.loreContext ?? null,
+			})),
 		};
 	}
 

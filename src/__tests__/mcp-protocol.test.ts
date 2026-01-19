@@ -46,8 +46,18 @@ describe("mcp-protocol.ts", () => {
 		it("should list all available tools", () => {
 			const tools = handler.listTools();
 
-			expect(tools).toEqual(knowledgeTools);
-			expect(tools.length).toBe(4);
+			// Should include both knowledge tools and oracle tools
+			expect(tools.length).toBe(5); // 4 knowledge + 1 oracle
+
+			// Verify knowledge tools are included
+			const knowledgeToolNames = knowledgeTools.map((t) => t.name);
+			const toolNames = tools.map((t) => t.name);
+			for (const name of knowledgeToolNames) {
+				expect(toolNames).toContain(name);
+			}
+
+			// Verify oracle tool is included
+			expect(toolNames).toContain("oracle_search");
 		});
 
 		it("should include knowledge_search tool", () => {

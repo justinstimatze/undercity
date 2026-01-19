@@ -146,6 +146,31 @@ export const knowledgeMarkUsedTool: MCPTool = {
 };
 
 /**
+ * Oracle search tool - Find oracle cards by keyword or category
+ */
+export const oracleSearchTool: MCPTool = {
+	name: "oracle_search",
+	description:
+		"Search the Undercity Oracle deck for wisdom cards by keyword or category. Oracle cards provide oblique strategies for creative problem-solving.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			query: {
+				type: "string",
+				description: "Search query (keywords to match in card text or context)",
+			},
+			category: {
+				type: "string",
+				enum: ["questioning", "action", "perspective", "disruption", "exploration"],
+				description:
+					"Optional category filter: questioning (challenge assumptions), action (direct interventions), perspective (shift viewpoints), disruption (break patterns), exploration (discover possibilities)",
+			},
+		},
+		required: ["query"],
+	},
+};
+
+/**
  * All available knowledge tools
  */
 export const knowledgeTools: MCPTool[] = [
@@ -154,3 +179,8 @@ export const knowledgeTools: MCPTool[] = [
 	knowledgeStatsTool,
 	knowledgeMarkUsedTool,
 ];
+
+/**
+ * All available oracle tools
+ */
+export const oracleTools: MCPTool[] = [oracleSearchTool];
