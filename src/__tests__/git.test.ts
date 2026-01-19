@@ -585,7 +585,180 @@ describe("MergeQueue additional tests", () => {
 	});
 
 	describe("queue status filtering", () => {
-		it("can filter items by status", () => {
+		// ZERO: Empty queue - no items to filter
+		it("handles filtering on empty queue", () => {
+			const queue = new MergeQueue();
+			const allItems = queue.getQueue();
+
+			const pendingItems = allItems.filter((i) => i.status === "pending");
+			const conflictItems = allItems.filter((i) => i.status === "conflict");
+			const mergedItems = allItems.filter((i) => i.status === "complete");
+
+			expect(pendingItems).toHaveLength(0);
+			expect(conflictItems).toHaveLength(0);
+			expect(mergedItems).toHaveLength(0);
+		});
+
+		// ONE: Single item filtering
+		it("filters single item by pending status", () => {
+			const queue = new MergeQueue();
+			queue.add("branch1", "t1", "a1");
+
+			const allItems = queue.getQueue();
+			const pendingItems = allItems.filter((i) => i.status === "pending");
+
+			expect(pendingItems).toHaveLength(1);
+			expect(pendingItems[0].branch).toBe("branch1");
+		});
+
+		it("filters single item by conflict status", () => {
+			const queue = new MergeQueue();
+			const item = queue.add("branch1", "t1", "a1");
+			item.status = "conflict";
+
+			const allItems = queue.getQueue();
+			const conflictItems = allItems.filter((i) => i.status === "conflict");
+
+			expect(conflictItems).toHaveLength(1);
+			expect(conflictItems[0].branch).toBe("branch1");
+		});
+
+		it("returns empty result when single item doesn't match filter", () => {
+			const queue = new MergeQueue();
+			const item = queue.add("branch1", "t1", "a1");
+			item.status = "pending";
+
+			const allItems = queue.getQueue();
+			const conflictItems = allItems.filter((i) => i.status === "conflict");
+			const testFailedItems = allItems.filter((i) => i.status === "test_failed");
+
+			expect(conflictItems).toHaveLength(0);
+			expect(testFailedItems).toHaveLength(0);
+		});
+
+		// TWO-MAX: Multiple items with various statuses
+		it("filters multiple items by different statuses", () => {
+			const queue = new MergeQueue();
+			const item1 = queue.add("branch1", "t1", "a1");
+			const item2 = queue.add("branch2", "t2", "a2");
+			const item3 = queue.add("branch3", "t3", "a3");
+			const item4 = queue.add("branch4", "t4", "a4");
+
+			item1.status = "pending";
+			item2.status = "conflict";
+			item3.status = "test_failed";
+			item4.status = "complete";
+
+			const allItems = queue.getQueue();
+			const pendingItems = allItems.filter((i) => i.status === "pending");
+			const conflictItems = allItems.filter((i) => i.status === "conflict");
+			const testFailedItems = allItems.filter((i) => i.status === "test_failed");
+			const completeItems = allItems.filter((i) => i.status === "complete");
+
+			expect(pendingItems).toHaveLength(1);
+			expect(conflictItems).toHaveLength(1);
+			expect(testFailedItems).toHaveLength(1);
+			expect(completeItems).toHaveLength(1);
+			expect(pendingItems[0].branch).toBe("branch1");
+			expect(conflictItems[0].branch).toBe("branch2");
+			expect(testFailedItems[0].branch).toBe("branch3");
+			expect(completeItems[0].branch).toBe("branch4");
+		});
+
+		it("filters all items matching same status", () => {
+			const queue = new MergeQueue();
+			const item1 = queue.add("branch1", "t1", "a1");
+			const item2 = queue.add("branch2", "t2", "a2");
+			const item3 = queue.add("branch3", "t3", "a3");
+
+			item1.status = "conflict";
+			item2.status = "conflict";
+			item3.status = "conflict";
+
+			const allItems = queue.getQueue();
+			const conflictItems = allItems.filter((i) => i.status === "conflict");
+
+			expect(conflictItems).toHaveLength(3);
+			expect(conflictItems.map((i) => i.branch)).toEqual(["branch1", "branch2", "branch3"]);
+		});
+
+		it("filters no items when no matches exist", () => {
+			const queue = new MergeQueue();
+			const item1 = queue.add("branch1", "t1", "a1");
+			const item2 = queue.add("branch2", "t2", "a2");
+			const item3 = queue.add("branch3", "t3", "a3");
+
+			item1.status = "pending";
+			item2.status = "pending";
+			item3.status = "pending";
+
+			const allItems = queue.getQueue();
+			const conflictItems = allItems.filter((i) => i.status === "conflict");
+			const testFailedItems = allItems.filter((i) => i.status === "test_failed");
+			const completeItems = allItems.filter((i) => i.status === "complete");
+
+			expect(conflictItems).toHaveLength(0);
+			expect(testFailedItems).toHaveLength(0);
+			expect(completeItems).toHaveLength(0);
+		});
+
+		// All valid status values
+		it("filters by each valid status value", () => {
+			const queue = new MergeQueue();
+			const item1 = queue.add("branch1", "t1", "a1");
+			const item2 = queue.add("branch2", "t2", "a2");
+			const item3 = queue.add("branch3", "t3", "a3");
+			const item4 = queue.add("branch4", "t4", "a4");
+			const item5 = queue.add("branch5", "t5", "a5");
+			const item6 = queue.add("branch6", "t6", "a6");
+			const item7 = queue.add("branch7", "t7", "a7");
+			const item8 = queue.add("branch8", "t8", "a8");
+
+			item1.status = "pending";
+			item2.status = "rebasing";
+			item3.status = "testing";
+			item4.status = "merging";
+			item5.status = "pushing";
+			item6.status = "complete";
+			item7.status = "conflict";
+			item8.status = "test_failed";
+
+			const allItems = queue.getQueue();
+
+			// Each status should match exactly one item
+			expect(allItems.filter((i) => i.status === "pending")).toHaveLength(1);
+			expect(allItems.filter((i) => i.status === "rebasing")).toHaveLength(1);
+			expect(allItems.filter((i) => i.status === "testing")).toHaveLength(1);
+			expect(allItems.filter((i) => i.status === "merging")).toHaveLength(1);
+			expect(allItems.filter((i) => i.status === "pushing")).toHaveLength(1);
+			expect(allItems.filter((i) => i.status === "complete")).toHaveLength(1);
+			expect(allItems.filter((i) => i.status === "conflict")).toHaveLength(1);
+			expect(allItems.filter((i) => i.status === "test_failed")).toHaveLength(1);
+		});
+
+		// Chained filtering operations
+		it("supports multiple chained filters", () => {
+			const queue = new MergeQueue();
+			const item1 = queue.add("branch1", "t1", "a1");
+			const item2 = queue.add("branch2", "t2", "a2");
+			const item3 = queue.add("branch3", "t3", "a3");
+
+			item1.status = "conflict";
+			item1.stepId = "step-a";
+			item2.status = "conflict";
+			item2.stepId = "step-b";
+			item3.status = "pending";
+			item3.stepId = "step-a";
+
+			const allItems = queue.getQueue();
+			const conflictWithStepA = allItems.filter((i) => i.status === "conflict" && i.stepId === "step-a");
+
+			expect(conflictWithStepA).toHaveLength(1);
+			expect(conflictWithStepA[0].branch).toBe("branch1");
+		});
+
+		// Filter state preservation across calls
+		it("preserves queue state across multiple filter calls", () => {
 			const queue = new MergeQueue();
 			const item1 = queue.add("branch1", "t1", "a1");
 			const item2 = queue.add("branch2", "t2", "a2");
@@ -593,7 +766,59 @@ describe("MergeQueue additional tests", () => {
 
 			item1.status = "pending";
 			item2.status = "conflict";
-			item3.status = "merged";
+			item3.status = "test_failed";
+
+			// First filter call
+			let allItems = queue.getQueue();
+			let pendingItems = allItems.filter((i) => i.status === "pending");
+			expect(pendingItems).toHaveLength(1);
+
+			// Second filter call - should get same results
+			allItems = queue.getQueue();
+			pendingItems = allItems.filter((i) => i.status === "pending");
+			expect(pendingItems).toHaveLength(1);
+
+			// Different filter - should work correctly
+			allItems = queue.getQueue();
+			const conflictItems = allItems.filter((i) => i.status === "conflict");
+			expect(conflictItems).toHaveLength(1);
+
+			// Back to pending filter - should still work
+			allItems = queue.getQueue();
+			pendingItems = allItems.filter((i) => i.status === "pending");
+			expect(pendingItems).toHaveLength(1);
+		});
+
+		// Boundary condition: maximum items
+		it("filters correctly with many items (boundary condition)", () => {
+			const queue = new MergeQueue();
+			const itemCount = 50;
+
+			// Add 50 items, alternating statuses
+			for (let i = 0; i < itemCount; i++) {
+				const item = queue.add(`branch${i}`, `t${i}`, `a${i}`);
+				item.status = i % 2 === 0 ? "pending" : "conflict";
+			}
+
+			const allItems = queue.getQueue();
+			const pendingItems = allItems.filter((i) => i.status === "pending");
+			const conflictItems = allItems.filter((i) => i.status === "conflict");
+
+			expect(pendingItems).toHaveLength(25);
+			expect(conflictItems).toHaveLength(25);
+			expect(pendingItems.length + conflictItems.length).toBe(itemCount);
+		});
+
+		// Original simple test case
+		it("can filter items by status (original test)", () => {
+			const queue = new MergeQueue();
+			const item1 = queue.add("branch1", "t1", "a1");
+			const item2 = queue.add("branch2", "t2", "a2");
+			const item3 = queue.add("branch3", "t3", "a3");
+
+			item1.status = "pending";
+			item2.status = "conflict";
+			item3.status = "complete";
 
 			const allItems = queue.getQueue();
 			const pendingItems = allItems.filter((i) => i.status === "pending");
