@@ -2211,12 +2211,30 @@ Return your analysis as JSON in the format specified above.`;
 
 			let retryContext = "";
 			if (this.attempts > 1 && this.lastFeedback) {
-				retryContext = `
+				// Check if agent was using Edit on non-existent file
+				const editOnNewFile =
+					this.consecutiveNoWriteAttempts >= 1 ||
+					this.lastFeedback.includes("Edit") ||
+					this.lastFeedback.includes("does not exist");
+
+				if (editOnNewFile) {
+					retryContext = `
+
+PREVIOUS ATTEMPT FAILED - WRONG TOOL USED:
+${this.lastFeedback}
+
+CRITICAL FIX: The Edit tool CANNOT create new files. For new files, you MUST use the Write tool.
+Steps:
+1. Run: mkdir -p .undercity/research
+2. Use Write tool (not Edit) to create ${outputPath} with your findings`;
+				} else {
+					retryContext = `
 
 PREVIOUS ATTEMPT FEEDBACK:
 ${this.lastFeedback}
 
 Please provide more detailed findings and ensure the markdown file is written.`;
+				}
 			}
 
 			prompt = `You are a research assistant. Your task is to gather information and document findings.
