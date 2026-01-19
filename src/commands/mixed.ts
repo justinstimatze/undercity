@@ -65,6 +65,7 @@ export const mixedCommands: CommandModule = {
 			.option("--max-opus-review-passes <n>", "Maximum review passes at opus tier (default: 6)")
 			.option("--dry-run", "Show what would execute without running tasks")
 			.option("--push", "Push to remote after successful merge (default: off)")
+			.option("--duration <time>", "Auto-drain after duration (e.g., 6h, 30m)")
 			.action((options: GrindOptions) => handleGrind(options));
 
 		// Limits command - quick snapshot of usage (use 'watch' for live monitoring)

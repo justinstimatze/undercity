@@ -18,6 +18,52 @@ import type { LastAttemptContext } from "../task.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/**
+ * Parse duration string (e.g., "6h", "30m", "2.5h") into milliseconds
+ * Returns null if invalid format
+ */
+function parseDuration(duration: string): number | null {
+	const match = duration.match(/^(\d+(?:\.\d+)?)(h|m|s)$/i);
+	if (!match) {
+		return null;
+	}
+
+	const value = Number.parseFloat(match[1]);
+	const unit = match[2].toLowerCase();
+
+	switch (unit) {
+		case "h":
+			return value * 60 * 60 * 1000;
+		case "m":
+			return value * 60 * 1000;
+		case "s":
+			return value * 1000;
+		default:
+			return null;
+	}
+}
+
+/**
+ * Format milliseconds into human-readable duration
+ */
+function formatDuration(ms: number): string {
+	const hours = Math.floor(ms / (60 * 60 * 1000));
+	const minutes = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
+
+	if (hours > 0 && minutes > 0) {
+		return `${hours}h ${minutes}m`;
+	}
+	if (hours > 0) {
+		return `${hours}h`;
+	}
+	if (minutes > 0) {
+		return `${minutes}m`;
+	}
+
+	const seconds = Math.floor(ms / 1000);
+	return `${seconds}s`;
+}
+
 // Type definitions for command options
 export interface GrindOptions {
 	count?: string;
@@ -32,6 +78,7 @@ export interface GrindOptions {
 	taskId?: string;
 	dryRun?: boolean;
 	push?: boolean;
+	duration?: string;
 	// Verification retry options
 	maxAttempts?: string;
 	maxRetriesPerTier?: string;
@@ -801,6 +848,26 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		maxReviewPassesPerTier,
 		maxOpusReviewPasses,
 	});
+
+	// Set up auto-drain timer if duration specified
+	let drainTimer: NodeJS.Timeout | null = null;
+	if (options.duration) {
+		const durationMs = parseDuration(options.duration);
+		if (durationMs === null) {
+			output.error(`Invalid duration format: ${options.duration}. Use format like "6h" or "30m"`);
+			process.exit(1);
+		}
+
+		// Schedule drain signal
+		drainTimer = setTimeout(() => {
+			output.progress(`Duration ${options.duration} elapsed - initiating drain`);
+			orchestrator.drain(() => {
+				output.success("Auto-drain complete");
+			});
+		}, durationMs);
+
+		output.info(`Auto-drain scheduled in ${options.duration} (${formatDuration(durationMs)})`);
+	}
 
 	// Process from task board (all tasks run in worktrees)
 	output.header("Undercity Grind Mode", "Autonomous operation • Rate limit handling • Infinite processing");
@@ -1640,6 +1707,11 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		}
 
 		clearGrindProgress();
+
+		// Clean up drain timer if still active
+		if (drainTimer) {
+			clearTimeout(drainTimer);
+		}
 
 		// End grind session logging
 		endGrindSession({
