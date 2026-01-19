@@ -9,12 +9,43 @@
  * 2. Quick atomicity check via Ax program
  * 3. If atomic → proceed with execution
  * 4. If not → decompose into subtasks, add to board
+ * 5. Validate subtasks for quality (reject vague/research tasks)
  *
  * Training data collected in .undercity/ax-examples/ for prompt optimization.
  */
 
 import { checkAtomicityAx, decomposeTaskAx } from "./ax-programs.js";
 import { sessionLogger } from "./logger.js";
+
+/** Maximum subtasks allowed per decomposition to prevent explosion */
+const MAX_SUBTASKS = 5;
+
+/** Minimum length for a subtask objective to be considered specific enough */
+const MIN_SUBTASK_LENGTH = 30;
+
+/** Patterns that indicate research/analysis tasks (no code output) */
+const RESEARCH_PATTERNS = [
+	/^identify\b/i,
+	/^analyze\b/i,
+	/^review\s+and\b/i,
+	/^design\s+(?!.*\.(ts|js|tsx|jsx))/i,
+	/^establish\b/i,
+	/^determine\b/i,
+	/^clarify\b/i,
+	/^decide\b/i,
+	/^research\b/i,
+	/^examine\b/i,
+	/^compile\b/i,
+	/^conduct\b/i,
+	/^document\s+(?!.*\.(ts|js|tsx|jsx))/i,
+];
+
+/** Patterns that indicate actionable code tasks */
+const ACTIONABLE_PATTERNS = [
+	/\.(ts|js|tsx|jsx)[\s:,]/i, // File reference
+	/(?:in|to|from)\s+src\//i, // src/ directory reference
+	/(?:add|create|implement|update|modify|fix|refactor)\s+\w+\s+(?:in|to)\s+/i,
+];
 
 const logger = sessionLogger.child({ module: "task-decomposer" });
 
@@ -58,6 +89,77 @@ export interface DecompositionResult {
 	subtasks: Subtask[];
 	/** Why decomposition was needed (or why it wasn't) */
 	reasoning: string;
+	/** Subtasks that were filtered out during validation */
+	filteredCount?: number;
+}
+
+/**
+ * Result of subtask validation
+ */
+interface SubtaskValidation {
+	isValid: boolean;
+	reason?: string;
+}
+
+/**
+ * Validate a single subtask for quality
+ */
+function validateSubtask(objective: string): SubtaskValidation {
+	// Too short - likely vague
+	if (objective.length < MIN_SUBTASK_LENGTH) {
+		return { isValid: false, reason: "too_short" };
+	}
+
+	// Research/analysis task - no code output
+	if (RESEARCH_PATTERNS.some((p) => p.test(objective))) {
+		return { isValid: false, reason: "research_task" };
+	}
+
+	// Check if it has actionable patterns (file refs, specific verbs)
+	const hasActionablePattern = ACTIONABLE_PATTERNS.some((p) => p.test(objective));
+
+	// If no file reference and no clear action target, it's probably vague
+	if (!hasActionablePattern && objective.length < 80) {
+		// Allow longer objectives even without file refs - they may have enough context
+		return { isValid: false, reason: "vague_no_target" };
+	}
+
+	return { isValid: true };
+}
+
+/**
+ * Validate and filter decomposition results
+ * Returns only high-quality, actionable subtasks
+ */
+function validateDecomposition(subtasks: Subtask[]): {
+	valid: Subtask[];
+	filtered: number;
+	reasons: Record<string, number>;
+} {
+	const valid: Subtask[] = [];
+	const reasons: Record<string, number> = {};
+
+	for (const subtask of subtasks) {
+		const validation = validateSubtask(subtask.objective);
+		if (validation.isValid) {
+			valid.push(subtask);
+		} else {
+			const reason = validation.reason || "unknown";
+			reasons[reason] = (reasons[reason] || 0) + 1;
+		}
+	}
+
+	// Cap at MAX_SUBTASKS to prevent explosion
+	const capped = valid.slice(0, MAX_SUBTASKS);
+	if (valid.length > MAX_SUBTASKS) {
+		reasons["capped_max_subtasks"] = valid.length - MAX_SUBTASKS;
+	}
+
+	return {
+		valid: capped,
+		filtered: subtasks.length - capped.length,
+		reasons,
+	};
 }
 
 /**
@@ -74,11 +176,15 @@ export async function checkAtomicity(task: string): Promise<AtomicityCheckResult
  * Decompose a complex task into smaller, atomic subtasks
  *
  * Uses Ax/DSPy program for self-improving decomposition
+ * Validates subtasks to reject vague/research tasks
+ *
+ * @param task The task to decompose
+ * @param cwd Working directory for project detection (default: process.cwd())
  */
-export async function decomposeTask(task: string): Promise<DecompositionResult> {
+export async function decomposeTask(task: string, cwd: string = process.cwd()): Promise<DecompositionResult> {
 	logger.debug({ task: task.substring(0, 50) }, "Running Ax decomposition");
 
-	const result = await decomposeTaskAx(task);
+	const result = await decomposeTaskAx(task, ".undercity", cwd);
 
 	if (result.subtasks.length === 0) {
 		return {
@@ -91,7 +197,7 @@ export async function decomposeTask(task: string): Promise<DecompositionResult> 
 
 	// Transform string subtasks to Subtask objects
 	// Extract file paths from objectives like "In src/file.ts, do something"
-	const subtasks: Subtask[] = result.subtasks.map((objective, idx) => {
+	const rawSubtasks: Subtask[] = result.subtasks.map((objective, idx) => {
 		const fileMatch = objective.match(/(?:In |in )([\w/./-]+\.\w+)/);
 		const estimatedFiles = fileMatch ? [fileMatch[1]] : undefined;
 
@@ -102,11 +208,49 @@ export async function decomposeTask(task: string): Promise<DecompositionResult> 
 		};
 	});
 
+	// Validate and filter subtasks for quality
+	const validation = validateDecomposition(rawSubtasks);
+
+	if (validation.filtered > 0) {
+		logger.info(
+			{
+				task: task.substring(0, 50),
+				original: rawSubtasks.length,
+				kept: validation.valid.length,
+				filtered: validation.filtered,
+				reasons: validation.reasons,
+			},
+			"Filtered low-quality subtasks from decomposition",
+		);
+	}
+
+	// If all subtasks were filtered, don't decompose
+	if (validation.valid.length === 0) {
+		logger.warn(
+			{ task: task.substring(0, 50), reasons: validation.reasons },
+			"All subtasks filtered - decomposition rejected",
+		);
+		return {
+			wasDecomposed: false,
+			originalTask: task,
+			subtasks: [],
+			reasoning: `Decomposition rejected: all ${rawSubtasks.length} subtasks were too vague or non-actionable`,
+			filteredCount: validation.filtered,
+		};
+	}
+
+	// Re-number the valid subtasks
+	const subtasks = validation.valid.map((s, idx) => ({
+		...s,
+		order: idx + 1,
+	}));
+
 	return {
 		wasDecomposed: true,
 		originalTask: task,
 		subtasks,
 		reasoning: result.reasoning,
+		filteredCount: validation.filtered,
 	};
 }
 
@@ -127,6 +271,8 @@ export async function checkAndDecompose(
 		forceDecompose?: boolean;
 		/** Minimum confidence to trust atomicity check */
 		minConfidence?: number;
+		/** Working directory for project detection (default: process.cwd()) */
+		cwd?: string;
 	} = {},
 ): Promise<{
 	action: "proceed" | "decomposed" | "skip";
@@ -135,11 +281,11 @@ export async function checkAndDecompose(
 	/** Recommended model for task execution */
 	recommendedModel?: "haiku" | "sonnet" | "opus";
 }> {
-	const { forceDecompose = false, minConfidence = 0.6 } = options;
+	const { forceDecompose = false, minConfidence = 0.6, cwd = process.cwd() } = options;
 
 	// Force decomposition if requested
 	if (forceDecompose) {
-		const decomposition = await decomposeTask(task);
+		const decomposition = await decomposeTask(task, cwd);
 		if (decomposition.wasDecomposed && decomposition.subtasks.length > 0) {
 			return {
 				action: "decomposed",
@@ -177,7 +323,7 @@ export async function checkAndDecompose(
 
 	// If not atomic or low confidence, decompose
 	if (!atomicity.isAtomic || atomicity.confidence < minConfidence) {
-		const decomposition = await decomposeTask(task);
+		const decomposition = await decomposeTask(task, cwd);
 
 		if (decomposition.wasDecomposed && decomposition.subtasks.length > 0) {
 			logger.info(

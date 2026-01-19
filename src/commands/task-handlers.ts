@@ -842,7 +842,17 @@ export interface CompleteOptions {
 }
 
 interface TriageIssue {
-	type: "test_cruft" | "duplicate" | "stale" | "status_bug" | "overly_granular" | "vague";
+	type:
+		| "test_cruft"
+		| "duplicate"
+		| "stale"
+		| "status_bug"
+		| "overly_granular"
+		| "vague"
+		| "orphaned"
+		| "over_decomposed"
+		| "research_no_output"
+		| "generic_error_handling";
 	taskId: string;
 	objective: string;
 	reason: string;
@@ -877,7 +887,41 @@ function analyzeTaskBoard(): TriageReport {
 	// Vague task patterns
 	const vaguePatterns = [/^improve /i, /^fix /i, /^update /i, /^better /i];
 
+	// Research/analysis patterns (no code output)
+	const researchPatterns = [
+		/^identify\b/i,
+		/^analyze\b/i,
+		/^review\s+and\b/i,
+		/^establish\b/i,
+		/^determine\b/i,
+		/^clarify\b/i,
+		/^decide\b/i,
+		/^research\b/i,
+		/^examine\b/i,
+		/^compile\b/i,
+		/^conduct\b/i,
+	];
+
+	// Generic error handling patterns
+	const genericErrorPatterns = [/^implement\s+error\s+handling/i, /^add\s+try-catch/i, /^error\s+recovery/i];
+
+	// Build parent status map for orphan detection
+	const parentStatus = new Map<string, string>();
 	for (const task of items) {
+		parentStatus.set(task.id, task.status);
+	}
+
+	// Count subtasks per parent for over-decomposition detection
+	const subtaskCountByParent = new Map<string, number>();
+	for (const task of items) {
+		if (task.parentId && task.status === "pending") {
+			subtaskCountByParent.set(task.parentId, (subtaskCountByParent.get(task.parentId) || 0) + 1);
+		}
+	}
+
+	for (const task of items) {
+		if (task.status !== "pending") continue;
+
 		// Check for test cruft
 		for (const pattern of testPatterns) {
 			if (pattern.test(task.objective)) {
@@ -892,8 +936,54 @@ function analyzeTaskBoard(): TriageReport {
 			}
 		}
 
+		// Check for orphaned subtasks (parent completed)
+		if (task.parentId) {
+			const parentTaskStatus = parentStatus.get(task.parentId);
+			if (parentTaskStatus === "complete") {
+				issues.push({
+					type: "orphaned",
+					taskId: task.id,
+					objective: task.objective,
+					reason: "Parent task is complete but subtask remains pending",
+					action: "remove",
+				});
+				continue; // Skip other checks for orphaned tasks
+			}
+		}
+
+		// Check for research/analysis tasks (no code output)
+		const hasFileRef = task.objective.includes(".ts") || task.objective.includes("/src/");
+		if (!hasFileRef) {
+			for (const pattern of researchPatterns) {
+				if (pattern.test(task.objective)) {
+					issues.push({
+						type: "research_no_output",
+						taskId: task.id,
+						objective: task.objective,
+						reason: "Research/analysis task without file target - unlikely to produce code",
+						action: "review",
+					});
+					break;
+				}
+			}
+
+			// Check for generic error handling tasks
+			for (const pattern of genericErrorPatterns) {
+				if (pattern.test(task.objective) && task.objective.length < 100) {
+					issues.push({
+						type: "generic_error_handling",
+						taskId: task.id,
+						objective: task.objective,
+						reason: "Generic error handling task without specific file target",
+						action: "review",
+					});
+					break;
+				}
+			}
+		}
+
 		// Check for status bugs (pending with completedAt)
-		if (task.status === "pending" && task.completedAt) {
+		if (task.completedAt) {
 			issues.push({
 				type: "status_bug",
 				taskId: task.id,
@@ -914,6 +1004,22 @@ function analyzeTaskBoard(): TriageReport {
 					action: "review",
 				});
 				break;
+			}
+		}
+	}
+
+	// Check for over-decomposed parents (>5 pending subtasks)
+	for (const [parentId, count] of subtaskCountByParent) {
+		if (count > 5) {
+			const parent = items.find((t: { id: string }) => t.id === parentId);
+			if (parent) {
+				issues.push({
+					type: "over_decomposed",
+					taskId: parentId,
+					objective: parent.objective,
+					reason: `Has ${count} pending subtasks - likely over-decomposed`,
+					action: "review",
+				});
 			}
 		}
 	}
@@ -969,8 +1075,12 @@ function analyzeTaskBoard(): TriageReport {
 	// Calculate health score
 	const issueWeight: Record<string, number> = {
 		test_cruft: 3,
+		orphaned: 3,
+		over_decomposed: 3,
 		duplicate: 2,
 		status_bug: 2,
+		research_no_output: 2,
+		generic_error_handling: 2,
 		overly_granular: 1,
 		vague: 1,
 		stale: 1,
@@ -984,7 +1094,19 @@ function analyzeTaskBoard(): TriageReport {
 	const testCruft = issues.filter((i) => i.type === "test_cruft").length;
 	const duplicates = issues.filter((i) => i.type === "duplicate").length;
 	const statusBugs = issues.filter((i) => i.type === "status_bug").length;
+	const orphaned = issues.filter((i) => i.type === "orphaned").length;
+	const overDecomposed = issues.filter((i) => i.type === "over_decomposed").length;
+	const researchTasks = issues.filter((i) => i.type === "research_no_output").length;
 
+	if (orphaned > 0) {
+		recommendations.push(`Cancel ${orphaned} orphaned subtask(s) - parent tasks completed without them`);
+	}
+	if (overDecomposed > 0) {
+		recommendations.push(`Review ${overDecomposed} over-decomposed parent(s) - consider collapsing subtasks`);
+	}
+	if (researchTasks > 0) {
+		recommendations.push(`Review ${researchTasks} research task(s) - may not produce mergeable code`);
+	}
 	if (testCruft > 0) {
 		recommendations.push(`Remove ${testCruft} test task(s) with: undercity prune`);
 	}
@@ -1057,6 +1179,10 @@ export function handleTriage(options: TriageOptions): void {
 
 	const typeLabels: Record<string, string> = {
 		test_cruft: "Test Cruft",
+		orphaned: "Orphaned Subtasks",
+		over_decomposed: "Over-Decomposed",
+		research_no_output: "Research (No Code)",
+		generic_error_handling: "Generic Error Handling",
 		duplicate: "Duplicates",
 		status_bug: "Status Bugs",
 		overly_granular: "Overly Granular",
