@@ -50,6 +50,16 @@ export {
 	stash,
 	stashPop,
 } from "./git.js";
+// Intent completion (ambiguous objective detection and prediction)
+export {
+	formatPredictionDisplay,
+	type InferredDetail,
+	type IntentConfidence,
+	type IntentPredictionResult,
+	isAmbiguous,
+	predictFullIntent,
+	shouldSkipIntentCompletion,
+} from "./intent-completion.js";
 // Knowledge System
 export {
 	addLearning,

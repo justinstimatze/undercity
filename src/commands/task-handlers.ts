@@ -3,7 +3,15 @@
  * Extracted from task.ts for maintainability
  */
 import { readFileSync } from "node:fs";
+import * as readline from "node:readline";
 import chalk from "chalk";
+import {
+	formatPredictionDisplay,
+	type IntentPredictionResult,
+	isAmbiguous,
+	predictFullIntent,
+	shouldSkipIntentCompletion,
+} from "../intent-completion.js";
 import { Orchestrator } from "../orchestrator.js";
 import {
 	generateTaskContext,
@@ -46,6 +54,8 @@ export interface AddOptions {
 	notes?: string;
 	/** Comma-separated task IDs this task depends on */
 	dependsOn?: string;
+	/** Skip intent completion even for ambiguous objectives */
+	skipIntentCompletion?: boolean;
 }
 
 export interface ImportPlanOptions {
@@ -167,9 +177,70 @@ export function handleTasks(options: TasksOptions = {}): void {
 }
 
 /**
+ * Prompt user for confirmation of intent prediction
+ * Returns the chosen objective (predicted, custom, or original)
+ */
+async function promptIntentConfirmation(prediction: IntentPredictionResult): Promise<string> {
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	});
+
+	return new Promise((resolve) => {
+		// Display the prediction
+		console.log();
+		console.log(chalk.cyan("Intent Completion Suggestion"));
+		console.log(chalk.gray("".padEnd(50, "-")));
+		console.log();
+		console.log(`Original: ${chalk.yellow(`"${prediction.originalObjective}"`)}`);
+		console.log(`Predicted: ${chalk.green(`"${prediction.predictedObjective}"`)}`);
+		console.log();
+		console.log(`Confidence: ${chalk.cyan(prediction.confidence)}`);
+		console.log(`Reasoning: ${chalk.gray(prediction.reasoning)}`);
+		console.log();
+
+		if (prediction.similarTasks.length > 0) {
+			console.log(chalk.bold("Similar historical tasks:"));
+			for (const task of prediction.similarTasks.slice(0, 3)) {
+				const status = task.success ? chalk.green("[OK]") : chalk.red("[FAIL]");
+				console.log(`  ${status} ${task.objective.slice(0, 60)}${task.objective.length > 60 ? "..." : ""}`);
+			}
+			console.log();
+		}
+
+		console.log(chalk.bold("Options:"));
+		console.log("  [1] Use predicted objective (recommended)");
+		console.log("  [2] Use original objective");
+		console.log("  [3] Enter custom objective");
+		console.log();
+
+		rl.question(chalk.cyan("Choose [1/2/3]: "), (answer) => {
+			const choice = answer.trim();
+
+			if (choice === "1" || choice === "") {
+				rl.close();
+				resolve(prediction.predictedObjective);
+			} else if (choice === "2") {
+				rl.close();
+				resolve(prediction.originalObjective);
+			} else if (choice === "3") {
+				rl.question(chalk.cyan("Enter custom objective: "), (custom) => {
+					rl.close();
+					resolve(custom.trim() || prediction.originalObjective);
+				});
+			} else {
+				// Invalid choice, default to predicted
+				rl.close();
+				resolve(prediction.predictedObjective);
+			}
+		});
+	});
+}
+
+/**
  * Handle the add command - add a task
  */
-export function handleAdd(goal: string, options: AddOptions = {}): void {
+export async function handleAdd(goal: string, options: AddOptions = {}): Promise<void> {
 	let priority: number | undefined;
 
 	if (options.priority) {
@@ -210,14 +281,40 @@ export function handleAdd(goal: string, options: AddOptions = {}): void {
 		}
 	}
 
-	const item = addTask(goal, { priority, handoffContext });
-	console.log(chalk.green(`Added: ${goal}`));
+	// Intent completion: predict full intent for ambiguous objectives
+	let finalObjective = goal;
+	const shouldSkip = options.skipIntentCompletion || shouldSkipIntentCompletion(goal);
+
+	if (!shouldSkip && isAmbiguous(goal)) {
+		const prediction = predictFullIntent(goal);
+
+		// Only prompt if prediction differs from original
+		if (prediction.predictedObjective !== goal) {
+			// Check if running in TTY (interactive mode)
+			if (process.stdin.isTTY) {
+				finalObjective = await promptIntentConfirmation(prediction);
+			} else {
+				// Non-interactive mode: show warning and use original
+				console.log(chalk.yellow("Intent completion suggestion (non-interactive mode):"));
+				console.log(`  Original: "${goal}"`);
+				console.log(`  Suggested: "${prediction.predictedObjective}"`);
+				console.log(chalk.gray("  Use --skip-intent-completion to suppress this warning"));
+				console.log();
+			}
+		}
+	}
+
+	const item = addTask(finalObjective, { priority, handoffContext });
+	console.log(chalk.green(`Added: ${finalObjective}`));
 	console.log(chalk.gray(`  ID: ${item.id}`));
 	if (priority !== undefined) {
 		console.log(chalk.gray(`  Priority: ${priority}`));
 	}
 	if (handoffContext) {
 		console.log(chalk.gray(`  Handoff context: ${Object.keys(handoffContext).join(", ")}`));
+	}
+	if (finalObjective !== goal) {
+		console.log(chalk.cyan(`  Intent completed from: "${goal}"`));
 	}
 }
 
