@@ -445,6 +445,9 @@ export class TaskWorker {
 	/** Agent reported task needs decomposition - too vague to act on */
 	private needsDecompositionReason: string | null = null;
 
+	/** Count of consecutive attempts that ended with 0 writes */
+	private consecutiveNoWriteAttempts: number = 0;
+
 	/** Result from pre-execution planning phase */
 	private executionPlan: TieredPlanResult | null = null;
 
@@ -752,6 +755,7 @@ export class TaskWorker {
 			sessionLogger.info({ phase: checkpoint.phase, attempts: checkpoint.attempts }, "Resuming from checkpoint");
 		} else {
 			this.attempts = 0;
+			this.consecutiveNoWriteAttempts = 0;
 		}
 
 		this.attemptRecords = [];
@@ -1928,18 +1932,37 @@ export class TaskWorker {
 			}
 		}
 
+		// Provide more actionable error message based on failure type
+		let errorMessage: string;
+		if (this.consecutiveNoWriteAttempts >= 2) {
+			// Task failed primarily because agent couldn't identify what to change
+			errorMessage =
+				`NO_CHANGES: Agent couldn't identify what to modify after ${this.attempts} attempts. ` +
+				"Task may be too vague or already complete. Consider: (1) breaking into specific subtasks, " +
+				"(2) adding file paths to the task, (3) verifying the task still needs doing.";
+		} else {
+			errorMessage = "Max attempts reached without passing verification";
+		}
+
 		return {
 			task,
 			status: "failed",
 			model: this.currentModel,
 			attempts: this.attempts,
-			error: "Max attempts reached without passing verification",
+			error: errorMessage,
 			durationMs: Date.now() - startTime,
 			tokenUsage: {
 				attempts: this.tokenUsageThisTask,
 				total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
 			},
 			unresolvedTickets: this.pendingTickets.length > 0 ? this.pendingTickets : undefined,
+			// Add decomposition suggestion when task was too vague
+			needsDecomposition:
+				this.consecutiveNoWriteAttempts >= 2
+					? {
+							reason: "Agent could not identify what changes to make - task may need to be more specific",
+						}
+					: undefined,
 		};
 	}
 
@@ -2403,15 +2426,40 @@ RULES:
 									return { continue: true };
 								}
 								if (this.writeCountThisExecution === 0) {
+									this.consecutiveNoWriteAttempts++;
 									sessionLogger.info(
-										{ model: this.currentModel, writes: 0 },
+										{
+											model: this.currentModel,
+											writes: 0,
+											consecutiveNoWrites: this.consecutiveNoWriteAttempts,
+										},
 										"Stop hook rejected: agent tried to finish with 0 writes",
 									);
-									return {
-										continue: false,
-										reason:
-											"You haven't made any code changes yet. If the task is already complete, output: TASK_ALREADY_COMPLETE: <reason>. Otherwise, implement the required changes.",
-									};
+
+									// Provide escalating feedback based on consecutive no-write attempts
+									let reason: string;
+									if (this.consecutiveNoWriteAttempts >= 3 || this.currentModel === "opus") {
+										// At opus or after 3 attempts: suggest decomposition
+										reason =
+											"You have attempted multiple times without making changes. The task may be too vague or complex. " +
+											"Options:\n" +
+											"1. If the task is already complete: TASK_ALREADY_COMPLETE: <reason>\n" +
+											"2. If you cannot identify what to change: NEEDS_DECOMPOSITION: <list specific subtasks that would be clearer>\n" +
+											"3. If you can identify changes: Make them now using Edit/Write tools";
+									} else if (this.consecutiveNoWriteAttempts === 2) {
+										// Second attempt: mention task might be unclear
+										reason =
+											"You still haven't made any code changes. If you're unsure what to modify:\n" +
+											"- Re-read the task to identify the specific file and change needed\n" +
+											"- If the task is unclear, output: NEEDS_DECOMPOSITION: <what clarification or subtasks are needed>\n" +
+											"- If already complete: TASK_ALREADY_COMPLETE: <reason>";
+									} else {
+										// First attempt: standard message
+										reason =
+											"You haven't made any code changes yet. If the task is already complete, output: TASK_ALREADY_COMPLETE: <reason>. Otherwise, implement the required changes.";
+									}
+
+									return { continue: false, reason };
 								}
 								return { continue: true };
 							},
@@ -2685,20 +2733,19 @@ RULES:
 									? block.content
 									: Array.isArray(block.content)
 										? (block.content as Array<string | { text?: string }>)
-												.map((c: string | { text?: string }) =>
-													typeof c === "string" ? c : c.text || "",
-												)
+												.map((c: string | { text?: string }) => (typeof c === "string" ? c : c.text || ""))
 												.join("")
 										: "";
 							// Only count as error if it's a tool_use_error, not just contains "error" in success message
 							const contentHasError =
 								contentStr.includes("<tool_use_error>") ||
-								(contentStr.toLowerCase().includes("error") &&
-									!contentStr.toLowerCase().includes("successfully"));
+								(contentStr.toLowerCase().includes("error") && !contentStr.toLowerCase().includes("successfully"));
 							const succeeded = !isError && !contentHasError;
 
 							if (succeeded) {
 								this.writeCountThisExecution++;
+								// Reset no-write counter since agent made progress
+								this.consecutiveNoWriteAttempts = 0;
 								// Track per-file writes to detect thrashing
 								const filePath = pendingTool.filePath || "unknown";
 								const fileWriteCount = (this.writesPerFile.get(filePath) || 0) + 1;
@@ -2791,6 +2838,21 @@ RULES:
 			if (this.noOpEditCount > 0) {
 				return { shouldEscalate: false, reason: "task may already be complete (no-op edits detected)" };
 			}
+
+			// At opus with multiple no-write attempts: fail fast to save tokens
+			// Task is likely fundamentally vague, not just needing a smarter model
+			if (this.currentModel === "opus" && this.consecutiveNoWriteAttempts >= 2) {
+				sessionLogger.warn(
+					{ consecutiveNoWrites: this.consecutiveNoWriteAttempts },
+					"Opus tier with repeated no-write attempts - forcing failure to save tokens",
+				);
+				return {
+					shouldEscalate: false,
+					reason: `opus with ${this.consecutiveNoWriteAttempts} consecutive no-write attempts - task may need decomposition`,
+					forceFailure: true,
+				};
+			}
+
 			// Otherwise agent is stuck, escalate
 			return { shouldEscalate: true, reason: "no changes made" };
 		}

@@ -205,6 +205,18 @@ export function categorizeFailure(error: string): FailureReason {
 	if (e.includes("max attempts") || e.includes("exhausted")) {
 		return "max_attempts";
 	}
+	// Agent SDK or execution errors
+	if (e.includes("agent") && (e.includes("error") || e.includes("crash") || e.includes("stopped"))) {
+		return "agent_error";
+	}
+	// Tier-level errors that don't match specific patterns
+	if (e.includes("tier error")) {
+		return "agent_error";
+	}
+	// Invalid target (file/function doesn't exist)
+	if (e.includes("invalid_target") || e.includes("file not found") || e.includes("does not exist")) {
+		return "agent_error";
+	}
 
 	return "unknown";
 }
