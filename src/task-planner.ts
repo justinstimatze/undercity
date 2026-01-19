@@ -754,6 +754,8 @@ IMPORTANT: You MUST output a JSON response. Do not output an empty response.`;
 	logger.debug({ task: task.substring(0, 50), model, retryCount }, "Reviewing execution plan");
 
 	let reviewJson = "";
+	let messageCount = 0;
+	let lastError: string | undefined;
 
 	for await (const message of query({
 		prompt,
@@ -761,13 +763,31 @@ IMPORTANT: You MUST output a JSON response. Do not output an empty response.`;
 			model: MODEL_NAMES[model],
 			permissionMode: "bypassPermissions",
 			allowDangerouslySkipPermissions: true,
-			maxTurns: 5,
+			maxTurns: 15, // Increased from 5 - agent needs time to process plan
 			cwd,
 		},
 	})) {
+		messageCount++;
+		const msg = message as Record<string, unknown>;
+
+		// Capture any error for logging
+		if (msg.type === "result" && msg.subtype === "error") {
+			lastError = String(msg.result || "Unknown error");
+			logger.warn({ error: lastError, messageCount }, "Plan review query returned error");
+		}
+
 		if (message.type === "result" && message.subtype === "success") {
 			reviewJson = message.result;
+			logger.debug({ messageCount, resultLength: reviewJson?.length || 0 }, "Plan review received result");
 		}
+	}
+
+	// Log diagnostic info if we got an empty response
+	if (!reviewJson || reviewJson.trim() === "") {
+		logger.warn(
+			{ model, retryCount, messageCount, lastError },
+			"Plan review returned empty - diagnostic info",
+		);
 	}
 
 	// Check for empty response and retry if we haven't exceeded retries
