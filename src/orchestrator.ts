@@ -22,7 +22,18 @@ import { updateLedger } from "./capability-ledger.js";
 import { type ExperimentManager, getExperimentManager } from "./experiment.js";
 import { FileTracker } from "./file-tracker.js";
 import { checkAndFixBareRepo } from "./git.js";
+import {
+	generateFixTaskDescription,
+	getEmergencyModeStatus,
+	hasExceededMaxFixAttempts,
+	isEmergencyModeActive,
+	preMergeHealthCheck,
+	recordFixWorkerCompleted,
+	recordFixWorkerSpawned,
+	shouldSpawnFixWorker,
+} from "./emergency-mode.js";
 import { sessionLogger } from "./logger.js";
+import { nameFromId } from "./names.js";
 import * as output from "./output.js";
 import { Persistence, readTaskAssignment, writeTaskAssignment } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
@@ -109,6 +120,7 @@ export interface ParallelBatchResult {
 	mergeFailed: number;
 	decomposed: number; // Tasks that were decomposed into subtasks (not executed)
 	durationMs: number;
+	emergencyMode?: boolean; // Execution halted due to emergency mode
 }
 
 /**
@@ -231,6 +243,16 @@ export class Orchestrator {
 	/** Callback to invoke when drain completes */
 	private onDrainComplete?: () => void;
 
+	/**
+	 * Ralph-style opus budget tracking
+	 * Limits opus usage to ~10% of tasks to optimize for Max plan usage
+	 */
+	private opusBudgetPercent: number = 10; // Target 5-10% opus usage
+	private opusTasksUsed: number = 0;
+	private totalTasksProcessed: number = 0;
+	/** Repository root directory */
+	private repoRoot: string;
+
 	constructor(options: ParallelSoloOptions = {}) {
 		this.maxConcurrent = options.maxConcurrent ?? 3;
 		this.startingModel = options.startingModel ?? "sonnet";
@@ -258,11 +280,11 @@ export class Orchestrator {
 		// CRITICAL: Capture repo root at CLI invocation time to avoid wrong repo issues
 		// When undercity is installed globally and run from another project, process.cwd()
 		// must be captured here, not later when git commands are executed
-		const repoRoot = options.repoRoot ?? process.cwd();
-		this.worktreeManager = new WorktreeManager({ repoRoot });
+		this.repoRoot = options.repoRoot ?? process.cwd();
+		this.worktreeManager = new WorktreeManager({ repoRoot: this.repoRoot });
 
 		// Check and fix bare repo (can happen due to worktree race conditions)
-		checkAndFixBareRepo(repoRoot);
+		checkAndFixBareRepo(this.repoRoot);
 
 		// Initialize persistence and trackers
 		this.persistence = new Persistence();
@@ -814,6 +836,21 @@ export class Orchestrator {
 		this.displayExecutionHeader(implTasks.length);
 		const mainBranch = this.setupFileTracking();
 
+		// Check emergency mode before processing
+		const emergencyCheck = await this.checkEmergencyMode();
+		if (!emergencyCheck.proceed) {
+			return {
+				results: [],
+				successful: 0,
+				failed: 0,
+				merged: 0,
+				mergeFailed: 0,
+				decomposed: 0,
+				durationMs: Date.now() - startTime,
+				emergencyMode: true,
+			};
+		}
+
 		// Process all task batches
 		const batchId = generateBatchId();
 		const results = await this.processBatches(implTasks, batchId, mainBranch);
@@ -906,6 +943,61 @@ export class Orchestrator {
 		} catch {
 			// Silent failure - continue with local estimates
 		}
+	}
+
+	/**
+	 * Check emergency mode status and handle fix worker spawning
+	 * Returns true if safe to proceed, false if blocked by emergency mode
+	 */
+	private async checkEmergencyMode(): Promise<{ proceed: boolean }> {
+		// Check if we should skip emergency mode (e.g., in test environments)
+		if (process.env.UNDERCITY_SKIP_EMERGENCY_CHECK === "true") {
+			return { proceed: true };
+		}
+
+		const healthCheck = await preMergeHealthCheck(this.repoRoot);
+
+		if (healthCheck.proceed) {
+			return { proceed: true };
+		}
+
+		// Emergency mode is active
+		const status = getEmergencyModeStatus();
+		output.error(`Emergency mode active: ${status.reason || "Main branch unhealthy"}`);
+
+		// Check if we should spawn a fix worker
+		if (shouldSpawnFixWorker()) {
+			if (hasExceededMaxFixAttempts()) {
+				output.error(
+					`Maximum fix attempts (${status.fixAttempts}) exceeded. Human intervention required.`,
+				);
+				output.info("Run 'undercity emergency --status' to check emergency mode status");
+				output.info("Run 'undercity emergency --clear' to manually clear emergency mode after fixing");
+			} else {
+				output.warning(`Spawning emergency fix worker (attempt ${status.fixAttempts + 1})`);
+				await this.spawnEmergencyFixWorker();
+			}
+		} else if (status.fixWorkerActive) {
+			output.info("Emergency fix worker is already active, waiting for completion");
+		}
+
+		return { proceed: false };
+	}
+
+	/**
+	 * Spawn a worker to fix the main branch CI failure
+	 */
+	private async spawnEmergencyFixWorker(): Promise<void> {
+		const { loadEmergencyState, generateFixTaskDescription } = await import("./emergency-mode.js");
+		const state = loadEmergencyState();
+		const fixTask = generateFixTaskDescription(state);
+
+		// Add emergency fix task to the board
+		const task = addTask(fixTask, { priority: 100 }); // Highest priority
+		recordFixWorkerSpawned(task.id);
+
+		output.info(`Created emergency fix task: ${task.id}`);
+		output.info("The fix task will be processed on the next grind run");
 	}
 
 	/**
@@ -1033,13 +1125,14 @@ export class Orchestrator {
 
 			try {
 				const worktreeInfo = this.worktreeManager.createWorktree(taskId);
+				const workerName = nameFromId(taskId);
 				preparedTasks.push({
 					task,
 					taskId,
 					worktreePath: worktreeInfo.path,
 					branch: worktreeInfo.branch,
 				});
-				output.success(`Created worktree: ${taskId}`);
+				output.success(`Spawned worker: ${workerName} (${taskId})`);
 			} catch (err) {
 				output.error(`Failed to create worktree: ${err}`);
 				existingResults.push({
@@ -1106,11 +1199,29 @@ export class Orchestrator {
 		this.updateTaskStatus(taskId, "running");
 
 		try {
-			output.taskStart(taskId, task.substring(0, 50));
+			const workerName = nameFromId(taskId);
+			output.taskStart(taskId, task.substring(0, 50), { workerName });
+			this.totalTasksProcessed++;
 
 			const variant = this.experimentManager.selectVariant();
-			const effectiveModel = (variant?.model as "haiku" | "sonnet" | "opus" | undefined) ?? this.startingModel;
+			let effectiveModel = (variant?.model as "haiku" | "sonnet" | "opus" | undefined) ?? this.startingModel;
 			const effectiveReview = variant?.reviewEnabled ?? this.reviewPasses;
+
+			// Ralph-style: enforce opus budget to maintain optimal model ratios
+			// If starting model is opus and budget is exhausted, cap to sonnet
+			if (effectiveModel === "opus" && !this.canUseOpus()) {
+				sessionLogger.info(
+					{
+						opusUsed: this.opusTasksUsed,
+						totalTasks: this.totalTasksProcessed,
+						budgetPercent: this.opusBudgetPercent,
+					},
+					"Opus budget exhausted - capping to sonnet",
+				);
+				effectiveModel = "sonnet";
+			} else if (effectiveModel === "opus") {
+				this.opusTasksUsed++;
+			}
 
 			const worker = new TaskWorker({
 				startingModel: effectiveModel,
@@ -1230,13 +1341,14 @@ export class Orchestrator {
 			output.warning(`Task needs decomposition but no subtasks suggested: ${reason}`, { taskId });
 		}
 
+		const workerName = nameFromId(taskId);
 		if (result.status === "complete") {
-			output.taskComplete(taskId, "Task completed", { modifiedFiles: modifiedFiles.length });
+			output.taskComplete(taskId, "Task completed", { workerName, modifiedFiles: modifiedFiles.length });
 			if (result.metaTaskResult) {
 				this.processMetaTaskResult(result.metaTaskResult, taskId);
 			}
 		} else {
-			output.taskFailed(taskId, "Task failed", result.error);
+			output.taskFailed(taskId, "Task failed", result.error, { workerName });
 		}
 
 		if (modifiedFiles.length > 0 && this.verbose) {
@@ -1248,6 +1360,20 @@ export class Orchestrator {
 
 		try {
 			const escalated = result.model !== this.startingModel;
+
+			// Track if task escalated to opus (for budget tracking)
+			// This catches cases where task started at haiku/sonnet but escalated to opus
+			if (result.model === "opus" && this.startingModel !== "opus") {
+				this.opusTasksUsed++;
+				sessionLogger.debug(
+					{
+						opusUsed: this.opusTasksUsed,
+						totalTasks: this.totalTasksProcessed,
+					},
+					"Task escalated to opus",
+				);
+			}
+
 			updateLedger({
 				objective: task,
 				model: result.model,
@@ -1297,9 +1423,10 @@ export class Orchestrator {
 		branch: string,
 		err: unknown,
 	): ParallelTaskResult {
+		const workerName = nameFromId(taskId);
 		this.fileTracker.stopTaskTracking(taskId);
 		this.updateTaskStatus(taskId, "failed", { error: String(err) });
-		output.taskFailed(taskId, "Task error", String(err));
+		output.taskFailed(taskId, "Task error", String(err), { workerName });
 
 		return {
 			task,
@@ -2261,6 +2388,22 @@ Working directory: ${worktreePath}`;
 	}
 
 	/**
+	 * Ralph-style: Check if opus budget allows another opus task
+	 * Maintains target ratio of ~10% opus usage for optimal Max plan efficiency
+	 */
+	private canUseOpus(): boolean {
+		// Always allow at least one opus task
+		if (this.opusTasksUsed === 0) {
+			return true;
+		}
+
+		// Allow more opus if under budget
+		// Formula: allow opus if current opus% < target budget%
+		const currentOpusPercent = (this.opusTasksUsed / Math.max(1, this.totalTasksProcessed)) * 100;
+		return currentOpusPercent < this.opusBudgetPercent;
+	}
+
+	/**
 	 * Mark batch as complete (cleanup)
 	 */
 	private markBatchComplete(): void {
@@ -2330,7 +2473,8 @@ Working directory: ${worktreePath}`;
 					const startedAtMs = new Date(task.startedAt).getTime();
 					const elapsedMs = now - startedAtMs;
 					if (elapsedMs > this.stuckThresholdMs) {
-						output.warning(`Worker ${task.taskId} has no checkpoint after ${Math.round(elapsedMs / 1000)}s`);
+						const workerName = nameFromId(task.taskId);
+						output.warning(`Worker [${workerName}] has no checkpoint after ${Math.round(elapsedMs / 1000)}s`);
 						this.handleStuckWorker(task.taskId, task.worktreePath, "no_checkpoint");
 					}
 				}
@@ -2343,7 +2487,8 @@ Working directory: ${worktreePath}`;
 
 			if (staleDurationMs > this.stuckThresholdMs) {
 				const phase = assignment.checkpoint.phase;
-				output.warning(`Worker ${task.taskId} stuck in '${phase}' phase for ${Math.round(staleDurationMs / 1000)}s`);
+				const workerName = nameFromId(task.taskId);
+				output.warning(`Worker [${workerName}] stuck in '${phase}' phase for ${Math.round(staleDurationMs / 1000)}s`);
 				this.handleStuckWorker(task.taskId, task.worktreePath, phase);
 			}
 		}
@@ -2354,11 +2499,12 @@ Working directory: ${worktreePath}`;
 	 */
 	private handleStuckWorker(taskId: string, worktreePath: string, stuckPhase: string): void {
 		const attempts = this.recoveryAttempts.get(taskId) ?? 0;
+		const workerName = nameFromId(taskId);
 
 		if (this.attemptRecovery && attempts < this.maxRecoveryAttempts) {
 			// Attempt recovery intervention
 			this.recoveryAttempts.set(taskId, attempts + 1);
-			output.info(`Attempting recovery for ${taskId} (attempt ${attempts + 1}/${this.maxRecoveryAttempts})`);
+			output.info(`Nudging [${workerName}] (recovery attempt ${attempts + 1}/${this.maxRecoveryAttempts})`);
 
 			// Write a nudge file to the worktree that the worker can detect
 			try {
@@ -2384,7 +2530,7 @@ Working directory: ${worktreePath}`;
 			// direct control over the worker process. The worker will eventually
 			// timeout or complete. This is just alerting.
 			output.error(
-				`Worker ${taskId} unresponsive after ${this.maxRecoveryAttempts} recovery attempts. ` +
+				`Worker [${workerName}] unresponsive after ${this.maxRecoveryAttempts} recovery attempts. ` +
 					`Consider manual intervention or wait for worker timeout.`,
 			);
 

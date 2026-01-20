@@ -42,6 +42,40 @@ export {
 	searchBySemanticSimilarity,
 	tokenize,
 } from "./embeddings.js";
+// Emergency mode (main branch CI failure handling)
+export {
+	activateEmergencyMode,
+	checkMainBranchHealth,
+	deactivateEmergencyMode,
+	type EmergencyModeState,
+	generateFixTaskDescription,
+	getEmergencyModeStatus,
+	getFixAttemptCount,
+	hasExceededMaxFixAttempts,
+	isEmergencyModeActive,
+	loadEmergencyState,
+	MAX_FIX_ATTEMPTS,
+	preMergeHealthCheck,
+	recordFixWorkerCompleted,
+	recordFixWorkerSpawned,
+	saveEmergencyState,
+	shouldSpawnFixWorker,
+} from "./emergency-mode.js";
+// Human input tracking (breaks retry loops with human guidance)
+export {
+	clearNeedsHumanInput,
+	flagNeedsHumanInput,
+	formatGuidanceForWorker,
+	getHumanGuidance,
+	getHumanInputStats,
+	getTasksNeedingInput,
+	type HumanGuidance,
+	initHumanInputTables,
+	markGuidanceUsed,
+	type NeedsHumanInputState,
+	saveHumanGuidance,
+	shouldRequestHumanInput,
+} from "./human-input-tracking.js";
 // Experiment framework
 export { ExperimentManager, getExperimentManager } from "./experiment.js";
 // Git operations
@@ -109,6 +143,14 @@ export { knowledgeTools, type MCPTool, oracleTools } from "./mcp-tools.js";
 export { MergeQueue } from "./merge-queue.js";
 // Metrics dashboard
 export { launchMetricsDashboard } from "./metrics-dashboard.js";
+// Names - Docker-style worker naming
+export {
+	generateWorkerName,
+	getWorkerDisplayName,
+	nameFromId,
+	parseWorkerNameFromBranch,
+	// Note: generateBranchName not exported - conflicts with git.ts version
+} from "./names.js";
 // Orchestration
 export { Orchestrator } from "./orchestrator.js";
 // Output system

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-20T20:40:02.954Z",
+  "generatedAt": "2026-01-20T21:57:57.051Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -18,12 +18,12 @@
         },
         {
           "file": "worker.ts",
-          "line": 2538,
+          "line": 2635,
           "context": "if"
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3288,
+          "line": 3366,
           "context": "log"
         },
         {
@@ -70,12 +70,12 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1730,
+          "line": 1787,
           "context": "if"
         },
         {
           "file": "worker.ts",
-          "line": 2032,
+          "line": 2109,
           "context": "if"
         },
         {
@@ -91,7 +91,7 @@
       "calledFrom": [
         {
           "file": "orchestrator.ts",
-          "line": 1614,
+          "line": 1736,
           "context": "for"
         },
         {
@@ -127,7 +127,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2564,
+          "line": 2672,
           "context": "if"
         }
       ]
@@ -138,12 +138,12 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1890,
+          "line": 1967,
           "context": "if"
         },
         {
           "file": "worker.ts",
-          "line": 2575,
+          "line": 2683,
           "context": "if"
         }
       ]
@@ -154,13 +154,13 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1741,
+          "line": 1798,
           "context": "if"
         },
         {
           "file": "worker.ts",
-          "line": 2074,
-          "context": "if"
+          "line": 2171,
+          "context": "unknown"
         }
       ]
     },
@@ -186,7 +186,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1492,
+          "line": 1542,
           "context": "if"
         }
       ]
@@ -197,7 +197,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1840,
+          "line": 1904,
           "context": "debug"
         }
       ]
@@ -208,7 +208,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1590,
+          "line": 1640,
           "context": "if"
         }
       ]
@@ -219,7 +219,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2041,
+          "line": 2118,
           "context": "if"
         }
       ]
@@ -230,7 +230,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2554,
+          "line": 2651,
           "context": "if"
         }
       ]
@@ -241,7 +241,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1725,
+          "line": 1782,
           "context": "recordSuccessLearnings"
         },
         {
@@ -257,8 +257,8 @@
       "calledFrom": [
         {
           "file": "orchestrator.ts",
-          "line": 1251,
-          "context": "updateTaskStatus"
+          "line": 1372,
+          "context": "if"
         }
       ]
     },
@@ -273,7 +273,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2868,
+          "line": 2976,
           "context": "for"
         }
       ]
@@ -289,7 +289,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3111,
+          "line": 3189,
           "context": "if"
         }
       ]
@@ -310,7 +310,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3134,
+          "line": 3212,
           "context": "log"
         },
         {
@@ -358,12 +358,12 @@
         },
         {
           "file": "worker.ts",
-          "line": 1231,
+          "line": 1281,
           "context": "info"
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3349,
+          "line": 3427,
           "context": "log"
         }
       ]
@@ -379,7 +379,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3374,
+          "line": 3452,
           "context": "log"
         }
       ]
@@ -395,7 +395,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3384,
+          "line": 3462,
           "context": "log"
         }
       ]
@@ -406,7 +406,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 920,
+          "line": 970,
           "context": "info"
         }
       ]

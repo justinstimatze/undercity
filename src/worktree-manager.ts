@@ -16,6 +16,7 @@ import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { gitLogger } from "./logger.js";
+import { nameFromId } from "./names.js";
 import type { WorktreeInfo } from "./types.js";
 
 /**
@@ -266,9 +267,19 @@ export class WorktreeManager {
 
 	/**
 	 * Get the branch name for a session's worktree
+	 * Format: undercity/{friendly-name}/{sessionId}
+	 * e.g., undercity/swift-fox/task-abc123
 	 */
 	getWorktreeBranchName(sessionId: string): string {
-		return `undercity/${sessionId}/worktree`;
+		const friendlyName = nameFromId(sessionId);
+		return `undercity/${friendlyName}/${sessionId}`;
+	}
+
+	/**
+	 * Get the friendly worker name for a session
+	 */
+	getWorkerName(sessionId: string): string {
+		return nameFromId(sessionId);
 	}
 
 	/**
@@ -523,7 +534,8 @@ export class WorktreeManager {
 				const sessionId = basename(worktree.path);
 
 				// Verify it matches our naming convention
-				if (worktree.branch.startsWith(`undercity/${sessionId}/worktree`)) {
+				// Format: undercity/{friendly-name}/{sessionId}
+				if (worktree.branch.startsWith("undercity/") && worktree.branch.endsWith(`/${sessionId}`)) {
 					sessionWorktrees.push({
 						sessionId,
 						path: worktree.path,

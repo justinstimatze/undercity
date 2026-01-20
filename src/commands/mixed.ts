@@ -7,6 +7,7 @@ import {
 	type BriefOptions,
 	type ConfigOptions,
 	type DecideOptions,
+	type EmergencyOptions,
 	type GrindOptions,
 	handleBrief,
 	handleConfig,
@@ -14,7 +15,9 @@ import {
 	handleDecide,
 	handleDrain,
 	handleDspyReadiness,
+	handleEmergency,
 	handleGrind,
+	handleHumanInput,
 	handleIndex,
 	handleInit,
 	handleIntrospect,
@@ -29,6 +32,7 @@ import {
 	handleTuning,
 	handleUsage,
 	handleWatch,
+	type HumanInputOptions,
 	type IndexOptions,
 	type InitOptions,
 	type IntrospectOptions,
@@ -197,6 +201,18 @@ export const mixedCommands: CommandModule = {
 			.description("Signal grind to finish current tasks and start no more")
 			.action(() => handleDrain());
 
+		// Emergency command - manage emergency mode (main branch CI failure handling)
+		program
+			.command("emergency")
+			.description("Manage emergency mode (halts merges when main branch CI fails)")
+			.option("--status", "Show emergency mode status (default)")
+			.option("--check", "Check main branch health")
+			.option("--clear", "Manually clear emergency mode")
+			.action((options: EmergencyOptions, cmd) => {
+				const parentOpts = cmd.parent?.opts() || {};
+				handleEmergency({ ...options, human: parentOpts.human || options.human });
+			});
+
 		// Status command - check grind session status from event log
 		program
 			.command("status")
@@ -247,5 +263,18 @@ export const mixedCommands: CommandModule = {
 			.option("--ideate", "Full ideation session: research + propose (default)")
 			.option("--add", "Add proposed tasks to the board (requires confirmation)")
 			.action((topic: string | undefined, options: PMOptions) => handlePM(topic, options));
+
+		// Human-input command - provide guidance for recurring failures
+		program
+			.command("human-input")
+			.description("Manage human guidance for recurring task failures (breaks retry loops)")
+			.option("--list", "List tasks needing human input (default)")
+			.option("--provide <signature>", "Provide guidance for an error signature")
+			.option("--guidance <text>", "The guidance text (used with --provide)")
+			.option("--stats", "Show human input tracking statistics")
+			.action((options: HumanInputOptions, cmd) => {
+				const parentOpts = cmd.parent?.opts() || {};
+				handleHumanInput({ ...options, human: parentOpts.human || options.human });
+			});
 	},
 };

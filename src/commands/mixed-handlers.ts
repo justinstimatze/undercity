@@ -2763,6 +2763,84 @@ export async function handleDrain(): Promise<void> {
 }
 
 /**
+ * Emergency mode options
+ */
+export interface EmergencyOptions {
+	status?: boolean;
+	clear?: boolean;
+	check?: boolean;
+	human?: boolean;
+}
+
+/**
+ * Handle emergency mode commands
+ */
+export async function handleEmergency(options: EmergencyOptions): Promise<void> {
+	const {
+		checkMainBranchHealth,
+		deactivateEmergencyMode,
+		getEmergencyModeStatus,
+		isEmergencyModeActive,
+		loadEmergencyState,
+	} = await import("../emergency-mode.js");
+
+	if (options.clear) {
+		if (!isEmergencyModeActive()) {
+			console.log(chalk.gray("Emergency mode is not active"));
+			return;
+		}
+		deactivateEmergencyMode();
+		console.log(chalk.green("Emergency mode cleared"));
+		return;
+	}
+
+	if (options.check) {
+		console.log(chalk.cyan("Checking main branch health..."));
+		const result = await checkMainBranchHealth();
+		if (result.healthy) {
+			console.log(chalk.green("Main branch is healthy"));
+			if (isEmergencyModeActive()) {
+				console.log(chalk.yellow("Emergency mode is still active - use --clear to reset"));
+			}
+		} else {
+			console.log(chalk.red(`Main branch is unhealthy: ${result.error || "verification failed"}`));
+		}
+		return;
+	}
+
+	// Default: show status
+	const status = getEmergencyModeStatus();
+	const state = loadEmergencyState();
+
+	if (!options.human) {
+		console.log(JSON.stringify({ ...status, lastError: state.lastError, activatedAt: state.activatedAt }, null, 2));
+		return;
+	}
+
+	if (!status.active) {
+		console.log(chalk.green("Emergency mode: INACTIVE"));
+		console.log(chalk.dim("Main branch is healthy, merges can proceed"));
+		return;
+	}
+
+	console.log(chalk.red("Emergency mode: ACTIVE"));
+	console.log();
+	console.log(`  Reason: ${chalk.yellow(status.reason || "Unknown")}`);
+	if (state.lastError) {
+		console.log(`  Error: ${chalk.dim(state.lastError)}`);
+	}
+	if (status.duration !== undefined) {
+		console.log(`  Duration: ${status.duration} minutes`);
+	}
+	console.log(`  Fix attempts: ${status.fixAttempts}`);
+	console.log(`  Fix worker active: ${status.fixWorkerActive ? chalk.cyan("Yes") : chalk.dim("No")}`);
+	console.log();
+	console.log(chalk.dim("Commands:"));
+	console.log(chalk.dim("  undercity emergency --check   # Re-check main branch health"));
+	console.log(chalk.dim("  undercity emergency --clear   # Manually clear emergency mode"));
+}
+
+/**
  * Handle the status command
  */
 export async function handleStatus(options: StatusOptions): Promise<void> {
@@ -3431,6 +3509,126 @@ export async function handlePM(topic: string | undefined, options: PMOptions): P
 			console.log(chalk.red(`\n✗ PM operation failed: ${error}`));
 		} else {
 			console.log(JSON.stringify({ error: String(error) }));
+		}
+	}
+}
+
+// =============================================================================
+// Human Input Command
+// =============================================================================
+
+export interface HumanInputOptions {
+	list?: boolean;
+	provide?: string;
+	guidance?: string;
+	stats?: boolean;
+	human?: boolean;
+}
+
+/**
+ * Handle human-input command - manage human guidance for recurring failures
+ */
+export async function handleHumanInput(options: HumanInputOptions): Promise<void> {
+	const {
+		getTasksNeedingInput,
+		saveHumanGuidance,
+		clearNeedsHumanInput,
+		getHumanInputStats,
+	} = await import("../human-input-tracking.js");
+
+	const isHuman = options.human ?? output.isHumanMode();
+
+	// Default to --list if no option specified
+	const showList = options.list || (!options.provide && !options.stats);
+
+	if (options.stats) {
+		// Show stats about human input tracking
+		const stats = getHumanInputStats();
+
+		if (isHuman) {
+			console.log(chalk.bold("\n📊 Human Input Statistics\n"));
+			console.log(`Guidance entries: ${stats.guidanceCount}`);
+			console.log(`Successful guidance: ${stats.successfulGuidance}`);
+			console.log(`Tasks needing input: ${stats.tasksNeedingInput}`);
+
+			if (stats.topPatterns.length > 0) {
+				console.log(chalk.dim("\nTop patterns with guidance:"));
+				for (const pattern of stats.topPatterns) {
+					const status = pattern.successful ? chalk.green("✓") : chalk.yellow("○");
+					console.log(`  ${status} ${pattern.signature.substring(0, 60)}... (used ${pattern.timesUsed}x)`);
+				}
+			}
+		} else {
+			console.log(JSON.stringify(stats));
+		}
+		return;
+	}
+
+	if (options.provide) {
+		// Provide guidance for a specific error signature
+		if (!options.guidance) {
+			if (isHuman) {
+				console.log(chalk.red("Error: --guidance is required when using --provide"));
+				console.log(chalk.dim("Usage: undercity human-input --provide <signature> --guidance 'Your guidance here'"));
+			} else {
+				console.log(JSON.stringify({ error: "--guidance is required when using --provide" }));
+			}
+			process.exitCode = 1;
+			return;
+		}
+
+		const id = saveHumanGuidance(options.provide, options.guidance);
+
+		// Clear any tasks flagged for this pattern
+		const tasksNeedingInput = getTasksNeedingInput();
+		for (const task of tasksNeedingInput) {
+			if (task.errorSignature === options.provide) {
+				clearNeedsHumanInput(task.taskId);
+			}
+		}
+
+		if (isHuman) {
+			console.log(chalk.green(`\n✓ Guidance saved (${id})`));
+			console.log(chalk.dim("This guidance will be applied to future tasks with matching errors."));
+		} else {
+			console.log(JSON.stringify({ success: true, id }));
+		}
+		return;
+	}
+
+	if (showList) {
+		// List tasks needing human input
+		const tasks = getTasksNeedingInput();
+
+		if (tasks.length === 0) {
+			if (isHuman) {
+				console.log(chalk.green("\n✓ No tasks currently need human input"));
+			} else {
+				console.log(JSON.stringify({ tasks: [] }));
+			}
+			return;
+		}
+
+		if (isHuman) {
+			console.log(chalk.bold(`\n🧑 ${tasks.length} Task(s) Need Human Input\n`));
+
+			for (const task of tasks) {
+				console.log(chalk.yellow(`Task: ${task.taskId}`));
+				console.log(`  Objective: ${task.objective.substring(0, 80)}${task.objective.length > 80 ? "..." : ""}`);
+				console.log(`  Category: ${task.category}`);
+				console.log(`  Error: ${task.sampleMessage.substring(0, 100)}${task.sampleMessage.length > 100 ? "..." : ""}`);
+				console.log(`  Failed attempts: ${task.failedAttempts} (last model: ${task.modelUsed})`);
+				console.log(`  Signature: ${task.errorSignature.substring(0, 60)}...`);
+				if (task.previousGuidance) {
+					console.log(chalk.dim(`  Previous guidance was tried but didn't help`));
+				}
+				console.log("");
+			}
+
+			console.log(chalk.dim("To provide guidance:"));
+			console.log(chalk.dim(`  undercity human-input --provide "<signature>" --guidance "Your guidance here"`));
+		} else {
+			console.log(JSON.stringify({ tasks }));
 		}
 	}
 }

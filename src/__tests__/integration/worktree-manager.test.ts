@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { nameFromId } from "../../names.js";
 import { WorktreeError, WorktreeManager } from "../../worktree-manager.js";
 
 // Skip git operation tests in coverage mode or during verification
@@ -137,10 +138,11 @@ describeGit("WorktreeManager Integration Tests", () => {
 			expect(manager.getWorktreePath(sessionId)).toBe(expected);
 		});
 
-		it("should generate correct branch name", () => {
+		it("should generate correct branch name with friendly name", () => {
 			manager = new WorktreeManager({ repoRoot: testDir, defaultBranch });
 			const sessionId = "test-session-123";
-			expect(manager.getWorktreeBranchName(sessionId)).toBe("undercity/test-session-123/worktree");
+			const friendlyName = nameFromId(sessionId);
+			expect(manager.getWorktreeBranchName(sessionId)).toBe(`undercity/${friendlyName}/${sessionId}`);
 		});
 	});
 

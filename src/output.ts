@@ -221,9 +221,11 @@ export function status(message: string, data?: Record<string, unknown>): void {
  * Output task start notification
  */
 export function taskStart(taskId: string, description: string, data?: Record<string, unknown>): void {
+	const workerName = (data?.workerName as string) || null;
+	const displayName = workerName ? `[${workerName}] ` : "";
 	outputEvent({
 		type: "task_start",
-		message: description,
+		message: `${displayName}${description}`,
 		timestamp: now(),
 		data: { taskId, ...data },
 	});
@@ -233,9 +235,11 @@ export function taskStart(taskId: string, description: string, data?: Record<str
  * Output task completion notification
  */
 export function taskComplete(taskId: string, message: string, data?: Record<string, unknown>): void {
+	const workerName = (data?.workerName as string) || null;
+	const displayName = workerName ? `[${workerName}] ` : "";
 	outputEvent({
 		type: "task_complete",
-		message,
+		message: `${displayName}${message}`,
 		timestamp: now(),
 		data: { taskId, ...data },
 	});
@@ -250,9 +254,11 @@ export function taskFailed(
 	errorDetails?: string,
 	data?: Record<string, unknown>,
 ): void {
+	const workerName = (data?.workerName as string) || null;
+	const displayName = workerName ? `[${workerName}] ` : "";
 	outputEvent({
 		type: "task_failed",
-		message,
+		message: `${displayName}${message}`,
 		timestamp: now(),
 		data: { taskId, error: errorDetails, ...data },
 	});

@@ -20,7 +20,7 @@
  */
 
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
@@ -39,6 +39,7 @@ import { generateToolsPrompt } from "./efficiency-tools.js";
 import {
 	clearPendingError,
 	formatFixSuggestionsForPrompt,
+	formatPatternsAsRules,
 	getFailureWarningsForTask,
 	recordPendingError,
 	recordPermanentFailure,
@@ -46,6 +47,13 @@ import {
 	tryAutoRemediate,
 } from "./error-fix-patterns.js";
 import { createAndCheckout } from "./git.js";
+import {
+	flagNeedsHumanInput,
+	formatGuidanceForWorker,
+	getHumanGuidance,
+	markGuidanceUsed,
+	shouldRequestHumanInput,
+} from "./human-input-tracking.js";
 import { logFastPathComplete, logFastPathFailed } from "./grind-events.js";
 import { findRelevantLearnings, formatLearningsCompact, markLearningsUsed } from "./knowledge.js";
 import { extractAndStoreLearnings } from "./knowledge-extractor.js";
@@ -435,6 +443,12 @@ export class TaskWorker {
 	/** Detailed error output for permanent failure recording */
 	private lastDetailedErrors: string[] = [];
 
+	/**
+	 * Ralph-style error history - accumulates across all attempts in this task.
+	 * Used to detect repeated same errors and build RULES for retry prompts.
+	 */
+	private errorHistory: Array<{ category: string; message: string; attempt: number }> = [];
+
 	/** Files modified before current attempt (for tracking what fixed the error) */
 	private filesBeforeAttempt: string[] = [];
 
@@ -516,6 +530,43 @@ export class TaskWorker {
 			updateTaskCheckpoint(this.workingDirectory, checkpoint);
 		} catch {
 			// Silent failure - checkpoints are optional
+		}
+
+		// Check for health check nudges from orchestrator
+		this.checkForNudge();
+	}
+
+	/**
+	 * Check for and respond to health check nudge files from the orchestrator.
+	 * Nudge files are written by the orchestrator when a worker appears stuck.
+	 */
+	private checkForNudge(): void {
+		const nudgePath = join(this.workingDirectory, ".undercity-nudge");
+		try {
+			if (!existsSync(nudgePath)) {
+				return;
+			}
+
+			// Read nudge content
+			const nudgeContent = readFileSync(nudgePath, "utf-8");
+			const nudge = JSON.parse(nudgeContent) as {
+				timestamp: string;
+				reason: string;
+				attempt: number;
+				message: string;
+			};
+
+			output.debug(`Received health check nudge: ${nudge.reason} (attempt ${nudge.attempt})`);
+			sessionLogger.info(
+				{ reason: nudge.reason, attempt: nudge.attempt },
+				"Worker received health check nudge",
+			);
+
+			// Clear the nudge file to acknowledge receipt
+			unlinkSync(nudgePath);
+			output.debug("Acknowledged nudge by removing file");
+		} catch {
+			// Non-critical - ignore errors reading/clearing nudge
 		}
 	}
 
@@ -782,6 +833,8 @@ export class TaskWorker {
 		this.currentAgentSessionId = undefined;
 		this.executionPlan = null;
 		this.autoRemediationAttempted = false;
+		// Ralph-style: clear error history for new task
+		this.errorHistory = [];
 
 		this.saveCheckpoint("starting");
 		this.cleanupDirtyState();
@@ -1596,6 +1649,13 @@ export class TaskWorker {
 					stateDir: this.stateDir,
 				});
 				output.debug(`Recorded fix for error pattern`, { taskId, files: changedFiles.length });
+
+				// Mark human guidance as successful if it was used
+				try {
+					markGuidanceUsed(this.pendingErrorSignature, true, this.stateDir);
+				} catch {
+					// Non-critical
+				}
 			} catch {
 				// Non-critical
 			}
@@ -1826,6 +1886,13 @@ export class TaskWorker {
 		// Store for potential permanent failure recording
 		this.lastErrorCategory = primaryCategory;
 		this.lastErrorMessage = errorMessage;
+
+		// Ralph-style: accumulate errors across attempts for RULES injection
+		this.errorHistory.push({
+			category: primaryCategory,
+			message: errorMessage,
+			attempt: this.attempts,
+		});
 		// Capture detailed errors: all issues plus relevant lines from feedback
 		this.lastDetailedErrors = [
 			...verification.issues,
@@ -1882,6 +1949,19 @@ export class TaskWorker {
 			}
 		} catch {
 			// Non-critical
+		}
+
+		// Inject human guidance if available for this error pattern
+		if (this.pendingErrorSignature) {
+			try {
+				const humanGuidance = formatGuidanceForWorker(this.pendingErrorSignature, this.stateDir);
+				if (humanGuidance) {
+					output.debug("Found human guidance for error pattern", { taskId });
+					enhancedFeedback += `\n\n${humanGuidance}`;
+				}
+			} catch {
+				// Non-critical
+			}
 		}
 
 		try {
@@ -2054,6 +2134,26 @@ export class TaskWorker {
 					category: this.lastErrorCategory,
 					detailedErrorCount: this.lastDetailedErrors.length,
 				});
+
+				// Check if this failure pattern should request human input
+				if (
+					this.pendingErrorSignature &&
+					shouldRequestHumanInput(this.pendingErrorSignature, this.currentTaskId, this.stateDir)
+				) {
+					// Check if we already tried human guidance
+					const existingGuidance = getHumanGuidance(this.pendingErrorSignature, this.stateDir);
+					flagNeedsHumanInput(
+						this.currentTaskId,
+						task,
+						this.pendingErrorSignature,
+						this.lastErrorCategory,
+						this.lastErrorMessage,
+						this.attempts,
+						this.currentModel,
+						existingGuidance?.guidance,
+						this.stateDir,
+					);
+				}
 			} catch {
 				// Non-critical - fall back to just clearing
 				try {
@@ -2554,6 +2654,17 @@ The file MUST be created at ${outputPath} for this task to succeed.`;
 			const failureWarnings = getFailureWarningsForTask(task, 2, this.stateDir);
 			if (failureWarnings) {
 				contextSection += `${failureWarnings}
+
+---
+
+`;
+			}
+
+			// Ralph-style: inject RULES from error patterns and current session errors
+			// These are imperative directives ("MUST NEVER", "ALWAYS") that teach the agent
+			const errorRules = formatPatternsAsRules(task, this.errorHistory, this.stateDir);
+			if (errorRules) {
+				contextSection += `${errorRules}
 
 ---
 
@@ -3062,6 +3173,7 @@ RULES:
 	 * Decide whether to escalate to a better model
 	 *
 	 * Strategy:
+	 * - Ralph-style: if same error 3+ times, fail fast (agent is stuck in loop)
 	 * - No changes made: escalate immediately (agent is stuck)
 	 * - At opus tier: use maxOpusRetries (default 7) - more attempts at final tier
 	 * - Trivial errors (lint/spell only): allow full maxRetriesPerTier attempts
@@ -3074,6 +3186,27 @@ RULES:
 		errorCategories: ErrorCategory[],
 		task: string,
 	): { shouldEscalate: boolean; reason: string; forceFailure?: boolean } {
+		// Ralph-style: detect repeated same errors (agent stuck in loop)
+		// If the same error message appears 3+ times, fail fast - more retries won't help
+		const errorMessage = verification.issues[0] || "";
+		const sameErrorCount = this.errorHistory.filter((e) => e.message.slice(0, 80) === errorMessage.slice(0, 80)).length;
+
+		if (sameErrorCount >= 3) {
+			sessionLogger.warn(
+				{
+					errorMessage: errorMessage.slice(0, 100),
+					occurrences: sameErrorCount,
+					totalAttempts: this.attempts,
+				},
+				"Ralph loop detection: same error 3+ times - failing fast",
+			);
+			return {
+				shouldEscalate: false,
+				reason: `same error repeated ${sameErrorCount}x - agent stuck in loop, task needs different approach`,
+				forceFailure: true,
+			};
+		}
+
 		// Check for file thrashing (same file edited too many times without progress)
 		for (const [filePath, count] of this.writesPerFile) {
 			if (count >= TaskWorker.MAX_WRITES_PER_FILE) {
