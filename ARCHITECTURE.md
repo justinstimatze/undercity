@@ -176,6 +176,195 @@ interface ComplexityAssessment {
 }
 ```
 
+## Configuration & Data Structures
+
+### knowledge.json
+
+**Location**: `.undercity/knowledge.json`
+
+**Purpose**: Persistent knowledge base of learnings extracted from completed tasks. Each task completion deposits knowledge that improves future task execution through relevant context injection.
+
+**Root Structure (KnowledgeBase)**:
+
+```typescript
+interface KnowledgeBase {
+  learnings: Learning[];      // Array of extracted learnings
+  version: string;            // Format version (currently "1.0")
+  lastUpdated: string;        // ISO timestamp of last modification
+}
+```
+
+**Learning Structure**:
+
+```typescript
+interface Learning {
+  id: string;                 // Unique identifier (learn-{timestamp}-{random})
+  taskId: string;             // Task that produced this learning
+  category: LearningCategory; // "pattern" | "gotcha" | "preference" | "fact"
+  content: string;            // Natural language description of learning
+  keywords: string[];         // Keywords extracted for retrieval (max 20)
+  structured?: {              // Optional structured data
+    file?: string;            // Associated file path
+    pattern?: string;         // Code pattern or template
+    approach?: string;        // Recommended approach
+  };
+  confidence: number;         // Score 0-1, starts at 0.5, increases with reuse
+  usedCount: number;          // Times injected into task context
+  successCount: number;       // Times use led to task success
+  createdAt: string;          // ISO timestamp
+  lastUsedAt?: string;        // ISO timestamp of last injection
+}
+```
+
+**Learning Categories**:
+
+| Category | Use | Example |
+|----------|-----|---------|
+| `pattern` | Recurring code patterns or solutions | "Use discriminated unions for error handling" |
+| `gotcha` | Pitfalls and edge cases | "Forget to await in try/catch blocks" |
+| `preference` | Team preferences and conventions | "Always use execFileSync over execSync" |
+| `fact` | Facts about codebase structure | "TypeScript strict mode enforced in tsconfig.json" |
+
+**Example knowledge.json**:
+
+```json
+{
+  "version": "1.0",
+  "lastUpdated": "2026-01-20T15:30:45.123Z",
+  "learnings": [
+    {
+      "id": "learn-1a2b3c-xyz789",
+      "taskId": "task-fix-validation",
+      "category": "pattern",
+      "content": "Use discriminated unions with z.discriminatedUnion() for Zod validation to ensure type safety",
+      "keywords": ["zod", "discriminated", "union", "validation", "typescript"],
+      "structured": {
+        "file": "src/types.ts",
+        "pattern": "z.discriminatedUnion('success', [...])",
+        "approach": "Define success/error variants explicitly"
+      },
+      "confidence": 0.85,
+      "usedCount": 3,
+      "successCount": 3,
+      "createdAt": "2026-01-15T10:20:00.000Z",
+      "lastUsedAt": "2026-01-20T15:00:00.000Z"
+    },
+    {
+      "id": "learn-2d4e5f-abc123",
+      "taskId": "task-git-safety",
+      "category": "gotcha",
+      "content": "Never use git add -A or git add . in automation. Always stage specific files to avoid committing untracked experiments.",
+      "keywords": ["git", "staging", "bulk", "safety", "commit"],
+      "confidence": 0.92,
+      "usedCount": 2,
+      "successCount": 2,
+      "createdAt": "2026-01-12T08:15:00.000Z",
+      "lastUsedAt": "2026-01-18T14:30:00.000Z"
+    }
+  ]
+}
+```
+
+### Knowledge Lifecycle
+
+**Extraction** (task completion):
+1. `knowledge-extractor.ts` analyzes completed task
+2. Identifies learnings from changes made, patterns used, gotchas encountered
+3. Extracts keywords via `extractKeywords()` (filters stop words, max 20 per learning)
+4. Creates Learning object with confidence: 0.5 (50% baseline)
+5. Deduplicates against existing learnings (80% similarity threshold)
+6. Persists to `.undercity/knowledge.json` via `saveKnowledge()`
+
+**Injection** (before execution):
+1. Worker calls `findRelevantLearnings(objective)` before agent execution
+2. Scores learnings: `(70% keyword match) + (30% confidence)`
+3. Returns top 5 learnings with score > 0.1
+4. Context builder formats learnings into prompt via `formatLearningsForPrompt()`
+5. Injected knowledge helps agent make better decisions
+
+**Scoring**:
+- Keyword overlap: How many task keywords match learning keywords
+- Confidence: Increases with successful reuse (`confidence += 0.1 * (successCount / usedCount)`)
+- Time-based decay: Older unused learnings have lower priority (via lastUsedAt)
+
+**Pruning**:
+- Learnings with confidence < 0.3 and no uses in 30 days are candidates for removal
+- Manual cleanup via `knowledge prune` command
+- Rebuilding: `knowledge rebuild` recreates from task history
+
+### Knowledge Integration Points
+
+| Component | Location | Function | When Called |
+|-----------|----------|----------|-------------|
+| **Planning** | `task-planner.ts:373` | `findRelevantLearnings()` | During pre-execution plan creation |
+| **Context Building** | `worker.ts:2525` | `findRelevantLearnings()` | Before agent execution begins |
+| **PM Decisions** | `automated-pm.ts:92` | `findRelevantLearnings()` | When resolving pending decisions |
+| **Usage Tracking** | `worker.ts:1720` | `markLearningsUsed()` | After task completion (updates confidence) |
+| **Extraction** | `knowledge-extractor.ts` | `addLearning()` | Task completion (stores new learnings) |
+| **Validation** | `knowledge-validator.ts` | `validateKnowledgeBase()` | Load/save time, pre-commit hook, CI/CD |
+| **CLI Access** | `commands/mixed-handlers.ts` | Knowledge command | User queries knowledge via `knowledge <query>` |
+| **Verification** | `verification.ts` | Validation checks | Pre-commit hook runs knowledge validation |
+
+### Knowledge Retrieval Scoring
+
+**Formula**: `score = (keywordMatch * 0.7) + (confidence * 0.3)`
+
+**Example**:
+```
+Task: "Add error handling with discriminated unions"
+Keywords: ["error", "handling", "discriminated", "unions"]
+
+Learning: "Use discriminated unions for error handling"
+Learning keywords: ["zod", "discriminated", "union", "validation"]
+Keyword match: 2/4 = 0.5
+Confidence: 0.85
+Score: (0.5 * 0.7) + (0.85 * 0.3) = 0.35 + 0.255 = 0.605 ✓ (above 0.1 threshold)
+```
+
+### Validation Rules
+
+**Structure**:
+- `learnings` must be array of Learning objects
+- `version` must be string (currently "1.0")
+- `lastUpdated` must be valid ISO date
+
+**Learning Fields**:
+- `id`: Non-empty string (format: `learn-{base36}-{random}`)
+- `taskId`: Non-empty string
+- `category`: One of: `pattern`, `gotcha`, `preference`, `fact`
+- `content`: Non-empty string
+- `keywords`: Array of strings (filtered duplicates)
+- `confidence`: Number between 0.0 and 1.0
+- `usedCount`, `successCount`: Non-negative integers
+- `createdAt`: Valid ISO date string
+- `lastUsedAt`: Optional, valid ISO date if present
+- `structured`: Optional object with optional `file`, `pattern`, `approach` string fields
+
+**Validation occurs**:
+- On `loadKnowledge()` (returns default KB on validation failure)
+- On `saveKnowledge()` (throws error if invalid)
+- Pre-commit hook via `verifyWork()`
+- CI/CD pipeline via GitHub Actions
+
+### Common Issues & Troubleshooting
+
+| Issue | Cause | Resolution |
+|-------|-------|-----------|
+| **Knowledge base not loaded** | Invalid knowledge.json | Run `knowledge rebuild` or delete `.undercity/knowledge.json` and restart |
+| **Validation failure during save** | Added malformed learning | Check logs for specific field error (path shown in error message) |
+| **Learnings not being injected** | Confidence too low or no keyword match | Review learning keywords via `knowledge search <term>` |
+| **Duplicate learnings** | Same content added twice | Duplicates filtered at 80% similarity; manual cleanup may be needed |
+| **No relevant learnings found** | Empty knowledge base or poor keyword extraction | Start with a few completed tasks to build knowledge base |
+
+### Size Estimates
+
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Per learning | ~200-400 bytes | Depends on content/keywords length |
+| Typical KB | ~100 learnings | ~20-40 KB JSON file |
+| Max recommended | 1000 learnings | ~200-400 KB, still performant |
+| Retrieval cost | ~50ms | Scoring all learnings for one query |
+
 ## Execution Flow
 
 ### grind Command

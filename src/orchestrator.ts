@@ -678,9 +678,7 @@ export class Orchestrator {
 		}
 
 		const escalationInfo =
-			this.maxTier && this.maxTier !== "opus"
-				? ` (capped at ${this.maxTier})`
-				: " → escalate if needed";
+			this.maxTier && this.maxTier !== "opus" ? ` (capped at ${this.maxTier})` : " → escalate if needed";
 		output.header("Solo Mode (Direct)", `Model: ${this.startingModel}${escalationInfo}`);
 
 		const taskId = generateTaskId();
@@ -915,9 +913,7 @@ export class Orchestrator {
 	 */
 	private displayExecutionHeader(taskCount: number): void {
 		const escalationInfo =
-			this.maxTier && this.maxTier !== "opus"
-				? ` (capped at ${this.maxTier})`
-				: " → escalate if needed";
+			this.maxTier && this.maxTier !== "opus" ? ` (capped at ${this.maxTier})` : " → escalate if needed";
 		output.header(
 			"Parallel Mode",
 			`${taskCount} tasks (max ${this.maxConcurrent} concurrent) • Model: ${this.startingModel}${escalationInfo}`,
