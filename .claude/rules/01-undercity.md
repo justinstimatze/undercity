@@ -110,8 +110,11 @@ undercity patterns                         # View all learning patterns (files, 
 undercity decide                           # View/resolve pending decisions
 ```
 
-**Analysis** (run periodically, not during grind):
+**Analysis & Post-Mortem** (run after grind or periodically):
 ```bash
+undercity postmortem                       # Analyze last grind: failures, recommendations
+undercity postmortem --json                # Machine-readable output
+undercity grind --postmortem               # Auto-run postmortem after grind
 undercity metrics                          # Performance overview
 undercity introspect                       # Self-analysis: success rates, routing, escalation
 undercity insights                         # Routing recommendations from historical data
@@ -143,10 +146,11 @@ pnpm daemon:logs                           # View logs
 
 **"Is grind running?"** → `undercity status` or `undercity watch`
 **"How much usage left?"** → `undercity usage`
-**"What went wrong?"** → `undercity status --events`
+**"What went wrong?"** → `undercity postmortem` (after grind) or `undercity status --events`
 **"Why did task X fail?"** → `undercity knowledge "task X error"`
 **"What should I work on?"** → `undercity pm --propose`
 **"Is my code healthy?"** → `undercity metrics` then `undercity introspect`
+**"How do I improve?"** → `undercity postmortem` → follow recommendations
 
 ## Learning Systems Integration
 
@@ -177,6 +181,66 @@ curl -X POST http://localhost:7331/mcp -d '{"jsonrpc":"2.0","id":2,"method":"too
 ```
 
 Tools: `knowledge_search`, `knowledge_add`, `knowledge_stats`, `knowledge_mark_used`
+
+## Meta Learning Loop
+
+Undercity improves itself through a continuous feedback loop:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         GRIND SESSION                           │
+│  Tasks execute → Successes/failures recorded → Patterns saved   │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                         POST-MORTEM                             │
+│  undercity postmortem analyzes:                                 │
+│  • Failure breakdown (planning, tests, typecheck, no_changes)   │
+│  • Success rate by task type                                    │
+│  • Token efficiency                                             │
+│  → Generates actionable recommendations                         │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                      SYSTEM ADAPTATION                          │
+│  Recommendations trigger improvements:                          │
+│  • Plan specificity validation (catches vague plans early)      │
+│  • Test task routing (sonnet minimum, extra retries)            │
+│  • Model routing adjustments (capability ledger)                │
+│  • Error-fix pattern additions                                  │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+                    Next grind benefits from learnings
+
+```
+
+**Postmortem output example:**
+```
+📊 Grind Post-Mortem
+
+Summary
+  Tasks: 50 completed / 6 failed
+  Success Rate: 89.3%
+
+Failure Breakdown
+  planning: 2
+  verification_tests: 3
+  no_changes: 1
+
+Recommendations
+  2 task(s) failed in planning phase. Consider:
+    - Breaking vague tasks into specific subtasks
+  3 task(s) failed test verification. Consider:
+    - Test tasks now route to sonnet minimum
+```
+
+**Workflow:**
+```bash
+undercity grind --postmortem    # Run grind + auto-analyze
+# OR
+undercity grind                 # Run grind
+undercity postmortem            # Analyze separately
+```
 
 ## Task Execution Flow
 

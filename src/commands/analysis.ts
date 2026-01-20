@@ -648,6 +648,17 @@ export const analysisCommands: CommandModule = {
 				const { handleVisualize } = await import("./visualize-handlers.js");
 				await handleVisualize(options);
 			});
+
+		// Post-mortem command for analyzing grind results
+		program
+			.command("postmortem")
+			.description("Analyze last grind session and generate insights")
+			.option("-n, --last <n>", "Analyze last N sessions (default: 1)", "1")
+			.option("--json", "Output as JSON")
+			.action(async (options) => {
+				const { handlePostmortem } = await import("./analysis-handlers.js");
+				await handlePostmortem(options);
+			});
 	},
 };
 

@@ -152,6 +152,7 @@ export interface GrindOptions {
 	dryRun?: boolean;
 	push?: boolean;
 	duration?: string;
+	postmortem?: boolean;
 	// Verification retry options
 	maxAttempts?: string;
 	maxRetriesPerTier?: string;
@@ -2010,6 +2011,12 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 					});
 				}
 			}
+		}
+
+		// Run post-mortem if requested
+		if (options.postmortem) {
+			const { handlePostmortem } = await import("./analysis-handlers.js");
+			await handlePostmortem({});
 		}
 	} catch (error) {
 		clearGrindProgress();

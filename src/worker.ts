@@ -58,7 +58,7 @@ import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
 import { runEscalatingReview, type UnresolvedTicket } from "./review.js";
 import { addTask, type HandoffContext } from "./task.js";
 import { formatCoModificationHints, formatFileSuggestionsForPrompt, recordTaskFiles } from "./task-file-patterns.js";
-import { formatExecutionPlanAsContext, planTaskWithReview, type TieredPlanResult } from "./task-planner.js";
+import { formatExecutionPlanAsContext, isTestTask, planTaskWithReview, type TieredPlanResult } from "./task-planner.js";
 import { extractMetaTaskType, isMetaTask, isResearchTask, parseResearchResult } from "./task-schema.js";
 import {
 	type AttemptRecord,
@@ -1065,7 +1065,7 @@ export class TaskWorker {
 			output.info(`Complexity: ${assessment.level} (keyword-based)`, { taskId, complexity: assessment.level });
 		}
 
-		this.currentModel = this.determineStartingModel(assessment);
+		this.currentModel = this.determineStartingModel(assessment, task);
 
 		if (this.startingModel === "sonnet") {
 			const adjustedModel = await adjustModelFromMetrics(this.currentModel, assessment.level);
@@ -1900,7 +1900,7 @@ export class TaskWorker {
 		verification: VerificationResult,
 		errorCategories: ErrorCategory[],
 	): void {
-		const escalationDecision = this.shouldEscalate(verification, errorCategories);
+		const escalationDecision = this.shouldEscalate(verification, errorCategories, task);
 
 		// Force failure when file thrashing detected (prevents token burn)
 		if (escalationDecision.forceFailure) {
@@ -2236,11 +2236,24 @@ Be concise and specific. Focus on actionable insights.`;
 
 	/**
 	 * Determine starting model based on complexity assessment
+	 *
+	 * Special handling for test-writing tasks: Always use sonnet minimum.
+	 * Test tasks are inherently harder (need understanding of code + test patterns),
+	 * and failures are expensive (verification loops on the tests themselves).
 	 */
-	private determineStartingModel(assessment: ComplexityAssessment): ModelTier {
+	private determineStartingModel(assessment: ComplexityAssessment, task: string): ModelTier {
 		// Override with user preference if set
 		if (this.startingModel !== "sonnet") {
 			return this.startingModel;
+		}
+
+		// Test-writing tasks: minimum sonnet (skip haiku)
+		// Test tasks have higher failure rates with haiku due to complexity
+		if (isTestTask(task)) {
+			sessionLogger.debug({ objective: task.substring(0, 50) }, "Test task detected - using sonnet minimum");
+			if (assessment.level === "trivial" || assessment.level === "simple") {
+				return "sonnet";
+			}
 		}
 
 		// Use assessment to pick model
@@ -3003,10 +3016,12 @@ RULES:
 	 * - Trivial errors (lint/spell only): allow full maxRetriesPerTier attempts
 	 * - Serious errors (typecheck/build/test): allow fewer retries (maxRetriesPerTier - 1)
 	 *   to escalate faster for errors that likely need a smarter model
+	 * - Test-writing tasks get extra retries for test failures (tests are iterative)
 	 */
 	private shouldEscalate(
 		verification: VerificationResult,
 		errorCategories: ErrorCategory[],
+		task: string,
 	): { shouldEscalate: boolean; reason: string; forceFailure?: boolean } {
 		// Check for file thrashing (same file edited too many times without progress)
 		for (const [filePath, count] of this.writesPerFile) {
@@ -3078,8 +3093,21 @@ RULES:
 		}
 
 		if (hasSerious) {
-			// Serious errors: allow fewer retries to escalate faster
-			const seriousRetryLimit = Math.max(2, this.maxRetriesPerTier - 1);
+			// Test-writing tasks get more retries when tests fail
+			// Test failures are expected during test development - give more chances
+			const isWritingTests = isTestTask(task);
+			const hasTestErrors = errorCategories.includes("test");
+
+			let seriousRetryLimit: number;
+			if (isWritingTests && hasTestErrors) {
+				// Test-writing tasks with test failures: full retries (tests are iterative)
+				seriousRetryLimit = this.maxRetriesPerTier + 1;
+				sessionLogger.debug({ retries: this.sameModelRetries, limit: seriousRetryLimit }, "Test task - allowing extra retries for test failures");
+			} else {
+				// Other serious errors: allow fewer retries to escalate faster
+				seriousRetryLimit = Math.max(2, this.maxRetriesPerTier - 1);
+			}
+
 			if (this.sameModelRetries < seriousRetryLimit) {
 				const remaining = seriousRetryLimit - this.sameModelRetries;
 				return { shouldEscalate: false, reason: `serious error, ${remaining} retries left at tier` };

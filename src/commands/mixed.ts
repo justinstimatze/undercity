@@ -67,6 +67,7 @@ export const mixedCommands: CommandModule = {
 			.option("--dry-run", "Show what would execute without running tasks")
 			.option("--push", "Push to remote after successful merge (default: off)")
 			.option("--duration <time>", "Auto-drain after duration (e.g., 6h, 30m)")
+			.option("--postmortem", "Run post-mortem analysis after grind completes")
 			.action((options: GrindOptions) => handleGrind(options));
 
 		// Limits command - quick snapshot of usage (use 'watch' for live monitoring)

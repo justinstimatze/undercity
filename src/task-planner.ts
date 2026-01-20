@@ -507,7 +507,7 @@ RULES:
 	try {
 		return JSON.parse(planJson) as ExecutionPlan;
 	} catch {
-		// Return minimal plan if parsing fails
+		// Return minimal plan if parsing fails - marked for retry
 		return {
 			objective: task,
 			filesToRead: [],
@@ -516,8 +516,86 @@ RULES:
 			steps: ["Execute the task as described"],
 			risks: ["Plan parsing failed - proceeding with minimal plan"],
 			expectedOutcome: "Task completion",
-		};
+			_parsingFailed: true, // Internal flag for retry logic
+		} as ExecutionPlan & { _parsingFailed?: boolean };
 	}
+}
+
+/**
+ * Non-specific plan patterns that indicate retry is needed
+ */
+const NON_SPECIFIC_STEP_PATTERNS = [
+	/^execute the task/i,
+	/^do the task/i,
+	/^complete the task/i,
+	/^implement as described/i,
+	/^follow the instructions/i,
+	/^proceed with/i,
+];
+
+/**
+ * Check if a plan is too non-specific to execute
+ * Returns issues if plan needs improvement
+ */
+function validatePlanSpecificity(plan: ExecutionPlan): {
+	isSpecific: boolean;
+	issues: string[];
+} {
+	const issues: string[] = [];
+
+	// Check for non-specific steps
+	const hasNonSpecificSteps = plan.steps.some((step) =>
+		NON_SPECIFIC_STEP_PATTERNS.some((pattern) => pattern.test(step)),
+	);
+	if (hasNonSpecificSteps) {
+		issues.push("Plan contains non-specific steps like 'Execute the task as described'");
+	}
+
+	// Check for missing file targets (unless it's a research task)
+	const isResearchTask =
+		plan.objective.toLowerCase().includes("[research]") ||
+		plan.objective.toLowerCase().includes("research") ||
+		plan.objective.toLowerCase().includes("analyze") ||
+		plan.objective.toLowerCase().includes("review");
+
+	if (!isResearchTask && plan.filesToModify.length === 0 && plan.filesToCreate.length === 0) {
+		issues.push("No files to modify or create - plan needs specific targets");
+	}
+
+	// Check for overly short steps
+	const tooShortSteps = plan.steps.filter((s) => s.length < 15);
+	if (tooShortSteps.length > plan.steps.length / 2) {
+		issues.push("Most steps are too short to be actionable");
+	}
+
+	// Check for steps that are just file names
+	const fileOnlySteps = plan.steps.filter((s) => /^\s*[\w/.-]+\.(ts|js|tsx|jsx|json|md)\s*$/i.test(s));
+	if (fileOnlySteps.length > 0) {
+		issues.push("Steps should describe actions, not just list files");
+	}
+
+	return {
+		isSpecific: issues.length === 0,
+		issues,
+	};
+}
+
+/**
+ * Detect if a task is test-related (needs special handling)
+ */
+export function isTestTask(objective: string): boolean {
+	const lower = objective.toLowerCase();
+	return (
+		lower.includes("test") ||
+		lower.includes("spec") ||
+		lower.includes("__tests__") ||
+		lower.includes(".test.") ||
+		lower.includes(".spec.") ||
+		lower.includes("coverage") ||
+		lower.includes("unit test") ||
+		lower.includes("integration test") ||
+		lower.includes("e2e")
+	);
 }
 
 /**
@@ -967,12 +1045,45 @@ export async function planTaskWithReview(
 
 	// Phase 1: Create initial plan with cheaper model (using pre-gathered context)
 	let currentPlan = await createExecutionPlan(task, plannerModel, cwd, planningContext);
+	let actualPlannerModel = plannerModel;
+
+	// Phase 1.2: Validate plan specificity - retry with better model if too vague
+	const specificity = validatePlanSpecificity(currentPlan);
+	const planWithMeta = currentPlan as ExecutionPlan & { _parsingFailed?: boolean };
+
+	if (!specificity.isSpecific || planWithMeta._parsingFailed) {
+		logger.warn(
+			{
+				issues: specificity.issues,
+				parsingFailed: !!planWithMeta._parsingFailed,
+				plannerModel,
+			},
+			"Initial plan not specific enough - escalating planner model",
+		);
+
+		// Escalate planner model
+		const escalatedModel = getReviewerTier(plannerModel);
+		if (escalatedModel !== plannerModel) {
+			logger.info({ from: plannerModel, to: escalatedModel }, "Retrying plan creation with escalated model");
+			currentPlan = await createExecutionPlan(task, escalatedModel, cwd, planningContext);
+			actualPlannerModel = escalatedModel;
+
+			// Re-validate after escalation
+			const recheck = validatePlanSpecificity(currentPlan);
+			if (!recheck.isSpecific) {
+				logger.warn({ issues: recheck.issues }, "Escalated plan still not specific - will proceed to review");
+			}
+		}
+	}
 
 	// Phase 1.5: Resolve any open questions via PM (inline, not deferred)
 	if (currentPlan.openQuestions && currentPlan.openQuestions.length > 0) {
 		const taskId = `plan-${Date.now().toString(36)}`;
 		currentPlan = await resolveOpenQuestions(currentPlan, taskId);
 	}
+
+	// Recalculate reviewer model based on actual planner model used
+	const actualReviewerModel = getReviewerTier(actualPlannerModel);
 
 	// Early exit: already complete
 	if (currentPlan.alreadyComplete?.likely) {
@@ -985,8 +1096,8 @@ export async function planTaskWithReview(
 				suggestions: [],
 				skipExecution: { skip: true, reason: currentPlan.alreadyComplete.reason },
 			},
-			plannerModel,
-			reviewerModel,
+			plannerModel: actualPlannerModel,
+			reviewerModel: actualReviewerModel,
 			proceedWithExecution: false,
 			skipReason: `Task already complete: ${currentPlan.alreadyComplete.reason}`,
 		};
@@ -999,13 +1110,13 @@ export async function planTaskWithReview(
 
 		// If no subtasks provided, escalate through models to get them
 		if (subtasks.length === 0) {
-			logger.info({ plannerModel, reason }, "Plan needs decomposition but no subtasks - escalating");
+			logger.info({ plannerModel: actualPlannerModel, reason }, "Plan needs decomposition but no subtasks - escalating");
 
 			// Try reviewerModel first (sonnet if planner was haiku)
-			subtasks = await requestDecompositionSubtasks(task, reason, reviewerModel, cwd);
+			subtasks = await requestDecompositionSubtasks(task, reason, actualReviewerModel, cwd);
 
 			// If still no subtasks and not at opus, try opus
-			if (subtasks.length === 0 && reviewerModel !== "opus") {
+			if (subtasks.length === 0 && actualReviewerModel !== "opus") {
 				logger.info("Escalating to opus for decomposition subtasks");
 				subtasks = await requestDecompositionSubtasks(task, reason, "opus", cwd);
 			}
@@ -1022,8 +1133,8 @@ export async function planTaskWithReview(
 				issues: ["Task requires decomposition"],
 				suggestions: subtasks,
 			},
-			plannerModel,
-			reviewerModel,
+			plannerModel: actualPlannerModel,
+			reviewerModel: actualReviewerModel,
 			proceedWithExecution: false,
 			skipReason: "Task needs decomposition into smaller subtasks",
 		};
@@ -1046,7 +1157,7 @@ export async function planTaskWithReview(
 		);
 
 		// Get review from higher-tier model
-		review = await reviewExecutionPlan(task, currentPlan, reviewerModel, cwd);
+		review = await reviewExecutionPlan(task, currentPlan, actualReviewerModel, cwd);
 
 		// If approved or should skip, we're done
 		if (review.approved || review.skipExecution?.skip) {
@@ -1078,7 +1189,7 @@ export async function planTaskWithReview(
 			"Revising plan based on feedback",
 		);
 
-		currentPlan = await revisePlan(task, currentPlan, review, plannerModel, cwd, planningContext);
+		currentPlan = await revisePlan(task, currentPlan, review, actualPlannerModel, cwd, planningContext);
 
 		// Check if revision triggered decomposition
 		if (currentPlan.needsDecomposition?.needed) {
@@ -1087,10 +1198,10 @@ export async function planTaskWithReview(
 
 			// If no subtasks provided, escalate through models to get them
 			if (subtasks.length === 0) {
-				logger.info({ plannerModel, reason }, "Revision needs decomposition but no subtasks - escalating");
-				subtasks = await requestDecompositionSubtasks(task, reason, reviewerModel, cwd);
+				logger.info({ plannerModel: actualPlannerModel, reason }, "Revision needs decomposition but no subtasks - escalating");
+				subtasks = await requestDecompositionSubtasks(task, reason, actualReviewerModel, cwd);
 
-				if (subtasks.length === 0 && reviewerModel !== "opus") {
+				if (subtasks.length === 0 && actualReviewerModel !== "opus") {
 					logger.info("Escalating to opus for decomposition subtasks");
 					subtasks = await requestDecompositionSubtasks(task, reason, "opus", cwd);
 				}
@@ -1107,8 +1218,8 @@ export async function planTaskWithReview(
 					issues: ["Task requires decomposition after revision"],
 					suggestions: subtasks,
 				},
-				plannerModel,
-				reviewerModel,
+				plannerModel: actualPlannerModel,
+				reviewerModel: actualReviewerModel,
 				proceedWithExecution: false,
 				skipReason: "Task needs decomposition into smaller subtasks",
 			};
@@ -1136,8 +1247,8 @@ export async function planTaskWithReview(
 		success: true,
 		plan: finalPlan,
 		review: review!,
-		plannerModel,
-		reviewerModel,
+		plannerModel: actualPlannerModel,
+		reviewerModel: actualReviewerModel,
 		proceedWithExecution,
 		skipReason: shouldSkip ? review!.skipExecution?.reason : undefined,
 		iterations: iteration,

@@ -8,7 +8,8 @@
 | **commands/task.ts** | Task board commands (tasks, add, work, plan, plans, import-plan, reconcile, triage, prune) | taskCommands |
 | **commands/plan-handlers.ts** | Plan-task linkage command handlers | handlePlan (linkage) |
 | **commands/mixed.ts** | Execution + learning commands (grind, pm, usage, knowledge, decide, tuning, watch) | mixedCommands |
-| **commands/analysis.ts** | Metrics/analysis commands (patterns, decisions, ax) | analysisCommands |
+| **commands/analysis.ts** | Metrics/analysis commands (patterns, decisions, ax, postmortem) | analysisCommands |
+| **commands/analysis-handlers.ts** | Analysis command handlers (postmortem) | handlePostmortem |
 | **orchestrator.ts** | Main production orchestrator, parallel execution | Orchestrator |
 | **worker.ts** | Single-task executor, runs in worktree | TaskWorker |
 | **task.ts** | Task board CRUD (add, get, mark status) | addGoal, getAllItems, markComplete, etc. |
@@ -80,6 +81,7 @@
 - Create pre-execution plans with review → `task-planner.ts` (planTaskWithReview)
 - Check task complexity → `complexity.ts` or `task-decomposer.ts`
 - Analyze historical metrics → `feedback-metrics.ts`
+- Run post-mortem analysis → `commands/analysis-handlers.ts` (handlePostmortem)
 - View/tune model routing → `self-tuning.ts` (or `undercity tuning`)
 - Analyze task board → `task-board-analyzer.ts`
 - Schedule compatible tasks → `task-scheduler.ts`
