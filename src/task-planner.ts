@@ -1110,7 +1110,10 @@ export async function planTaskWithReview(
 
 		// If no subtasks provided, escalate through models to get them
 		if (subtasks.length === 0) {
-			logger.info({ plannerModel: actualPlannerModel, reason }, "Plan needs decomposition but no subtasks - escalating");
+			logger.info(
+				{ plannerModel: actualPlannerModel, reason },
+				"Plan needs decomposition but no subtasks - escalating",
+			);
 
 			// Try reviewerModel first (sonnet if planner was haiku)
 			subtasks = await requestDecompositionSubtasks(task, reason, actualReviewerModel, cwd);
@@ -1198,7 +1201,10 @@ export async function planTaskWithReview(
 
 			// If no subtasks provided, escalate through models to get them
 			if (subtasks.length === 0) {
-				logger.info({ plannerModel: actualPlannerModel, reason }, "Revision needs decomposition but no subtasks - escalating");
+				logger.info(
+					{ plannerModel: actualPlannerModel, reason },
+					"Revision needs decomposition but no subtasks - escalating",
+				);
 				subtasks = await requestDecompositionSubtasks(task, reason, actualReviewerModel, cwd);
 
 				if (subtasks.length === 0 && actualReviewerModel !== "opus") {

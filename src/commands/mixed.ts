@@ -64,6 +64,7 @@ export const mixedCommands: CommandModule = {
 			.option("--max-review-passes <n>", "Maximum review passes per tier before escalating (default: 2)")
 			.option("--max-opus-review-passes <n>", "Maximum review passes at opus tier (default: 6)")
 			.option("--max-decomposition-depth <n>", "Maximum decomposition depth (default: 1, subtasks won't decompose)")
+			.option("--max-tier <tier>", "Maximum model tier to escalate to (haiku, sonnet, opus). Default: opus")
 			.option("--dry-run", "Show what would execute without running tasks")
 			.option("--push", "Push to remote after successful merge (default: off)")
 			.option("--duration <time>", "Auto-drain after duration (e.g., 6h, 30m)")

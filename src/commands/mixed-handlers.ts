@@ -64,7 +64,13 @@ function formatDuration(ms: number): string {
 	return `${seconds}s`;
 }
 
-const GRIND_LOCK_FILE = ".undercity/grind.lock";
+/**
+ * Get the absolute path to the grind lock file.
+ * Uses process.cwd() to ensure the lock is in the current project's .undercity directory.
+ */
+function getGrindLockPath(): string {
+	return join(process.cwd(), ".undercity", "grind.lock");
+}
 
 interface GrindLock {
 	pid: number;
@@ -89,9 +95,9 @@ function isProcessRunning(pid: number): boolean {
  */
 function acquireGrindLock(): { acquired: boolean; existingPid?: number; startedAt?: string } {
 	// Check for existing lock
-	if (existsSync(GRIND_LOCK_FILE)) {
+	if (existsSync(getGrindLockPath())) {
 		try {
-			const lockData: GrindLock = JSON.parse(readFileSync(GRIND_LOCK_FILE, "utf-8"));
+			const lockData: GrindLock = JSON.parse(readFileSync(getGrindLockPath(), "utf-8"));
 			// Check if process is still alive
 			if (isProcessRunning(lockData.pid)) {
 				return { acquired: false, existingPid: lockData.pid, startedAt: lockData.startedAt };
@@ -111,12 +117,12 @@ function acquireGrindLock(): { acquired: boolean; existingPid?: number; startedA
 	};
 
 	// Ensure directory exists
-	const dir = dirname(GRIND_LOCK_FILE);
+	const dir = dirname(getGrindLockPath());
 	if (!existsSync(dir)) {
 		mkdirSync(dir, { recursive: true });
 	}
 
-	writeFileSync(GRIND_LOCK_FILE, JSON.stringify(lock, null, 2));
+	writeFileSync(getGrindLockPath(), JSON.stringify(lock, null, 2));
 	return { acquired: true };
 }
 
@@ -125,11 +131,11 @@ function acquireGrindLock(): { acquired: boolean; existingPid?: number; startedA
  */
 function releaseGrindLock(): void {
 	try {
-		if (existsSync(GRIND_LOCK_FILE)) {
+		if (existsSync(getGrindLockPath())) {
 			// Only remove if we own the lock
-			const lockData: GrindLock = JSON.parse(readFileSync(GRIND_LOCK_FILE, "utf-8"));
+			const lockData: GrindLock = JSON.parse(readFileSync(getGrindLockPath(), "utf-8"));
 			if (lockData.pid === process.pid) {
-				unlinkSync(GRIND_LOCK_FILE);
+				unlinkSync(getGrindLockPath());
 			}
 		}
 	} catch {
@@ -160,6 +166,8 @@ export interface GrindOptions {
 	maxOpusReviewPasses?: string;
 	// Decomposition depth limit (default: 1, meaning only top-level tasks can be decomposed)
 	maxDecompositionDepth?: string;
+	// Maximum model tier to escalate to (caps escalation at this tier)
+	maxTier?: string;
 }
 
 export interface InitOptions {
@@ -944,6 +952,13 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 	// Decomposition depth limit (default: 1, meaning subtasks cannot be decomposed further)
 	const maxDecompositionDepth = options.maxDecompositionDepth ? Number.parseInt(options.maxDecompositionDepth, 10) : 1;
 
+	// Parse max tier option (caps escalation at this tier)
+	const maxTier = options.maxTier as "haiku" | "sonnet" | "opus" | undefined;
+	if (maxTier && !["haiku", "sonnet", "opus"].includes(maxTier)) {
+		output.error(`Invalid max-tier: ${maxTier}. Must be haiku, sonnet, or opus`);
+		process.exit(1);
+	}
+
 	const orchestrator = new Orchestrator({
 		maxConcurrent: parallelism,
 		autoCommit: options.commit !== false,
@@ -956,6 +971,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		maxRetriesPerTier,
 		maxReviewPassesPerTier,
 		maxOpusReviewPasses,
+		maxTier,
 	});
 
 	// Set up auto-drain timer if duration specified
@@ -1757,6 +1773,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 						maxRetriesPerTier,
 						maxReviewPassesPerTier,
 						maxOpusReviewPasses,
+						maxTier,
 					});
 
 					// Pass full task objects to preserve IDs for decomposition

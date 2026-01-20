@@ -1038,7 +1038,10 @@ export class Persistence {
 			}
 
 			if (cleared.length > 0) {
-				persistenceLogger.info({ count: cleared.length, currentBatchId }, "Cleared orphaned workers from previous batches");
+				persistenceLogger.info(
+					{ count: cleared.length, currentBatchId },
+					"Cleared orphaned workers from previous batches",
+				);
 			}
 		} catch (error) {
 			persistenceLogger.warn({ error: String(error) }, "Error clearing previous batch workers");

@@ -64,6 +64,8 @@ export interface ParallelSoloOptions {
 	maxRetriesPerTier?: number; // Maximum fix attempts at same tier before escalating (default: 2)
 	maxReviewPassesPerTier?: number; // Maximum review passes per tier before escalating (default: 2)
 	maxOpusReviewPasses?: number; // Maximum review passes at opus tier (default: 6)
+	// Model tier cap (prevents escalation beyond this tier)
+	maxTier?: "haiku" | "sonnet" | "opus";
 	// Worker health monitoring
 	healthCheck?: WorkerHealthConfig;
 	// Repository root directory (default: process.cwd())
@@ -202,6 +204,7 @@ export class Orchestrator {
 	private maxRetriesPerTier: number;
 	private maxReviewPassesPerTier: number;
 	private maxOpusReviewPasses: number;
+	private maxTier?: "haiku" | "sonnet" | "opus";
 	private worktreeManager: WorktreeManager;
 	private persistence: Persistence;
 	private rateLimitTracker: RateLimitTracker;
@@ -243,6 +246,7 @@ export class Orchestrator {
 		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
 		this.maxReviewPassesPerTier = options.maxReviewPassesPerTier ?? 2;
 		this.maxOpusReviewPasses = options.maxOpusReviewPasses ?? 6;
+		this.maxTier = options.maxTier;
 		// Health monitoring with defaults
 		const healthConfig = options.healthCheck ?? {};
 		this.healthCheckEnabled = healthConfig.enabled ?? true;
@@ -673,7 +677,11 @@ export class Orchestrator {
 			};
 		}
 
-		output.header("Solo Mode (Direct)", `Model: ${this.startingModel} → escalate if needed`);
+		const escalationInfo =
+			this.maxTier && this.maxTier !== "opus"
+				? ` (capped at ${this.maxTier})`
+				: " → escalate if needed";
+		output.header("Solo Mode (Direct)", `Model: ${this.startingModel}${escalationInfo}`);
 
 		const taskId = generateTaskId();
 
@@ -690,6 +698,7 @@ export class Orchestrator {
 				maxRetriesPerTier: this.maxRetriesPerTier,
 				maxReviewPassesPerTier: this.maxReviewPassesPerTier,
 				maxOpusReviewPasses: this.maxOpusReviewPasses,
+				maxTier: this.maxTier,
 				// No workingDirectory - runs in current directory
 			});
 
@@ -905,9 +914,13 @@ export class Orchestrator {
 	 * Display execution header with task and rate limit info
 	 */
 	private displayExecutionHeader(taskCount: number): void {
+		const escalationInfo =
+			this.maxTier && this.maxTier !== "opus"
+				? ` (capped at ${this.maxTier})`
+				: " → escalate if needed";
 		output.header(
 			"Parallel Mode",
-			`${taskCount} tasks (max ${this.maxConcurrent} concurrent) • Model: ${this.startingModel} → escalate if needed`,
+			`${taskCount} tasks (max ${this.maxConcurrent} concurrent) • Model: ${this.startingModel}${escalationInfo}`,
 		);
 
 		const usageSummary = this.rateLimitTracker.getUsageSummary();
@@ -1115,6 +1128,7 @@ export class Orchestrator {
 				maxRetriesPerTier: this.maxRetriesPerTier,
 				maxReviewPassesPerTier: this.maxReviewPassesPerTier,
 				maxOpusReviewPasses: this.maxOpusReviewPasses,
+				maxTier: this.maxTier,
 			});
 
 			const assignment: TaskAssignment = {

@@ -186,7 +186,9 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 	console.log(`  Duration: ${report.summary.duration}`);
 	console.log(`  Tasks: ${chalk.green(summary.ok + " completed")} / ${chalk.red(summary.fail + " failed")}`);
 	console.log(`  Merged: ${summary.merged}`);
-	console.log(`  Success Rate: ${successRate >= 80 ? chalk.green(report.summary.successRate) : chalk.yellow(report.summary.successRate)}`);
+	console.log(
+		`  Success Rate: ${successRate >= 80 ? chalk.green(report.summary.successRate) : chalk.yellow(report.summary.successRate)}`,
+	);
 	console.log(`  Tokens: ${summary.tokens.toLocaleString()}`);
 
 	if (topIssues.length > 0) {

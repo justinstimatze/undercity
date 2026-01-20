@@ -338,6 +338,12 @@ export interface SoloOptions {
 	 * Default: false
 	 */
 	skipOptionalVerification?: boolean;
+	/**
+	 * Maximum model tier to escalate to.
+	 * Caps escalation at this tier - useful for cost control.
+	 * Default: "opus" (no cap)
+	 */
+	maxTier?: ModelTier;
 }
 
 /**
@@ -362,6 +368,7 @@ export class TaskWorker {
 	private maxRetriesPerTier: number;
 	private maxOpusRetries: number;
 	private skipOptionalVerification: boolean;
+	private maxTier: ModelTier;
 
 	private currentModel: ModelTier;
 	private attempts: number = 0;
@@ -478,6 +485,8 @@ export class TaskWorker {
 		this.enablePlanning = options.enablePlanning ?? true;
 		// Skip optional verification for trivial tasks to reduce overhead
 		this.skipOptionalVerification = options.skipOptionalVerification ?? false;
+		// Maximum tier to escalate to (default: opus = no cap)
+		this.maxTier = options.maxTier ?? "opus";
 		this.currentModel = this.startingModel;
 		this.metricsTracker = new MetricsTracker();
 	}
@@ -2235,16 +2244,28 @@ Be concise and specific. Focus on actionable insights.`;
 	}
 
 	/**
+	 * Cap a model tier at the configured maxTier
+	 */
+	private capAtMaxTier(tier: ModelTier): ModelTier {
+		const tiers: ModelTier[] = ["haiku", "sonnet", "opus"];
+		const tierIndex = tiers.indexOf(tier);
+		const maxTierIndex = tiers.indexOf(this.maxTier);
+		return tierIndex > maxTierIndex ? this.maxTier : tier;
+	}
+
+	/**
 	 * Determine starting model based on complexity assessment
 	 *
 	 * Special handling for test-writing tasks: Always use sonnet minimum.
 	 * Test tasks are inherently harder (need understanding of code + test patterns),
 	 * and failures are expensive (verification loops on the tests themselves).
+	 *
+	 * Respects maxTier cap - will not start at a tier higher than configured maximum.
 	 */
 	private determineStartingModel(assessment: ComplexityAssessment, task: string): ModelTier {
 		// Override with user preference if set
 		if (this.startingModel !== "sonnet") {
-			return this.startingModel;
+			return this.capAtMaxTier(this.startingModel);
 		}
 
 		// Test-writing tasks: minimum sonnet (skip haiku)
@@ -2252,24 +2273,24 @@ Be concise and specific. Focus on actionable insights.`;
 		if (isTestTask(task)) {
 			sessionLogger.debug({ objective: task.substring(0, 50) }, "Test task detected - using sonnet minimum");
 			if (assessment.level === "trivial" || assessment.level === "simple") {
-				return "sonnet";
+				return this.capAtMaxTier("sonnet");
 			}
 		}
 
-		// Use assessment to pick model
+		// Use assessment to pick model, capped at maxTier
 		switch (assessment.level) {
 			case "trivial":
-				return "haiku";
+				return this.capAtMaxTier("haiku");
 			case "simple":
-				return "haiku";
+				return this.capAtMaxTier("haiku");
 			case "standard":
-				return "sonnet";
+				return this.capAtMaxTier("sonnet");
 			case "complex":
-				return "sonnet"; // Start with sonnet, escalate if needed
+				return this.capAtMaxTier("sonnet"); // Start with sonnet, escalate if needed
 			case "critical":
-				return "opus"; // Critical tasks go straight to opus
+				return this.capAtMaxTier("opus"); // Critical tasks go straight to opus (capped at maxTier)
 			default:
-				return "sonnet";
+				return this.capAtMaxTier("sonnet");
 		}
 	}
 
@@ -2280,6 +2301,8 @@ Be concise and specific. Focus on actionable insights.`;
 	 * - trivial/simple/standard: haiku → sonnet only (no opus review)
 	 * - complex/critical: haiku → sonnet → opus (full escalation + annealing)
 	 *
+	 * Also respects maxTier cap - review tier will not exceed configured maximum.
+	 *
 	 * Rationale: 95% of tasks are trivial/simple/standard and don't benefit from
 	 * opus review. The token cost isn't justified when sonnet can catch most issues.
 	 */
@@ -2288,14 +2311,17 @@ Be concise and specific. Focus on actionable insights.`;
 		annealing: boolean;
 		maxReviewTier: ModelTier;
 	} {
-		// If user explicitly set annealing, respect it (full escalation)
+		// If user explicitly set annealing, respect it (full escalation, capped at maxTier)
 		if (this.annealingAtOpus) {
-			return { review: true, annealing: true, maxReviewTier: "opus" };
+			const cappedTier = this.capAtMaxTier("opus");
+			// Disable annealing if we can't reach opus
+			const canAnneal = cappedTier === "opus";
+			return { review: true, annealing: canAnneal, maxReviewTier: cappedTier };
 		}
 
 		// If user explicitly disabled reviews, respect that
 		if (!this.reviewPasses) {
-			return { review: false, annealing: false, maxReviewTier: "sonnet" };
+			return { review: false, annealing: false, maxReviewTier: this.capAtMaxTier("sonnet") };
 		}
 
 		// Reviews are enabled - determine escalation cap based on complexity
@@ -2307,13 +2333,16 @@ Be concise and specific. Focus on actionable insights.`;
 			case "complex":
 				// Simple and complex tasks get capped review: haiku → sonnet only
 				// Complex tasks execution was demoted from opus to sonnet, review follows
-				return { review: true, annealing: false, maxReviewTier: "sonnet" };
-			case "critical":
-				// Only critical tasks get opus review + annealing
-				return { review: true, annealing: true, maxReviewTier: "opus" };
+				return { review: true, annealing: false, maxReviewTier: this.capAtMaxTier("sonnet") };
+			case "critical": {
+				// Only critical tasks get opus review + annealing (capped at maxTier)
+				const cappedTier = this.capAtMaxTier("opus");
+				const canAnneal = cappedTier === "opus";
+				return { review: true, annealing: canAnneal, maxReviewTier: cappedTier };
+			}
 			default:
 				// Default to capped review
-				return { review: true, annealing: false, maxReviewTier: "sonnet" };
+				return { review: true, annealing: false, maxReviewTier: this.capAtMaxTier("sonnet") };
 		}
 	}
 
@@ -3071,13 +3100,15 @@ RULES:
 			};
 		}
 
-		// At opus tier, use maxOpusRetries for more attempts (no escalation available)
-		if (this.currentModel === "opus") {
+		// At final tier (opus OR maxTier cap), use maxOpusRetries for more attempts (no escalation available)
+		const isAtFinalTier = this.currentModel === "opus" || this.currentModel === this.maxTier;
+		if (isAtFinalTier) {
 			if (this.sameModelRetries < this.maxOpusRetries) {
 				const remaining = this.maxOpusRetries - this.sameModelRetries;
-				return { shouldEscalate: false, reason: `opus tier, ${remaining} retries left` };
+				const tierLabel = this.maxTier === "opus" ? "opus tier" : `${this.currentModel} tier (max-tier cap)`;
+				return { shouldEscalate: false, reason: `${tierLabel}, ${remaining} retries left` };
 			}
-			return { shouldEscalate: true, reason: `max opus retries (${this.maxOpusRetries})` };
+			return { shouldEscalate: true, reason: `max retries at final tier (${this.maxOpusRetries})` };
 		}
 
 		// Check if errors are only trivial (lint/spell)
@@ -3102,7 +3133,10 @@ RULES:
 			if (isWritingTests && hasTestErrors) {
 				// Test-writing tasks with test failures: full retries (tests are iterative)
 				seriousRetryLimit = this.maxRetriesPerTier + 1;
-				sessionLogger.debug({ retries: this.sameModelRetries, limit: seriousRetryLimit }, "Test task - allowing extra retries for test failures");
+				sessionLogger.debug(
+					{ retries: this.sameModelRetries, limit: seriousRetryLimit },
+					"Test task - allowing extra retries for test failures",
+				);
 			} else {
 				// Other serious errors: allow fewer retries to escalate faster
 				seriousRetryLimit = Math.max(2, this.maxRetriesPerTier - 1);
@@ -3125,10 +3159,17 @@ RULES:
 
 	/**
 	 * Escalate to the next model tier
+	 * Respects maxTier cap - will not escalate beyond the configured maximum tier
 	 */
 	private escalateModel(): boolean {
 		const tiers: ModelTier[] = ["haiku", "sonnet", "opus"];
 		const currentIndex = tiers.indexOf(this.currentModel);
+		const maxTierIndex = tiers.indexOf(this.maxTier);
+
+		// Don't escalate if we're already at the max tier cap
+		if (currentIndex >= maxTierIndex) {
+			return false;
+		}
 
 		if (currentIndex < tiers.length - 1) {
 			const previousModel = this.currentModel;
