@@ -769,9 +769,18 @@ async function findWithAstGrep(task: string, cwd: string): Promise<string[]> {
 				{ encoding: "utf-8", cwd, timeout: 5000 },
 			);
 			if (result.trim()) {
-				const matches = JSON.parse(result);
-				const names = matches.slice(0, 5).map((m: { text: string }) => m.text?.slice(0, 50) || "");
-				patterns.push(`Functions: ${names.filter(Boolean).join(", ")}`);
+				try {
+					const matches = JSON.parse(result);
+					const names = matches.slice(0, 5).map((m: { text: string }) => m.text?.slice(0, 50) || "");
+					patterns.push(`Functions: ${names.filter(Boolean).join(", ")}`);
+				} catch (parseError: unknown) {
+					// ast-grep may return malformed JSON if output is truncated or corrupted
+					const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
+					sessionLogger.debug(
+						{ error: errorMsg, outputSample: result.slice(0, 100) },
+						"Failed to parse ast-grep JSON output for function detection",
+					);
+				}
 			}
 		}
 
@@ -933,7 +942,7 @@ function detectConstraints(_task: string, cwd: string): string[] {
 				constraints.push("TypeScript strict mode enabled");
 			}
 		} catch {
-			/* ignore */
+			// Malformed or unparseable tsconfig.json - non-fatal, skip constraint
 		}
 	}
 
