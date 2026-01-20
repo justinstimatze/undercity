@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-20T19:37:48.168Z",
+  "generatedAt": "2026-01-20T19:47:43.695Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -18,12 +18,12 @@
         },
         {
           "file": "worker.ts",
-          "line": 2536,
+          "line": 2538,
           "context": "if"
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3269,
+          "line": 3288,
           "context": "log"
         },
         {
@@ -38,7 +38,7 @@
         },
         {
           "file": "task-planner.ts",
-          "line": 373,
+          "line": 374,
           "context": "gatherPlanningContext"
         }
       ]
@@ -46,18 +46,7 @@
     {
       "function": "formatLearningsForPrompt",
       "definedIn": "knowledge.ts",
-      "calledFrom": [
-        {
-          "file": "worker.ts",
-          "line": 2538,
-          "context": "if"
-        },
-        {
-          "file": "task-planner.ts",
-          "line": 374,
-          "context": "gatherPlanningContext"
-        }
-      ]
+      "calledFrom": []
     },
     {
       "function": "addLearning",
@@ -133,7 +122,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2562,
+          "line": 2564,
           "context": "if"
         }
       ]
@@ -149,7 +138,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 2573,
+          "line": 2575,
           "context": "if"
         }
       ]
@@ -231,7 +220,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2552,
+          "line": 2554,
           "context": "if"
         }
       ]
@@ -274,7 +263,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2866,
+          "line": 2868,
           "context": "for"
         }
       ]
@@ -290,7 +279,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3092,
+          "line": 3111,
           "context": "if"
         }
       ]
@@ -311,7 +300,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3115,
+          "line": 3134,
           "context": "log"
         },
         {
@@ -327,7 +316,7 @@
       "calledFrom": [
         {
           "file": "task-planner.ts",
-          "line": 981,
+          "line": 982,
           "context": "join"
         }
       ]
@@ -364,7 +353,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3330,
+          "line": 3349,
           "context": "log"
         }
       ]
@@ -380,7 +369,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3355,
+          "line": 3374,
           "context": "log"
         }
       ]
@@ -391,12 +380,12 @@
       "calledFrom": [
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1324,
+          "line": 1343,
           "context": "progress"
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3365,
+          "line": 3384,
           "context": "log"
         }
       ]

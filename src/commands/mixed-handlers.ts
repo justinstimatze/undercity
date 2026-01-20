@@ -970,6 +970,23 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		output.debug(`Stale task IDs: ${staleCleanup.taskIds.join(", ")}`);
 	}
 
+	// Auto-migrate JSON data to SQLite if needed
+	const { autoMigrateIfNeeded } = await import("../storage.js");
+	const migration = autoMigrateIfNeeded();
+	if (migration) {
+		output.info(`Migrated to SQLite: ${migration.learnings} learnings, ${migration.errorPatterns} error patterns, ${migration.decisions} decisions`);
+		if (migration.errors.length > 0) {
+			output.warning(`Migration had ${migration.errors.length} errors`);
+		}
+	}
+
+	// Generate embeddings for any learnings without them
+	const { embedAllLearnings } = await import("../embeddings.js");
+	const embeddedCount = embedAllLearnings();
+	if (embeddedCount > 0) {
+		output.debug(`Generated embeddings for ${embeddedCount} learnings`);
+	}
+
 	// Check disk space on worktrees directory before starting
 	const diskSpaceGB = getWorktreesDiskSpaceGB();
 	if (diskSpaceGB !== null) {

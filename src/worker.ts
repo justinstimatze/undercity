@@ -47,7 +47,7 @@ import {
 } from "./error-fix-patterns.js";
 import { createAndCheckout } from "./git.js";
 import { logFastPathComplete, logFastPathFailed } from "./grind-events.js";
-import { findRelevantLearnings, formatLearningsForPrompt, markLearningsUsed } from "./knowledge.js";
+import { findRelevantLearnings, formatLearningsCompact, markLearningsUsed } from "./knowledge.js";
 import { extractAndStoreLearnings } from "./knowledge-extractor.js";
 import { recordQueryResult } from "./live-metrics.js";
 import { sessionLogger } from "./logger.js";
@@ -2531,11 +2531,13 @@ The file MUST be created at ${outputPath} for this task to succeed.`;
 `;
 			}
 
-			// Add relevant learnings from previous tasks
+			// Add relevant learnings from previous tasks (compact format for token efficiency)
 			// Use this.stateDir (main repo) for knowledge, not worktree
+			// Compact format shows index + preview (~50 tokens/learning vs ~200+ for full)
+			// Agent can reference learnings by number if more detail needed
 			const relevantLearnings = findRelevantLearnings(task, 5, this.stateDir);
 			if (relevantLearnings.length > 0) {
-				const learningsPrompt = formatLearningsForPrompt(relevantLearnings);
+				const learningsPrompt = formatLearningsCompact(relevantLearnings);
 				contextSection += `${learningsPrompt}
 
 ---

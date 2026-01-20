@@ -28,7 +28,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { getASTIndex } from "./ast-index.js";
 import { quickDecision } from "./automated-pm.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
-import { findRelevantLearnings, formatLearningsForPrompt } from "./knowledge.js";
+import { findRelevantLearnings, formatLearningsCompact } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
 import { findRelevantFiles } from "./task-file-patterns.js";
 import { MODEL_NAMES, type ModelTier } from "./types.js";
@@ -370,8 +370,9 @@ async function gatherPlanningContext(task: string, cwd: string): Promise<Plannin
 	const suggestedFiles = findRelevantFiles(task, 10);
 
 	// Get relevant learnings from knowledge base (instant, local)
+	// Use compact format for token efficiency during planning
 	const learnings = findRelevantLearnings(task, 5);
-	const learningsText = learnings.length > 0 ? formatLearningsForPrompt(learnings) : "";
+	const learningsText = learnings.length > 0 ? formatLearningsCompact(learnings) : "";
 
 	// Prepare context briefing (uses AST index, grep - fast local operations)
 	let briefing: ContextBriefing | undefined;

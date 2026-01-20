@@ -365,6 +365,45 @@ export function findRelevantLearnings(
 	stateDir: string = DEFAULT_STATE_DIR,
 ): Learning[] {
 	const kb = loadKnowledge(stateDir);
+
+	// Try hybrid search (keyword + semantic) if embeddings module available
+	try {
+		// Dynamic import to avoid circular dependencies
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const { hybridSearch, getEmbeddingStats } = require("./embeddings.js") as typeof import("./embeddings.js");
+		const stats = getEmbeddingStats(stateDir);
+
+		// Only use semantic search if we have enough embeddings
+		if (stats.embeddedCount >= 3) {
+			const results = hybridSearch(
+				objective,
+				{
+					limit: maxResults * 2, // Get more, then filter
+					keywordWeight: 0.4,
+					semanticWeight: 0.6,
+					minScore: 0.05,
+				},
+				stateDir,
+			);
+
+			if (results.length > 0) {
+				// Map back to Learning objects
+				const learningMap = new Map(kb.learnings.map((l) => [l.id, l]));
+				const found = results
+					.map((r) => learningMap.get(r.learningId))
+					.filter((l): l is Learning => l !== undefined)
+					.slice(0, maxResults);
+
+				if (found.length > 0) {
+					return found;
+				}
+			}
+		}
+	} catch {
+		// Embeddings not available, fall back to keyword-only
+	}
+
+	// Fallback: keyword-only scoring
 	const objectiveKeywords = new Set(extractKeywords(objective));
 
 	// Score each learning by keyword overlap and confidence
@@ -488,9 +527,7 @@ export function getLearningTimeline(
 	const kb = loadKnowledge(stateDir);
 
 	// Sort by creation time
-	const sorted = [...kb.learnings].sort(
-		(a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-	);
+	const sorted = [...kb.learnings].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
 	const targetIdx = sorted.findIndex((l) => l.id === learningId);
 	if (targetIdx === -1) {
@@ -508,10 +545,7 @@ export function getLearningTimeline(
  * Layer 3: Get full details for specific learning IDs
  * Use this to fetch complete content for learnings the agent needs.
  */
-export function getLearningsByIds(
-	ids: string[],
-	stateDir: string = DEFAULT_STATE_DIR,
-): Learning[] {
+export function getLearningsByIds(ids: string[], stateDir: string = DEFAULT_STATE_DIR): Learning[] {
 	const kb = loadKnowledge(stateDir);
 	const idSet = new Set(ids);
 	return kb.learnings.filter((l) => idSet.has(l.id));
@@ -521,13 +555,8 @@ export function getLearningsByIds(
  * Get learnings by index numbers (1-based, as shown in compact format)
  * Convenience function for when agent references learnings by number.
  */
-export function getLearningsByIndex(
-	indices: number[],
-	learnings: Learning[],
-): Learning[] {
-	return indices
-		.filter((idx) => idx >= 1 && idx <= learnings.length)
-		.map((idx) => learnings[idx - 1]);
+export function getLearningsByIndex(indices: number[], learnings: Learning[]): Learning[] {
+	return indices.filter((idx) => idx >= 1 && idx <= learnings.length).map((idx) => learnings[idx - 1]);
 }
 
 /**
