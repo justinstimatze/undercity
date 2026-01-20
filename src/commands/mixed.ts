@@ -9,6 +9,7 @@ import {
 	type DecideOptions,
 	type EmergencyOptions,
 	type GrindOptions,
+	type HumanInputOptions,
 	handleBrief,
 	handleConfig,
 	handleDaemon,
@@ -32,7 +33,6 @@ import {
 	handleTuning,
 	handleUsage,
 	handleWatch,
-	type HumanInputOptions,
 	type IndexOptions,
 	type InitOptions,
 	type IntrospectOptions,
@@ -271,6 +271,7 @@ export const mixedCommands: CommandModule = {
 			.option("--list", "List tasks needing human input (default)")
 			.option("--provide <signature>", "Provide guidance for an error signature")
 			.option("--guidance <text>", "The guidance text (used with --provide)")
+			.option("--retry", "Re-queue all tasks that have guidance available")
 			.option("--stats", "Show human input tracking statistics")
 			.action((options: HumanInputOptions, cmd) => {
 				const parentOpts = cmd.parent?.opts() || {};

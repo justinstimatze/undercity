@@ -19,19 +19,17 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, normalize } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { updateLedger } from "./capability-ledger.js";
-import { type ExperimentManager, getExperimentManager } from "./experiment.js";
-import { FileTracker } from "./file-tracker.js";
-import { checkAndFixBareRepo } from "./git.js";
 import {
-	generateFixTaskDescription,
 	getEmergencyModeStatus,
 	hasExceededMaxFixAttempts,
-	isEmergencyModeActive,
 	preMergeHealthCheck,
-	recordFixWorkerCompleted,
 	recordFixWorkerSpawned,
 	shouldSpawnFixWorker,
 } from "./emergency-mode.js";
+import { type ExperimentManager, getExperimentManager } from "./experiment.js";
+import { FileTracker } from "./file-tracker.js";
+import { getTasksNeedingInput } from "./human-input-tracking.js";
+import { checkAndFixBareRepo } from "./git.js";
 import { sessionLogger } from "./logger.js";
 import { nameFromId } from "./names.js";
 import * as output from "./output.js";
@@ -968,9 +966,7 @@ export class Orchestrator {
 		// Check if we should spawn a fix worker
 		if (shouldSpawnFixWorker()) {
 			if (hasExceededMaxFixAttempts()) {
-				output.error(
-					`Maximum fix attempts (${status.fixAttempts}) exceeded. Human intervention required.`,
-				);
+				output.error(`Maximum fix attempts (${status.fixAttempts}) exceeded. Human intervention required.`);
 				output.info("Run 'undercity emergency --status' to check emergency mode status");
 				output.info("Run 'undercity emergency --clear' to manually clear emergency mode after fixing");
 			} else {
@@ -1627,6 +1623,18 @@ export class Orchestrator {
 		}
 
 		output.summary("Parallel Execution Summary", summaryItems);
+
+		// Check for tasks needing human input (batch-friendly summary)
+		try {
+			const tasksNeedingInput = getTasksNeedingInput();
+			if (tasksNeedingInput.length > 0) {
+				output.warning(
+					`${tasksNeedingInput.length} task(s) need human input to retry. Run: undercity human-input`,
+				);
+			}
+		} catch {
+			// Non-critical
+		}
 	}
 
 	/**

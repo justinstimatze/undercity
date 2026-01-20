@@ -2,7 +2,7 @@
  * Handlers for analysis commands
  */
 import chalk from "chalk";
-import { type FailureReason, getLastGrindSummary, readRecentEvents } from "../grind-events.js";
+import { type FailureReason, getLastGrindSummary } from "../grind-events.js";
 import { loadLiveMetrics } from "../live-metrics.js";
 
 interface PostmortemOptions {
@@ -30,6 +30,11 @@ interface PostmortemReport {
 		successfulQueries: number;
 		rateLimited: number;
 		modelBreakdown: Record<string, { input: number; output: number; cost: number }>;
+	};
+	humanInput?: {
+		tasksNeedingInput: number;
+		tasksWithGuidance: number;
+		tasksNeedingGuidance: number;
 	};
 }
 
@@ -173,6 +178,22 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 		};
 	}
 
+	// Add human input status
+	try {
+		const { getTasksNeedingInput, getHumanGuidance } = await import("../human-input-tracking.js");
+		const tasksNeedingInput = getTasksNeedingInput();
+		if (tasksNeedingInput.length > 0) {
+			const withGuidance = tasksNeedingInput.filter((t) => getHumanGuidance(t.errorSignature) !== null).length;
+			report.humanInput = {
+				tasksNeedingInput: tasksNeedingInput.length,
+				tasksWithGuidance: withGuidance,
+				tasksNeedingGuidance: tasksNeedingInput.length - withGuidance,
+			};
+		}
+	} catch {
+		// Non-critical
+	}
+
 	if (options.json) {
 		console.log(JSON.stringify(report, null, 2));
 		return;
@@ -184,7 +205,7 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 	console.log(chalk.bold("Summary"));
 	console.log(`  Batch: ${chalk.dim(summary.batchId || "unknown")}`);
 	console.log(`  Duration: ${report.summary.duration}`);
-	console.log(`  Tasks: ${chalk.green(summary.ok + " completed")} / ${chalk.red(summary.fail + " failed")}`);
+	console.log(`  Tasks: ${chalk.green(`${summary.ok} completed`)} / ${chalk.red(`${summary.fail} failed`)}`);
 	console.log(`  Merged: ${summary.merged}`);
 	console.log(
 		`  Success Rate: ${successRate >= 80 ? chalk.green(report.summary.successRate) : chalk.yellow(report.summary.successRate)}`,
@@ -216,6 +237,25 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 		if (report.sessionMetrics.rateLimited > 0) {
 			console.log(`  Rate Limited: ${chalk.yellow(report.sessionMetrics.rateLimited)}`);
 		}
+	}
+
+	// Check for tasks needing human input
+	try {
+		const { getTasksNeedingInput, getHumanGuidance } = await import("../human-input-tracking.js");
+		const tasksNeedingInput = getTasksNeedingInput();
+		if (tasksNeedingInput.length > 0) {
+			const withGuidance = tasksNeedingInput.filter((t) => getHumanGuidance(t.errorSignature) !== null).length;
+			console.log(chalk.bold("\nHuman Input Needed"));
+			console.log(`  ${tasksNeedingInput.length} task(s) blocked on recurring failures`);
+			if (withGuidance > 0) {
+				console.log(`  ${chalk.green(`${withGuidance} have guidance`)} - run: undercity human-input --retry`);
+			}
+			if (withGuidance < tasksNeedingInput.length) {
+				console.log(`  ${chalk.yellow(`${tasksNeedingInput.length - withGuidance} need guidance`)} - run: undercity human-input`);
+			}
+		}
+	} catch {
+		// Non-critical
 	}
 
 	console.log();

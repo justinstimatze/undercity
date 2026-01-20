@@ -2896,6 +2896,27 @@ export async function handleStatus(options: StatusOptions): Promise<void> {
 	console.log(
 		`  Queued: ${status.tasksQueued} | Started: ${status.tasksStarted} | Complete: ${status.tasksComplete} | Failed: ${status.tasksFailed}`,
 	);
+
+	// Check for tasks needing human input
+	try {
+		const { getTasksNeedingInput, getHumanGuidance } = await import("../human-input-tracking.js");
+		const tasksNeedingInput = getTasksNeedingInput();
+		if (tasksNeedingInput.length > 0) {
+			const withGuidance = tasksNeedingInput.filter((t) => getHumanGuidance(t.errorSignature) !== null).length;
+			console.log();
+			console.log(chalk.bold("Human Input:"));
+			if (withGuidance > 0) {
+				console.log(`  ${chalk.cyan(`${withGuidance} task(s) ready to retry`)} (run: undercity human-input --retry)`);
+			}
+			if (withGuidance < tasksNeedingInput.length) {
+				console.log(
+					`  ${chalk.yellow(`${tasksNeedingInput.length - withGuidance} task(s) need guidance`)} (run: undercity human-input)`,
+				);
+			}
+		}
+	} catch {
+		// Non-critical
+	}
 }
 
 /**
@@ -3521,6 +3542,7 @@ export interface HumanInputOptions {
 	list?: boolean;
 	provide?: string;
 	guidance?: string;
+	retry?: boolean;
 	stats?: boolean;
 	human?: boolean;
 }
@@ -3529,17 +3551,70 @@ export interface HumanInputOptions {
  * Handle human-input command - manage human guidance for recurring failures
  */
 export async function handleHumanInput(options: HumanInputOptions): Promise<void> {
-	const {
-		getTasksNeedingInput,
-		saveHumanGuidance,
-		clearNeedsHumanInput,
-		getHumanInputStats,
-	} = await import("../human-input-tracking.js");
+	const { getTasksNeedingInput, saveHumanGuidance, clearNeedsHumanInput, getHumanInputStats, getHumanGuidance } =
+		await import("../human-input-tracking.js");
 
 	const isHuman = options.human ?? output.isHumanMode();
 
 	// Default to --list if no option specified
-	const showList = options.list || (!options.provide && !options.stats);
+	const showList = options.list || (!options.provide && !options.stats && !options.retry);
+
+	if (options.retry) {
+		// Re-queue tasks that have guidance available
+		const { addTask } = await import("../task.js");
+		const tasksNeedingInput = getTasksNeedingInput();
+
+		// Filter to tasks that have guidance available
+		const retryableTasks = tasksNeedingInput.filter((task) => {
+			const guidance = getHumanGuidance(task.errorSignature);
+			return guidance !== null;
+		});
+
+		if (retryableTasks.length === 0) {
+			if (isHuman) {
+				const total = tasksNeedingInput.length;
+				if (total === 0) {
+					console.log(chalk.green("\n✓ No tasks need human input"));
+				} else {
+					console.log(chalk.yellow(`\n⚠ ${total} task(s) need human input but none have guidance yet`));
+					console.log(chalk.dim("Provide guidance first with: undercity human-input --provide <signature> --guidance '...'"));
+				}
+			} else {
+				console.log(JSON.stringify({ retried: 0, message: "No tasks with guidance to retry" }));
+			}
+			return;
+		}
+
+		// Re-queue each task with a hint about the guidance
+		const requeued: string[] = [];
+		for (const task of retryableTasks) {
+			const guidance = getHumanGuidance(task.errorSignature);
+			if (!guidance) continue;
+
+			// Add task back to board with guidance context
+			const newTask = addTask(task.objective, {
+				priority: 50, // Higher priority for retries
+				handoffContext: {
+					isRetry: true,
+					humanGuidance: guidance.guidance,
+					previousError: task.sampleMessage,
+					previousAttempts: task.failedAttempts,
+				},
+			});
+
+			// Clear from needs_human_input table
+			clearNeedsHumanInput(task.taskId);
+			requeued.push(newTask.id);
+		}
+
+		if (isHuman) {
+			console.log(chalk.green(`\n✓ Re-queued ${requeued.length} task(s) with human guidance`));
+			console.log(chalk.dim("Run 'undercity grind' to process them"));
+		} else {
+			console.log(JSON.stringify({ retried: requeued.length, taskIds: requeued }));
+		}
+		return;
+	}
 
 	if (options.stats) {
 		// Show stats about human input tracking
@@ -3579,19 +3654,20 @@ export async function handleHumanInput(options: HumanInputOptions): Promise<void
 
 		const id = saveHumanGuidance(options.provide, options.guidance);
 
-		// Clear any tasks flagged for this pattern
+		// Count tasks that match this signature
 		const tasksNeedingInput = getTasksNeedingInput();
-		for (const task of tasksNeedingInput) {
-			if (task.errorSignature === options.provide) {
-				clearNeedsHumanInput(task.taskId);
-			}
-		}
+		const matchingTasks = tasksNeedingInput.filter((task) => task.errorSignature === options.provide);
 
 		if (isHuman) {
 			console.log(chalk.green(`\n✓ Guidance saved (${id})`));
-			console.log(chalk.dim("This guidance will be applied to future tasks with matching errors."));
+			if (matchingTasks.length > 0) {
+				console.log(chalk.cyan(`\n${matchingTasks.length} task(s) can now be retried with this guidance.`));
+				console.log(chalk.dim("Run: undercity human-input --retry"));
+			} else {
+				console.log(chalk.dim("This guidance will be applied to future tasks with matching errors."));
+			}
 		} else {
-			console.log(JSON.stringify({ success: true, id }));
+			console.log(JSON.stringify({ success: true, id, matchingTasks: matchingTasks.length }));
 		}
 		return;
 	}
@@ -3612,23 +3688,45 @@ export async function handleHumanInput(options: HumanInputOptions): Promise<void
 		if (isHuman) {
 			console.log(chalk.bold(`\n🧑 ${tasks.length} Task(s) Need Human Input\n`));
 
+			// Check which tasks have guidance available
+			let withGuidance = 0;
 			for (const task of tasks) {
-				console.log(chalk.yellow(`Task: ${task.taskId}`));
+				const guidance = getHumanGuidance(task.errorSignature);
+				const hasGuidance = guidance !== null;
+				if (hasGuidance) withGuidance++;
+
+				const statusIcon = hasGuidance ? chalk.green("✓") : chalk.yellow("○");
+				console.log(`${statusIcon} ${chalk.yellow(`Task: ${task.taskId}`)}`);
 				console.log(`  Objective: ${task.objective.substring(0, 80)}${task.objective.length > 80 ? "..." : ""}`);
 				console.log(`  Category: ${task.category}`);
 				console.log(`  Error: ${task.sampleMessage.substring(0, 100)}${task.sampleMessage.length > 100 ? "..." : ""}`);
 				console.log(`  Failed attempts: ${task.failedAttempts} (last model: ${task.modelUsed})`);
 				console.log(`  Signature: ${task.errorSignature.substring(0, 60)}...`);
-				if (task.previousGuidance) {
+				if (hasGuidance) {
+					console.log(chalk.green(`  Has guidance: "${guidance.guidance.substring(0, 50)}..."`));
+				} else if (task.previousGuidance) {
 					console.log(chalk.dim(`  Previous guidance was tried but didn't help`));
 				}
 				console.log("");
 			}
 
-			console.log(chalk.dim("To provide guidance:"));
-			console.log(chalk.dim(`  undercity human-input --provide "<signature>" --guidance "Your guidance here"`));
+			// Show next steps
+			if (withGuidance > 0) {
+				console.log(chalk.cyan(`${withGuidance} task(s) have guidance and can be retried:`));
+				console.log(chalk.dim("  undercity human-input --retry"));
+				console.log("");
+			}
+			if (withGuidance < tasks.length) {
+				console.log(chalk.dim("To provide guidance for remaining tasks:"));
+				console.log(chalk.dim(`  undercity human-input --provide "<signature>" --guidance "Your guidance here"`));
+			}
 		} else {
-			console.log(JSON.stringify({ tasks }));
+			// Include guidance status in JSON output
+			const tasksWithStatus = tasks.map((task) => ({
+				...task,
+				hasGuidance: getHumanGuidance(task.errorSignature) !== null,
+			}));
+			console.log(JSON.stringify({ tasks: tasksWithStatus }));
 		}
 	}
 }

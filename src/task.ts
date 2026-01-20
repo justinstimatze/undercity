@@ -205,6 +205,14 @@ export interface HandoffContext {
 	notes?: string;
 	/** Context from previous failed attempt (for retry tasks) */
 	lastAttempt?: LastAttemptContext;
+	/** Whether this is a retry with human guidance */
+	isRetry?: boolean;
+	/** Human-provided guidance for this retry */
+	humanGuidance?: string;
+	/** The error that triggered the human input request */
+	previousError?: string;
+	/** Number of previous failed attempts */
+	previousAttempts?: number;
 }
 
 export interface TaskBoard {

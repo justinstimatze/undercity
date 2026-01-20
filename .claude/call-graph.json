@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-20T21:57:57.051Z",
+  "generatedAt": "2026-01-20T22:32:29.632Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -23,7 +23,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3366,
+          "line": 3387,
           "context": "log"
         },
         {
@@ -91,7 +91,7 @@
       "calledFrom": [
         {
           "file": "orchestrator.ts",
-          "line": 1736,
+          "line": 1747,
           "context": "for"
         },
         {
@@ -257,7 +257,7 @@
       "calledFrom": [
         {
           "file": "orchestrator.ts",
-          "line": 1372,
+          "line": 1373,
           "context": "if"
         }
       ]
@@ -289,7 +289,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3189,
+          "line": 3210,
           "context": "if"
         }
       ]
@@ -310,7 +310,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3212,
+          "line": 3233,
           "context": "log"
         },
         {
@@ -363,7 +363,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3427,
+          "line": 3448,
           "context": "log"
         }
       ]
@@ -379,7 +379,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3452,
+          "line": 3473,
           "context": "log"
         }
       ]
@@ -395,7 +395,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 3462,
+          "line": 3483,
           "context": "log"
         }
       ]
