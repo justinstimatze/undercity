@@ -3,3 +3,12 @@
 # Single source of truth: run verification script
 # Uses tsx to run TypeScript directly (no build required)
 pnpm exec tsx src/verification-cli.ts
+
+# Regenerate call-graph.json if source files changed
+if git diff --cached --name-only | grep -q "^src/.*\.ts$"; then
+    pnpm exec tsx scripts/generate-call-graph.ts > /dev/null 2>&1
+    # Stage the updated call-graph if it changed
+    if ! git diff --quiet .claude/call-graph.json 2>/dev/null; then
+        git add .claude/call-graph.json
+    fi
+fi
