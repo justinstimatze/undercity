@@ -260,6 +260,27 @@ export function recordPendingError(
 	}
 
 	saveErrorFixStore(store, stateDir);
+
+	// Dual-write to SQLite
+	try {
+		const storage = require("./storage.js") as typeof import("./storage.js");
+		storage.upsertErrorPattern(signature, category, message.slice(0, 500), stateDir);
+		storage.addPendingErrorDB(
+			{
+				signature,
+				category,
+				message: message.slice(0, 500),
+				taskId,
+				filesBeforeFix: currentFiles,
+				recordedAt: new Date().toISOString(),
+			},
+			stateDir,
+		);
+		storage.pruneOldPendingErrorsDB(10, stateDir);
+	} catch {
+		// SQLite not available, continue with JSON only
+	}
+
 	return signature;
 }
 
@@ -342,13 +363,16 @@ export function recordSuccessfulFix(
 	const pending = store.pending[pendingIndex];
 	const pattern = store.patterns[pending.signature];
 
+	// Track variables for SQLite dual-write
+	let relevantFiles: string[] | undefined;
+	let patchData: string | undefined;
+
 	if (pattern) {
 		// Determine which files were actually changed to fix the error
 		const newFiles = opts.filesChanged.filter((f) => !pending.filesBeforeFix.includes(f));
-		const relevantFiles = newFiles.length > 0 ? newFiles : opts.filesChanged.slice(0, 5);
+		relevantFiles = newFiles.length > 0 ? newFiles : opts.filesChanged.slice(0, 5);
 
 		// Capture git diff if working directory provided (enables auto-remediation)
-		let patchData: string | undefined;
 		if (opts.workingDirectory && relevantFiles.length > 0) {
 			patchData = captureGitDiff(relevantFiles, opts.workingDirectory, opts.baseCommit);
 		}
@@ -372,6 +396,25 @@ export function recordSuccessfulFix(
 	store.pending.splice(pendingIndex, 1);
 
 	saveErrorFixStore(store, actualStateDir);
+
+	// Dual-write to SQLite
+	try {
+		const storage = require("./storage.js") as typeof import("./storage.js");
+		if (relevantFiles) {
+			storage.addErrorFix(
+				pending.signature,
+				{
+					description: opts.editSummary.slice(0, 200),
+					diff: patchData,
+					filesChanged: relevantFiles,
+				},
+				actualStateDir,
+			);
+		}
+		storage.removePendingErrorDB(opts.taskId, actualStateDir);
+	} catch {
+		// SQLite not available, continue with JSON only
+	}
 }
 
 /**
@@ -385,6 +428,14 @@ export function markFixSuccessful(signature: string, stateDir: string = DEFAULT_
 	if (pattern) {
 		pattern.fixSuccesses++;
 		saveErrorFixStore(store, stateDir);
+
+		// Dual-write to SQLite
+		try {
+			const storage = require("./storage.js") as typeof import("./storage.js");
+			storage.incrementFixSuccessDB(signature, stateDir);
+		} catch {
+			// SQLite not available, continue with JSON only
+		}
 	}
 }
 
@@ -395,6 +446,14 @@ export function clearPendingError(taskId: string, stateDir: string = DEFAULT_STA
 	const store = loadErrorFixStore(stateDir);
 	store.pending = store.pending.filter((p) => p.taskId !== taskId);
 	saveErrorFixStore(store, stateDir);
+
+	// Dual-write to SQLite
+	try {
+		const storage = require("./storage.js") as typeof import("./storage.js");
+		storage.removePendingErrorDB(taskId, stateDir);
+	} catch {
+		// SQLite not available, continue with JSON only
+	}
 }
 
 /**
@@ -493,6 +552,30 @@ export function recordPermanentFailure(
 	store.pending = store.pending.filter((p) => p.taskId !== opts.taskId);
 
 	saveErrorFixStore(store, actualStateDir);
+
+	// Dual-write to SQLite
+	try {
+		const storage = require("./storage.js") as typeof import("./storage.js");
+		storage.upsertErrorPattern(signature, opts.category, opts.message.slice(0, 500), actualStateDir);
+		storage.recordPermanentFailureDB(
+			{
+				signature,
+				category: opts.category,
+				sampleMessage: opts.message.slice(0, 500),
+				taskObjective: opts.taskObjective.slice(0, 200),
+				modelUsed: opts.modelUsed,
+				attemptsCount: opts.attemptCount,
+				filesAttempted: opts.currentFiles.slice(0, 10),
+				detailedErrors,
+				recordedAt: new Date().toISOString(),
+			},
+			actualStateDir,
+		);
+		storage.removePendingErrorDB(opts.taskId, actualStateDir);
+	} catch {
+		// SQLite not available, continue with JSON only
+	}
+
 	return signature;
 }
 
@@ -651,6 +734,14 @@ function updateAutoApplyStats(signature: string, success: boolean, stateDir: str
 			fixWithPatch.autoApplySuccessRate = newRate;
 
 			saveErrorFixStore(store, stateDir);
+
+			// Dual-write to SQLite
+			try {
+				const storage = require("./storage.js") as typeof import("./storage.js");
+				storage.updateFixAutoApplyStatsDB(signature, success, stateDir);
+			} catch {
+				// SQLite not available, continue with JSON only
+			}
 		}
 	} catch {
 		// Silent failure - stats update is non-critical

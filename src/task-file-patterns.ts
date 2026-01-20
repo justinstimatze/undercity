@@ -391,6 +391,36 @@ export function recordTaskFiles(
 	}
 
 	saveTaskFileStore(store, stateDir);
+
+	// Dual-write to SQLite
+	try {
+		const storage = require("./storage.js") as typeof import("./storage.js");
+
+		// Record task-file relationship
+		storage.recordTaskFile(
+			{
+				taskId,
+				objective: taskDescription,
+				filesModified: normalizedFiles,
+				success,
+				keywords,
+				recordedAt: record.recordedAt,
+			},
+			stateDir,
+		);
+
+		// Update keyword correlations
+		for (const keyword of keywords) {
+			storage.updateKeywordCorrelation(keyword, normalizedFiles, success, stateDir);
+		}
+
+		// Update co-modification patterns (only for successful tasks with multiple files)
+		if (success && normalizedFiles.length >= 2) {
+			storage.updateCoModification(normalizedFiles, stateDir);
+		}
+	} catch {
+		// SQLite not available, continue with JSON only
+	}
 }
 
 /**

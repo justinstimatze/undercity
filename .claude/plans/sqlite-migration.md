@@ -9,9 +9,9 @@ Migrate the remaining JSON file persistence modules to use SQLite storage for im
 | Module | JSON File | SQLite Schema | Status |
 |--------|-----------|---------------|--------|
 | `knowledge.ts` | `knowledge.json` | `learnings` table | **Hybrid** (writes to both) |
-| `error-fix-patterns.ts` | `error-fix-patterns.json` | `error_patterns`, `error_fixes`, `pending_errors`, `permanent_failures` | JSON only |
-| `decision-tracker.ts` | `decisions.json` | `decisions`, `decision_resolutions`, `human_overrides` | JSON only |
-| `task-file-patterns.ts` | `task-file-patterns.json` | `task_file_records`, `keyword_correlations`, `co_modifications` | JSON only |
+| `error-fix-patterns.ts` | `error-fix-patterns.json` | `error_patterns`, `error_fixes`, `pending_errors`, `permanent_failures` | **Hybrid** (writes to both) |
+| `decision-tracker.ts` | `decisions.json` | `decisions`, `decision_resolutions`, `human_overrides` | **Hybrid** (writes to both) |
+| `task-file-patterns.ts` | `task-file-patterns.json` | `task_file_records`, `keyword_correlations`, `co_modifications` | **Hybrid** (writes to both) |
 
 ## Migration Strategy
 
@@ -97,21 +97,24 @@ Remove JSON persistence entirely.
 
 ### Phase 1 Tasks
 
-1. **error-fix-patterns.ts**
-   - [ ] Add SQLite write to `recordPendingError()`
-   - [ ] Add SQLite write to `recordSuccessfulFix()`
-   - [ ] Add SQLite write to `recordPermanentFailure()`
-   - [ ] Add SQLite write to `clearPendingError()`
+1. **error-fix-patterns.ts** ✅
+   - [x] Add SQLite write to `recordPendingError()`
+   - [x] Add SQLite write to `recordSuccessfulFix()`
+   - [x] Add SQLite write to `recordPermanentFailure()`
+   - [x] Add SQLite write to `clearPendingError()`
+   - [x] Add SQLite write to `markFixSuccessful()`
+   - [x] Add SQLite write to `updateAutoApplyStats()`
 
-2. **decision-tracker.ts**
-   - [ ] Add SQLite write to `captureDecision()`
-   - [ ] Add SQLite write to `resolveDecision()`
-   - [ ] Add SQLite write to `recordHumanOverride()`
+2. **decision-tracker.ts** ✅
+   - [x] Add SQLite write to `captureDecision()`
+   - [x] Add SQLite write to `resolveDecision()`
+   - [x] Add SQLite write to `recordOverride()`
+   - [x] Add SQLite write to `updateDecisionOutcome()`
 
-3. **task-file-patterns.ts**
-   - [ ] Add SQLite write to `recordTaskFiles()`
-   - [ ] Add SQLite write to keyword correlation updates
-   - [ ] Add SQLite write to co-modification pattern updates
+3. **task-file-patterns.ts** ✅
+   - [x] Add SQLite write to `recordTaskFiles()`
+   - [x] Add SQLite write to keyword correlation updates
+   - [x] Add SQLite write to co-modification pattern updates
 
 ### Phase 2 Tasks
 

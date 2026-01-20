@@ -332,6 +332,14 @@ export function captureDecision(
 	store.pending.push(decision);
 	saveDecisionStore(store, stateDir);
 
+	// Dual-write to SQLite
+	try {
+		const storage = require("./storage.js") as typeof import("./storage.js");
+		storage.saveDecision(decision, stateDir);
+	} catch {
+		// SQLite not available, continue with JSON only
+	}
+
 	return decision;
 }
 
@@ -353,16 +361,27 @@ export function resolveDecision(
 	const decision = store.pending[pendingIndex];
 	store.pending.splice(pendingIndex, 1);
 
+	const fullResolution = {
+		...resolution,
+		decisionId,
+		resolvedAt: new Date().toISOString(),
+	};
+
 	store.resolved.push({
 		...decision,
-		resolution: {
-			...resolution,
-			decisionId,
-			resolvedAt: new Date().toISOString(),
-		},
+		resolution: fullResolution,
 	});
 
 	saveDecisionStore(store, stateDir);
+
+	// Dual-write to SQLite
+	try {
+		const storage = require("./storage.js") as typeof import("./storage.js");
+		storage.saveDecisionResolution(fullResolution, stateDir);
+	} catch {
+		// SQLite not available, continue with JSON only
+	}
+
 	return true;
 }
 
@@ -379,16 +398,25 @@ export function recordOverride(
 ): void {
 	const store = loadDecisionStore(stateDir);
 
-	store.overrides.push({
+	const override = {
 		decisionId,
 		originalDecision,
 		originalResolver,
 		humanDecision,
 		humanReasoning,
 		overriddenAt: new Date().toISOString(),
-	});
+	};
 
+	store.overrides.push(override);
 	saveDecisionStore(store, stateDir);
+
+	// Dual-write to SQLite
+	try {
+		const storage = require("./storage.js") as typeof import("./storage.js");
+		storage.saveHumanOverrideDB(override, stateDir);
+	} catch {
+		// SQLite not available, continue with JSON only
+	}
 }
 
 /**
@@ -408,6 +436,15 @@ export function updateDecisionOutcome(
 
 	resolved.resolution.outcome = outcome;
 	saveDecisionStore(store, stateDir);
+
+	// Dual-write to SQLite
+	try {
+		const storage = require("./storage.js") as typeof import("./storage.js");
+		storage.updateDecisionOutcomeDB(decisionId, outcome, stateDir);
+	} catch {
+		// SQLite not available, continue with JSON only
+	}
+
 	return true;
 }
 

@@ -19,12 +19,12 @@
  * - human_overrides: Human corrections to PM/auto decisions
  */
 
-import Database from "better-sqlite3";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { sessionLogger } from "./logger.js";
+import Database from "better-sqlite3";
+import type { ConfidenceLevel, DecisionCategory } from "./decision-tracker.js";
 import type { Learning, LearningCategory } from "./knowledge.js";
-import type { DecisionCategory, ConfidenceLevel } from "./decision-tracker.js";
+import { sessionLogger } from "./logger.js";
 
 const logger = sessionLogger.child({ module: "storage" });
 
@@ -306,10 +306,7 @@ export function getAllLearnings(stateDir: string = DEFAULT_STATE_DIR): Learning[
 /**
  * Get learnings by category
  */
-export function getLearningsByCategory(
-	category: LearningCategory,
-	stateDir: string = DEFAULT_STATE_DIR,
-): Learning[] {
+export function getLearningsByCategory(category: LearningCategory, stateDir: string = DEFAULT_STATE_DIR): Learning[] {
 	const db = getDatabase(stateDir);
 	const rows = db
 		.prepare("SELECT * FROM learnings WHERE category = ? ORDER BY confidence DESC")
@@ -348,11 +345,7 @@ export function searchLearningsByKeywords(
 /**
  * Update learning usage stats
  */
-export function updateLearningUsage(
-	learningId: string,
-	success: boolean,
-	stateDir: string = DEFAULT_STATE_DIR,
-): void {
+export function updateLearningUsage(learningId: string, success: boolean, stateDir: string = DEFAULT_STATE_DIR): void {
 	const db = getDatabase(stateDir);
 
 	const stmt = db.prepare(`
@@ -511,9 +504,9 @@ export function getErrorPattern(signature: string, stateDir: string = DEFAULT_ST
 		return null;
 	}
 
-	const fixRows = db.prepare("SELECT * FROM error_fixes WHERE signature = ? ORDER BY success_count DESC").all(
-		signature,
-	) as ErrorFixRow[];
+	const fixRows = db
+		.prepare("SELECT * FROM error_fixes WHERE signature = ? ORDER BY success_count DESC")
+		.all(signature) as ErrorFixRow[];
 
 	return {
 		signature: patternRow.signature,
@@ -537,10 +530,7 @@ export function getErrorPattern(signature: string, stateDir: string = DEFAULT_ST
 /**
  * Find matching fix for an error
  */
-export function findMatchingFixFromDB(
-	signature: string,
-	stateDir: string = DEFAULT_STATE_DIR,
-): ErrorFix | null {
+export function findMatchingFixFromDB(signature: string, stateDir: string = DEFAULT_STATE_DIR): ErrorFix | null {
 	const db = getDatabase(stateDir);
 
 	const row = db
@@ -646,10 +636,7 @@ export function saveDecision(decision: DecisionPoint, stateDir: string = DEFAULT
 /**
  * Save a decision resolution
  */
-export function saveDecisionResolution(
-	resolution: DecisionResolution,
-	stateDir: string = DEFAULT_STATE_DIR,
-): void {
+export function saveDecisionResolution(resolution: DecisionResolution, stateDir: string = DEFAULT_STATE_DIR): void {
 	const db = getDatabase(stateDir);
 
 	const stmt = db.prepare(`
@@ -751,6 +738,56 @@ export function searchResolvedDecisions(
 	}));
 }
 
+/**
+ * Update outcome of a resolved decision
+ */
+export function updateDecisionOutcomeDB(
+	decisionId: string,
+	outcome: "success" | "failure",
+	stateDir: string = DEFAULT_STATE_DIR,
+): boolean {
+	const db = getDatabase(stateDir);
+
+	const result = db.prepare("UPDATE decision_resolutions SET outcome = ? WHERE decision_id = ?").run(outcome, decisionId);
+
+	return result.changes > 0;
+}
+
+/**
+ * Human override record
+ */
+export interface HumanOverrideDB {
+	decisionId: string;
+	originalDecision: string;
+	originalResolver: "auto" | "pm";
+	humanDecision: string;
+	humanReasoning?: string;
+	overriddenAt: string;
+}
+
+/**
+ * Save a human override record
+ */
+export function saveHumanOverrideDB(override: HumanOverrideDB, stateDir: string = DEFAULT_STATE_DIR): void {
+	const db = getDatabase(stateDir);
+
+	const stmt = db.prepare(`
+		INSERT INTO human_overrides (
+			decision_id, original_decision, original_resolver,
+			human_decision, human_reasoning, overridden_at
+		) VALUES (?, ?, ?, ?, ?, ?)
+	`);
+
+	stmt.run(
+		override.decisionId,
+		override.originalDecision,
+		override.originalResolver,
+		override.humanDecision,
+		override.humanReasoning || null,
+		override.overriddenAt,
+	);
+}
+
 // =============================================================================
 // Task-File Pattern Operations
 // =============================================================================
@@ -836,9 +873,9 @@ export function getCorrelatedFiles(
 	const fileScores = new Map<string, number>();
 
 	for (const keyword of keywords) {
-		const row = db.prepare("SELECT files, task_count, success_count FROM keyword_correlations WHERE keyword = ?").get(
-			keyword,
-		) as { files: string; task_count: number; success_count: number } | undefined;
+		const row = db
+			.prepare("SELECT files, task_count, success_count FROM keyword_correlations WHERE keyword = ?")
+			.get(keyword) as { files: string; task_count: number; success_count: number } | undefined;
 
 		if (row) {
 			const files = JSON.parse(row.files) as Record<string, number>;
@@ -861,10 +898,7 @@ export function getCorrelatedFiles(
 /**
  * Update co-modification patterns
  */
-export function updateCoModification(
-	files: string[],
-	stateDir: string = DEFAULT_STATE_DIR,
-): void {
+export function updateCoModification(files: string[], stateDir: string = DEFAULT_STATE_DIR): void {
 	if (files.length < 2) return;
 
 	const db = getDatabase(stateDir);
@@ -945,10 +979,7 @@ export interface PermanentFailure {
 /**
  * Record a permanent failure
  */
-export function recordPermanentFailureDB(
-	failure: PermanentFailure,
-	stateDir: string = DEFAULT_STATE_DIR,
-): void {
+export function recordPermanentFailureDB(failure: PermanentFailure, stateDir: string = DEFAULT_STATE_DIR): void {
 	const db = getDatabase(stateDir);
 
 	const stmt = db.prepare(`
@@ -974,10 +1005,7 @@ export function recordPermanentFailureDB(
 /**
  * Get failure patterns for warnings
  */
-export function getFailurePatterns(
-	keywords: string[],
-	stateDir: string = DEFAULT_STATE_DIR,
-): PermanentFailure[] {
+export function getFailurePatterns(keywords: string[], stateDir: string = DEFAULT_STATE_DIR): PermanentFailure[] {
 	const db = getDatabase(stateDir);
 
 	// Search by keywords in task objective
@@ -1016,6 +1044,149 @@ export function getFailurePatterns(
 		detailedErrors: row.detailed_errors ? (JSON.parse(row.detailed_errors) as string[]) : undefined,
 		recordedAt: row.recorded_at,
 	}));
+}
+
+// =============================================================================
+// Pending Errors
+// =============================================================================
+
+/**
+ * Pending error awaiting resolution
+ */
+export interface PendingErrorDB {
+	signature: string;
+	category: string;
+	message: string;
+	taskId: string;
+	filesBeforeFix: string[];
+	recordedAt: string;
+}
+
+/**
+ * Add a pending error to track for later fix recording
+ */
+export function addPendingErrorDB(pending: PendingErrorDB, stateDir: string = DEFAULT_STATE_DIR): void {
+	const db = getDatabase(stateDir);
+
+	const stmt = db.prepare(`
+		INSERT INTO pending_errors (signature, category, message, task_id, files_before_fix, recorded_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`);
+
+	stmt.run(
+		pending.signature,
+		pending.category,
+		pending.message,
+		pending.taskId,
+		JSON.stringify(pending.filesBeforeFix),
+		pending.recordedAt,
+	);
+}
+
+/**
+ * Get pending error for a task
+ */
+export function getPendingErrorDB(taskId: string, stateDir: string = DEFAULT_STATE_DIR): PendingErrorDB | null {
+	const db = getDatabase(stateDir);
+
+	const row = db.prepare("SELECT * FROM pending_errors WHERE task_id = ? ORDER BY id DESC LIMIT 1").get(taskId) as
+		| {
+				signature: string;
+				category: string;
+				message: string;
+				task_id: string;
+				files_before_fix: string;
+				recorded_at: string;
+		  }
+		| undefined;
+
+	if (!row) {
+		return null;
+	}
+
+	return {
+		signature: row.signature,
+		category: row.category,
+		message: row.message,
+		taskId: row.task_id,
+		filesBeforeFix: JSON.parse(row.files_before_fix) as string[],
+		recordedAt: row.recorded_at,
+	};
+}
+
+/**
+ * Remove pending error for a task
+ */
+export function removePendingErrorDB(taskId: string, stateDir: string = DEFAULT_STATE_DIR): void {
+	const db = getDatabase(stateDir);
+	db.prepare("DELETE FROM pending_errors WHERE task_id = ?").run(taskId);
+}
+
+/**
+ * Clean up old pending errors (keep only last 10)
+ */
+export function pruneOldPendingErrorsDB(maxCount: number = 10, stateDir: string = DEFAULT_STATE_DIR): number {
+	const db = getDatabase(stateDir);
+
+	const count = (db.prepare("SELECT COUNT(*) as count FROM pending_errors").get() as { count: number }).count;
+
+	if (count <= maxCount) {
+		return 0;
+	}
+
+	// Delete oldest entries beyond the limit
+	const deleted = db
+		.prepare(
+			`
+		DELETE FROM pending_errors
+		WHERE id NOT IN (
+			SELECT id FROM pending_errors
+			ORDER BY id DESC
+			LIMIT ?
+		)
+	`,
+		)
+		.run(maxCount);
+
+	return deleted.changes;
+}
+
+/**
+ * Increment fix success count for a pattern
+ */
+export function incrementFixSuccessDB(signature: string, stateDir: string = DEFAULT_STATE_DIR): void {
+	const db = getDatabase(stateDir);
+	db.prepare("UPDATE error_patterns SET fix_successes = fix_successes + 1 WHERE signature = ?").run(signature);
+}
+
+/**
+ * Update auto-apply statistics for an error fix
+ */
+export function updateFixAutoApplyStatsDB(
+	signature: string,
+	success: boolean,
+	stateDir: string = DEFAULT_STATE_DIR,
+): void {
+	const db = getDatabase(stateDir);
+
+	// Update the most recent fix for this signature
+	if (success) {
+		db.prepare(
+			`
+			UPDATE error_fixes SET success_count = success_count + 1
+			WHERE signature = ?
+			ORDER BY recorded_at DESC LIMIT 1
+		`,
+		).run(signature);
+	} else {
+		db.prepare(
+			`
+			UPDATE error_fixes SET failure_count = failure_count + 1
+			WHERE signature = ?
+			ORDER BY recorded_at DESC LIMIT 1
+		`,
+		).run(signature);
+	}
 }
 
 // =============================================================================
