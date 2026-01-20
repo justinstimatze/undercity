@@ -38,6 +38,16 @@ const RESEARCH_PATTERNS = [
 	/^compile\b/i,
 	/^conduct\b/i,
 	/^document\s+(?!.*\.(ts|js|tsx|jsx))/i,
+	// Added based on failure analysis - these patterns have high failure rates
+	/^explore\b/i,
+	/^investigate\b/i,
+	/^study\b/i,
+	/^understand\b/i,
+	/^look\s+into\b/i,
+	/^evaluate\b/i,
+	/^assess\b/i,
+	/^check\s+(?!and\s+(fix|update|add|create|implement))/i, // "check and fix" is OK
+	/^verify\s+(?!and\s+(fix|update|add|create|implement))/i, // "verify and fix" is OK
 ];
 
 /** Patterns that indicate actionable code tasks */

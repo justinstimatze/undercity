@@ -412,6 +412,61 @@ Be specific and actionable. Focus on practical improvements, not theoretical ide
 }
 
 /**
+ * Check if a task description is actionable (not vague)
+ *
+ * Vague tasks waste tokens and have low success rates.
+ * Actionable tasks should have:
+ * - Specific file paths or clear targets
+ * - Concrete actions (not just "explore", "research", "improve")
+ * - Measurable deliverables
+ */
+function isTaskActionable(objective: string): boolean {
+	const lower = objective.toLowerCase();
+
+	// Reject purely research/exploration tasks with no code output
+	const vaguePatterns = [
+		/^explore\s/i,
+		/^research\s/i,
+		/^investigate\s/i,
+		/^analyze\s(?!and\s+(fix|update|add|create|implement))/i, // "analyze and fix" is OK
+		/^understand\s/i,
+		/^study\s/i,
+		/^review\s(?!and\s+(fix|update|add|create|implement))/i, // "review and fix" is OK
+		/^look\s+into/i,
+		/^evaluate\s/i,
+		/^assess\s/i,
+	];
+
+	for (const pattern of vaguePatterns) {
+		if (pattern.test(objective)) {
+			sessionLogger.debug({ objective, pattern: pattern.toString() }, "Rejected vague task");
+			return false;
+		}
+	}
+
+	// Reject tasks without any concrete identifiers (files, functions, modules)
+	const hasConcreteTarget =
+		// File paths
+		/\.(ts|js|tsx|jsx|json|md|yaml|yml|toml|css|html)(\s|$|,)/i.test(objective) ||
+		// src/ paths
+		/src\//i.test(objective) ||
+		// Function/method names (camelCase or snake_case followed by parens or as target)
+		/[a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*\s*\(/i.test(objective) || // camelCase function
+		/[a-z]+_[a-z]+/i.test(objective) || // snake_case
+		// Class/component names (PascalCase)
+		/\b[A-Z][a-z]+[A-Z][a-z]+\b/.test(objective) ||
+		// Specific module/directory names
+		/__tests__|__mocks__|components|utils|hooks|services|api|lib/i.test(objective);
+
+	if (!hasConcreteTarget) {
+		sessionLogger.debug({ objective }, "Rejected task without concrete target");
+		return false;
+	}
+
+	return true;
+}
+
+/**
  * Analyze codebase and generate task proposals for improvements
  *
  * Uses knowledge base, patterns, and codebase analysis to identify
@@ -474,12 +529,30 @@ YOUR TASK:
 3. Propose specific, actionable tasks
 4. Avoid duplicating pending or recently completed tasks
 
+CRITICAL REQUIREMENTS FOR TASK DESCRIPTIONS:
+Tasks MUST include concrete deliverables. Vague tasks waste tokens and fail.
+
+BAD (too vague - will fail):
+- "Explore the test configuration" (no deliverable)
+- "Research best practices for X" (no code output)
+- "Improve error handling" (which errors? which files?)
+
+GOOD (specific, actionable):
+- "Add try-catch wrapper to fetchUser() in src/api/users.ts with specific error types"
+- "Create test file src/__tests__/parser.test.ts covering edge cases: empty input, malformed JSON, missing required fields"
+- "Refactor src/utils/date.ts: extract formatRelativeDate() into a separate module to reduce bundle size"
+
+Each task MUST specify:
+- Target file path(s)
+- Specific function/component/module to modify or create
+- Concrete change to make (not just "improve" or "explore")
+
 Output task proposals in this exact JSON format:
 
 \`\`\`json
 [
   {
-    "objective": "specific task description with file paths if known",
+    "objective": "Verb + specific file + specific change (e.g., 'Add retry logic to src/api/client.ts fetchWithRetry() function')",
     "rationale": "why this improves the codebase",
     "suggestedPriority": 700,
     "source": "codebase_gap",
@@ -488,7 +561,7 @@ Output task proposals in this exact JSON format:
 ]
 \`\`\`
 
-Generate 3-5 high-value proposals. Be specific and actionable.`;
+Generate 3-5 high-value proposals. Each must be executable by an AI agent without further clarification.`;
 
 	try {
 		let resultJson = "";
@@ -510,13 +583,26 @@ Generate 3-5 high-value proposals. Be specific and actionable.`;
 
 		// Parse JSON response
 		const jsonMatch = resultJson.match(/```json\s*([\s\S]*?)\s*```/);
+		let proposals: TaskProposal[];
 		if (jsonMatch) {
-			const proposals = JSON.parse(jsonMatch[1]) as TaskProposal[];
-			sessionLogger.info({ proposalCount: proposals.length }, "PM generated proposals");
-			return proposals;
+			proposals = JSON.parse(jsonMatch[1]) as TaskProposal[];
+		} else {
+			proposals = JSON.parse(resultJson) as TaskProposal[];
 		}
 
-		return JSON.parse(resultJson) as TaskProposal[];
+		// Filter out vague tasks that are likely to fail
+		const actionableProposals = proposals.filter((p) => isTaskActionable(p.objective));
+		const filteredCount = proposals.length - actionableProposals.length;
+
+		if (filteredCount > 0) {
+			sessionLogger.warn(
+				{ total: proposals.length, filtered: filteredCount },
+				`Filtered ${filteredCount} vague task(s) from PM proposals`,
+			);
+		}
+
+		sessionLogger.info({ proposalCount: actionableProposals.length }, "PM generated proposals");
+		return actionableProposals;
 	} catch (error) {
 		sessionLogger.error({ error: String(error) }, "PM proposal generation failed");
 		return [];

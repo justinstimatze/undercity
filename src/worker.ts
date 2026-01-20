@@ -1961,15 +1961,26 @@ export class TaskWorker {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		output.error(`Error: ${errorMessage.substring(0, 100)}`, { taskId });
 
+		// Check for VAGUE_TASK fail-fast error - don't escalate, just fail immediately
+		const isVagueTask = errorMessage.includes("VAGUE_TASK:");
+		if (isVagueTask) {
+			sessionLogger.warn({ taskId }, "VAGUE_TASK detected - failing fast without escalation");
+			// Set attempts to max to break out of retry loop
+			this.attempts = this.maxAttempts;
+		}
+
 		this.attemptRecords.push({
 			model: this.currentModel,
 			durationMs: Date.now() - attemptStart,
 			success: false,
-			errorCategories: ["unknown"],
+			errorCategories: isVagueTask ? ["no_changes"] : ["unknown"],
 		});
 
-		this.escalateModel();
-		this.sameModelRetries = 0;
+		// Don't escalate for vague tasks - it won't help
+		if (!isVagueTask) {
+			this.escalateModel();
+			this.sameModelRetries = 0;
+		}
 	}
 
 	/**
@@ -2666,16 +2677,25 @@ RULES:
 									);
 
 									// Provide escalating feedback based on consecutive no-write attempts
+									// FAIL FAST: After 3 no-write attempts, terminate immediately
+									// Data shows escalating vague tasks wastes tokens - 68% of failures are task quality issues
+									if (this.consecutiveNoWriteAttempts >= 3) {
+										sessionLogger.warn(
+											{
+												consecutiveNoWrites: this.consecutiveNoWriteAttempts,
+												model: this.currentModel,
+											},
+											"FAIL FAST: 3+ consecutive no-write attempts - terminating to save tokens",
+										);
+										// Throw to break out of agent loop immediately
+										throw new Error(
+											`VAGUE_TASK: Agent attempted to finish ${this.consecutiveNoWriteAttempts} times without making changes. ` +
+												"Task likely needs decomposition into more specific subtasks.",
+										);
+									}
+
 									let reason: string;
-									if (this.consecutiveNoWriteAttempts >= 3 || this.currentModel === "opus") {
-										// At opus or after 3 attempts: suggest decomposition
-										reason =
-											"You have attempted multiple times without making changes. The task may be too vague or complex. " +
-											"Options:\n" +
-											"1. If the task is already complete: TASK_ALREADY_COMPLETE: <reason>\n" +
-											"2. If you cannot identify what to change: NEEDS_DECOMPOSITION: <list specific subtasks that would be clearer>\n" +
-											"3. If you can identify changes: Make them now using Edit/Write tools";
-									} else if (this.consecutiveNoWriteAttempts === 2) {
+									if (this.consecutiveNoWriteAttempts === 2) {
 										// Second attempt: mention task might be unclear
 										reason =
 											"You still haven't made any code changes. If you're unsure what to modify:\n" +
