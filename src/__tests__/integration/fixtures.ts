@@ -8,7 +8,7 @@
 
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
@@ -289,7 +289,8 @@ export function createWorktreeTestFixture(): UndercityProjectFixture & {
 } {
 	const project = createMinimalUndercityProject();
 	const repoHash = Buffer.from(project.path).toString("base64url").slice(0, 12);
-	const worktreesDir = `/tmp/undercity-worktrees/${repoHash}`;
+	// Use ~/.cache to match the default WorktreeManager behavior
+	const worktreesDir = join(homedir(), ".cache", "undercity-worktrees", repoHash);
 
 	// Create worktrees directory
 	mkdirSync(worktreesDir, { recursive: true });

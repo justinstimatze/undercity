@@ -13,6 +13,7 @@
 
 import { execFileSync, execSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { gitLogger } from "./logger.js";
 import type { WorktreeInfo } from "./types.js";
@@ -141,6 +142,7 @@ export class WorktreeManager {
 			stateDir?: string;
 			repoRoot?: string; // Optional explicit repo root
 			defaultBranch?: string; // Optional override for default branch
+			worktreesDir?: string; // Optional override for worktrees directory
 		} = {},
 	) {
 		// Determine repo root, with multiple fallback strategies
@@ -164,12 +166,29 @@ export class WorktreeManager {
 				: resolve(this.repoRoot, options.stateDir)
 			: join(this.repoRoot, ".undercity");
 
-		// CRITICAL: Put worktrees in /tmp for complete isolation.
-		// If worktrees are anywhere that could have parent .claude/ directories,
-		// the SDK walks up the tree and loads those rules, causing 10-15s latency per turn!
-		// Using /tmp ensures no ancestor has .claude/ rules.
+		// Determine worktrees directory from (in priority order):
+		// 1. options.worktreesDir - explicit override
+		// 2. UNDERCITY_WORKTREES_DIR env var
+		// 3. Default: ~/.cache/undercity-worktrees (disk-backed, survives reboot)
+		//
+		// IMPORTANT: Avoid paths with parent .claude/ directories - the SDK walks
+		// up the tree and loads those rules, causing 10-15s latency per turn.
+		// ~/.cache/ and /tmp are safe locations.
 		const repoHash = Buffer.from(this.repoRoot).toString("base64url").slice(0, 12);
-		this.worktreesDir = `/tmp/undercity-worktrees/${repoHash}`;
+		const envWorktreesDir = process.env.UNDERCITY_WORKTREES_DIR;
+		const defaultWorktreesDir = join(homedir(), ".cache", "undercity-worktrees", repoHash);
+
+		if (options.worktreesDir) {
+			this.worktreesDir = isAbsolute(options.worktreesDir)
+				? join(options.worktreesDir, repoHash)
+				: join(resolve(options.worktreesDir), repoHash);
+		} else if (envWorktreesDir) {
+			this.worktreesDir = isAbsolute(envWorktreesDir)
+				? join(envWorktreesDir, repoHash)
+				: join(resolve(envWorktreesDir), repoHash);
+		} else {
+			this.worktreesDir = defaultWorktreesDir;
+		}
 
 		// Get main branch with multiple fallback strategies
 		try {

@@ -10,7 +10,7 @@
 
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { WorktreeError, WorktreeManager } from "../../worktree-manager.js";
@@ -102,9 +102,9 @@ describeGit("WorktreeManager Integration Tests", () => {
 			execSync("git add . && git commit -m 'init'", { cwd: newTestDir, stdio: "pipe" });
 
 			new WorktreeManager({ repoRoot: newTestDir, defaultBranch: "main" });
-			// Worktrees directory is now in /tmp for isolation
+			// Worktrees directory is now in ~/.cache by default
 			const repoHash = Buffer.from(newTestDir).toString("base64url").slice(0, 12);
-			const worktreesPath = `/tmp/undercity-worktrees/${repoHash}`;
+			const worktreesPath = join(homedir(), ".cache", "undercity-worktrees", repoHash);
 
 			expect(existsSync(worktreesPath)).toBe(true);
 
@@ -131,9 +131,9 @@ describeGit("WorktreeManager Integration Tests", () => {
 		it("should generate correct worktree path", () => {
 			manager = new WorktreeManager({ repoRoot: testDir, defaultBranch });
 			const sessionId = "test-session-123";
-			// Worktrees are now in /tmp to avoid SDK inheriting any parent .claude rules
+			// Worktrees are now in ~/.cache by default to avoid SDK inheriting any parent .claude rules
 			const repoHash = Buffer.from(testDir).toString("base64url").slice(0, 12);
-			const expected = `/tmp/undercity-worktrees/${repoHash}/${sessionId}`;
+			const expected = join(homedir(), ".cache", "undercity-worktrees", repoHash, sessionId);
 			expect(manager.getWorktreePath(sessionId)).toBe(expected);
 		});
 

@@ -530,6 +530,12 @@ describe("complexity", () => {
 		});
 
 		it("should return recommended model when no metrics data", async () => {
+			// Mock self-tuning to return null profile so we fall through to feedback-metrics
+			vi.doMock("../self-tuning.js", () => ({
+				loadRoutingProfile: () => null,
+				shouldSkipModel: () => false,
+				getThreshold: () => ({ minSuccessRate: 0.7, minSamples: 3 }),
+			}));
 			vi.doMock("../feedback-metrics.js", () => ({
 				getMetricsAnalysis: () => ({
 					totalTasks: 0,
@@ -543,6 +549,12 @@ describe("complexity", () => {
 		});
 
 		it("should return recommended model when insufficient samples", async () => {
+			// Mock self-tuning to return null profile so we fall through to feedback-metrics
+			vi.doMock("../self-tuning.js", () => ({
+				loadRoutingProfile: () => null,
+				shouldSkipModel: () => false,
+				getThreshold: () => ({ minSuccessRate: 0.7, minSamples: 3 }),
+			}));
 			vi.doMock("../feedback-metrics.js", () => ({
 				getMetricsAnalysis: () => ({
 					totalTasks: 2, // Below minSamples

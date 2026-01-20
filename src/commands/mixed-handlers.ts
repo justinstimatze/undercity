@@ -2,7 +2,9 @@
  * Command handlers for mixed commands
  * Extracted from mixed.ts to reduce complexity
  */
+import { execSync } from "node:child_process";
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
@@ -63,6 +65,39 @@ function formatDuration(ms: number): string {
 	const seconds = Math.floor(ms / 1000);
 	return `${seconds}s`;
 }
+
+/**
+ * Check available disk space on the worktrees directory
+ * Returns available space in GB, or null if check fails
+ */
+function getWorktreesDiskSpaceGB(): number | null {
+	try {
+		// Determine worktrees directory (same logic as WorktreeManager)
+		const envWorktreesDir = process.env.UNDERCITY_WORKTREES_DIR;
+		const defaultWorktreesDir = join(homedir(), ".cache", "undercity-worktrees");
+		const worktreesDir = envWorktreesDir || defaultWorktreesDir;
+
+		// Get parent directory since worktrees dir might not exist yet
+		const checkDir = existsSync(worktreesDir) ? worktreesDir : dirname(worktreesDir);
+
+		// Use df to check available space
+		const result = execSync(`df -BG "${checkDir}" | tail -1 | awk '{print $4}'`, {
+			encoding: "utf-8",
+			timeout: 5000,
+		}).trim();
+
+		// Result is like "6G" - parse the number
+		const match = result.match(/^(\d+)/);
+		if (match) {
+			return Number.parseInt(match[1], 10);
+		}
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+const MINIMUM_DISK_SPACE_GB = 2;
 
 /**
  * Get the absolute path to the grind lock file.
@@ -933,6 +968,18 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 	if (staleCleanup.cleaned > 0) {
 		output.warning(`Cleaned up ${staleCleanup.cleaned} stale worker(s) from previous runs`);
 		output.debug(`Stale task IDs: ${staleCleanup.taskIds.join(", ")}`);
+	}
+
+	// Check disk space on worktrees directory before starting
+	const diskSpaceGB = getWorktreesDiskSpaceGB();
+	if (diskSpaceGB !== null) {
+		if (diskSpaceGB < MINIMUM_DISK_SPACE_GB) {
+			releaseGrindLock();
+			output.error(`Insufficient disk space: ${diskSpaceGB}GB available, need at least ${MINIMUM_DISK_SPACE_GB}GB`);
+			output.info("Clean up disk space or set UNDERCITY_WORKTREES_DIR to a location with more space");
+			process.exit(1);
+		}
+		output.debug(`Worktrees disk space: ${diskSpaceGB}GB available`);
 	}
 
 	const { Orchestrator } = await import("../orchestrator.js");
