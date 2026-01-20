@@ -440,6 +440,128 @@ Use these insights if applicable to your current task.`;
 }
 
 /**
+ * 3-Layer Token-Efficient Retrieval (inspired by claude-mem)
+ *
+ * Layer 1: Compact index with IDs and truncated previews (~50 tokens per learning)
+ * Layer 2: Timeline context around relevant learnings
+ * Layer 3: Full content for selected IDs (~500-1000 tokens)
+ *
+ * This approach saves ~10x tokens by filtering before fetching details.
+ */
+
+/** Truncate text to a maximum length with ellipsis */
+function truncateText(text: string, maxLength: number): string {
+	if (text.length <= maxLength) return text;
+	return text.slice(0, maxLength - 3) + "...";
+}
+
+/**
+ * Layer 1: Format learnings as compact index (IDs + previews)
+ * Use this for initial context injection to save tokens.
+ *
+ * Returns ~50 tokens per learning vs ~200+ for full content.
+ */
+export function formatLearningsCompact(learnings: Learning[]): string {
+	if (learnings.length === 0) return "";
+
+	const indexed = learnings.map((l, idx) => {
+		const preview = truncateText(l.content, 80);
+		const confidence = Math.round(l.confidence * 100);
+		return `[${idx + 1}] ${l.category} (${confidence}%): ${preview}`;
+	});
+
+	return `KNOWLEDGE INDEX (${learnings.length} relevant learnings):
+${indexed.join("\n")}
+
+To use a learning, reference it by number. Full details available on request.`;
+}
+
+/**
+ * Layer 2: Get timeline context around a learning
+ * Returns learnings created before/after for temporal context.
+ */
+export function getLearningTimeline(
+	learningId: string,
+	windowSize: number = 2,
+	stateDir: string = DEFAULT_STATE_DIR,
+): { before: Learning[]; target: Learning | null; after: Learning[] } {
+	const kb = loadKnowledge(stateDir);
+
+	// Sort by creation time
+	const sorted = [...kb.learnings].sort(
+		(a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+	);
+
+	const targetIdx = sorted.findIndex((l) => l.id === learningId);
+	if (targetIdx === -1) {
+		return { before: [], target: null, after: [] };
+	}
+
+	return {
+		before: sorted.slice(Math.max(0, targetIdx - windowSize), targetIdx),
+		target: sorted[targetIdx],
+		after: sorted.slice(targetIdx + 1, targetIdx + 1 + windowSize),
+	};
+}
+
+/**
+ * Layer 3: Get full details for specific learning IDs
+ * Use this to fetch complete content for learnings the agent needs.
+ */
+export function getLearningsByIds(
+	ids: string[],
+	stateDir: string = DEFAULT_STATE_DIR,
+): Learning[] {
+	const kb = loadKnowledge(stateDir);
+	const idSet = new Set(ids);
+	return kb.learnings.filter((l) => idSet.has(l.id));
+}
+
+/**
+ * Get learnings by index numbers (1-based, as shown in compact format)
+ * Convenience function for when agent references learnings by number.
+ */
+export function getLearningsByIndex(
+	indices: number[],
+	learnings: Learning[],
+): Learning[] {
+	return indices
+		.filter((idx) => idx >= 1 && idx <= learnings.length)
+		.map((idx) => learnings[idx - 1]);
+}
+
+/**
+ * Format full details for selected learnings
+ * Use after agent has identified which learnings are relevant.
+ */
+export function formatLearningDetails(learnings: Learning[]): string {
+	if (learnings.length === 0) return "";
+
+	const details = learnings.map((l) => {
+		const meta = [
+			`Category: ${l.category}`,
+			`Confidence: ${Math.round(l.confidence * 100)}%`,
+			`Used: ${l.usedCount} times (${l.successCount} successes)`,
+			l.structured?.file ? `File: ${l.structured.file}` : null,
+			l.structured?.pattern ? `Pattern: ${l.structured.pattern}` : null,
+		]
+			.filter(Boolean)
+			.join(" | ");
+
+		return `### Learning: ${l.id}
+${meta}
+
+${l.content}
+
+Keywords: ${l.keywords.join(", ")}`;
+	});
+
+	return `LEARNING DETAILS:
+
+${details.join("\n\n---\n\n")}`;
+}
+
+/**
  * Get knowledge base statistics
  */
 export function getKnowledgeStats(stateDir: string = DEFAULT_STATE_DIR): {
