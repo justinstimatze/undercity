@@ -1580,6 +1580,14 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		}
 
 		const batchId = `grind-${Date.now().toString(36)}`;
+
+		// Clear orphaned workers from any previous batch before starting
+		// This is critical: workers from previous sessions are definitely dead
+		const orphanCleanup = persistence.clearPreviousBatchWorkers(batchId);
+		if (orphanCleanup.cleared > 0) {
+			output.info(`Cleared ${orphanCleanup.cleared} orphaned worker(s) from previous sessions`);
+		}
+
 		startGrindSession({
 			batchId,
 			taskCount: tasksWithModels.length,

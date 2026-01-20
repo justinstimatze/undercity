@@ -1010,6 +1010,74 @@ export class Persistence {
 	}
 
 	/**
+	 * Clear all active tasks from previous batches
+	 *
+	 * Called on grind startup to remove orphaned workers from previous sessions.
+	 * This is critical: active tasks from a previous batch/PID are definitely orphaned
+	 * since that process is no longer running.
+	 *
+	 * @param currentBatchId The batch ID of the current grind session
+	 * @returns Info about cleaned up tasks
+	 */
+	clearPreviousBatchWorkers(currentBatchId: string): { cleared: number; taskIds: string[] } {
+		const cleared: string[] = [];
+
+		try {
+			const activeTasks = this.scanActiveTasks();
+
+			for (const task of activeTasks) {
+				// If task is from a different batch, it's definitely orphaned
+				if (task.batchId && task.batchId !== currentBatchId) {
+					persistenceLogger.info(
+						{ taskId: task.taskId, oldBatch: task.batchId, currentBatch: currentBatchId },
+						"Clearing orphaned worker from previous batch",
+					);
+					this.removeActiveTask(task.taskId);
+					cleared.push(task.taskId);
+				}
+			}
+
+			if (cleared.length > 0) {
+				persistenceLogger.info({ count: cleared.length, currentBatchId }, "Cleared orphaned workers from previous batches");
+			}
+		} catch (error) {
+			persistenceLogger.warn({ error: String(error) }, "Error clearing previous batch workers");
+		}
+
+		return { cleared: cleared.length, taskIds: cleared };
+	}
+
+	/**
+	 * Clear ALL active tasks (for fresh start)
+	 *
+	 * Use this when starting a completely fresh grind session and you want
+	 * to ensure no orphaned workers from any previous session.
+	 *
+	 * @returns Info about cleared tasks
+	 */
+	clearAllActiveWorkers(): { cleared: number; taskIds: string[] } {
+		const cleared: string[] = [];
+
+		try {
+			const activeTasks = this.scanActiveTasks();
+
+			for (const task of activeTasks) {
+				persistenceLogger.info({ taskId: task.taskId, batchId: task.batchId }, "Clearing active worker");
+				this.removeActiveTask(task.taskId);
+				cleared.push(task.taskId);
+			}
+
+			if (cleared.length > 0) {
+				persistenceLogger.info({ count: cleared.length }, "Cleared all active workers");
+			}
+		} catch (error) {
+			persistenceLogger.warn({ error: String(error) }, "Error clearing all active workers");
+		}
+
+		return { cleared: cleared.length, taskIds: cleared };
+	}
+
+	/**
 	 * Clear all active and completed tasks for a batch
 	 */
 	clearBatch(batchId: string): void {
