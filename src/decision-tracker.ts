@@ -6,11 +6,20 @@
  * - Building patterns for the automated PM
  * - Identifying what needs human judgment
  *
- * Storage: .undercity/decisions.json
+ * Storage: SQLite (.undercity/undercity.db)
+ * Legacy: .undercity/decisions.json (migration only)
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+	hasDecisionData,
+	loadDecisionStoreFromDB,
+	saveDecision as saveDecisionDB,
+	saveDecisionResolution as saveDecisionResolutionDB,
+	saveHumanOverrideDB,
+	updateDecisionOutcomeDB,
+} from "./storage.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
 const DECISIONS_FILE = "decisions.json";
@@ -145,69 +154,102 @@ function generateDecisionId(): string {
 }
 
 /**
- * Load decision store from disk
+ * Load decision store from JSON file (for migration only)
  */
-export function loadDecisionStore(stateDir: string = DEFAULT_STATE_DIR): DecisionStore {
+function loadDecisionStoreFromJSON(stateDir: string): DecisionStore | null {
 	const path = getStorePath(stateDir);
 
 	if (!existsSync(path)) {
-		return {
-			pending: [],
-			resolved: [],
-			overrides: [],
-			version: "1.0",
-			lastUpdated: new Date().toISOString(),
-		};
+		return null;
 	}
 
 	try {
 		const content = readFileSync(path, "utf-8");
 		return JSON.parse(content) as DecisionStore;
 	} catch {
-		return {
-			pending: [],
-			resolved: [],
-			overrides: [],
-			version: "1.0",
-			lastUpdated: new Date().toISOString(),
-		};
+		return null;
 	}
 }
 
 /**
- * Save decision store to disk
+ * Migrate JSON data to SQLite (one-time migration)
  */
-function saveDecisionStore(store: DecisionStore, stateDir: string = DEFAULT_STATE_DIR): void {
-	const path = getStorePath(stateDir);
-	const tempPath = `${path}.tmp`;
-	const dir = dirname(path);
-
-	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
+function migrateDecisionStoreToSQLite(store: DecisionStore, stateDir: string): void {
+	// Migrate pending decisions
+	for (const decision of store.pending) {
+		saveDecisionDB(decision, stateDir);
 	}
 
-	store.lastUpdated = new Date().toISOString();
-
-	// Keep only last 500 resolved decisions
-	if (store.resolved.length > 500) {
-		store.resolved = store.resolved.slice(-500);
+	// Migrate resolved decisions
+	for (const resolved of store.resolved) {
+		// First save the decision point
+		const decision: DecisionPoint = {
+			id: resolved.id,
+			taskId: resolved.taskId,
+			question: resolved.question,
+			context: resolved.context,
+			category: resolved.category,
+			keywords: resolved.keywords,
+			capturedAt: resolved.capturedAt,
+			options: resolved.options,
+		};
+		saveDecisionDB(decision, stateDir);
+		saveDecisionResolutionDB(resolved.resolution, stateDir);
 	}
 
-	// Keep only last 100 overrides
-	if (store.overrides.length > 100) {
-		store.overrides = store.overrides.slice(-100);
-	}
-
-	try {
-		writeFileSync(tempPath, JSON.stringify(store, null, 2), "utf-8");
-		renameSync(tempPath, path);
-	} catch (error) {
-		if (existsSync(tempPath)) {
-			unlinkSync(tempPath);
-		}
-		throw error;
+	// Migrate overrides
+	for (const override of store.overrides) {
+		saveHumanOverrideDB(
+			{
+				decisionId: override.decisionId,
+				originalDecision: override.originalDecision,
+				originalResolver: override.originalResolver,
+				humanDecision: override.humanDecision,
+				humanReasoning: override.humanReasoning,
+				overriddenAt: override.overriddenAt,
+			},
+			stateDir,
+		);
 	}
 }
+
+/**
+ * Load decision store (SQLite primary, JSON migration fallback)
+ */
+export function loadDecisionStore(stateDir: string = DEFAULT_STATE_DIR): DecisionStore {
+	try {
+		// Check if SQLite has data
+		if (hasDecisionData(stateDir)) {
+			// Load from SQLite
+			const dbStore = loadDecisionStoreFromDB(stateDir);
+			return {
+				pending: dbStore.pending,
+				resolved: dbStore.resolved,
+				overrides: dbStore.overrides,
+				version: "1.0",
+				lastUpdated: new Date().toISOString(),
+			};
+		}
+
+		// Try JSON fallback and migrate
+		const jsonStore = loadDecisionStoreFromJSON(stateDir);
+		if (jsonStore && (jsonStore.pending.length > 0 || jsonStore.resolved.length > 0 || jsonStore.overrides.length > 0)) {
+			migrateDecisionStoreToSQLite(jsonStore, stateDir);
+			return jsonStore;
+		}
+	} catch {
+		// Fall through to empty store
+	}
+
+	return {
+		pending: [],
+		resolved: [],
+		overrides: [],
+		version: "1.0",
+		lastUpdated: new Date().toISOString(),
+	};
+}
+
 
 /**
  * Extract keywords from decision context
@@ -316,8 +358,6 @@ export function captureDecision(
 	options?: string[],
 	stateDir: string = DEFAULT_STATE_DIR,
 ): DecisionPoint {
-	const store = loadDecisionStore(stateDir);
-
 	const decision: DecisionPoint = {
 		id: generateDecisionId(),
 		taskId,
@@ -329,16 +369,8 @@ export function captureDecision(
 		capturedAt: new Date().toISOString(),
 	};
 
-	store.pending.push(decision);
-	saveDecisionStore(store, stateDir);
-
-	// Dual-write to SQLite
-	try {
-		const storage = require("./storage.js") as typeof import("./storage.js");
-		storage.saveDecision(decision, stateDir);
-	} catch {
-		// SQLite not available, continue with JSON only
-	}
+	// Write to SQLite
+	saveDecisionDB(decision, stateDir);
 
 	return decision;
 }
@@ -351,36 +383,21 @@ export function resolveDecision(
 	resolution: Omit<DecisionResolution, "decisionId" | "resolvedAt">,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): boolean {
+	// Check if decision exists in pending
 	const store = loadDecisionStore(stateDir);
-
 	const pendingIndex = store.pending.findIndex((d) => d.id === decisionId);
 	if (pendingIndex === -1) {
 		return false;
 	}
 
-	const decision = store.pending[pendingIndex];
-	store.pending.splice(pendingIndex, 1);
-
-	const fullResolution = {
+	const fullResolution: DecisionResolution = {
 		...resolution,
 		decisionId,
 		resolvedAt: new Date().toISOString(),
 	};
 
-	store.resolved.push({
-		...decision,
-		resolution: fullResolution,
-	});
-
-	saveDecisionStore(store, stateDir);
-
-	// Dual-write to SQLite
-	try {
-		const storage = require("./storage.js") as typeof import("./storage.js");
-		storage.saveDecisionResolution(fullResolution, stateDir);
-	} catch {
-		// SQLite not available, continue with JSON only
-	}
+	// Write to SQLite
+	saveDecisionResolutionDB(fullResolution, stateDir);
 
 	return true;
 }
@@ -396,27 +413,18 @@ export function recordOverride(
 	humanReasoning?: string,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): void {
-	const store = loadDecisionStore(stateDir);
-
-	const override = {
-		decisionId,
-		originalDecision,
-		originalResolver,
-		humanDecision,
-		humanReasoning,
-		overriddenAt: new Date().toISOString(),
-	};
-
-	store.overrides.push(override);
-	saveDecisionStore(store, stateDir);
-
-	// Dual-write to SQLite
-	try {
-		const storage = require("./storage.js") as typeof import("./storage.js");
-		storage.saveHumanOverrideDB(override, stateDir);
-	} catch {
-		// SQLite not available, continue with JSON only
-	}
+	// Write to SQLite
+	saveHumanOverrideDB(
+		{
+			decisionId,
+			originalDecision,
+			originalResolver,
+			humanDecision,
+			humanReasoning,
+			overriddenAt: new Date().toISOString(),
+		},
+		stateDir,
+	);
 }
 
 /**
@@ -427,25 +435,8 @@ export function updateDecisionOutcome(
 	outcome: "success" | "failure",
 	stateDir: string = DEFAULT_STATE_DIR,
 ): boolean {
-	const store = loadDecisionStore(stateDir);
-
-	const resolved = store.resolved.find((d) => d.id === decisionId);
-	if (!resolved) {
-		return false;
-	}
-
-	resolved.resolution.outcome = outcome;
-	saveDecisionStore(store, stateDir);
-
-	// Dual-write to SQLite
-	try {
-		const storage = require("./storage.js") as typeof import("./storage.js");
-		storage.updateDecisionOutcomeDB(decisionId, outcome, stateDir);
-	} catch {
-		// SQLite not available, continue with JSON only
-	}
-
-	return true;
+	// Write to SQLite and return whether it succeeded
+	return updateDecisionOutcomeDB(decisionId, outcome, stateDir);
 }
 
 /**

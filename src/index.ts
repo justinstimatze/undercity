@@ -29,6 +29,19 @@ export {
 	type PatternStats,
 	updateLedger,
 } from "./capability-ledger.js";
+// Vector Embeddings
+export {
+	calculateVector,
+	cosineSimilarity,
+	type EmbeddingStats,
+	embedAllLearnings,
+	embedLearning,
+	getEmbeddingStats,
+	hybridSearch,
+	type SparseVector,
+	searchBySemanticSimilarity,
+	tokenize,
+} from "./embeddings.js";
 // Experiment framework
 export { ExperimentManager, getExperimentManager } from "./experiment.js";
 // Git operations
@@ -156,19 +169,6 @@ export {
 	saveDaemonState,
 	UndercityServer,
 } from "./server.js";
-// Vector Embeddings
-export {
-	calculateVector,
-	cosineSimilarity,
-	embedAllLearnings,
-	embedLearning,
-	type EmbeddingStats,
-	getEmbeddingStats,
-	hybridSearch,
-	searchBySemanticSimilarity,
-	type SparseVector,
-	tokenize,
-} from "./embeddings.js";
 // SQLite Storage
 export {
 	autoMigrateIfNeeded,
@@ -186,18 +186,18 @@ export {
 	getLearningsByCategory,
 	getPendingDecisions,
 	getStorageStats,
-	migrateFromJSON,
 	type MigrationResult,
+	migrateFromJSON,
 	needsMigration,
 	type PermanentFailure,
 	recordPermanentFailureDB,
 	recordTaskFile,
 	resetDatabase,
+	type StorageStats,
 	saveDecision,
 	saveDecisionResolution,
 	searchLearningsByKeywords,
 	searchResolvedDecisions,
-	type StorageStats,
 	type TaskFileRecord,
 	updateCoModification,
 	updateKeywordCorrelation,

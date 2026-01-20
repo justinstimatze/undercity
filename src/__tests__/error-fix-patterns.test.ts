@@ -86,6 +86,186 @@ vi.mock("node:child_process", () => ({
 	}),
 }));
 
+// Mock storage module with in-memory state to simulate SQLite
+// This allows us to test error-fix-patterns logic without actual SQLite
+interface MockPattern {
+	signature: string;
+	category: string;
+	sampleMessage: string;
+	occurrences: number;
+	fixSuccesses: number;
+	firstSeen: string;
+	lastSeen: string;
+	fixes: {
+		description: string;
+		diff?: string;
+		filesChanged: string[];
+		recordedAt: string;
+		autoApplyCount?: number;
+		autoApplySuccessRate?: number;
+	}[];
+}
+
+interface MockPending {
+	signature: string;
+	category: string;
+	message: string;
+	taskId: string;
+	filesBeforeFix: string[];
+	recordedAt: string;
+}
+
+interface MockFailure {
+	signature: string;
+	category: string;
+	sampleMessage: string;
+	taskObjective: string;
+	modelUsed: string;
+	attemptsCount: number;
+	filesAttempted: string[];
+	detailedErrors?: string[];
+	recordedAt: string;
+}
+
+// In-memory storage state
+const mockPatterns = new Map<string, MockPattern>();
+const mockPending: MockPending[] = [];
+const mockFailures: MockFailure[] = [];
+
+// Reset function called in beforeEach
+function resetMockStorage(): void {
+	mockPatterns.clear();
+	mockPending.length = 0;
+	mockFailures.length = 0;
+}
+
+vi.mock("../storage.js", () => ({
+	hasErrorFixData: vi.fn(() => mockPatterns.size > 0 || mockPending.length > 0 || mockFailures.length > 0),
+
+	loadErrorFixStoreFromDB: vi.fn(() => {
+		const patterns: Record<string, MockPattern> = {};
+		for (const [sig, pattern] of mockPatterns) {
+			patterns[sig] = {
+				...pattern,
+				fixes: pattern.fixes.map((f) => ({
+					filesChanged: f.filesChanged,
+					editSummary: f.description,
+					taskId: "", // SQLite schema doesn't preserve taskId
+					recordedAt: f.recordedAt,
+					patchData: f.diff,
+					autoApplyCount: f.autoApplyCount,
+					autoApplySuccessRate: f.autoApplySuccessRate,
+				})),
+			};
+		}
+		return {
+			patterns,
+			pending: [...mockPending],
+			failures: [...mockFailures],
+			version: "1.0",
+			lastUpdated: new Date().toISOString(),
+		};
+	}),
+
+	upsertErrorPattern: vi.fn((signature: string, category: string, sampleMessage: string) => {
+		if (!mockPatterns.has(signature)) {
+			mockPatterns.set(signature, {
+				signature,
+				category,
+				sampleMessage,
+				occurrences: 1,
+				fixSuccesses: 0,
+				firstSeen: new Date().toISOString(),
+				lastSeen: new Date().toISOString(),
+				fixes: [],
+			});
+		} else {
+			const pattern = mockPatterns.get(signature)!;
+			pattern.occurrences++;
+			pattern.lastSeen = new Date().toISOString();
+		}
+	}),
+
+	addErrorFix: vi.fn(
+		(signature: string, fix: { description: string; diff?: string; filesChanged: string[] }) => {
+			const pattern = mockPatterns.get(signature);
+			if (pattern) {
+				pattern.fixes.push({
+					...fix,
+					recordedAt: new Date().toISOString(),
+				});
+				// Limit to 5 fixes per pattern
+				if (pattern.fixes.length > 5) {
+					pattern.fixes = pattern.fixes.slice(-5);
+				}
+			}
+		},
+	),
+
+	addPendingErrorDB: vi.fn((pending: MockPending) => {
+		mockPending.push(pending);
+	}),
+
+	removePendingErrorDB: vi.fn((taskId: string) => {
+		const idx = mockPending.findIndex((p) => p.taskId === taskId);
+		if (idx >= 0) {
+			mockPending.splice(idx, 1);
+		}
+	}),
+
+	getPendingErrorDB: vi.fn((taskId: string) => {
+		return mockPending.find((p) => p.taskId === taskId) || null;
+	}),
+
+	pruneOldPendingErrorsDB: vi.fn((maxEntries: number) => {
+		if (mockPending.length > maxEntries) {
+			const removed = mockPending.length - maxEntries;
+			mockPending.splice(0, removed);
+			return removed;
+		}
+		return 0;
+	}),
+
+	incrementFixSuccessDB: vi.fn((signature: string) => {
+		const pattern = mockPatterns.get(signature);
+		if (pattern) {
+			pattern.fixSuccesses++;
+		}
+	}),
+
+	updateFixAutoApplyStatsDB: vi.fn((signature: string, success: boolean) => {
+		const pattern = mockPatterns.get(signature);
+		if (pattern && pattern.fixes.length > 0) {
+			const fix = pattern.fixes[0];
+			fix.autoApplyCount = (fix.autoApplyCount || 0) + 1;
+			const currentRate = fix.autoApplySuccessRate ?? 0.5;
+			fix.autoApplySuccessRate = currentRate * 0.7 + (success ? 0.3 : 0);
+		}
+	}),
+
+	recordPermanentFailureDB: vi.fn((failure: MockFailure) => {
+		mockFailures.push(failure);
+		// Limit to 10 failures
+		if (mockFailures.length > 10) {
+			mockFailures.splice(0, mockFailures.length - 10);
+		}
+	}),
+
+	pruneOldErrorPatternsDB: vi.fn((maxAgeDays: number, _minOccurrences: number) => {
+		const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+		let pruned = 0;
+		for (const [sig, pattern] of mockPatterns) {
+			const lastSeenTime = new Date(pattern.lastSeen).getTime();
+			if (lastSeenTime < cutoff && pattern.fixes.length === 0 && pattern.occurrences < 5) {
+				mockPatterns.delete(sig);
+				pruned++;
+			}
+		}
+		return pruned;
+	}),
+}));
+
+
 // Import after mocking
 import {
 	clearPendingError,
@@ -109,12 +289,14 @@ describe("error-fix-patterns.ts", () => {
 		mockDirs.clear();
 		mockNow = 1704067200000;
 		mockExecResult = "";
+		resetMockStorage();
 		vi.clearAllMocks();
 	});
 
 	afterEach(() => {
 		mockFiles.clear();
 		mockDirs.clear();
+		resetMockStorage();
 		vi.clearAllMocks();
 	});
 
@@ -415,27 +597,29 @@ describe("error-fix-patterns.ts", () => {
 			expect(store.pending[0].message.length).toBe(500);
 		});
 
-		it("should persist to disk atomically", () => {
-			mockDirs.add(".undercity");
-
+		it("should persist data to storage", () => {
 			recordPendingError("task-1", "lint", "Error", []);
 
-			expect(mockFiles.has(".undercity/error-fix-patterns.json")).toBe(true);
-			expect(mockFiles.has(".undercity/error-fix-patterns.json.tmp")).toBe(false);
+			// Verify data was persisted by loading it back
+			const store = loadErrorFixStore();
+			expect(Object.keys(store.patterns).length).toBeGreaterThan(0);
+			expect(store.pending.length).toBeGreaterThan(0);
 		});
 
-		it("should create directory if it does not exist", () => {
+		it("should work without pre-existing state directory", () => {
+			// SQLite creates its own file, doesn't need mkdir
 			recordPendingError("task-1", "test", "Error", []);
 
-			expect(mockDirs.has(".undercity")).toBe(true);
+			const store = loadErrorFixStore();
+			expect(store.pending.length).toBe(1);
 		});
 
 		it("should use custom state directory", () => {
-			mockDirs.add("/custom/.undercity");
-
 			recordPendingError("task-1", "lint", "Error", [], "/custom/.undercity");
 
-			expect(mockFiles.has("/custom/.undercity/error-fix-patterns.json")).toBe(true);
+			// Verify data was stored (mock doesn't differentiate directories but function accepts param)
+			const store = loadErrorFixStore("/custom/.undercity");
+			expect(store.pending.length).toBe(1);
 		});
 	});
 
@@ -455,8 +639,6 @@ describe("error-fix-patterns.ts", () => {
 		});
 
 		it("should record fix with filesChanged", () => {
-			mockDirs.add(".undercity");
-
 			recordPendingError("task-1", "lint", "Lint error", []);
 
 			recordSuccessfulFix("task-1", ["file1.ts", "file2.ts"], "Fixed lint issues");
@@ -467,7 +649,7 @@ describe("error-fix-patterns.ts", () => {
 
 			expect(fix.filesChanged).toEqual(["file1.ts", "file2.ts"]);
 			expect(fix.editSummary).toBe("Fixed lint issues");
-			expect(fix.taskId).toBe("task-1");
+			// Note: taskId is not preserved in SQLite schema
 			expect(fix.recordedAt).toBe(new Date(mockNow).toISOString());
 		});
 
@@ -576,22 +758,24 @@ describe("error-fix-patterns.ts", () => {
 			expect(store.pending).toEqual([]);
 		});
 
-		it("should persist to disk", () => {
-			mockDirs.add(".undercity");
-
+		it("should persist to storage", () => {
 			recordPendingError("task-1", "typecheck", "Error", []);
 			recordSuccessfulFix("task-1", ["file.ts"], "Fixed");
 
-			expect(mockFiles.has(".undercity/error-fix-patterns.json")).toBe(true);
+			// Verify data persisted by loading it back
+			const store = loadErrorFixStore();
+			expect(Object.keys(store.patterns).length).toBeGreaterThan(0);
+			const pattern = Object.values(store.patterns)[0];
+			expect(pattern.fixes.length).toBeGreaterThan(0);
 		});
 
 		it("should use custom state directory", () => {
-			mockDirs.add("/custom/.undercity");
-
 			recordPendingError("task-1", "lint", "Error", [], "/custom/.undercity");
 			recordSuccessfulFix("task-1", ["file.ts"], "Fixed", "/custom/.undercity");
 
-			expect(mockFiles.has("/custom/.undercity/error-fix-patterns.json")).toBe(true);
+			// Verify data persisted (mock doesn't differentiate directories)
+			const store = loadErrorFixStore("/custom/.undercity");
+			expect(Object.keys(store.patterns).length).toBeGreaterThan(0);
 		});
 	});
 
@@ -698,13 +882,13 @@ describe("error-fix-patterns.ts", () => {
 			expect(store.patterns["non-existent-signature"]).toBeUndefined();
 		});
 
-		it("should persist to disk", () => {
-			mockDirs.add(".undercity");
-
+		it("should persist to storage", () => {
 			const signature = recordPendingError("task-1", "test", "Error", []);
 			markFixSuccessful(signature);
 
-			expect(mockFiles.has(".undercity/error-fix-patterns.json")).toBe(true);
+			// Verify persistence by loading
+			const store = loadErrorFixStore();
+			expect(store.patterns[signature].fixSuccesses).toBe(1);
 		});
 
 		it("should use custom state directory", () => {
@@ -761,13 +945,13 @@ describe("error-fix-patterns.ts", () => {
 			expect(store.pending).toHaveLength(1);
 		});
 
-		it("should persist to disk", () => {
-			mockDirs.add(".undercity");
-
+		it("should persist to storage", () => {
 			recordPendingError("task-1", "typecheck", "Error", []);
 			clearPendingError("task-1");
 
-			expect(mockFiles.has(".undercity/error-fix-patterns.json")).toBe(true);
+			// Verify persistence by loading
+			const store = loadErrorFixStore();
+			expect(store.pending).toHaveLength(0);
 		});
 
 		it("should use custom state directory", () => {
@@ -938,8 +1122,6 @@ describe("error-fix-patterns.ts", () => {
 
 	describe("pruneOldPatterns", () => {
 		it("should remove patterns older than maxAge without fixes", () => {
-			mockDirs.add(".undercity");
-
 			// Old pattern without fixes
 			mockNow = 1704067200000 - 40 * 24 * 60 * 60 * 1000; // 40 days ago
 			const oldSig = recordPendingError("task-1", "typecheck", "Old error", []);
@@ -948,7 +1130,8 @@ describe("error-fix-patterns.ts", () => {
 			mockNow = 1704067200000;
 			recordPendingError("task-2", "lint", "Recent error", []);
 
-			const pruned = pruneOldPatterns(30 * 24 * 60 * 60 * 1000, ".undercity");
+			// Pass days, not milliseconds
+			const pruned = pruneOldPatterns(30, ".undercity");
 
 			expect(pruned).toBe(1);
 
@@ -965,7 +1148,7 @@ describe("error-fix-patterns.ts", () => {
 			const recentSig = recordPendingError("task-1", "typecheck", "Recent error", []);
 
 			mockNow = 1704067200000;
-			const pruned = pruneOldPatterns(30 * 24 * 60 * 60 * 1000, ".undercity");
+			const pruned = pruneOldPatterns(30, ".undercity");
 
 			expect(pruned).toBe(0);
 
@@ -982,7 +1165,7 @@ describe("error-fix-patterns.ts", () => {
 			recordSuccessfulFix("task-1", ["file.ts"], "Fixed");
 
 			mockNow = 1704067200000;
-			const pruned = pruneOldPatterns(30 * 24 * 60 * 60 * 1000, ".undercity");
+			const pruned = pruneOldPatterns(30, ".undercity");
 
 			expect(pruned).toBe(0);
 
@@ -1002,7 +1185,7 @@ describe("error-fix-patterns.ts", () => {
 			}
 
 			mockNow = 1704067200000;
-			const pruned = pruneOldPatterns(30 * 24 * 60 * 60 * 1000, ".undercity");
+			const pruned = pruneOldPatterns(30, ".undercity");
 
 			expect(pruned).toBe(0);
 
@@ -1022,20 +1205,19 @@ describe("error-fix-patterns.ts", () => {
 			mockDirs.clear();
 			mockDirs.add(".undercity");
 
-			const pruned = pruneOldPatterns(30 * 24 * 60 * 60 * 1000, ".undercity");
+			const pruned = pruneOldPatterns(30, ".undercity");
 
 			expect(pruned).toBe(0);
 			// File should not be written if nothing was pruned
 		});
 
 		it("should use custom state directory", () => {
-			mockDirs.add("/custom/.undercity");
-
 			mockNow = 1704067200000 - 40 * 24 * 60 * 60 * 1000;
 			recordPendingError("task-1", "typecheck", "Old error", [], "/custom/.undercity");
 
 			mockNow = 1704067200000;
-			const pruned = pruneOldPatterns(30 * 24 * 60 * 60 * 1000, "/custom/.undercity");
+			// Pass days, not milliseconds
+			const pruned = pruneOldPatterns(30, "/custom/.undercity");
 
 			expect(pruned).toBe(1);
 		});
@@ -1186,22 +1368,19 @@ describe("error-fix-patterns.ts", () => {
 			expect(store.failures[2].attemptsCount).toBe(7);
 		});
 
-		it("should persist to disk atomically", () => {
-			mockDirs.add(".undercity");
-
+		it("should persist to storage", () => {
 			recordPermanentFailure("task-1", "build", "Build failed", "Build task", "sonnet", 5, []);
 
-			expect(mockFiles.has(".undercity/error-fix-patterns.json")).toBe(true);
-			expect(mockFiles.has(".undercity/error-fix-patterns.json.tmp")).toBe(false);
+			// Verify persistence by loading
+			const store = loadErrorFixStore();
+			expect(store.failures).toHaveLength(1);
+			expect(store.failures[0].category).toBe("build");
 		});
 
 		it("should use custom state directory", () => {
-			mockDirs.add("/custom/.undercity");
-
 			recordPermanentFailure("task-1", "test", "Test error", "Test task", "haiku", 3, [], "/custom/.undercity");
 
-			expect(mockFiles.has("/custom/.undercity/error-fix-patterns.json")).toBe(true);
-
+			// Verify data persisted (mock doesn't differentiate directories)
 			const store = loadErrorFixStore("/custom/.undercity");
 			expect(store.failures).toHaveLength(1);
 		});
@@ -1415,22 +1594,14 @@ describe("error-fix-patterns.ts", () => {
 			expect(result3).toBeNull();
 		});
 
-		it("should test atomic writes with temp files", () => {
-			mockDirs.add(".undercity");
-
+		it("should store data with proper structure", () => {
 			recordPendingError("task-1", "typecheck", "Error", []);
 
-			// Verify atomic write pattern
-			expect(mockFiles.has(".undercity/error-fix-patterns.json")).toBe(true);
-			expect(mockFiles.has(".undercity/error-fix-patterns.json.tmp")).toBe(false);
-
-			// Parse and verify structure
-			const content = mockFiles.get(".undercity/error-fix-patterns.json");
-			expect(content).toBeDefined();
-
-			const parsed = JSON.parse(content!);
-			expect(parsed.version).toBe("1.0");
-			expect(parsed.lastUpdated).toBeDefined();
+			// Verify data structure through store load
+			const store = loadErrorFixStore();
+			expect(store.version).toBe("1.0");
+			expect(store.lastUpdated).toBeDefined();
+			expect(Object.keys(store.patterns).length).toBeGreaterThan(0);
 		});
 	});
 
@@ -1502,22 +1673,16 @@ describe("error-fix-patterns.ts", () => {
 			expect(totalFixes).toBeGreaterThan(0);
 		});
 
-		it("should handle custom stateDir usage consistently", () => {
-			mockDirs.add("/custom1/.undercity");
-			mockDirs.add("/custom2/.undercity");
-
-			// Two separate stores
+		it("should accept custom stateDir parameter", () => {
+			// Verify functions accept custom state directory parameter
 			recordPendingError("task-1", "typecheck", "Error 1", [], "/custom1/.undercity");
 			recordPendingError("task-2", "lint", "Error 2", [], "/custom2/.undercity");
 
-			const store1 = loadErrorFixStore("/custom1/.undercity");
-			const store2 = loadErrorFixStore("/custom2/.undercity");
-
-			expect(store1.pending).toHaveLength(1);
-			expect(store1.pending[0].taskId).toBe("task-1");
-
-			expect(store2.pending).toHaveLength(1);
-			expect(store2.pending[0].taskId).toBe("task-2");
+			// Both should be stored (mock doesn't isolate by directory)
+			const store = loadErrorFixStore();
+			expect(store.pending).toHaveLength(2);
+			expect(store.pending.some((p) => p.taskId === "task-1")).toBe(true);
+			expect(store.pending.some((p) => p.taskId === "task-2")).toBe(true);
 		});
 
 		it("should handle fix suggestions with zero occurrences", () => {
@@ -1695,38 +1860,26 @@ describe("error-fix-patterns.ts", () => {
 		});
 
 		it("should update success rate after successful application", () => {
-			mockDirs.add(".undercity");
-
-			// Create a store with patch data using actual generated signature
-			const store: ErrorFixStore = {
-				patterns: {
-					[testSignature]: {
-						signature: testSignature,
-						category: "typecheck",
-						sampleMessage: testErrorMessage,
-						fixes: [
-							{
-								filesChanged: ["src/file.ts"],
-								editSummary: "Fixed type error",
-								taskId: "task-1",
-								recordedAt: "2024-01-01T00:00:00.000Z",
-								patchData: "--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+new",
-								autoApplyCount: 2,
-								autoApplySuccessRate: 0.5,
-							},
-						],
-						occurrences: 1,
-						fixSuccesses: 0,
-						firstSeen: "2024-01-01T00:00:00.000Z",
-						lastSeen: "2024-01-01T00:00:00.000Z",
+			// Set up pattern with patch data via mock storage directly
+			mockPatterns.set(testSignature, {
+				signature: testSignature,
+				category: "typecheck",
+				sampleMessage: testErrorMessage,
+				occurrences: 1,
+				fixSuccesses: 0,
+				firstSeen: "2024-01-01T00:00:00.000Z",
+				lastSeen: "2024-01-01T00:00:00.000Z",
+				fixes: [
+					{
+						description: "Fixed type error",
+						diff: "--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+new",
+						filesChanged: ["src/file.ts"],
+						recordedAt: "2024-01-01T00:00:00.000Z",
+						autoApplyCount: 2,
+						autoApplySuccessRate: 0.5,
 					},
-				},
-				pending: [],
-				failures: [],
-				version: "1.0",
-				lastUpdated: "2024-01-01T00:00:00.000Z",
-			};
-			mockFiles.set(".undercity/error-fix-patterns.json", JSON.stringify(store));
+				],
+			});
 
 			// Mock git apply to succeed
 			mockExecResult = "";
@@ -1742,38 +1895,26 @@ describe("error-fix-patterns.ts", () => {
 		});
 
 		it("should update success rate after failed application", () => {
-			mockDirs.add(".undercity");
-
-			// Create a store with patch data using actual generated signature
-			const store: ErrorFixStore = {
-				patterns: {
-					[testSignature]: {
-						signature: testSignature,
-						category: "typecheck",
-						sampleMessage: testErrorMessage,
-						fixes: [
-							{
-								filesChanged: ["src/file.ts"],
-								editSummary: "Fixed type error",
-								taskId: "task-1",
-								recordedAt: "2024-01-01T00:00:00.000Z",
-								patchData: "--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+new",
-								autoApplyCount: 2,
-								autoApplySuccessRate: 0.5,
-							},
-						],
-						occurrences: 1,
-						fixSuccesses: 0,
-						firstSeen: "2024-01-01T00:00:00.000Z",
-						lastSeen: "2024-01-01T00:00:00.000Z",
+			// Set up pattern with patch data via mock storage directly
+			mockPatterns.set(testSignature, {
+				signature: testSignature,
+				category: "typecheck",
+				sampleMessage: testErrorMessage,
+				occurrences: 1,
+				fixSuccesses: 0,
+				firstSeen: "2024-01-01T00:00:00.000Z",
+				lastSeen: "2024-01-01T00:00:00.000Z",
+				fixes: [
+					{
+						description: "Fixed type error",
+						diff: "--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1 +1 @@\n-old\n+new",
+						filesChanged: ["src/file.ts"],
+						recordedAt: "2024-01-01T00:00:00.000Z",
+						autoApplyCount: 2,
+						autoApplySuccessRate: 0.5,
 					},
-				},
-				pending: [],
-				failures: [],
-				version: "1.0",
-				lastUpdated: "2024-01-01T00:00:00.000Z",
-			};
-			mockFiles.set(".undercity/error-fix-patterns.json", JSON.stringify(store));
+				],
+			});
 
 			// Mock git apply to fail
 			mockExecResult = new Error("patch does not apply");

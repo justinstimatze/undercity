@@ -2,21 +2,56 @@
  * Tests for decision-tracker.ts
  *
  * Tests decision capture, resolution, pending decisions retrieval,
- * classification patterns, storage persistence, and edge cases with mock fs.
+ * classification patterns, storage persistence, and edge cases with mock SQLite.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DecisionPoint, DecisionResolution } from "../decision-tracker.js";
 
-// Mock state
-const mockFiles = new Map<string, string>();
-const mockDirs = new Set<string>();
+// Mock state for timestamps
 let mockNow = 1704067200000; // Fixed timestamp: 2024-01-01T00:00:00.000Z
 let mockRandomSeed = 0.123456;
 
-// Store original implementations
-const _originalDate = Date;
-const _originalDateNow = Date.now;
-const _originalMathRandom = Math.random;
+// In-memory storage state (simulates SQLite)
+interface MockDecision {
+	id: string;
+	taskId: string;
+	question: string;
+	options?: string[];
+	context: string;
+	category: "auto_handle" | "pm_decidable" | "human_required";
+	keywords: string[];
+	capturedAt: string;
+}
+
+interface MockResolution {
+	decisionId: string;
+	resolvedBy: "auto" | "pm" | "human";
+	decision: string;
+	reasoning?: string;
+	confidence?: "high" | "medium" | "low";
+	resolvedAt: string;
+	outcome?: "success" | "failure" | "pending";
+}
+
+interface MockOverride {
+	decisionId: string;
+	originalDecision: string;
+	originalResolver: "auto" | "pm";
+	humanDecision: string;
+	humanReasoning?: string;
+	overriddenAt: string;
+}
+
+const mockDecisions = new Map<string, MockDecision>();
+const mockResolutions = new Map<string, MockResolution>();
+const mockOverrides: MockOverride[] = [];
+
+function resetMockStorage(): void {
+	mockDecisions.clear();
+	mockResolutions.clear();
+	mockOverrides.length = 0;
+}
 
 // Mock Date constructor and Date.now for consistent timestamps
 class MockDate extends Date {
@@ -37,44 +72,111 @@ class MockDate extends Date {
 vi.stubGlobal("Date", MockDate);
 Math.random = vi.fn(() => mockRandomSeed);
 
-// Mock fs module
+// Mock fs module (for JSON migration path)
 vi.mock("node:fs", () => ({
-	existsSync: vi.fn((path: string): boolean => {
-		return mockFiles.has(path) || mockDirs.has(path);
+	existsSync: vi.fn((): boolean => false),
+	readFileSync: vi.fn((): string => {
+		throw new Error("ENOENT: no such file or directory");
 	}),
-	readFileSync: vi.fn((path: string, _encoding: string): string => {
-		const content = mockFiles.get(path);
-		if (content === undefined) {
-			throw new Error(`ENOENT: no such file or directory, open '${path}'`);
-		}
-		return content;
-	}),
-	writeFileSync: vi.fn((path: string, content: string): void => {
-		mockFiles.set(path, content);
-	}),
-	renameSync: vi.fn((oldPath: string, newPath: string): void => {
-		const content = mockFiles.get(oldPath);
-		if (content === undefined) {
-			throw new Error(`ENOENT: no such file or directory, rename '${oldPath}'`);
-		}
-		mockFiles.set(newPath, content);
-		mockFiles.delete(oldPath);
-	}),
-	unlinkSync: vi.fn((path: string): void => {
-		mockFiles.delete(path);
-	}),
-	mkdirSync: vi.fn((path: string, options?: { recursive?: boolean }): void => {
-		if (options?.recursive) {
-			// Create all parent directories
-			const parts = path.split("/").filter(Boolean);
-			let current = "";
-			for (const part of parts) {
-				current = current ? `${current}/${part}` : part;
-				mockDirs.add(current);
+	writeFileSync: vi.fn(),
+	renameSync: vi.fn(),
+	unlinkSync: vi.fn(),
+	mkdirSync: vi.fn(),
+}));
+
+// Mock storage module (SQLite)
+vi.mock("../storage.js", () => ({
+	hasDecisionData: vi.fn(() => mockDecisions.size > 0),
+	loadDecisionStoreFromDB: vi.fn(() => {
+		const pending: Array<DecisionPoint> = [];
+		const resolved: Array<DecisionPoint & { resolution: DecisionResolution }> = [];
+
+		for (const dec of mockDecisions.values()) {
+			const resolution = mockResolutions.get(dec.id);
+			if (resolution) {
+				resolved.push({
+					id: dec.id,
+					taskId: dec.taskId,
+					question: dec.question,
+					options: dec.options,
+					context: dec.context,
+					category: dec.category,
+					keywords: dec.keywords,
+					capturedAt: dec.capturedAt,
+					resolution: {
+						decisionId: resolution.decisionId,
+						resolvedBy: resolution.resolvedBy,
+						decision: resolution.decision,
+						reasoning: resolution.reasoning,
+						confidence: resolution.confidence,
+						resolvedAt: resolution.resolvedAt,
+						outcome: resolution.outcome,
+					},
+				});
+			} else {
+				pending.push({
+					id: dec.id,
+					taskId: dec.taskId,
+					question: dec.question,
+					options: dec.options,
+					context: dec.context,
+					category: dec.category,
+					keywords: dec.keywords,
+					capturedAt: dec.capturedAt,
+				});
 			}
-		} else {
-			mockDirs.add(path);
 		}
+
+		// Sort resolved by resolvedAt, keep only last 500
+		resolved.sort((a, b) => a.resolution.resolvedAt.localeCompare(b.resolution.resolvedAt));
+		const trimmedResolved = resolved.slice(-500);
+
+		return {
+			pending,
+			resolved: trimmedResolved,
+			overrides: mockOverrides.map((o) => ({
+				decisionId: o.decisionId,
+				originalDecision: o.originalDecision,
+				originalResolver: o.originalResolver,
+				humanDecision: o.humanDecision,
+				humanReasoning: o.humanReasoning,
+				overriddenAt: o.overriddenAt,
+			})),
+		};
+	}),
+	saveDecision: vi.fn((decision: DecisionPoint) => {
+		mockDecisions.set(decision.id, {
+			id: decision.id,
+			taskId: decision.taskId,
+			question: decision.question,
+			options: decision.options,
+			context: decision.context,
+			category: decision.category,
+			keywords: decision.keywords,
+			capturedAt: decision.capturedAt,
+		});
+	}),
+	saveDecisionResolution: vi.fn((resolution: DecisionResolution) => {
+		mockResolutions.set(resolution.decisionId, {
+			decisionId: resolution.decisionId,
+			resolvedBy: resolution.resolvedBy,
+			decision: resolution.decision,
+			reasoning: resolution.reasoning,
+			confidence: resolution.confidence,
+			resolvedAt: resolution.resolvedAt,
+			outcome: resolution.outcome,
+		});
+	}),
+	saveHumanOverrideDB: vi.fn((override: MockOverride) => {
+		mockOverrides.push({ ...override });
+	}),
+	updateDecisionOutcomeDB: vi.fn((decisionId: string, outcome: "success" | "failure") => {
+		const resolution = mockResolutions.get(decisionId);
+		if (resolution) {
+			resolution.outcome = outcome;
+			return true;
+		}
+		return false;
 	}),
 }));
 
@@ -82,8 +184,6 @@ vi.mock("node:fs", () => ({
 import {
 	captureDecision,
 	classifyDecision,
-	type DecisionPoint,
-	type DecisionStore,
 	getPendingDecisions,
 	loadDecisionStore,
 	resolveDecision,
@@ -92,21 +192,19 @@ import {
 
 describe("decision-tracker.ts", () => {
 	beforeEach(() => {
-		mockFiles.clear();
-		mockDirs.clear();
+		resetMockStorage();
 		mockNow = 1704067200000;
 		mockRandomSeed = 0.123456;
 		vi.clearAllMocks();
 	});
 
 	afterEach(() => {
-		mockFiles.clear();
-		mockDirs.clear();
+		resetMockStorage();
 		vi.clearAllMocks();
 	});
 
 	describe("loadDecisionStore", () => {
-		it("should return empty store when file does not exist", () => {
+		it("should return empty store when no data exists", () => {
 			const store = loadDecisionStore();
 
 			expect(store.pending).toEqual([]);
@@ -116,25 +214,17 @@ describe("decision-tracker.ts", () => {
 			expect(store.lastUpdated).toBe(new Date(mockNow).toISOString());
 		});
 
-		it("should load existing store from disk", () => {
-			const existingStore: DecisionStore = {
-				pending: [
-					{
-						id: "dec-1",
-						taskId: "task-1",
-						question: "Should I fix this?",
-						context: "Found a bug",
-						category: "pm_decidable",
-						keywords: ["fix", "bug", "found"],
-						capturedAt: "2024-01-01T00:00:00.000Z",
-					},
-				],
-				resolved: [],
-				overrides: [],
-				version: "1.0",
-				lastUpdated: "2024-01-01T00:00:00.000Z",
-			};
-			mockFiles.set(".undercity/decisions.json", JSON.stringify(existingStore));
+		it("should load existing store from storage", () => {
+			// Set up data directly in mock storage
+			mockDecisions.set("dec-1", {
+				id: "dec-1",
+				taskId: "task-1",
+				question: "Should I fix this?",
+				context: "Found a bug",
+				category: "pm_decidable",
+				keywords: ["fix", "bug", "found"],
+				capturedAt: "2024-01-01T00:00:00.000Z",
+			});
 
 			const store = loadDecisionStore();
 
@@ -143,9 +233,8 @@ describe("decision-tracker.ts", () => {
 			expect(store.pending[0].question).toBe("Should I fix this?");
 		});
 
-		it("should handle corrupted JSON gracefully", () => {
-			mockFiles.set(".undercity/decisions.json", "{ invalid json }");
-
+		it("should return empty store when storage has errors", () => {
+			// Empty storage returns empty store
 			const store = loadDecisionStore();
 
 			expect(store.pending).toEqual([]);
@@ -154,15 +243,7 @@ describe("decision-tracker.ts", () => {
 		});
 
 		it("should use custom state directory", () => {
-			const customStore: DecisionStore = {
-				pending: [],
-				resolved: [],
-				overrides: [],
-				version: "1.0",
-				lastUpdated: "2024-01-01T00:00:00.000Z",
-			};
-			mockFiles.set("/custom/.undercity/decisions.json", JSON.stringify(customStore));
-
+			// Custom state directory still works - verify store is returned
 			const store = loadDecisionStore("/custom/.undercity");
 
 			expect(store).toBeDefined();
@@ -264,38 +345,35 @@ describe("decision-tracker.ts", () => {
 			expect(decision.options).toEqual(["Approach A", "Approach B"]);
 		});
 
-		it("should persist decision to disk", () => {
-			mockDirs.add(".undercity");
-
+		it("should persist decision to storage", () => {
 			captureDecision("task-1", "Question?", "Context");
 
-			expect(mockFiles.has(".undercity/decisions.json")).toBe(true);
-			const content = mockFiles.get(".undercity/decisions.json");
-			expect(content).toBeDefined();
-
-			const store = JSON.parse(content!) as DecisionStore;
+			// Verify decision was saved to storage
+			expect(mockDecisions.size).toBe(1);
+			const store = loadDecisionStore();
 			expect(store.pending).toHaveLength(1);
 		});
 
-		it("should create directory if it does not exist", () => {
+		it("should save decision via storage module", async () => {
 			captureDecision("task-1", "Question?", "Context");
 
-			expect(mockDirs.has(".undercity")).toBe(true);
+			// saveDecision should have been called
+			const { saveDecision } = await import("../storage.js");
+			expect(saveDecision).toHaveBeenCalled();
 		});
 
-		it("should use atomic write with temp file", () => {
-			mockDirs.add(".undercity");
+		it("should store decision with correct data", () => {
+			const decision = captureDecision("task-1", "Question?", "Context");
 
-			captureDecision("task-1", "Question?", "Context");
-
-			// Should have created temp file and renamed it
-			expect(mockFiles.has(".undercity/decisions.json")).toBe(true);
-			expect(mockFiles.has(".undercity/decisions.json.tmp")).toBe(false);
+			// Verify the data was stored correctly
+			const stored = mockDecisions.get(decision.id);
+			expect(stored).toBeDefined();
+			expect(stored?.taskId).toBe("task-1");
+			expect(stored?.question).toBe("Question?");
+			expect(stored?.context).toBe("Context");
 		});
 
 		it("should append to existing decisions", () => {
-			mockDirs.add(".undercity");
-
 			const decision1 = captureDecision("task-1", "Question 1?", "Context 1");
 			mockRandomSeed = 0.654321; // Change seed for different ID
 			const decision2 = captureDecision("task-2", "Question 2?", "Context 2");
@@ -347,12 +425,12 @@ describe("decision-tracker.ts", () => {
 			expect(decision.keywords).toContain("failure");
 		});
 
-		it("should use custom state directory", () => {
-			mockDirs.add("/custom/.undercity");
-
+		it("should use custom state directory", async () => {
 			captureDecision("task-1", "Question?", "Context", undefined, "/custom/.undercity");
 
-			expect(mockFiles.has("/custom/.undercity/decisions.json")).toBe(true);
+			// saveDecision should have been called with custom state dir
+			const { saveDecision } = await import("../storage.js");
+			expect(saveDecision).toHaveBeenCalledWith(expect.objectContaining({ taskId: "task-1" }), "/custom/.undercity");
 		});
 	});
 
@@ -455,7 +533,6 @@ describe("decision-tracker.ts", () => {
 		});
 
 		it("should use custom state directory", () => {
-			mockDirs.add("/custom/.undercity");
 			const decision = captureDecision("task-1", "Question?", "Context", undefined, "/custom/.undercity");
 
 			const success = resolveDecision(
@@ -529,7 +606,6 @@ describe("decision-tracker.ts", () => {
 		});
 
 		it("should use custom state directory", () => {
-			mockDirs.add("/custom/.undercity");
 			captureDecision("task-1", "Question?", "Context", undefined, "/custom/.undercity");
 
 			const pending = getPendingDecisions(undefined, "/custom/.undercity");

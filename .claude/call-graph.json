@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-20T19:57:13.662Z",
+  "generatedAt": "2026-01-20T20:40:02.954Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -101,8 +101,13 @@
         },
         {
           "file": "task-file-patterns.ts",
-          "line": 513,
+          "line": 483,
           "context": "formatFileSuggestionsForPrompt"
+        },
+        {
+          "file": "task-file-patterns.ts",
+          "line": 656,
+          "context": "if"
         },
         {
           "file": "task-planner.ts",
@@ -165,8 +170,13 @@
       "calledFrom": [
         {
           "file": "task-file-patterns.ts",
-          "line": 563,
+          "line": 533,
           "context": "for"
+        },
+        {
+          "file": "task-file-patterns.ts",
+          "line": 656,
+          "context": "if"
         }
       ]
     },

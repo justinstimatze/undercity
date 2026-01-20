@@ -748,7 +748,9 @@ export function updateDecisionOutcomeDB(
 ): boolean {
 	const db = getDatabase(stateDir);
 
-	const result = db.prepare("UPDATE decision_resolutions SET outcome = ? WHERE decision_id = ?").run(outcome, decisionId);
+	const result = db
+		.prepare("UPDATE decision_resolutions SET outcome = ? WHERE decision_id = ?")
+		.run(outcome, decisionId);
 
 	return result.changes > 0;
 }
@@ -1187,6 +1189,430 @@ export function updateFixAutoApplyStatsDB(
 		`,
 		).run(signature);
 	}
+}
+
+/**
+ * Prune old error patterns that haven't been seen recently
+ */
+export function pruneOldErrorPatternsDB(
+	maxAgeDays: number = 30,
+	minOccurrences: number = 5,
+	stateDir: string = DEFAULT_STATE_DIR,
+): number {
+	const db = getDatabase(stateDir);
+
+	// Delete patterns that: have no fixes, are older than maxAgeDays, and have few occurrences
+	const cutoffDate = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
+
+	// First delete associated fixes for patterns we'll remove
+	db.prepare(
+		`
+		DELETE FROM error_fixes WHERE signature IN (
+			SELECT signature FROM error_patterns
+			WHERE last_seen < ?
+			AND occurrences < ?
+			AND signature NOT IN (SELECT DISTINCT signature FROM error_fixes)
+		)
+	`,
+	).run(cutoffDate, minOccurrences);
+
+	// Then delete the patterns
+	const result = db
+		.prepare(
+			`
+		DELETE FROM error_patterns
+		WHERE last_seen < ?
+		AND occurrences < ?
+		AND signature NOT IN (SELECT DISTINCT signature FROM error_fixes)
+	`,
+		)
+		.run(cutoffDate, minOccurrences);
+
+	return result.changes;
+}
+
+// =============================================================================
+// Full Store Loading (for migration from JSON)
+// =============================================================================
+
+/**
+ * Error fix pattern with fixes (matches JSON schema)
+ */
+export interface ErrorFixPatternFull {
+	signature: string;
+	category: string;
+	sampleMessage: string;
+	fixes: Array<{
+		filesChanged: string[];
+		editSummary: string;
+		taskId: string;
+		recordedAt: string;
+		patchData?: string;
+		autoApplySuccessRate?: number;
+		autoApplyCount?: number;
+	}>;
+	occurrences: number;
+	fixSuccesses: number;
+	firstSeen: string;
+	lastSeen: string;
+}
+
+/**
+ * Full error fix store (matches JSON schema)
+ */
+export interface ErrorFixStoreFull {
+	patterns: Record<string, ErrorFixPatternFull>;
+	pending: PendingErrorDB[];
+	failures: PermanentFailure[];
+	version: string;
+	lastUpdated: string;
+}
+
+/**
+ * Load full error fix store from SQLite
+ */
+export function loadErrorFixStoreFromDB(stateDir: string = DEFAULT_STATE_DIR): ErrorFixStoreFull {
+	const db = getDatabase(stateDir);
+
+	// Load patterns
+	const patternRows = db.prepare("SELECT * FROM error_patterns").all() as Array<{
+		signature: string;
+		category: string;
+		sample_message: string;
+		occurrences: number;
+		fix_successes: number;
+		first_seen: string;
+		last_seen: string;
+	}>;
+
+	const patterns: Record<string, ErrorFixPatternFull> = {};
+	for (const row of patternRows) {
+		// Load fixes for this pattern
+		const fixRows = db
+			.prepare("SELECT * FROM error_fixes WHERE signature = ? ORDER BY recorded_at DESC")
+			.all(row.signature) as Array<{
+			description: string;
+			diff: string | null;
+			files_changed: string;
+			success_count: number;
+			failure_count: number;
+			recorded_at: string;
+		}>;
+
+		patterns[row.signature] = {
+			signature: row.signature,
+			category: row.category,
+			sampleMessage: row.sample_message,
+			occurrences: row.occurrences,
+			fixSuccesses: row.fix_successes,
+			firstSeen: row.first_seen,
+			lastSeen: row.last_seen,
+			fixes: fixRows.map((f) => ({
+				filesChanged: JSON.parse(f.files_changed) as string[],
+				editSummary: f.description,
+				taskId: "", // Not stored in SQLite schema
+				recordedAt: f.recorded_at,
+				patchData: f.diff || undefined,
+				autoApplySuccessRate:
+					f.success_count + f.failure_count > 0 ? f.success_count / (f.success_count + f.failure_count) : undefined,
+				autoApplyCount: f.success_count + f.failure_count > 0 ? f.success_count + f.failure_count : undefined,
+			})),
+		};
+	}
+
+	// Load pending errors
+	const pendingRows = db.prepare("SELECT * FROM pending_errors ORDER BY id DESC LIMIT 10").all() as Array<{
+		signature: string;
+		category: string;
+		message: string;
+		task_id: string;
+		files_before_fix: string;
+		recorded_at: string;
+	}>;
+
+	const pending: PendingErrorDB[] = pendingRows.map((row) => ({
+		signature: row.signature,
+		category: row.category,
+		message: row.message,
+		taskId: row.task_id,
+		filesBeforeFix: JSON.parse(row.files_before_fix) as string[],
+		recordedAt: row.recorded_at,
+	}));
+
+	// Load failures
+	const failureRows = db.prepare("SELECT * FROM permanent_failures ORDER BY recorded_at DESC LIMIT 10").all() as Array<{
+		signature: string;
+		category: string;
+		sample_message: string;
+		task_objective: string;
+		model_used: string;
+		attempts_count: number;
+		files_attempted: string;
+		detailed_errors: string | null;
+		recorded_at: string;
+	}>;
+
+	const failures: PermanentFailure[] = failureRows.map((row) => ({
+		signature: row.signature,
+		category: row.category,
+		sampleMessage: row.sample_message,
+		taskObjective: row.task_objective,
+		modelUsed: row.model_used,
+		attemptsCount: row.attempts_count,
+		filesAttempted: JSON.parse(row.files_attempted) as string[],
+		detailedErrors: row.detailed_errors ? (JSON.parse(row.detailed_errors) as string[]) : undefined,
+		recordedAt: row.recorded_at,
+	}));
+
+	return {
+		patterns,
+		pending,
+		failures,
+		version: "1.0",
+		lastUpdated: new Date().toISOString(),
+	};
+}
+
+/**
+ * Check if error fix store has data in SQLite
+ */
+export function hasErrorFixData(stateDir: string = DEFAULT_STATE_DIR): boolean {
+	const db = getDatabase(stateDir);
+	const count = (db.prepare("SELECT COUNT(*) as count FROM error_patterns").get() as { count: number }).count;
+	return count > 0;
+}
+
+/**
+ * Full decision store (matches JSON schema)
+ */
+export interface DecisionStoreFull {
+	pending: DecisionPoint[];
+	resolved: Array<DecisionPoint & { resolution: DecisionResolution }>;
+	overrides: Array<{
+		decisionId: string;
+		originalDecision: string;
+		originalResolver: "auto" | "pm";
+		humanDecision: string;
+		humanReasoning?: string;
+		overriddenAt: string;
+	}>;
+	version: string;
+	lastUpdated: string;
+}
+
+/**
+ * Load full decision store from SQLite
+ */
+export function loadDecisionStoreFromDB(stateDir: string = DEFAULT_STATE_DIR): DecisionStoreFull {
+	const db = getDatabase(stateDir);
+
+	// Load pending decisions (no resolution)
+	const pendingRows = db
+		.prepare(
+			`
+		SELECT d.* FROM decisions d
+		LEFT JOIN decision_resolutions r ON d.id = r.decision_id
+		WHERE r.decision_id IS NULL
+		ORDER BY d.captured_at DESC
+	`,
+		)
+		.all() as DecisionRow[];
+
+	const pending: DecisionPoint[] = pendingRows.map((row) => ({
+		id: row.id,
+		taskId: row.task_id,
+		question: row.question,
+		options: row.options ? (JSON.parse(row.options) as string[]) : undefined,
+		context: row.context,
+		category: row.category as DecisionCategory,
+		keywords: JSON.parse(row.keywords) as string[],
+		capturedAt: row.captured_at,
+	}));
+
+	// Load resolved decisions
+	const resolvedRows = db
+		.prepare(
+			`
+		SELECT d.*, r.resolved_by, r.decision, r.reasoning, r.confidence, r.resolved_at, r.outcome
+		FROM decisions d
+		JOIN decision_resolutions r ON d.id = r.decision_id
+		ORDER BY r.resolved_at DESC
+		LIMIT 500
+	`,
+		)
+		.all() as Array<DecisionRow & DecisionResolutionRow>;
+
+	const resolved = resolvedRows.map((row) => ({
+		id: row.id,
+		taskId: row.task_id,
+		question: row.question,
+		options: row.options ? (JSON.parse(row.options) as string[]) : undefined,
+		context: row.context,
+		category: row.category as DecisionCategory,
+		keywords: JSON.parse(row.keywords) as string[],
+		capturedAt: row.captured_at,
+		resolution: {
+			decisionId: row.decision_id,
+			resolvedBy: row.resolved_by as "auto" | "pm" | "human",
+			decision: row.decision,
+			reasoning: row.reasoning || undefined,
+			confidence: (row.confidence as "high" | "medium" | "low") || undefined,
+			resolvedAt: row.resolved_at,
+			outcome: (row.outcome as "success" | "failure" | "pending") || undefined,
+		},
+	}));
+
+	// Load overrides
+	const overrideRows = db
+		.prepare("SELECT * FROM human_overrides ORDER BY overridden_at DESC LIMIT 100")
+		.all() as Array<{
+		decision_id: string;
+		original_decision: string;
+		original_resolver: string;
+		human_decision: string;
+		human_reasoning: string | null;
+		overridden_at: string;
+	}>;
+
+	const overrides = overrideRows.map((row) => ({
+		decisionId: row.decision_id,
+		originalDecision: row.original_decision,
+		originalResolver: row.original_resolver as "auto" | "pm",
+		humanDecision: row.human_decision,
+		humanReasoning: row.human_reasoning || undefined,
+		overriddenAt: row.overridden_at,
+	}));
+
+	return {
+		pending,
+		resolved,
+		overrides,
+		version: "1.0",
+		lastUpdated: new Date().toISOString(),
+	};
+}
+
+/**
+ * Check if decision store has data in SQLite
+ */
+export function hasDecisionData(stateDir: string = DEFAULT_STATE_DIR): boolean {
+	const db = getDatabase(stateDir);
+	const count = (db.prepare("SELECT COUNT(*) as count FROM decisions").get() as { count: number }).count;
+	return count > 0;
+}
+
+/**
+ * Full task file store (matches JSON schema)
+ */
+export interface TaskFileStoreFull {
+	recentTasks: Array<{
+		taskId: string;
+		keywords: string[];
+		filesModified: string[];
+		success: boolean;
+		recordedAt: string;
+	}>;
+	keywordCorrelations: Record<
+		string,
+		{
+			keyword: string;
+			files: Record<string, number>;
+			taskCount: number;
+			successCount: number;
+			lastUpdated?: string;
+		}
+	>;
+	coModificationPatterns: Record<
+		string,
+		{
+			file: string;
+			coModified: Record<string, number>;
+			modificationCount: number;
+			lastUpdated?: string;
+		}
+	>;
+	version: string;
+	lastUpdated: string;
+}
+
+/**
+ * Load full task file store from SQLite
+ */
+export function loadTaskFileStoreFromDB(stateDir: string = DEFAULT_STATE_DIR): TaskFileStoreFull {
+	const db = getDatabase(stateDir);
+
+	// Load recent tasks
+	const taskRows = db.prepare("SELECT * FROM task_file_records ORDER BY recorded_at DESC LIMIT 100").all() as Array<{
+		task_id: string;
+		objective: string;
+		files_modified: string;
+		success: number;
+		keywords: string;
+		recorded_at: string;
+	}>;
+
+	const recentTasks = taskRows.map((row) => ({
+		taskId: row.task_id,
+		keywords: JSON.parse(row.keywords) as string[],
+		filesModified: JSON.parse(row.files_modified) as string[],
+		success: row.success === 1,
+		recordedAt: row.recorded_at,
+	}));
+
+	// Load keyword correlations
+	const keywordRows = db.prepare("SELECT * FROM keyword_correlations").all() as Array<{
+		keyword: string;
+		files: string;
+		task_count: number;
+		success_count: number;
+		last_updated: string | null;
+	}>;
+
+	const keywordCorrelations: TaskFileStoreFull["keywordCorrelations"] = {};
+	for (const row of keywordRows) {
+		keywordCorrelations[row.keyword] = {
+			keyword: row.keyword,
+			files: JSON.parse(row.files) as Record<string, number>,
+			taskCount: row.task_count,
+			successCount: row.success_count,
+			lastUpdated: row.last_updated || undefined,
+		};
+	}
+
+	// Load co-modification patterns
+	const coModRows = db.prepare("SELECT * FROM co_modifications").all() as Array<{
+		file: string;
+		co_modified: string;
+		modification_count: number;
+		last_updated: string | null;
+	}>;
+
+	const coModificationPatterns: TaskFileStoreFull["coModificationPatterns"] = {};
+	for (const row of coModRows) {
+		coModificationPatterns[row.file] = {
+			file: row.file,
+			coModified: JSON.parse(row.co_modified) as Record<string, number>,
+			modificationCount: row.modification_count,
+			lastUpdated: row.last_updated || undefined,
+		};
+	}
+
+	return {
+		recentTasks,
+		keywordCorrelations,
+		coModificationPatterns,
+		version: "1.0",
+		lastUpdated: new Date().toISOString(),
+	};
+}
+
+/**
+ * Check if task file store has data in SQLite
+ */
+export function hasTaskFileData(stateDir: string = DEFAULT_STATE_DIR): boolean {
+	const db = getDatabase(stateDir);
+	const count = (db.prepare("SELECT COUNT(*) as count FROM task_file_records").get() as { count: number }).count;
+	return count > 0;
 }
 
 // =============================================================================

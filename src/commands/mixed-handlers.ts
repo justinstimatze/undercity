@@ -974,7 +974,9 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 	const { autoMigrateIfNeeded } = await import("../storage.js");
 	const migration = autoMigrateIfNeeded();
 	if (migration) {
-		output.info(`Migrated to SQLite: ${migration.learnings} learnings, ${migration.errorPatterns} error patterns, ${migration.decisions} decisions`);
+		output.info(
+			`Migrated to SQLite: ${migration.learnings} learnings, ${migration.errorPatterns} error patterns, ${migration.decisions} decisions`,
+		);
 		if (migration.errors.length > 0) {
 			output.warning(`Migration had ${migration.errors.length} errors`);
 		}

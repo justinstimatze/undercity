@@ -4,13 +4,28 @@
  * Records correlations between verification errors and successful fixes.
  * When similar errors occur, suggests fixes that worked before.
  *
- * Storage: .undercity/error-fix-patterns.json
+ * Storage: SQLite (.undercity/undercity.db)
+ * Legacy: .undercity/error-fix-patterns.json (migration only)
  */
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+	addErrorFix,
+	addPendingErrorDB,
+	getPendingErrorDB,
+	hasErrorFixData,
+	incrementFixSuccessDB,
+	loadErrorFixStoreFromDB,
+	pruneOldErrorPatternsDB,
+	pruneOldPendingErrorsDB,
+	recordPermanentFailureDB,
+	removePendingErrorDB,
+	updateFixAutoApplyStatsDB,
+	upsertErrorPattern,
+} from "./storage.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
 // Stores error-fix correlations - maps verification failures to successful fixes for learning
@@ -139,32 +154,20 @@ export function generateErrorSignature(category: string, message: string): strin
 }
 
 /**
- * Load the error-fix store from disk
+ * Load the error-fix store from JSON (for migration only)
  */
-export function loadErrorFixStore(stateDir: string = DEFAULT_STATE_DIR): ErrorFixStore {
+function loadErrorFixStoreFromJSON(stateDir: string = DEFAULT_STATE_DIR): ErrorFixStore | null {
 	const path = getStorePath(stateDir);
 
 	if (!existsSync(path)) {
-		return {
-			patterns: {},
-			pending: [],
-			failures: [],
-			version: "1.0",
-			lastUpdated: new Date().toISOString(),
-		};
+		return null;
 	}
 
 	try {
 		const content = readFileSync(path, "utf-8");
 		const parsed = JSON.parse(content) as ErrorFixStore;
 		if (!parsed.patterns || typeof parsed.patterns !== "object") {
-			return {
-				patterns: {},
-				pending: [],
-				failures: [],
-				version: "1.0",
-				lastUpdated: new Date().toISOString(),
-			};
+			return null;
 		}
 		// Handle legacy stores without failures field
 		if (!parsed.failures) {
@@ -172,42 +175,111 @@ export function loadErrorFixStore(stateDir: string = DEFAULT_STATE_DIR): ErrorFi
 		}
 		return parsed;
 	} catch {
-		return {
-			patterns: {},
-			pending: [],
-			failures: [],
-			version: "1.0",
-			lastUpdated: new Date().toISOString(),
-		};
+		return null;
 	}
 }
 
 /**
- * Save the error-fix store to disk
+ * Migrate JSON data to SQLite (one-time migration)
  */
-function saveErrorFixStore(store: ErrorFixStore, stateDir: string = DEFAULT_STATE_DIR): void {
-	const path = getStorePath(stateDir);
-	const tempPath = `${path}.tmp`;
-	const dir = dirname(path);
-
-	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
-	}
-
-	store.lastUpdated = new Date().toISOString();
-
-	try {
-		writeFileSync(tempPath, JSON.stringify(store, null, 2), {
-			encoding: "utf-8",
-			flag: "w",
-		});
-		renameSync(tempPath, path);
-	} catch (error) {
-		if (existsSync(tempPath)) {
-			unlinkSync(tempPath);
+function migrateErrorFixStoreToSQLite(store: ErrorFixStore, stateDir: string): void {
+	// Migrate patterns and fixes
+	for (const pattern of Object.values(store.patterns)) {
+		upsertErrorPattern(pattern.signature, pattern.category, pattern.sampleMessage, stateDir);
+		for (const fix of pattern.fixes) {
+			addErrorFix(
+				pattern.signature,
+				{
+					description: fix.editSummary,
+					diff: fix.patchData,
+					filesChanged: fix.filesChanged,
+				},
+				stateDir,
+			);
 		}
-		throw error;
 	}
+
+	// Migrate pending errors
+	for (const pending of store.pending) {
+		addPendingErrorDB(
+			{
+				signature: pending.signature,
+				category: pending.category,
+				message: pending.message,
+				taskId: pending.taskId,
+				filesBeforeFix: pending.filesBeforeFix,
+				recordedAt: pending.recordedAt,
+			},
+			stateDir,
+		);
+	}
+
+	// Migrate failures
+	for (const failure of store.failures) {
+		recordPermanentFailureDB(
+			{
+				signature: failure.signature,
+				category: failure.category,
+				sampleMessage: failure.sampleMessage,
+				taskObjective: failure.taskObjective,
+				modelUsed: failure.modelUsed,
+				attemptsCount: failure.attemptsCount,
+				filesAttempted: failure.filesAttempted,
+				detailedErrors: failure.detailedErrors,
+				recordedAt: failure.recordedAt,
+			},
+			stateDir,
+		);
+	}
+}
+
+/**
+ * Load the error-fix store (SQLite primary, JSON migration fallback)
+ */
+export function loadErrorFixStore(stateDir: string = DEFAULT_STATE_DIR): ErrorFixStore {
+	try {
+		// Check if SQLite has data
+		if (hasErrorFixData(stateDir)) {
+			// Load from SQLite
+			const dbStore = loadErrorFixStoreFromDB(stateDir);
+			return {
+				patterns: dbStore.patterns,
+				pending: dbStore.pending.map((p) => ({
+					signature: p.signature,
+					category: p.category,
+					message: p.message,
+					taskId: p.taskId,
+					filesBeforeFix: p.filesBeforeFix,
+					recordedAt: p.recordedAt,
+				})),
+				failures: dbStore.failures,
+				version: dbStore.version,
+				lastUpdated: dbStore.lastUpdated,
+			};
+		}
+
+		// Try to migrate from JSON
+		const jsonStore = loadErrorFixStoreFromJSON(stateDir);
+		if (jsonStore && Object.keys(jsonStore.patterns).length > 0) {
+			migrateErrorFixStoreToSQLite(jsonStore, stateDir);
+			return jsonStore;
+		}
+	} catch {
+		// SQLite not available, try JSON fallback
+		const jsonStore = loadErrorFixStoreFromJSON(stateDir);
+		if (jsonStore) {
+			return jsonStore;
+		}
+	}
+
+	// Return empty store
+	return {
+		patterns: {},
+		pending: [],
+		failures: [],
+		version: "1.0",
+		lastUpdated: new Date().toISOString(),
+	};
 }
 
 /**
@@ -224,62 +296,22 @@ export function recordPendingError(
 	currentFiles: string[],
 	stateDir: string = DEFAULT_STATE_DIR,
 ): string {
-	const store = loadErrorFixStore(stateDir);
 	const signature = generateErrorSignature(category, message);
 
-	// Update or create the pattern
-	if (!store.patterns[signature]) {
-		store.patterns[signature] = {
+	// Write to SQLite
+	upsertErrorPattern(signature, category, message.slice(0, 500), stateDir);
+	addPendingErrorDB(
+		{
 			signature,
 			category,
-			sampleMessage: message.slice(0, 500),
-			fixes: [],
-			occurrences: 0,
-			fixSuccesses: 0,
-			firstSeen: new Date().toISOString(),
-			lastSeen: new Date().toISOString(),
-		};
-	}
-
-	store.patterns[signature].occurrences++;
-	store.patterns[signature].lastSeen = new Date().toISOString();
-
-	// Add to pending (for later fix recording)
-	store.pending.push({
-		signature,
-		category,
-		message: message.slice(0, 500),
-		taskId,
-		filesBeforeFix: currentFiles,
-		recordedAt: new Date().toISOString(),
-	});
-
-	// Keep only recent pending entries (last 10)
-	if (store.pending.length > 10) {
-		store.pending = store.pending.slice(-10);
-	}
-
-	saveErrorFixStore(store, stateDir);
-
-	// Dual-write to SQLite
-	try {
-		const storage = require("./storage.js") as typeof import("./storage.js");
-		storage.upsertErrorPattern(signature, category, message.slice(0, 500), stateDir);
-		storage.addPendingErrorDB(
-			{
-				signature,
-				category,
-				message: message.slice(0, 500),
-				taskId,
-				filesBeforeFix: currentFiles,
-				recordedAt: new Date().toISOString(),
-			},
-			stateDir,
-		);
-		storage.pruneOldPendingErrorsDB(10, stateDir);
-	} catch {
-		// SQLite not available, continue with JSON only
-	}
+			message: message.slice(0, 500),
+			taskId,
+			filesBeforeFix: currentFiles,
+			recordedAt: new Date().toISOString(),
+		},
+		stateDir,
+	);
+	pruneOldPendingErrorsDB(10, stateDir);
 
 	return signature;
 }
@@ -352,69 +384,36 @@ export function recordSuccessfulFix(
 	}
 
 	const actualStateDir = opts.stateDir ?? DEFAULT_STATE_DIR;
-	const store = loadErrorFixStore(actualStateDir);
 
 	// Find pending error for this task
-	const pendingIndex = store.pending.findIndex((p) => p.taskId === opts.taskId);
-	if (pendingIndex === -1) {
+	const pending = getPendingErrorDB(opts.taskId, actualStateDir);
+	if (!pending) {
 		return; // No pending error to resolve
 	}
 
-	const pending = store.pending[pendingIndex];
-	const pattern = store.patterns[pending.signature];
+	// Determine which files were actually changed to fix the error
+	const newFiles = opts.filesChanged.filter((f) => !pending.filesBeforeFix.includes(f));
+	const relevantFiles = newFiles.length > 0 ? newFiles : opts.filesChanged.slice(0, 5);
 
-	// Track variables for SQLite dual-write
-	let relevantFiles: string[] | undefined;
+	// Capture git diff if working directory provided (enables auto-remediation)
 	let patchData: string | undefined;
-
-	if (pattern) {
-		// Determine which files were actually changed to fix the error
-		const newFiles = opts.filesChanged.filter((f) => !pending.filesBeforeFix.includes(f));
-		relevantFiles = newFiles.length > 0 ? newFiles : opts.filesChanged.slice(0, 5);
-
-		// Capture git diff if working directory provided (enables auto-remediation)
-		if (opts.workingDirectory && relevantFiles.length > 0) {
-			patchData = captureGitDiff(relevantFiles, opts.workingDirectory, opts.baseCommit);
-		}
-
-		// Add the fix
-		pattern.fixes.push({
-			filesChanged: relevantFiles,
-			editSummary: opts.editSummary.slice(0, 200),
-			taskId: opts.taskId,
-			recordedAt: new Date().toISOString(),
-			patchData,
-		});
-
-		// Keep only the most recent/successful fixes (max 5)
-		if (pattern.fixes.length > 5) {
-			pattern.fixes = pattern.fixes.slice(-5);
-		}
+	if (opts.workingDirectory && relevantFiles.length > 0) {
+		patchData = captureGitDiff(relevantFiles, opts.workingDirectory, opts.baseCommit);
 	}
+
+	// Add the fix to SQLite
+	addErrorFix(
+		pending.signature,
+		{
+			description: opts.editSummary.slice(0, 200),
+			diff: patchData,
+			filesChanged: relevantFiles,
+		},
+		actualStateDir,
+	);
 
 	// Remove from pending
-	store.pending.splice(pendingIndex, 1);
-
-	saveErrorFixStore(store, actualStateDir);
-
-	// Dual-write to SQLite
-	try {
-		const storage = require("./storage.js") as typeof import("./storage.js");
-		if (relevantFiles) {
-			storage.addErrorFix(
-				pending.signature,
-				{
-					description: opts.editSummary.slice(0, 200),
-					diff: patchData,
-					filesChanged: relevantFiles,
-				},
-				actualStateDir,
-			);
-		}
-		storage.removePendingErrorDB(opts.taskId, actualStateDir);
-	} catch {
-		// SQLite not available, continue with JSON only
-	}
+	removePendingErrorDB(opts.taskId, actualStateDir);
 }
 
 /**
@@ -422,38 +421,14 @@ export function recordSuccessfulFix(
  * Call this when a fix suggestion led to success
  */
 export function markFixSuccessful(signature: string, stateDir: string = DEFAULT_STATE_DIR): void {
-	const store = loadErrorFixStore(stateDir);
-	const pattern = store.patterns[signature];
-
-	if (pattern) {
-		pattern.fixSuccesses++;
-		saveErrorFixStore(store, stateDir);
-
-		// Dual-write to SQLite
-		try {
-			const storage = require("./storage.js") as typeof import("./storage.js");
-			storage.incrementFixSuccessDB(signature, stateDir);
-		} catch {
-			// SQLite not available, continue with JSON only
-		}
-	}
+	incrementFixSuccessDB(signature, stateDir);
 }
 
 /**
  * Clear pending error for a task (e.g., on task failure/abort)
  */
 export function clearPendingError(taskId: string, stateDir: string = DEFAULT_STATE_DIR): void {
-	const store = loadErrorFixStore(stateDir);
-	store.pending = store.pending.filter((p) => p.taskId !== taskId);
-	saveErrorFixStore(store, stateDir);
-
-	// Dual-write to SQLite
-	try {
-		const storage = require("./storage.js") as typeof import("./storage.js");
-		storage.removePendingErrorDB(taskId, stateDir);
-	} catch {
-		// SQLite not available, continue with JSON only
-	}
+	removePendingErrorDB(taskId, stateDir);
 }
 
 /**
@@ -507,74 +482,28 @@ export function recordPermanentFailure(
 	}
 
 	const actualStateDir = opts.stateDir ?? DEFAULT_STATE_DIR;
-	const store = loadErrorFixStore(actualStateDir);
 	const signature = generateErrorSignature(opts.category, opts.message);
-
-	// Update or create the pattern
-	if (!store.patterns[signature]) {
-		store.patterns[signature] = {
-			signature,
-			category: opts.category,
-			sampleMessage: opts.message.slice(0, 500),
-			fixes: [],
-			occurrences: 0,
-			fixSuccesses: 0,
-			firstSeen: new Date().toISOString(),
-			lastSeen: new Date().toISOString(),
-		};
-	}
-
-	store.patterns[signature].occurrences++;
-	store.patterns[signature].lastSeen = new Date().toISOString();
 
 	// Prepare detailed errors (truncate each to 300 chars, keep max 10)
 	const detailedErrors = opts.detailedErrors?.slice(0, 10).map((e) => e.slice(0, 300));
 
-	// Add to failures array
-	store.failures.push({
-		signature,
-		category: opts.category,
-		sampleMessage: opts.message.slice(0, 500),
-		taskObjective: opts.taskObjective.slice(0, 200),
-		modelUsed: opts.modelUsed,
-		attemptsCount: opts.attemptCount,
-		filesAttempted: opts.currentFiles.slice(0, 10),
-		recordedAt: new Date().toISOString(),
-		detailedErrors,
-	});
-
-	// Keep only most recent 10 failures
-	if (store.failures.length > 10) {
-		store.failures = store.failures.slice(-10);
-	}
-
-	// Clear from pending if it exists
-	store.pending = store.pending.filter((p) => p.taskId !== opts.taskId);
-
-	saveErrorFixStore(store, actualStateDir);
-
-	// Dual-write to SQLite
-	try {
-		const storage = require("./storage.js") as typeof import("./storage.js");
-		storage.upsertErrorPattern(signature, opts.category, opts.message.slice(0, 500), actualStateDir);
-		storage.recordPermanentFailureDB(
-			{
-				signature,
-				category: opts.category,
-				sampleMessage: opts.message.slice(0, 500),
-				taskObjective: opts.taskObjective.slice(0, 200),
-				modelUsed: opts.modelUsed,
-				attemptsCount: opts.attemptCount,
-				filesAttempted: opts.currentFiles.slice(0, 10),
-				detailedErrors,
-				recordedAt: new Date().toISOString(),
-			},
-			actualStateDir,
-		);
-		storage.removePendingErrorDB(opts.taskId, actualStateDir);
-	} catch {
-		// SQLite not available, continue with JSON only
-	}
+	// Write to SQLite
+	upsertErrorPattern(signature, opts.category, opts.message.slice(0, 500), actualStateDir);
+	recordPermanentFailureDB(
+		{
+			signature,
+			category: opts.category,
+			sampleMessage: opts.message.slice(0, 500),
+			taskObjective: opts.taskObjective.slice(0, 200),
+			modelUsed: opts.modelUsed,
+			attemptsCount: opts.attemptCount,
+			filesAttempted: opts.currentFiles.slice(0, 10),
+			detailedErrors,
+			recordedAt: new Date().toISOString(),
+		},
+		actualStateDir,
+	);
+	removePendingErrorDB(opts.taskId, actualStateDir);
 
 	return signature;
 }
@@ -717,32 +646,7 @@ export function tryAutoRemediate(
  */
 function updateAutoApplyStats(signature: string, success: boolean, stateDir: string = DEFAULT_STATE_DIR): void {
 	try {
-		const store = loadErrorFixStore(stateDir);
-		const pattern = store.patterns[signature];
-
-		if (!pattern || pattern.fixes.length === 0) return;
-
-		// Update the most recent fix with patch data
-		const fixWithPatch = pattern.fixes.find((f) => f.patchData);
-		if (fixWithPatch) {
-			const count = (fixWithPatch.autoApplyCount ?? 0) + 1;
-			const currentRate = fixWithPatch.autoApplySuccessRate ?? 0.5;
-			// Exponential moving average for success rate
-			const newRate = success ? currentRate * 0.7 + 0.3 : currentRate * 0.7;
-
-			fixWithPatch.autoApplyCount = count;
-			fixWithPatch.autoApplySuccessRate = newRate;
-
-			saveErrorFixStore(store, stateDir);
-
-			// Dual-write to SQLite
-			try {
-				const storage = require("./storage.js") as typeof import("./storage.js");
-				storage.updateFixAutoApplyStatsDB(signature, success, stateDir);
-			} catch {
-				// SQLite not available, continue with JSON only
-			}
-		}
+		updateFixAutoApplyStatsDB(signature, success, stateDir);
 	} catch {
 		// Silent failure - stats update is non-critical
 	}
@@ -929,26 +833,8 @@ export function getErrorFixStats(stateDir: string = DEFAULT_STATE_DIR): {
  * Prune old patterns that haven't been seen recently
  */
 export function pruneOldPatterns(
-	maxAge: number = 30 * 24 * 60 * 60 * 1000, // 30 days
+	maxAgeDays: number = 30,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): number {
-	const store = loadErrorFixStore(stateDir);
-	const now = Date.now();
-	const originalCount = Object.keys(store.patterns).length;
-
-	for (const [signature, pattern] of Object.entries(store.patterns)) {
-		const age = now - new Date(pattern.lastSeen).getTime();
-		// Keep if: has fixes, or seen recently, or high occurrence
-		if (pattern.fixes.length === 0 && age > maxAge && pattern.occurrences < 5) {
-			delete store.patterns[signature];
-		}
-	}
-
-	const prunedCount = originalCount - Object.keys(store.patterns).length;
-
-	if (prunedCount > 0) {
-		saveErrorFixStore(store, stateDir);
-	}
-
-	return prunedCount;
+	return pruneOldErrorPatternsDB(maxAgeDays, 5, stateDir);
 }

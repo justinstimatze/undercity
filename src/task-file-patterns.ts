@@ -5,11 +5,19 @@
  * - "Tasks mentioning X typically touch files Y, Z"
  * - "When file A changes, file B usually needs updating too"
  *
- * Storage: .undercity/task-file-patterns.json
+ * Storage: SQLite (.undercity/undercity.db)
+ * Legacy: .undercity/task-file-patterns.json (migration only)
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+	hasTaskFileData,
+	loadTaskFileStoreFromDB,
+	recordTaskFile as recordTaskFileDB,
+	updateCoModification as updateCoModificationDB,
+	updateKeywordCorrelation as updateKeywordCorrelationDB,
+} from "./storage.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
 const PATTERNS_FILE = "task-file-patterns.json";
@@ -211,10 +219,73 @@ function calculateDecayFactor(lastUpdated: string | undefined): number {
 }
 
 /**
- * Get the store file path
+ * Get the store file path (for JSON migration only)
  */
 function getStorePath(stateDir: string = DEFAULT_STATE_DIR): string {
 	return join(stateDir, PATTERNS_FILE);
+}
+
+/**
+ * Load store from JSON file (for migration only)
+ */
+function loadTaskFileStoreFromJSON(stateDir: string): TaskFileStore | null {
+	const path = getStorePath(stateDir);
+
+	if (!existsSync(path)) {
+		return null;
+	}
+
+	try {
+		const content = readFileSync(path, "utf-8");
+		const parsed = JSON.parse(content) as TaskFileStore;
+		if (!parsed.keywordCorrelations || typeof parsed.keywordCorrelations !== "object") {
+			return null;
+		}
+		return parsed;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Migrate JSON data to SQLite (one-time migration)
+ */
+function migrateTaskFileStoreToSQLite(store: TaskFileStore, stateDir: string): void {
+	// Migrate recent tasks
+	for (const task of store.recentTasks) {
+		recordTaskFileDB(
+			{
+				taskId: task.taskId,
+				objective: task.keywords.join(" "), // Best effort reconstruction
+				filesModified: task.filesModified,
+				success: task.success,
+				keywords: task.keywords,
+				recordedAt: task.recordedAt,
+			},
+			stateDir,
+		);
+	}
+
+	// Migrate keyword correlations
+	for (const correlation of Object.values(store.keywordCorrelations)) {
+		const files = Object.keys(correlation.files);
+		if (files.length > 0) {
+			// Simulate the correlation updates
+			for (let i = 0; i < correlation.taskCount; i++) {
+				const isSuccess = i < correlation.successCount;
+				updateKeywordCorrelationDB(correlation.keyword, files, isSuccess, stateDir);
+			}
+		}
+	}
+
+	// Migrate co-modification patterns
+	for (const pattern of Object.values(store.coModificationPatterns)) {
+		const coFiles = Object.keys(pattern.coModified);
+		if (coFiles.length > 0) {
+			const allFiles = [pattern.file, ...coFiles];
+			updateCoModificationDB(allFiles, stateDir);
+		}
+	}
 }
 
 /**
@@ -239,72 +310,47 @@ function normalizeFilePath(filePath: string): string {
 }
 
 /**
- * Load the store from disk
+ * Load the store (SQLite primary, JSON migration fallback)
  */
 export function loadTaskFileStore(stateDir: string = DEFAULT_STATE_DIR): TaskFileStore {
-	const path = getStorePath(stateDir);
-
-	if (!existsSync(path)) {
-		return {
-			recentTasks: [],
-			keywordCorrelations: {},
-			coModificationPatterns: {},
-			version: "1.0",
-			lastUpdated: new Date().toISOString(),
-		};
-	}
-
 	try {
-		const content = readFileSync(path, "utf-8");
-		const parsed = JSON.parse(content) as TaskFileStore;
-		if (!parsed.keywordCorrelations || typeof parsed.keywordCorrelations !== "object") {
+		// Check if SQLite has data
+		if (hasTaskFileData(stateDir)) {
+			// Load from SQLite
+			const dbStore = loadTaskFileStoreFromDB(stateDir);
 			return {
-				recentTasks: [],
-				keywordCorrelations: {},
-				coModificationPatterns: {},
+				recentTasks: dbStore.recentTasks,
+				keywordCorrelations: dbStore.keywordCorrelations,
+				coModificationPatterns: dbStore.coModificationPatterns,
 				version: "1.0",
 				lastUpdated: new Date().toISOString(),
 			};
 		}
-		return parsed;
-	} catch {
-		return {
-			recentTasks: [],
-			keywordCorrelations: {},
-			coModificationPatterns: {},
-			version: "1.0",
-			lastUpdated: new Date().toISOString(),
-		};
-	}
-}
 
-/**
- * Save the store to disk
- */
-function saveTaskFileStore(store: TaskFileStore, stateDir: string = DEFAULT_STATE_DIR): void {
-	const path = getStorePath(stateDir);
-	const tempPath = `${path}.tmp`;
-	const dir = dirname(path);
-
-	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
-	}
-
-	store.lastUpdated = new Date().toISOString();
-
-	try {
-		writeFileSync(tempPath, JSON.stringify(store, null, 2), {
-			encoding: "utf-8",
-			flag: "w",
-		});
-		renameSync(tempPath, path);
-	} catch (error) {
-		if (existsSync(tempPath)) {
-			unlinkSync(tempPath);
+		// Try JSON fallback and migrate
+		const jsonStore = loadTaskFileStoreFromJSON(stateDir);
+		if (
+			jsonStore &&
+			(jsonStore.recentTasks.length > 0 ||
+				Object.keys(jsonStore.keywordCorrelations).length > 0 ||
+				Object.keys(jsonStore.coModificationPatterns).length > 0)
+		) {
+			migrateTaskFileStoreToSQLite(jsonStore, stateDir);
+			return jsonStore;
 		}
-		throw error;
+	} catch {
+		// Fall through to empty store
 	}
+
+	return {
+		recentTasks: [],
+		keywordCorrelations: {},
+		coModificationPatterns: {},
+		version: "1.0",
+		lastUpdated: new Date().toISOString(),
+	};
 }
+
 
 /**
  * Record a completed task and its file modifications.
@@ -320,106 +366,31 @@ export function recordTaskFiles(
 	success: boolean,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): void {
-	const store = loadTaskFileStore(stateDir);
 	const keywords = extractTaskKeywords(taskDescription);
 	const normalizedFiles = filesModified.map(normalizeFilePath);
+	const recordedAt = new Date().toISOString();
 
-	// Record the task
-	const record: TaskFileRecord = {
-		taskId,
-		keywords,
-		filesModified: normalizedFiles,
-		success,
-		recordedAt: new Date().toISOString(),
-	};
+	// Record task-file relationship to SQLite
+	recordTaskFileDB(
+		{
+			taskId,
+			objective: taskDescription,
+			filesModified: normalizedFiles,
+			success,
+			keywords,
+			recordedAt,
+		},
+		stateDir,
+	);
 
-	store.recentTasks.push(record);
-
-	// Keep only last 100 tasks
-	if (store.recentTasks.length > 100) {
-		store.recentTasks = store.recentTasks.slice(-100);
-	}
-
-	// Update keyword correlations (track all tasks for success rate)
+	// Update keyword correlations
 	for (const keyword of keywords) {
-		if (!store.keywordCorrelations[keyword]) {
-			store.keywordCorrelations[keyword] = {
-				keyword,
-				files: {},
-				taskCount: 0,
-				successCount: 0,
-			};
-		}
-
-		const correlation = store.keywordCorrelations[keyword];
-		correlation.taskCount++;
-		correlation.lastUpdated = new Date().toISOString();
-		if (success) {
-			correlation.successCount++;
-		}
-
-		// Only associate files with keywords for successful tasks
-		if (success && normalizedFiles.length > 0) {
-			for (const file of normalizedFiles) {
-				correlation.files[file] = (correlation.files[file] || 0) + 1;
-			}
-		}
+		updateKeywordCorrelationDB(keyword, normalizedFiles, success, stateDir);
 	}
 
-	// Update co-modification patterns (only for successful tasks)
-	if (success && normalizedFiles.length > 0) {
-		for (const file of normalizedFiles) {
-			if (!store.coModificationPatterns[file]) {
-				store.coModificationPatterns[file] = {
-					file,
-					coModified: {},
-					modificationCount: 0,
-				};
-			}
-
-			const pattern = store.coModificationPatterns[file];
-			pattern.modificationCount++;
-			pattern.lastUpdated = new Date().toISOString();
-
-			// Record co-modifications (other files changed in same task)
-			for (const otherFile of normalizedFiles) {
-				if (otherFile !== file) {
-					pattern.coModified[otherFile] = (pattern.coModified[otherFile] || 0) + 1;
-				}
-			}
-		}
-	}
-
-	saveTaskFileStore(store, stateDir);
-
-	// Dual-write to SQLite
-	try {
-		const storage = require("./storage.js") as typeof import("./storage.js");
-
-		// Record task-file relationship
-		storage.recordTaskFile(
-			{
-				taskId,
-				objective: taskDescription,
-				filesModified: normalizedFiles,
-				success,
-				keywords,
-				recordedAt: record.recordedAt,
-			},
-			stateDir,
-		);
-
-		// Update keyword correlations
-		for (const keyword of keywords) {
-			storage.updateKeywordCorrelation(keyword, normalizedFiles, success, stateDir);
-		}
-
-		// Update co-modification patterns (only for successful tasks with multiple files)
-		if (success && normalizedFiles.length >= 2) {
-			storage.updateCoModification(normalizedFiles, stateDir);
-		}
-	} catch {
-		// SQLite not available, continue with JSON only
+	// Update co-modification patterns (only for successful tasks with multiple files)
+	if (success && normalizedFiles.length >= 2) {
+		updateCoModificationDB(normalizedFiles, stateDir);
 	}
 }
 
@@ -681,10 +652,10 @@ export function getTaskFileStats(stateDir: string = DEFAULT_STATE_DIR): {
 
 /**
  * Prune stale patterns that haven't been seen recently or have poor performance
- * Removes patterns based on:
- * - Low usage count (below minTaskCount)
- * - Age + low success rate (>60 days old with <50% success)
- * - Age + minimal usage (>30 days old with minimal usage)
+ *
+ * NOTE: With SQLite storage, stale patterns are handled via decay factors in
+ * findRelevantFiles() and findCoModifiedFiles(). This function reports what
+ * would be pruned but does not delete from SQLite.
  */
 export function pruneStalePatterns(
 	minTaskCount: number = 2,
@@ -698,44 +669,34 @@ export function pruneStalePatterns(
 	let prunedKeywords = 0;
 	let prunedFiles = 0;
 
-	// Prune keywords
-	for (const [keyword, correlation] of Object.entries(store.keywordCorrelations)) {
+	// Count keywords that would be pruned (analysis only)
+	for (const correlation of Object.values(store.keywordCorrelations)) {
 		const ageMs = correlation.lastUpdated ? now - new Date(correlation.lastUpdated).getTime() : Infinity;
 		const successRate = correlation.successCount / Math.max(correlation.taskCount, 1);
 
-		// Remove if:
-		// - Too few tasks, OR
-		// - Old with minimal usage, OR
-		// - Very old with low success rate
 		const shouldRemove =
 			correlation.taskCount < minTaskCount ||
 			(ageMs > THIRTY_DAYS_MS && correlation.taskCount < 3) ||
 			(ageMs > SIXTY_DAYS_MS && successRate < 0.5);
 
 		if (shouldRemove) {
-			delete store.keywordCorrelations[keyword];
 			prunedKeywords++;
 		}
 	}
 
-	// Prune co-modification patterns
-	for (const [file, pattern] of Object.entries(store.coModificationPatterns)) {
+	// Count co-modification patterns that would be pruned (analysis only)
+	for (const pattern of Object.values(store.coModificationPatterns)) {
 		const ageMs = pattern.lastUpdated ? now - new Date(pattern.lastUpdated).getTime() : Infinity;
 
-		// Remove if low usage OR old with minimal usage
 		const shouldRemove =
 			pattern.modificationCount < minTaskCount || (ageMs > THIRTY_DAYS_MS && pattern.modificationCount < 3);
 
 		if (shouldRemove) {
-			delete store.coModificationPatterns[file];
 			prunedFiles++;
 		}
 	}
 
-	if (prunedKeywords > 0 || prunedFiles > 0) {
-		saveTaskFileStore(store, stateDir);
-	}
-
+	// Note: With SQLite, stale data is handled via decay factors, not deletion
 	return { prunedKeywords, prunedFiles };
 }
 
@@ -749,7 +710,6 @@ export async function primeFromGitHistory(
 ): Promise<{ commitsProcessed: number; patternsAdded: number }> {
 	const { execSync } = await import("node:child_process");
 
-	const store = loadTaskFileStore(stateDir);
 	let patternsAdded = 0;
 
 	try {
@@ -783,55 +743,25 @@ export async function primeFromGitHistory(
 			commits.push(currentCommit);
 		}
 
-		// Process commits to extract patterns
+		// Process commits to extract patterns - write directly to SQLite
 		for (const commit of commits) {
 			const keywords = extractTaskKeywords(commit.message);
 			const files = commit.files.map(normalizeFilePath);
 
 			if (keywords.length === 0 || files.length === 0) continue;
 
-			// Update keyword correlations
-			const now = new Date().toISOString();
+			// Update keyword correlations (treat commits as successful tasks)
 			for (const keyword of keywords) {
-				if (!store.keywordCorrelations[keyword]) {
-					store.keywordCorrelations[keyword] = {
-						keyword,
-						files: {},
-						taskCount: 0,
-						successCount: 0,
-					};
-				}
-				const correlation = store.keywordCorrelations[keyword];
-				correlation.taskCount++;
-				correlation.successCount++;
-				correlation.lastUpdated = now;
-				for (const file of files) {
-					correlation.files[file] = (correlation.files[file] || 0) + 1;
-					patternsAdded++;
-				}
+				updateKeywordCorrelationDB(keyword, files, true, stateDir);
+				patternsAdded += files.length;
 			}
 
-			// Update co-modification patterns
-			for (const file of files) {
-				if (!store.coModificationPatterns[file]) {
-					store.coModificationPatterns[file] = {
-						file,
-						coModified: {},
-						modificationCount: 0,
-					};
-				}
-				const pattern = store.coModificationPatterns[file];
-				pattern.modificationCount++;
-				pattern.lastUpdated = now;
-				for (const otherFile of files) {
-					if (otherFile !== file) {
-						pattern.coModified[otherFile] = (pattern.coModified[otherFile] || 0) + 1;
-					}
-				}
+			// Update co-modification patterns (for commits with multiple files)
+			if (files.length >= 2) {
+				updateCoModificationDB(files, stateDir);
 			}
 		}
 
-		saveTaskFileStore(store, stateDir);
 		return { commitsProcessed: commits.length, patternsAdded };
 	} catch {
 		return { commitsProcessed: 0, patternsAdded: 0 };

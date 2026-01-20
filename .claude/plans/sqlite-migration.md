@@ -9,9 +9,9 @@ Migrate the remaining JSON file persistence modules to use SQLite storage for im
 | Module | JSON File | SQLite Schema | Status |
 |--------|-----------|---------------|--------|
 | `knowledge.ts` | `knowledge.json` | `learnings` table | **Hybrid** (writes to both) |
-| `error-fix-patterns.ts` | `error-fix-patterns.json` | `error_patterns`, `error_fixes`, `pending_errors`, `permanent_failures` | **Hybrid** (writes to both) |
-| `decision-tracker.ts` | `decisions.json` | `decisions`, `decision_resolutions`, `human_overrides` | **Hybrid** (writes to both) |
-| `task-file-patterns.ts` | `task-file-patterns.json` | `task_file_records`, `keyword_correlations`, `co_modifications` | **Hybrid** (writes to both) |
+| `error-fix-patterns.ts` | `error-fix-patterns.json` | `error_patterns`, `error_fixes`, `pending_errors`, `permanent_failures` | **SQLite-only** (JSON migration) |
+| `decision-tracker.ts` | `decisions.json` | `decisions`, `decision_resolutions`, `human_overrides` | **SQLite-only** (JSON migration) |
+| `task-file-patterns.ts` | `task-file-patterns.json` | `task_file_records`, `keyword_correlations`, `co_modifications` | **SQLite-only** (JSON migration) |
 
 ## Migration Strategy
 
@@ -118,25 +118,25 @@ Remove JSON persistence entirely.
 
 ### Phase 2 Tasks
 
-4. **Add read-from-SQLite functions**
-   - [ ] `loadErrorFixStoreFromSQLite()` in error-fix-patterns.ts
-   - [ ] `loadDecisionStoreFromSQLite()` in decision-tracker.ts
-   - [ ] `loadTaskFileStoreFromSQLite()` in task-file-patterns.ts
+4. **Add read-from-SQLite functions** ✅
+   - [x] `loadErrorFixStoreFromSQLite()` in error-fix-patterns.ts (via storage.ts)
+   - [x] `loadDecisionStoreFromSQLite()` in decision-tracker.ts (via storage.ts)
+   - [x] `loadTaskFileStoreFromSQLite()` in task-file-patterns.ts (via storage.ts)
 
-5. **Add auto-migration on read**
-   - [ ] If SQLite empty but JSON exists, migrate
-   - [ ] Log migration for visibility
+5. **Add auto-migration on read** ✅
+   - [x] If SQLite empty but JSON exists, migrate
+   - [x] Migration happens transparently on first load
 
 ### Phase 3 Tasks
 
-6. **Remove JSON writes**
-   - [ ] Remove `saveErrorFixStore()` calls
-   - [ ] Remove `saveDecisionStore()` calls
-   - [ ] Remove `saveTaskFileStore()` calls
+6. **Remove JSON writes** ✅
+   - [x] Remove `saveErrorFixStore()` calls
+   - [x] Remove `saveDecisionStore()` calls
+   - [x] Remove `saveTaskFileStore()` calls
 
 7. **Add deprecation warnings**
-   - [ ] Warn on JSON file detection
-   - [ ] Suggest migration command
+   - [ ] Warn on JSON file detection (optional, migration happens automatically)
+   - [ ] Suggest migration command (optional)
 
 ### Phase 4 Tasks
 
