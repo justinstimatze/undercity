@@ -28,8 +28,8 @@ import {
 } from "./emergency-mode.js";
 import { type ExperimentManager, getExperimentManager } from "./experiment.js";
 import { FileTracker } from "./file-tracker.js";
-import { getTasksNeedingInput } from "./human-input-tracking.js";
 import { checkAndFixBareRepo } from "./git.js";
+import { getTasksNeedingInput } from "./human-input-tracking.js";
 import { sessionLogger } from "./logger.js";
 import { nameFromId } from "./names.js";
 import * as output from "./output.js";
@@ -1628,9 +1628,7 @@ export class Orchestrator {
 		try {
 			const tasksNeedingInput = getTasksNeedingInput();
 			if (tasksNeedingInput.length > 0) {
-				output.warning(
-					`${tasksNeedingInput.length} task(s) need human input to retry. Run: undercity human-input`,
-				);
+				output.warning(`${tasksNeedingInput.length} task(s) need human input to retry. Run: undercity human-input`);
 			}
 		} catch {
 			// Non-critical

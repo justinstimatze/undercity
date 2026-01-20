@@ -251,7 +251,9 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 				console.log(`  ${chalk.green(`${withGuidance} have guidance`)} - run: undercity human-input --retry`);
 			}
 			if (withGuidance < tasksNeedingInput.length) {
-				console.log(`  ${chalk.yellow(`${tasksNeedingInput.length - withGuidance} need guidance`)} - run: undercity human-input`);
+				console.log(
+					`  ${chalk.yellow(`${tasksNeedingInput.length - withGuidance} need guidance`)} - run: undercity human-input`,
+				);
 			}
 		}
 	} catch {

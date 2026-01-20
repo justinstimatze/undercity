@@ -3577,7 +3577,9 @@ export async function handleHumanInput(options: HumanInputOptions): Promise<void
 					console.log(chalk.green("\n✓ No tasks need human input"));
 				} else {
 					console.log(chalk.yellow(`\n⚠ ${total} task(s) need human input but none have guidance yet`));
-					console.log(chalk.dim("Provide guidance first with: undercity human-input --provide <signature> --guidance '...'"));
+					console.log(
+						chalk.dim("Provide guidance first with: undercity human-input --provide <signature> --guidance '...'"),
+					);
 				}
 			} else {
 				console.log(JSON.stringify({ retried: 0, message: "No tasks with guidance to retry" }));
