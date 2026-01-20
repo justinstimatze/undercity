@@ -71,7 +71,7 @@
     "multi-agent"
   ],
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.5",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@ax-llm/ax": "^16.0.10",
     "better-sqlite3": "^12.6.2",
