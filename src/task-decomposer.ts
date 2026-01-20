@@ -162,7 +162,7 @@ function validateDecomposition(subtasks: Subtask[]): {
 	// Cap at MAX_SUBTASKS to prevent explosion
 	const capped = valid.slice(0, MAX_SUBTASKS);
 	if (valid.length > MAX_SUBTASKS) {
-		reasons["capped_max_subtasks"] = valid.length - MAX_SUBTASKS;
+		reasons.capped_max_subtasks = valid.length - MAX_SUBTASKS;
 	}
 
 	return {

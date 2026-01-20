@@ -20,7 +20,7 @@
  */
 
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import Database from "better-sqlite3";
 import type { ConfidenceLevel, DecisionCategory } from "./decision-tracker.js";
 import type { Learning, LearningCategory } from "./knowledge.js";

@@ -457,7 +457,7 @@ describe("knowledge.ts", () => {
 			}
 
 			const kb = loadKnowledge(tempDir);
-			const lowConfidence = kb.learnings.find((l) => l.id === learning.id)?.confidence ?? 0.1;
+			const _lowConfidence = kb.learnings.find((l) => l.id === learning.id)?.confidence ?? 0.1;
 
 			// Query with no matching keywords should result in score near confidence * 0.3
 			// At minimum confidence 0.1: score = 0 * 0.7 + 0.1 * 0.3 = 0.03 (filtered)
@@ -626,7 +626,7 @@ describe("knowledge.ts", () => {
 		// ========================================================================
 
 		it("should handle learning with empty keyword array gracefully", () => {
-			const learning = addLearning(
+			const _learning = addLearning(
 				{
 					taskId: "task-empty-keywords",
 					category: "fact",
@@ -649,7 +649,7 @@ describe("knowledge.ts", () => {
 		// ========================================================================
 
 		it("should handle query containing only stopwords", () => {
-			const learning = addLearning(
+			const _learning = addLearning(
 				{
 					taskId: "task-stopwords",
 					category: "fact",
@@ -695,8 +695,8 @@ describe("knowledge.ts", () => {
 
 			// Initial search: both should have same score (same keywords, default confidence)
 			const results1 = findRelevantLearnings("testing", 5, tempDir);
-			const index1_1 = results1.findIndex((l) => l.id === learning1.id);
-			const index2_1 = results1.findIndex((l) => l.id === learning2.id);
+			const _index1_1 = results1.findIndex((l) => l.id === learning1.id);
+			const _index2_1 = results1.findIndex((l) => l.id === learning2.id);
 
 			// Mark learning1 as successfully used multiple times
 			for (let i = 0; i < 3; i++) {

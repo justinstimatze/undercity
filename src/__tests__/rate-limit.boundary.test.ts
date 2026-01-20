@@ -8,9 +8,9 @@
  * - Resume time calculations and state transitions
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { RateLimitTracker } from "../rate-limit.js";
-import type { RateLimitState, TaskUsage } from "../types.js";
+import type { RateLimitState } from "../types.js";
 
 describe("RateLimitTracker - Boundary Values", () => {
 	describe("Token Multipliers - Min/Max Boundaries", () => {
@@ -153,7 +153,7 @@ describe("RateLimitTracker - Boundary Values", () => {
 
 	describe("Time Window Boundaries - 5 hours and 7 days", () => {
 		it("should include task exactly at 5-hour boundary", () => {
-			const tracker = new RateLimitTracker();
+			const _tracker = new RateLimitTracker();
 			const now = new Date();
 			const fiveHoursAgo = new Date(now.getTime() - 5 * 60 * 60 * 1000);
 
@@ -180,7 +180,7 @@ describe("RateLimitTracker - Boundary Values", () => {
 		});
 
 		it("should exclude task just outside 5-hour boundary", () => {
-			const tracker = new RateLimitTracker();
+			const _tracker = new RateLimitTracker();
 			const now = new Date();
 			const justOver5Hours = new Date(now.getTime() - 5 * 60 * 60 * 1000 - 1000);
 
@@ -206,7 +206,7 @@ describe("RateLimitTracker - Boundary Values", () => {
 		});
 
 		it("should include task exactly at 7-day boundary", () => {
-			const tracker = new RateLimitTracker();
+			const _tracker = new RateLimitTracker();
 			const now = new Date();
 			const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
@@ -232,7 +232,7 @@ describe("RateLimitTracker - Boundary Values", () => {
 		});
 
 		it("should exclude task just outside 7-day boundary", () => {
-			const tracker = new RateLimitTracker();
+			const _tracker = new RateLimitTracker();
 			const now = new Date();
 			const justOver7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000 - 1000);
 
@@ -362,7 +362,7 @@ describe("RateLimitTracker - Boundary Values", () => {
 		});
 
 		it("should handle 24-hour boundary for last24Hours calculation", () => {
-			const tracker = new RateLimitTracker();
+			const _tracker = new RateLimitTracker();
 			const now = new Date();
 			const just24HoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000 - 1000);
 

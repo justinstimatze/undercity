@@ -47,6 +47,7 @@ import {
 	tryAutoRemediate,
 } from "./error-fix-patterns.js";
 import { createAndCheckout } from "./git.js";
+import { logFastPathComplete, logFastPathFailed } from "./grind-events.js";
 import {
 	flagNeedsHumanInput,
 	formatGuidanceForWorker,
@@ -54,7 +55,6 @@ import {
 	markGuidanceUsed,
 	shouldRequestHumanInput,
 } from "./human-input-tracking.js";
-import { logFastPathComplete, logFastPathFailed } from "./grind-events.js";
 import { findRelevantLearnings, formatLearningsCompact, markLearningsUsed } from "./knowledge.js";
 import { extractAndStoreLearnings } from "./knowledge-extractor.js";
 import { recordQueryResult } from "./live-metrics.js";
@@ -557,10 +557,7 @@ export class TaskWorker {
 			};
 
 			output.debug(`Received health check nudge: ${nudge.reason} (attempt ${nudge.attempt})`);
-			sessionLogger.info(
-				{ reason: nudge.reason, attempt: nudge.attempt },
-				"Worker received health check nudge",
-			);
+			sessionLogger.info({ reason: nudge.reason, attempt: nudge.attempt }, "Worker received health check nudge");
 
 			// Clear the nudge file to acknowledge receipt
 			unlinkSync(nudgePath);

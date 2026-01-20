@@ -186,21 +186,19 @@ vi.mock("../storage.js", () => ({
 		}
 	}),
 
-	addErrorFix: vi.fn(
-		(signature: string, fix: { description: string; diff?: string; filesChanged: string[] }) => {
-			const pattern = mockPatterns.get(signature);
-			if (pattern) {
-				pattern.fixes.push({
-					...fix,
-					recordedAt: new Date().toISOString(),
-				});
-				// Limit to 5 fixes per pattern
-				if (pattern.fixes.length > 5) {
-					pattern.fixes = pattern.fixes.slice(-5);
-				}
+	addErrorFix: vi.fn((signature: string, fix: { description: string; diff?: string; filesChanged: string[] }) => {
+		const pattern = mockPatterns.get(signature);
+		if (pattern) {
+			pattern.fixes.push({
+				...fix,
+				recordedAt: new Date().toISOString(),
+			});
+			// Limit to 5 fixes per pattern
+			if (pattern.fixes.length > 5) {
+				pattern.fixes = pattern.fixes.slice(-5);
 			}
-		},
-	),
+		}
+	}),
 
 	addPendingErrorDB: vi.fn((pending: MockPending) => {
 		mockPending.push(pending);
@@ -264,7 +262,6 @@ vi.mock("../storage.js", () => ({
 		return pruned;
 	}),
 }));
-
 
 // Import after mocking
 import {

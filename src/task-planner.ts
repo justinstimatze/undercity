@@ -895,7 +895,7 @@ IMPORTANT: You MUST output a JSON response. Do not output an empty response.`;
 		// 2. Extract JSON from generic code block
 		() => {
 			const codeMatch = reviewJson.match(/```\s*([\s\S]*?)\s*```/);
-			if (codeMatch && codeMatch[1].trim().startsWith("{")) {
+			if (codeMatch?.[1].trim().startsWith("{")) {
 				return JSON.parse(codeMatch[1]) as PlanReview;
 			}
 			return null;

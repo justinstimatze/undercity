@@ -10,7 +10,7 @@
  */
 
 import { extractKeywords, findSimilarTasks } from "./feedback-metrics.js";
-import { findRelevantFiles, loadTaskFileStore } from "./task-file-patterns.js";
+import { findRelevantFiles } from "./task-file-patterns.js";
 import type { ModelTier } from "./types.js";
 
 /**
@@ -376,7 +376,7 @@ function calculateConfidence(
  */
 function buildPredictedObjective(
 	originalObjective: string,
-	partialIntent: ReturnType<typeof extractPartialIntent>,
+	_partialIntent: ReturnType<typeof extractPartialIntent>,
 	inferredDetails: InferredDetail[],
 	similarTasks: Array<{ objective: string; success: boolean }>,
 ): string {

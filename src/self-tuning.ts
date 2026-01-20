@@ -82,10 +82,10 @@ const MIN_SAMPLES_LOW = 5;
 const MIN_SAMPLES_HIGH = 20;
 
 /** Sample size at which confidence interval becomes very reliable (scaling max) */
-const SAMPLE_SIZE_CONSERVATIVE = 5;
+const _SAMPLE_SIZE_CONSERVATIVE = 5;
 
 /** Sample size at which we can be aggressive with thresholds (scaling max) */
-const SAMPLE_SIZE_AGGRESSIVE = 15;
+const _SAMPLE_SIZE_AGGRESSIVE = 15;
 
 /** Success rate threshold below which a tier should be skipped (low performance) */
 const SKIP_SUCCESS_RATE_THRESHOLD = 0.4;
@@ -210,7 +210,7 @@ function computeBinomialConfidence(successful: number, total: number): number {
 
 	// Wilson score interval formula
 	const denominator = 1 + (z * z) / total;
-	const pHat = (p + (z * z) / (2 * total)) / denominator;
+	const _pHat = (p + (z * z) / (2 * total)) / denominator;
 	const variance = ((p * (1 - p)) / total + (z * z) / (4 * total * total)) / (denominator * denominator);
 
 	const marginOfError = z * Math.sqrt(variance);

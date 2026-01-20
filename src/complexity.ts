@@ -785,6 +785,7 @@ const COMPLEXITY_SIGNALS = {
 		weight: 2,
 	},
 	// Significant changes that warrant opus escalation
+	// Weight increased to ensure complex tasks hit threshold (9-11) with expanded thresholds
 	complex: {
 		keywords: [
 			"refactor",
@@ -809,9 +810,10 @@ const COMPLEXITY_SIGNALS = {
 			/performance\s+optimization/i,
 			/major\s+restructure/i,
 		],
-		weight: 3,
+		weight: 5,
 	},
 	// Highest risk tasks requiring full review and escalation
+	// Weight increased to ensure critical keywords always hit critical threshold (> 11)
 	critical: {
 		keywords: [
 			"security",
@@ -826,8 +828,8 @@ const COMPLEXITY_SIGNALS = {
 			"data integrity",
 			"high-risk",
 		],
-		patterns: [/security/i, /auth/i, /payment/i, /migration/i, /production/i, /data\s+integrity/i, /high\s*-?\s*risk/i],
-		weight: 4,
+		patterns: [/security/i, /auth/i, /payment/i, /production/i, /data\s+integrity/i, /high\s*-?\s*risk/i],
+		weight: 10,
 	},
 };
 
@@ -1026,14 +1028,18 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 	}
 
 	// Determine level from score
+	// Thresholds tuned for optimal model ratios: 40-50% haiku, 40-50% sonnet, 5-10% opus
+	// Ralph-style: prefer cheaper models, escalate only when genuinely needed
 	let level: ComplexityLevel;
-	if (score <= 1) {
+	if (score <= 2) {
+		// Expanded trivial range for more haiku routing
 		level = "trivial";
-	} else if (score <= 3) {
+	} else if (score <= 5) {
+		// Expanded simple range - haiku can handle more than we think
 		level = "simple";
-	} else if (score <= 6) {
+	} else if (score <= 8) {
 		level = "standard";
-	} else if (score <= 9) {
+	} else if (score <= 11) {
 		level = "complex";
 	} else {
 		level = "critical";

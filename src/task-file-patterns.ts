@@ -351,7 +351,6 @@ export function loadTaskFileStore(stateDir: string = DEFAULT_STATE_DIR): TaskFil
 	};
 }
 
-
 /**
  * Record a completed task and its file modifications.
  * Updates keyword→file correlations and co-modification patterns.

@@ -6,7 +6,6 @@ import { readFileSync } from "node:fs";
 import * as readline from "node:readline";
 import chalk from "chalk";
 import {
-	formatPredictionDisplay,
 	type IntentPredictionResult,
 	isAmbiguous,
 	predictFullIntent,

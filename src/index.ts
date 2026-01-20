@@ -61,21 +61,6 @@ export {
 	saveEmergencyState,
 	shouldSpawnFixWorker,
 } from "./emergency-mode.js";
-// Human input tracking (breaks retry loops with human guidance)
-export {
-	clearNeedsHumanInput,
-	flagNeedsHumanInput,
-	formatGuidanceForWorker,
-	getHumanGuidance,
-	getHumanInputStats,
-	getTasksNeedingInput,
-	type HumanGuidance,
-	initHumanInputTables,
-	markGuidanceUsed,
-	type NeedsHumanInputState,
-	saveHumanGuidance,
-	shouldRequestHumanInput,
-} from "./human-input-tracking.js";
 // Experiment framework
 export { ExperimentManager, getExperimentManager } from "./experiment.js";
 // Git operations
@@ -97,6 +82,21 @@ export {
 	stash,
 	stashPop,
 } from "./git.js";
+// Human input tracking (breaks retry loops with human guidance)
+export {
+	clearNeedsHumanInput,
+	flagNeedsHumanInput,
+	formatGuidanceForWorker,
+	getHumanGuidance,
+	getHumanInputStats,
+	getTasksNeedingInput,
+	type HumanGuidance,
+	initHumanInputTables,
+	markGuidanceUsed,
+	type NeedsHumanInputState,
+	saveHumanGuidance,
+	shouldRequestHumanInput,
+} from "./human-input-tracking.js";
 // Intent completion (ambiguous objective detection and prediction)
 export {
 	formatPredictionDisplay,

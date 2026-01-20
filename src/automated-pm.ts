@@ -76,7 +76,7 @@ async function gatherPMContext(decision: DecisionPoint, stateDir: string): Promi
 		// Defensive: filter for valid similar decisions with outcomes
 		if (Array.isArray(similar)) {
 			context.similarDecisions = similar
-				.filter((d) => d && d.resolution && d.resolution.outcome && typeof d.question === "string")
+				.filter((d) => d?.resolution?.outcome && typeof d.question === "string")
 				.map((d) => ({
 					question: d.question,
 					decision: d.resolution.decision || "unknown",
@@ -421,7 +421,7 @@ Be specific and actionable. Focus on practical improvements, not theoretical ide
  * - Measurable deliverables
  */
 function isTaskActionable(objective: string): boolean {
-	const lower = objective.toLowerCase();
+	const _lower = objective.toLowerCase();
 
 	// Reject purely research/exploration tasks with no code output
 	const vaguePatterns = [

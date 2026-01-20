@@ -266,7 +266,7 @@ export interface ParallelExtractionConfig {
 /**
  * Split transcript into chunks on sentence boundaries to avoid breaking mid-phrase
  */
-function splitTranscriptIntoChunks(text: string, chunkSize: number = 5000): string[] {
+function _splitTranscriptIntoChunks(text: string, chunkSize: number = 5000): string[] {
 	if (text.length <= chunkSize) {
 		return [text];
 	}
@@ -306,7 +306,7 @@ function splitTranscriptIntoChunks(text: string, chunkSize: number = 5000): stri
 /**
  * Limit concurrent promises using a simple queue mechanism
  */
-async function pLimit<T>(concurrency: number, tasks: (() => Promise<T>)[]): Promise<T[]> {
+async function _pLimit<T>(concurrency: number, tasks: (() => Promise<T>)[]): Promise<T[]> {
 	const results: T[] = [];
 	let running = 0;
 	let index = 0;

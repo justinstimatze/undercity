@@ -233,7 +233,10 @@ export function loadDecisionStore(stateDir: string = DEFAULT_STATE_DIR): Decisio
 
 		// Try JSON fallback and migrate
 		const jsonStore = loadDecisionStoreFromJSON(stateDir);
-		if (jsonStore && (jsonStore.pending.length > 0 || jsonStore.resolved.length > 0 || jsonStore.overrides.length > 0)) {
+		if (
+			jsonStore &&
+			(jsonStore.pending.length > 0 || jsonStore.resolved.length > 0 || jsonStore.overrides.length > 0)
+		) {
 			migrateDecisionStoreToSQLite(jsonStore, stateDir);
 			return jsonStore;
 		}
@@ -249,7 +252,6 @@ export function loadDecisionStore(stateDir: string = DEFAULT_STATE_DIR): Decisio
 		lastUpdated: new Date().toISOString(),
 	};
 }
-
 
 /**
  * Extract keywords from decision context

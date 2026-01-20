@@ -197,7 +197,7 @@ export class ASTIndexManager {
 		}
 
 		return fileInfo.imports
-			.filter((i) => i && i.resolvedPath && typeof i.resolvedPath === "string")
+			.filter((i) => i?.resolvedPath && typeof i.resolvedPath === "string")
 			.map((i) => i.resolvedPath as string);
 	}
 
@@ -267,7 +267,7 @@ export class ASTIndexManager {
 			}
 
 			for (const exp of fileInfo.exports) {
-				if (exp && exp.name && typeof exp.name === "string" && pattern.test(exp.name)) {
+				if (exp?.name && typeof exp.name === "string" && pattern.test(exp.name)) {
 					results.push(exp);
 				}
 			}

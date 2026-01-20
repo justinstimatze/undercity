@@ -13,9 +13,9 @@
  * failing approach without learning.
  */
 
-import { getDatabase } from "./storage.js";
 import { sessionLogger } from "./logger.js";
 import * as output from "./output.js";
+import { getDatabase } from "./storage.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
 
@@ -94,10 +94,7 @@ export function initHumanInputTables(stateDir: string = DEFAULT_STATE_DIR): void
 /**
  * Check if there's human guidance available for an error signature
  */
-export function getHumanGuidance(
-	errorSignature: string,
-	stateDir: string = DEFAULT_STATE_DIR,
-): HumanGuidance | null {
+export function getHumanGuidance(errorSignature: string, stateDir: string = DEFAULT_STATE_DIR): HumanGuidance | null {
 	try {
 		initHumanInputTables(stateDir);
 		const db = getDatabase(stateDir);
@@ -167,11 +164,7 @@ export function saveHumanGuidance(
 /**
  * Mark that human guidance was used (successfully or not)
  */
-export function markGuidanceUsed(
-	errorSignature: string,
-	success: boolean,
-	stateDir: string = DEFAULT_STATE_DIR,
-): void {
+export function markGuidanceUsed(errorSignature: string, success: boolean, stateDir: string = DEFAULT_STATE_DIR): void {
 	try {
 		initHumanInputTables(stateDir);
 		const db = getDatabase(stateDir);
@@ -235,10 +228,7 @@ export function flagNeedsHumanInput(
 		previousGuidance ?? null,
 	);
 
-	sessionLogger.info(
-		{ taskId, errorSignature, category },
-		"Task flagged as needing human input",
-	);
+	sessionLogger.info({ taskId, errorSignature, category }, "Task flagged as needing human input");
 
 	output.warning(`Task ${taskId} needs human input to proceed`);
 	output.info(`Error pattern: ${errorSignature.substring(0, 100)}`);
@@ -294,10 +284,7 @@ export function getTasksNeedingInput(stateDir: string = DEFAULT_STATE_DIR): Need
 /**
  * Clear a task from the needs human input list (after guidance provided or task completed)
  */
-export function clearNeedsHumanInput(
-	taskId: string,
-	stateDir: string = DEFAULT_STATE_DIR,
-): void {
+export function clearNeedsHumanInput(taskId: string, stateDir: string = DEFAULT_STATE_DIR): void {
 	try {
 		initHumanInputTables(stateDir);
 		const db = getDatabase(stateDir);
@@ -332,9 +319,7 @@ export function shouldRequestHumanInput(
 
 		// Check if task already flagged
 		const db = getDatabase(stateDir);
-		const alreadyFlagged = db
-			.prepare("SELECT 1 FROM needs_human_input WHERE task_id = ?")
-			.get(taskId);
+		const alreadyFlagged = db.prepare("SELECT 1 FROM needs_human_input WHERE task_id = ?").get(taskId);
 		if (alreadyFlagged) {
 			return false; // Already flagged
 		}
@@ -386,19 +371,14 @@ export function getHumanInputStats(stateDir: string = DEFAULT_STATE_DIR): {
 		initHumanInputTables(stateDir);
 		const db = getDatabase(stateDir);
 
-		const guidanceCount = (
-			db.prepare("SELECT COUNT(*) as count FROM human_guidance").get() as { count: number }
-		).count;
+		const guidanceCount = (db.prepare("SELECT COUNT(*) as count FROM human_guidance").get() as { count: number }).count;
 
 		const successfulGuidance = (
-			db
-				.prepare("SELECT COUNT(*) as count FROM human_guidance WHERE used_successfully = 1")
-				.get() as { count: number }
+			db.prepare("SELECT COUNT(*) as count FROM human_guidance WHERE used_successfully = 1").get() as { count: number }
 		).count;
 
-		const tasksNeedingInput = (
-			db.prepare("SELECT COUNT(*) as count FROM needs_human_input").get() as { count: number }
-		).count;
+		const tasksNeedingInput = (db.prepare("SELECT COUNT(*) as count FROM needs_human_input").get() as { count: number })
+			.count;
 
 		const topPatterns = db
 			.prepare(

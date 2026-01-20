@@ -150,9 +150,7 @@ export function deactivateEmergencyMode(stateDir: string = STATE_DIR): void {
 		return;
 	}
 
-	const duration = state.activatedAt
-		? Math.round((Date.now() - new Date(state.activatedAt).getTime()) / 1000 / 60)
-		: 0;
+	const duration = state.activatedAt ? Math.round((Date.now() - new Date(state.activatedAt).getTime()) / 1000 / 60) : 0;
 
 	state.isActive = false;
 	state.fixWorkerActive = false;
@@ -232,8 +230,7 @@ export function recordFixWorkerCompleted(success: boolean, stateDir: string = ST
  */
 export function generateFixTaskDescription(state: EmergencyModeState): string {
 	const errorContext = state.lastError ? `\n\nLast error: ${state.lastError}` : "";
-	const attemptNote =
-		state.fixAttempts > 0 ? `\n\nThis is fix attempt #${state.fixAttempts + 1}.` : "";
+	const attemptNote = state.fixAttempts > 0 ? `\n\nThis is fix attempt #${state.fixAttempts + 1}.` : "";
 
 	return `[emergency] Fix main branch CI failure
 

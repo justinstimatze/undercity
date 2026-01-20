@@ -130,14 +130,19 @@ describe("complexity", () => {
 		});
 
 		describe("standard tasks", () => {
-			it("identifies bug fixes as standard", () => {
-				const result = assessComplexityFast("fix bug in user login");
+			// Note: With expanded thresholds for 40-50% haiku routing,
+			// simple bug fixes and enhancements now route to "simple" (haiku)
+			// Only more complex multi-file tasks hit "standard"
+			it("identifies bug fixes with multiple files as standard", () => {
+				// Adding "several files" scope indicator to hit standard threshold
+				const result = assessComplexityFast("fix bug affecting several files");
 				expect(result.level).toBe("standard");
 				expect(result.model).toBe("sonnet");
 			});
 
-			it("identifies enhancement tasks", () => {
-				const result = assessComplexityFast("enhance the logging system");
+			it("identifies enhancement tasks spanning multiple areas", () => {
+				// "throughout" adds scope weight to hit standard threshold
+				const result = assessComplexityFast("enhance logging throughout the codebase");
 				expect(result.level).toBe("standard");
 			});
 		});
