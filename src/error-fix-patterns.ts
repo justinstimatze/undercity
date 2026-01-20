@@ -832,9 +832,200 @@ export function getErrorFixStats(stateDir: string = DEFAULT_STATE_DIR): {
 /**
  * Prune old patterns that haven't been seen recently
  */
-export function pruneOldPatterns(
-	maxAgeDays: number = 30,
-	stateDir: string = DEFAULT_STATE_DIR,
-): number {
+export function pruneOldPatterns(maxAgeDays: number = 30, stateDir: string = DEFAULT_STATE_DIR): number {
 	return pruneOldErrorPatternsDB(maxAgeDays, 5, stateDir);
+}
+
+/**
+ * Ralph-style rule for prompt injection
+ */
+export interface ErrorRule {
+	/** The rule directive (MUST NEVER, ALWAYS, etc.) */
+	directive: "MUST_NEVER" | "ALWAYS" | "AVOID";
+	/** The rule content */
+	rule: string;
+	/** Why this rule exists (evidence) */
+	reason: string;
+	/** How many times this error occurred */
+	occurrences: number;
+}
+
+/**
+ * Format error patterns and failures as imperative RULES for Ralph-style prompts.
+ *
+ * Unlike suggestions ("consider this fix"), RULES are imperative directives
+ * that become permanent "signs" in the prompt - teaching the agent what NOT to do.
+ *
+ * @param taskObjective - The current task (for relevance filtering)
+ * @param errorHistory - Errors from current retry loop (for accumulation)
+ * @param stateDir - State directory path
+ * @returns Formatted rules section for prompt injection
+ */
+export function formatPatternsAsRules(
+	taskObjective: string,
+	errorHistory: Array<{ category: string; message: string }> = [],
+	stateDir: string = DEFAULT_STATE_DIR,
+): string {
+	const rules: ErrorRule[] = [];
+	const store = loadErrorFixStore(stateDir);
+
+	// Extract keywords from task for relevance matching
+	const taskWords = new Set(
+		taskObjective
+			.toLowerCase()
+			.split(/[\s,./\-_()[\]{}]+/)
+			.filter((w) => w.length > 3),
+	);
+
+	// 1. Add rules from permanent failures (highest priority - these NEVER worked)
+	if (store.failures && store.failures.length > 0) {
+		// Group failures by signature to count occurrences
+		const failureGroups = new Map<string, PermanentFailure[]>();
+		for (const failure of store.failures) {
+			const existing = failureGroups.get(failure.signature) || [];
+			existing.push(failure);
+			failureGroups.set(failure.signature, existing);
+		}
+
+		for (const [_sig, failures] of failureGroups) {
+			if (failures.length < 2) continue; // Only rules from repeated failures
+
+			const sample = failures[0];
+
+			// Check relevance to current task
+			const failureWords = new Set(
+				`${sample.taskObjective} ${sample.sampleMessage}`
+					.toLowerCase()
+					.split(/[\s,./\-_()[\]{}]+/)
+					.filter((w) => w.length > 3),
+			);
+			const overlap = [...taskWords].filter((w) => failureWords.has(w));
+
+			if (overlap.length >= 2 || failures.length >= 3) {
+				rules.push({
+					directive: "MUST_NEVER",
+					rule: extractRuleFromError(sample.category, sample.sampleMessage),
+					reason: `Failed ${failures.length}x on similar tasks, never succeeded`,
+					occurrences: failures.length,
+				});
+			}
+		}
+	}
+
+	// 2. Add rules from error patterns with known fixes
+	const patterns = Object.values(store.patterns);
+	for (const pattern of patterns) {
+		if (pattern.occurrences < 3) continue; // Only frequent errors become rules
+
+		const fixRate = pattern.fixSuccesses / pattern.occurrences;
+		if (fixRate < 0.5) continue; // Only include patterns where fix worked >50%
+
+		// Get the most successful fix
+		const bestFix = pattern.fixes.sort((a, b) => (b.autoApplySuccessRate || 0) - (a.autoApplySuccessRate || 0))[0];
+
+		if (bestFix) {
+			rules.push({
+				directive: "ALWAYS",
+				rule: `When encountering ${pattern.category} error "${pattern.sampleMessage.slice(0, 60)}...", fix by: ${bestFix.editSummary}`,
+				reason: `This fix worked ${Math.round(fixRate * 100)}% of the time (${pattern.occurrences} occurrences)`,
+				occurrences: pattern.occurrences,
+			});
+		}
+	}
+
+	// 3. Add rules from current retry loop errors (accumulate across attempts)
+	for (const error of errorHistory) {
+		// Check if we already have a rule for this error
+		const existingRule = rules.find((r) => r.rule.includes(error.message.slice(0, 30)));
+		if (!existingRule) {
+			rules.push({
+				directive: "AVOID",
+				rule: extractRuleFromError(error.category, error.message),
+				reason: "Failed in previous attempt this session",
+				occurrences: 1,
+			});
+		}
+	}
+
+	if (rules.length === 0) {
+		return "";
+	}
+
+	// Sort by importance: MUST_NEVER > ALWAYS > AVOID, then by occurrences
+	const directiveOrder = { MUST_NEVER: 0, ALWAYS: 1, AVOID: 2 };
+	rules.sort((a, b) => {
+		const orderDiff = directiveOrder[a.directive] - directiveOrder[b.directive];
+		if (orderDiff !== 0) return orderDiff;
+		return b.occurrences - a.occurrences;
+	});
+
+	// Format as prompt rules
+	const lines: string[] = [
+		"## LEARNED RULES (from previous failures)",
+		"These rules are derived from past failures. Follow them strictly:",
+		"",
+	];
+
+	for (const rule of rules.slice(0, 8)) {
+		// Limit to top 8 rules
+		const prefix =
+			rule.directive === "MUST_NEVER" ? "🚫 MUST NEVER:" : rule.directive === "ALWAYS" ? "✅ ALWAYS:" : "⚠️ AVOID:";
+
+		lines.push(`${prefix} ${rule.rule}`);
+		lines.push(`   (${rule.reason})`);
+		lines.push("");
+	}
+
+	return lines.join("\n");
+}
+
+/**
+ * Extract an actionable rule from an error category and message
+ */
+function extractRuleFromError(category: string, message: string): string {
+	// Try to extract the actionable part of the error
+	const messageLower = message.toLowerCase();
+
+	// Type errors
+	if (category === "typecheck" || messageLower.includes("type")) {
+		if (messageLower.includes("not assignable")) {
+			return `Check type compatibility before assignment (${message.slice(0, 80)}...)`;
+		}
+		if (messageLower.includes("property") && messageLower.includes("does not exist")) {
+			return `Verify property exists on type before accessing (${message.slice(0, 60)}...)`;
+		}
+		if (messageLower.includes("cannot find")) {
+			return `Ensure imports and declarations exist (${message.slice(0, 60)}...)`;
+		}
+	}
+
+	// Test errors
+	if (category === "test" || messageLower.includes("test") || messageLower.includes("expect")) {
+		if (messageLower.includes("mock")) {
+			return `Properly configure mocks before test execution`;
+		}
+		if (messageLower.includes("undefined") || messageLower.includes("null")) {
+			return `Handle null/undefined in test setup and assertions`;
+		}
+	}
+
+	// Lint errors
+	if (category === "lint") {
+		if (messageLower.includes("unused")) {
+			return `Remove unused variables/imports or mark them intentionally`;
+		}
+		if (messageLower.includes("import")) {
+			return `Check import statements for correctness`;
+		}
+	}
+
+	// Build errors
+	if (category === "build") {
+		if (messageLower.includes("module not found")) {
+			return `Verify all imported modules are installed and paths are correct`;
+		}
+	}
+
+	// Default: quote the first part of the error
+	return `Avoid causing: ${message.slice(0, 100)}...`;
 }
