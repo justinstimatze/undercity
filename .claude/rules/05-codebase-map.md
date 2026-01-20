@@ -132,6 +132,104 @@ Orchestrator.run():
 7. Auto-complete parent if all subtasks done
 ```
 
+## Task Execution Lifecycle (Learning System Integration)
+
+Shows which learning systems are invoked at each phase of task execution.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PLANNING PHASE (worker.ts:runPlanningPhase)                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  findRelevantLearnings()        ← knowledge.ts:373                          │
+│  findRelevantFiles()            ← task-file-patterns.ts:370                 │
+│  planTaskWithReview()           ← task-planner.ts:911                       │
+│    └─ quickDecision()           ← automated-pm.ts (resolves open questions) │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ CONTEXT BUILDING (worker.ts:buildContextSection ~line 2480)                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  findRelevantLearnings()        ← knowledge.ts:2483                         │
+│  formatLearningsForPrompt()     ← knowledge.ts:2485                         │
+│  formatFileSuggestionsForPrompt() ← task-file-patterns.ts:2509              │
+│  formatCoModificationHints()    ← task-file-patterns.ts:2520                │
+│  getFailureWarningsForTask()    ← error-fix-patterns.ts:2496                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ EXECUTION PHASE (worker.ts:runAgentLoop)                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Agent executes with injected context                                       │
+│  captureDecision()              ← decision-tracker.ts (if decisions made)   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ VERIFICATION PHASE (worker.ts:verifyAndCommit)                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  verifyWork()                   ← verification.ts                           │
+│    │                                                                        │
+│    ├─ On FAILURE:                                                           │
+│    │   recordPendingError()     ← error-fix-patterns.ts:1815                │
+│    │   tryAutoRemediate()       ← error-fix-patterns.ts:1483                │
+│    │   formatCoModificationHints() ← task-file-patterns.ts:1881             │
+│    │                                                                        │
+│    └─ On SUCCESS:                                                           │
+│        recordSuccessfulFix()    ← error-fix-patterns.ts:1757                │
+│        clearPendingError()      ← error-fix-patterns.ts                     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ COMPLETION PHASE (worker.ts + orchestrator.ts)                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  extractAndStoreLearnings()     ← knowledge-extractor.ts:1716               │
+│  markLearningsUsed()            ← knowledge.ts:1720                         │
+│  recordTaskFiles()              ← task-file-patterns.ts:1732                │
+│  updateLedger()                 ← capability-ledger.ts (orchestrator:1241)  │
+│                                                                             │
+│  On FAILURE:                                                                │
+│    recordPermanentFailure()     ← error-fix-patterns.ts:2021                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Learning System Call Sites
+
+Quick reference for where each learning function is called:
+
+| Function | File | Called From |
+|----------|------|-------------|
+| `findRelevantLearnings` | knowledge.ts | worker.ts:2483, task-planner.ts:373, automated-pm.ts:92 |
+| `formatLearningsForPrompt` | knowledge.ts | worker.ts:2485, task-planner.ts:386 |
+| `addLearning` | knowledge.ts | knowledge-extractor.ts:142 |
+| `markLearningsUsed` | knowledge.ts | worker.ts:1720 |
+| `findRelevantFiles` | task-file-patterns.ts | worker.ts:2509, task-planner.ts:370, orchestrator.ts:1604, automated-pm.ts:105 |
+| `formatFileSuggestionsForPrompt` | task-file-patterns.ts | worker.ts:2509 |
+| `formatCoModificationHints` | task-file-patterns.ts | worker.ts:1881, worker.ts:2520 |
+| `recordTaskFiles` | task-file-patterns.ts | worker.ts:1732 |
+| `tryAutoRemediate` | error-fix-patterns.ts | worker.ts:1483 |
+| `recordPendingError` | error-fix-patterns.ts | worker.ts:1815 |
+| `recordSuccessfulFix` | error-fix-patterns.ts | worker.ts:1757 |
+| `recordPermanentFailure` | error-fix-patterns.ts | worker.ts:2021 |
+| `getFailureWarningsForTask` | error-fix-patterns.ts | worker.ts:2496 |
+| `extractAndStoreLearnings` | knowledge-extractor.ts | worker.ts:1716 |
+| `updateLedger` | capability-ledger.ts | orchestrator.ts:1241 |
+| `captureDecision` | decision-tracker.ts | worker.ts (during execution) |
+| `quickDecision` | automated-pm.ts | task-planner.ts:903 |
+| `planTaskWithReview` | task-planner.ts | worker.ts:911 |
+
 ## State Files
 
 | File | Purpose | Schema |

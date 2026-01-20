@@ -352,7 +352,12 @@ function calculateSimilarity(a: string, b: string): number {
 }
 
 /**
- * Find relevant learnings for a task objective
+ * Find relevant learnings for a task objective.
+ *
+ * Called from:
+ * - worker.ts:2483 (context building before execution)
+ * - task-planner.ts:373 (planning context gathering)
+ * - automated-pm.ts:92 (PM decision context)
  */
 export function findRelevantLearnings(
 	objective: string,
@@ -383,7 +388,11 @@ export function findRelevantLearnings(
 }
 
 /**
- * Mark learnings as used for a task
+ * Mark learnings as used for a task.
+ * Updates usage count and adjusts confidence based on task success.
+ *
+ * Called from:
+ * - worker.ts:1720 (after task completion)
  */
 export function markLearningsUsed(
 	learningIds: string[],
@@ -413,7 +422,11 @@ export function markLearningsUsed(
 }
 
 /**
- * Format learnings for injection into a prompt
+ * Format learnings for injection into a prompt.
+ *
+ * Called from:
+ * - worker.ts:2485 (context building)
+ * - task-planner.ts:386 (planning context)
  */
 export function formatLearningsForPrompt(learnings: Learning[]): string {
 	if (learnings.length === 0) return "";

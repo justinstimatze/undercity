@@ -307,7 +307,11 @@ function saveTaskFileStore(store: TaskFileStore, stateDir: string = DEFAULT_STAT
 }
 
 /**
- * Record a completed task and its file modifications
+ * Record a completed task and its file modifications.
+ * Updates keyword→file correlations and co-modification patterns.
+ *
+ * Called from:
+ * - worker.ts:1732 (after successful task completion)
  */
 export function recordTaskFiles(
 	taskId: string,
@@ -390,7 +394,13 @@ export function recordTaskFiles(
 }
 
 /**
- * Find files likely relevant to a task based on keyword correlations
+ * Find files likely relevant to a task based on keyword correlations.
+ *
+ * Called from:
+ * - worker.ts:2509 (via formatFileSuggestionsForPrompt, context building)
+ * - task-planner.ts:370 (planning context gathering)
+ * - orchestrator.ts:1604 (conflict prediction)
+ * - automated-pm.ts:105 (PM decision context)
  */
 export function findRelevantFiles(
 	taskDescription: string,
@@ -462,7 +472,10 @@ export function findCoModifiedFiles(
 }
 
 /**
- * Format file suggestions for injection into prompt
+ * Format file suggestions for injection into prompt.
+ *
+ * Called from:
+ * - worker.ts:2509 (context building before execution)
  */
 export function formatFileSuggestionsForPrompt(taskDescription: string, stateDir: string = DEFAULT_STATE_DIR): string {
 	const store = loadTaskFileStore(stateDir);
@@ -506,7 +519,12 @@ export function formatFileSuggestionsForPrompt(taskDescription: string, stateDir
 }
 
 /**
- * Format co-modification hints for a set of files
+ * Format co-modification hints for a set of files.
+ * Suggests files that are often modified together with the given files.
+ *
+ * Called from:
+ * - worker.ts:1881 (verification feedback enhancement)
+ * - worker.ts:2520 (context building before execution)
  */
 export function formatCoModificationHints(filesBeingModified: string[], stateDir: string = DEFAULT_STATE_DIR): string {
 	const hints: Array<{ primary: string; coModified: string; probability: number }> = [];

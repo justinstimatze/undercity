@@ -1,0 +1,416 @@
+{
+  "version": "1.0",
+  "generatedAt": "2026-01-20T00:00:52.536Z",
+  "functions": [
+    {
+      "function": "findRelevantLearnings",
+      "definedIn": "knowledge.ts",
+      "calledFrom": [
+        {
+          "file": "automated-pm.ts",
+          "line": 92,
+          "context": "map"
+        },
+        {
+          "file": "automated-pm.ts",
+          "line": 428,
+          "context": "info"
+        },
+        {
+          "file": "worker.ts",
+          "line": 2483,
+          "context": "if"
+        },
+        {
+          "file": "commands/mixed-handlers.ts",
+          "line": 3190,
+          "context": "log"
+        },
+        {
+          "file": "mcp-protocol.ts",
+          "line": 130,
+          "context": "if"
+        },
+        {
+          "file": "knowledge.ts",
+          "line": 185,
+          "context": "if"
+        },
+        {
+          "file": "task-planner.ts",
+          "line": 373,
+          "context": "gatherPlanningContext"
+        }
+      ]
+    },
+    {
+      "function": "formatLearningsForPrompt",
+      "definedIn": "knowledge.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 2485,
+          "context": "if"
+        },
+        {
+          "file": "task-planner.ts",
+          "line": 374,
+          "context": "gatherPlanningContext"
+        }
+      ]
+    },
+    {
+      "function": "addLearning",
+      "definedIn": "knowledge.ts",
+      "calledFrom": [
+        {
+          "file": "knowledge-extractor.ts",
+          "line": 493,
+          "context": "for"
+        },
+        {
+          "file": "mcp-protocol.ts",
+          "line": 190,
+          "context": "if"
+        }
+      ]
+    },
+    {
+      "function": "markLearningsUsed",
+      "definedIn": "knowledge.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 1721,
+          "context": "if"
+        },
+        {
+          "file": "worker.ts",
+          "line": 2012,
+          "context": "if"
+        },
+        {
+          "file": "mcp-protocol.ts",
+          "line": 249,
+          "context": "if"
+        }
+      ]
+    },
+    {
+      "function": "findRelevantFiles",
+      "definedIn": "task-file-patterns.ts",
+      "calledFrom": [
+        {
+          "file": "orchestrator.ts",
+          "line": 1604,
+          "context": "for"
+        },
+        {
+          "file": "automated-pm.ts",
+          "line": 105,
+          "context": "if"
+        },
+        {
+          "file": "task-file-patterns.ts",
+          "line": 483,
+          "context": "formatFileSuggestionsForPrompt"
+        },
+        {
+          "file": "task-planner.ts",
+          "line": 370,
+          "context": "gatherPlanningContext"
+        },
+        {
+          "file": "intent-completion.ts",
+          "line": 396,
+          "context": "if"
+        }
+      ]
+    },
+    {
+      "function": "formatFileSuggestionsForPrompt",
+      "definedIn": "task-file-patterns.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 2509,
+          "context": "if"
+        }
+      ]
+    },
+    {
+      "function": "formatCoModificationHints",
+      "definedIn": "task-file-patterns.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 1881,
+          "context": "if"
+        },
+        {
+          "file": "worker.ts",
+          "line": 2520,
+          "context": "if"
+        }
+      ]
+    },
+    {
+      "function": "recordTaskFiles",
+      "definedIn": "task-file-patterns.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 1732,
+          "context": "if"
+        },
+        {
+          "file": "worker.ts",
+          "line": 2054,
+          "context": "if"
+        }
+      ]
+    },
+    {
+      "function": "findCoModifiedFiles",
+      "definedIn": "task-file-patterns.ts",
+      "calledFrom": [
+        {
+          "file": "task-file-patterns.ts",
+          "line": 533,
+          "context": "for"
+        }
+      ]
+    },
+    {
+      "function": "tryAutoRemediate",
+      "definedIn": "error-fix-patterns.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 1483,
+          "context": "if"
+        }
+      ]
+    },
+    {
+      "function": "recordPendingError",
+      "definedIn": "error-fix-patterns.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 1831,
+          "context": "debug"
+        }
+      ]
+    },
+    {
+      "function": "recordSuccessfulFix",
+      "definedIn": "error-fix-patterns.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 1581,
+          "context": "if"
+        }
+      ]
+    },
+    {
+      "function": "recordPermanentFailure",
+      "definedIn": "error-fix-patterns.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 2021,
+          "context": "if"
+        }
+      ]
+    },
+    {
+      "function": "getFailureWarningsForTask",
+      "definedIn": "error-fix-patterns.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 2499,
+          "context": "if"
+        }
+      ]
+    },
+    {
+      "function": "extractAndStoreLearnings",
+      "definedIn": "knowledge-extractor.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 1716,
+          "context": "recordSuccessLearnings"
+        },
+        {
+          "file": "knowledge-extractor.ts",
+          "line": 537,
+          "context": "push"
+        }
+      ]
+    },
+    {
+      "function": "updateLedger",
+      "definedIn": "capability-ledger.ts",
+      "calledFrom": [
+        {
+          "file": "orchestrator.ts",
+          "line": 1241,
+          "context": "updateTaskStatus"
+        }
+      ]
+    },
+    {
+      "function": "getRecommendedModel",
+      "definedIn": "capability-ledger.ts",
+      "calledFrom": []
+    },
+    {
+      "function": "captureDecision",
+      "definedIn": "decision-tracker.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 2804,
+          "context": "for"
+        }
+      ]
+    },
+    {
+      "function": "resolveDecision",
+      "definedIn": "decision-tracker.ts",
+      "calledFrom": [
+        {
+          "file": "automated-pm.ts",
+          "line": 228,
+          "context": "if"
+        },
+        {
+          "file": "commands/mixed-handlers.ts",
+          "line": 3013,
+          "context": "if"
+        }
+      ]
+    },
+    {
+      "function": "getPendingDecisions",
+      "definedIn": "decision-tracker.ts",
+      "calledFrom": [
+        {
+          "file": "commands/mixed-handlers.ts",
+          "line": 358,
+          "context": "if"
+        },
+        {
+          "file": "commands/mixed-handlers.ts",
+          "line": 661,
+          "context": "if"
+        },
+        {
+          "file": "commands/mixed-handlers.ts",
+          "line": 3036,
+          "context": "log"
+        },
+        {
+          "file": "commands/analysis.ts",
+          "line": 588,
+          "context": "if"
+        }
+      ]
+    },
+    {
+      "function": "quickDecision",
+      "definedIn": "automated-pm.ts",
+      "calledFrom": [
+        {
+          "file": "task-planner.ts",
+          "line": 903,
+          "context": "join"
+        }
+      ]
+    },
+    {
+      "function": "pmDecide",
+      "definedIn": "automated-pm.ts",
+      "calledFrom": [
+        {
+          "file": "automated-pm.ts",
+          "line": 222,
+          "context": "for"
+        },
+        {
+          "file": "automated-pm.ts",
+          "line": 271,
+          "context": "now"
+        }
+      ]
+    },
+    {
+      "function": "pmResearch",
+      "definedIn": "automated-pm.ts",
+      "calledFrom": [
+        {
+          "file": "automated-pm.ts",
+          "line": 540,
+          "context": "info"
+        },
+        {
+          "file": "worker.ts",
+          "line": 1222,
+          "context": "info"
+        },
+        {
+          "file": "commands/mixed-handlers.ts",
+          "line": 3251,
+          "context": "log"
+        }
+      ]
+    },
+    {
+      "function": "pmPropose",
+      "definedIn": "automated-pm.ts",
+      "calledFrom": [
+        {
+          "file": "automated-pm.ts",
+          "line": 545,
+          "context": "pmPropose"
+        },
+        {
+          "file": "commands/mixed-handlers.ts",
+          "line": 3276,
+          "context": "log"
+        }
+      ]
+    },
+    {
+      "function": "pmIdeate",
+      "definedIn": "automated-pm.ts",
+      "calledFrom": [
+        {
+          "file": "commands/mixed-handlers.ts",
+          "line": 1260,
+          "context": "progress"
+        },
+        {
+          "file": "commands/mixed-handlers.ts",
+          "line": 3286,
+          "context": "log"
+        }
+      ]
+    },
+    {
+      "function": "planTaskWithReview",
+      "definedIn": "task-planner.ts",
+      "calledFrom": [
+        {
+          "file": "worker.ts",
+          "line": 911,
+          "context": "info"
+        }
+      ]
+    }
+  ]
+}

@@ -211,8 +211,11 @@ function saveErrorFixStore(store: ErrorFixStore, stateDir: string = DEFAULT_STAT
 }
 
 /**
- * Record a verification error (before fix attempt)
- * Call this when verification fails
+ * Record a verification error (before fix attempt).
+ * Call this when verification fails.
+ *
+ * Called from:
+ * - worker.ts:1815 (handleVerificationFailure)
  */
 export function recordPendingError(
 	taskId: string,
@@ -302,8 +305,11 @@ function captureGitDiff(files: string[], workingDirectory: string, baseCommit?: 
 }
 
 /**
- * Record a successful fix for a pending error
- * Call this when verification passes after a previous failure
+ * Record a successful fix for a pending error.
+ * Call this when verification passes after a previous failure.
+ *
+ * Called from:
+ * - worker.ts:1757 (after verification succeeds post-failure)
  */
 export function recordSuccessfulFix(
 	taskIdOrOptions: string | RecordSuccessfulFixOptions,
@@ -408,8 +414,11 @@ export interface RecordPermanentFailureOptions {
 }
 
 /**
- * Record a permanent failure when verification error cannot be fixed after max retries
- * Call this when a task fails after exhausting all retry attempts
+ * Record a permanent failure when verification error cannot be fixed after max retries.
+ * Call this when a task fails after exhausting all retry attempts.
+ *
+ * Called from:
+ * - worker.ts:2021 (buildFailureResult, after max retries exhausted)
  */
 export function recordPermanentFailure(
 	taskIdOrOptions: string | RecordPermanentFailureOptions,
@@ -526,11 +535,14 @@ export interface AutoRemediationResult {
 }
 
 /**
- * Try to auto-remediate an error using learned fix patterns
+ * Try to auto-remediate an error using learned fix patterns.
  *
  * Looks up the error signature, finds fixes with patch data,
  * and attempts to apply the patch. Only patches with good
  * track records (high autoApplySuccessRate) are attempted.
+ *
+ * Called from:
+ * - worker.ts:1483 (after verification failure, before re-invoking agent)
  *
  * @param category - Error category (typecheck, lint, test, build)
  * @param message - Error message
@@ -680,12 +692,15 @@ export function formatFixSuggestionsForPrompt(
 }
 
 /**
- * Get failure warnings relevant to a task objective
- * These are "signs for Ralph" - warnings about past failures to avoid repeating them
+ * Get failure warnings relevant to a task objective.
+ * These are "signs for Ralph" - warnings about past failures to avoid repeating them.
  *
  * Returns formatted text to inject into worker prompts when:
  * - The task objective matches keywords from previous failures
  * - There are repeated failures (N >= 2) of the same error type
+ *
+ * Called from:
+ * - worker.ts:2496 (context building before execution)
  *
  * @param taskObjective - The task being planned
  * @param minOccurrences - Minimum failure occurrences to trigger warning (default: 2)

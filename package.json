@@ -54,7 +54,8 @@
     "verify": "tsx src/verification-cli.ts",
     "validate:knowledge": "tsx src/knowledge-validation-cli.ts",
     "security:full": "gitleaks detect --no-git && semgrep scan --config auto ./src",
-    "push": "bash ./scripts/push-and-watch.sh"
+    "push": "bash ./scripts/push-and-watch.sh",
+    "call-graph": "tsx scripts/generate-call-graph.ts"
   },
   "author": "Justin Stimatze",
   "license": "MIT",
