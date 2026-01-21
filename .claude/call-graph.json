@@ -1,11 +1,16 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-21T04:30:35.931Z",
+  "generatedAt": "2026-01-21T04:34:19.717Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
       "definedIn": "knowledge.ts",
       "calledFrom": [
+        {
+          "file": "worker/context-builder.ts",
+          "line": 79,
+          "context": "if"
+        },
         {
           "file": "worker/prompt-builder.ts",
           "line": 211,
@@ -20,11 +25,6 @@
           "file": "automated-pm.ts",
           "line": 483,
           "context": "info"
-        },
-        {
-          "file": "worker.ts",
-          "line": 2437,
-          "context": "if"
         },
         {
           "file": "commands/mixed-handlers.ts",
@@ -75,12 +75,12 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1689,
+          "line": 1686,
           "context": "if"
         },
         {
           "file": "worker.ts",
-          "line": 2011,
+          "line": 2008,
           "context": "if"
         },
         {
@@ -131,13 +131,13 @@
       "definedIn": "task-file-patterns.ts",
       "calledFrom": [
         {
-          "file": "worker/prompt-builder.ts",
-          "line": 231,
+          "file": "worker/context-builder.ts",
+          "line": 99,
           "context": "if"
         },
         {
-          "file": "worker.ts",
-          "line": 2474,
+          "file": "worker/prompt-builder.ts",
+          "line": 231,
           "context": "if"
         }
       ]
@@ -147,18 +147,18 @@
       "definedIn": "task-file-patterns.ts",
       "calledFrom": [
         {
+          "file": "worker/context-builder.ts",
+          "line": 106,
+          "context": "if"
+        },
+        {
           "file": "worker/prompt-builder.ts",
           "line": 238,
           "context": "if"
         },
         {
           "file": "worker.ts",
-          "line": 1869,
-          "context": "if"
-        },
-        {
-          "file": "worker.ts",
-          "line": 2485,
+          "line": 1866,
           "context": "if"
         }
       ]
@@ -169,12 +169,12 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1700,
+          "line": 1697,
           "context": "if"
         },
         {
           "file": "worker.ts",
-          "line": 2073,
+          "line": 2070,
           "context": "unknown"
         }
       ]
@@ -201,7 +201,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1444,
+          "line": 1441,
           "context": "if"
         }
       ]
@@ -212,7 +212,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1806,
+          "line": 1803,
           "context": "debug"
         }
       ]
@@ -223,7 +223,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1542,
+          "line": 1539,
           "context": "if"
         }
       ]
@@ -234,7 +234,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2020,
+          "line": 2017,
           "context": "if"
         }
       ]
@@ -244,13 +244,13 @@
       "definedIn": "error-fix-patterns.ts",
       "calledFrom": [
         {
-          "file": "worker/prompt-builder.ts",
-          "line": 219,
+          "file": "worker/context-builder.ts",
+          "line": 87,
           "context": "if"
         },
         {
-          "file": "worker.ts",
-          "line": 2453,
+          "file": "worker/prompt-builder.ts",
+          "line": 219,
           "context": "if"
         }
       ]
@@ -261,7 +261,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1684,
+          "line": 1681,
           "context": "recordSuccessLearnings"
         },
         {
@@ -293,7 +293,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2700,
+          "line": 2573,
           "context": "for"
         }
       ]
@@ -378,7 +378,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1199,
+          "line": 1196,
           "context": "info"
         },
         {
@@ -426,7 +426,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 890,
+          "line": 887,
           "context": "info"
         }
       ]

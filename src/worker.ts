@@ -47,7 +47,6 @@ import {
 	tryAutoRemediate,
 } from "./error-fix-patterns.js";
 import { createAndCheckout } from "./git.js";
-import { logFastPathComplete, logFastPathFailed } from "./grind-events.js";
 import {
 	flagNeedsHumanInput,
 	formatGuidanceForWorker,
@@ -78,18 +77,17 @@ import {
 	type TokenUsage,
 } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
+import { buildImplementationContext } from "./worker/context-builder.js";
 import { buildMetaTaskPrompt, buildResearchPrompt, buildResumePrompt } from "./worker/prompt-builder.js";
 import { getMaxTurnsForModel } from "./worker/stop-hooks.js";
 import {
 	commitResearchOutput,
 	type FastPathAttemptResult,
 	type FastPathConfig,
-	getFewShotExample,
 	handleFastPathFailure,
 	handleFastPathSuccess,
 	writePMResearchOutput,
 } from "./worker/task-helpers.js";
-
 
 /**
  * Extract explicitly mentioned file names from task description
@@ -2400,149 +2398,25 @@ Be concise and specific. Focus on actionable insights.`;
 			prompt = buildResearchPrompt(task, this.attempts, this.lastFeedback, this.consecutiveNoWriteAttempts);
 		} else {
 			// Standard implementation task: build prompt with context
-			let contextSection = "";
+			const contextResult = buildImplementationContext({
+				task,
+				stateDir: this.stateDir,
+				workingDirectory: this.workingDirectory,
+				assignmentContext: this.buildAssignmentContext(),
+				handoffContextSection: this.currentHandoffContext ? this.buildHandoffContextSection() : undefined,
+				briefing: this.currentBriefing,
+				executionPlan: this.executionPlan,
+				lastPostMortem: this.lastPostMortem,
+				errorHistory: this.errorHistory,
+			});
 
-			// Add assignment context for worker identity and recovery
-			const assignmentContext = this.buildAssignmentContext();
-			if (assignmentContext) {
-				contextSection += `${assignmentContext}\n---\n\n`;
-			}
+			prompt = contextResult.prompt;
+			this.injectedLearningIds = contextResult.injectedLearningIds;
 
-			// Add handoff context from calling Claude Code session
-			if (this.currentHandoffContext) {
-				contextSection += this.buildHandoffContextSection();
-				contextSection += "\n---\n\n";
-			}
-
-			if (this.currentBriefing?.briefingDoc) {
-				contextSection += `${this.currentBriefing.briefingDoc}
-
----
-
-`;
-			}
-
-			// Add efficiency tools section if any tools are available
-			const toolsPrompt = generateToolsPrompt();
-			if (toolsPrompt) {
-				contextSection += `${toolsPrompt}
-
----
-
-`;
-			}
-
-			// Add relevant learnings from previous tasks (compact format for token efficiency)
-			// Use this.stateDir (main repo) for knowledge, not worktree
-			// Compact format shows index + preview (~50 tokens/learning vs ~200+ for full)
-			// Agent can reference learnings by number if more detail needed
-			const relevantLearnings = findRelevantLearnings(task, 5, this.stateDir);
-			if (relevantLearnings.length > 0) {
-				const learningsPrompt = formatLearningsCompact(relevantLearnings);
-				contextSection += `${learningsPrompt}
-
----
-
-`;
-				// Track which learnings we're injecting (we'll mark them used after task completes)
-				this.injectedLearningIds = relevantLearnings.map((l) => l.id);
-			} else {
-				this.injectedLearningIds = [];
-			}
-
-			// Add failure warnings ("signs for Ralph") from past failures
-			// Use this.stateDir (main repo) for error patterns, not worktree
-			const failureWarnings = getFailureWarningsForTask(task, 2, this.stateDir);
-			if (failureWarnings) {
-				contextSection += `${failureWarnings}
-
----
-
-`;
-			}
-
-			// Ralph-style: inject RULES from error patterns and current session errors
-			// These are imperative directives ("MUST NEVER", "ALWAYS") that teach the agent
-			const errorRules = formatPatternsAsRules(task, this.errorHistory, this.stateDir);
-			if (errorRules) {
-				contextSection += `${errorRules}
-
----
-
-`;
-			}
-
-			// Add file suggestions based on task-file patterns
-			const fileSuggestions = formatFileSuggestionsForPrompt(task);
-			if (fileSuggestions) {
-				contextSection += `${fileSuggestions}
-
----
-
-`;
-			}
-
-			// Add co-modification hints based on target files from context
-			if (this.currentBriefing?.targetFiles && this.currentBriefing.targetFiles.length > 0) {
-				const coModHints = formatCoModificationHints(this.currentBriefing.targetFiles);
-				if (coModHints) {
-					contextSection += `${coModHints}
-
----
-
-`;
-				}
-			}
-
-			// Check if task might already be complete (pre-flight check)
-			const alreadyDoneHint = checkTaskMayBeComplete(task, this.workingDirectory);
-			if (alreadyDoneHint) {
-				contextSection += `⚠️ PRE-FLIGHT CHECK:
-${alreadyDoneHint}
-
----
-
-`;
-			}
-
-			// Add execution plan from planning phase (if available)
-			if (this.executionPlan?.proceedWithExecution) {
-				const planContext = formatExecutionPlanAsContext(this.executionPlan.plan);
-				contextSection += `${planContext}
-
----
-
-`;
-			}
-
-			// For first attempt after escalation, include post-mortem
-			let postMortemContext = "";
+			// Clear post-mortem after use - only applies to first attempt at new tier
 			if (this.lastPostMortem) {
-				postMortemContext = `
-
-POST-MORTEM FROM PREVIOUS TIER:
-${this.lastPostMortem}
-
-Use this analysis to avoid repeating the same mistakes.`;
-				// Clear after use - only applies to first attempt at new tier
 				this.lastPostMortem = undefined;
 			}
-
-			// Get few-shot example if applicable for this task type
-			const fewShotExample = getFewShotExample(task);
-			const exampleSection = fewShotExample ? `\nEXAMPLE OF SIMILAR TASK:\n${fewShotExample}\n` : "";
-
-			prompt = `${contextSection}TASK:
-${task}${postMortemContext}${exampleSection}
-RULES:
-1. First verify the task isn't already complete - check git log, read target files
-2. If task is already done, output exactly: TASK_ALREADY_COMPLETE: <reason>
-3. If the target file/function/class doesn't exist and this isn't a create task, output: INVALID_TARGET: <reason>
-4. If the task is too vague to act on (no specific targets, unclear what to change), output: NEEDS_DECOMPOSITION: <what specific subtasks are needed>
-5. If the task requires creating new files, create them (Write tool creates parent directories)
-5. If editing existing files, read them first before editing
-6. Minimal changes only - nothing beyond task scope
-7. No questions - decide and proceed`;
 		}
 
 		// Token usage will be accumulated in this.tokenUsageThisTask
