@@ -72,8 +72,8 @@ import {
 	type HookCallbackMatcher,
 	logSlowMessageGap,
 	parseResultMarkers,
-	recordAgentQueryResult,
 	type ResultMessageData,
+	recordAgentQueryResult,
 	type SDKHookOutput,
 } from "./worker/agent-execution.js";
 import { buildImplementationContext } from "./worker/context-builder.js";
@@ -96,6 +96,7 @@ import {
 	recordPlanFailure,
 	updateDecisionOutcomesToFailure,
 } from "./worker/failure-recording.js";
+import { createPreToolUseHooks, getMaxTurnsForModel } from "./worker/hooks.js";
 import {
 	type PendingWriteTool,
 	processAssistantMessage,
@@ -104,7 +105,6 @@ import {
 	type WriteTrackingState,
 } from "./worker/message-tracker.js";
 import { buildMetaTaskPrompt, buildResearchPrompt, buildResumePrompt } from "./worker/prompt-builder.js";
-import { createPreToolUseHooks, getMaxTurnsForModel } from "./worker/hooks.js";
 import {
 	recordComplexitySuccess,
 	recordKnowledgeLearnings,

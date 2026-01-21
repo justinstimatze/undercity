@@ -4,6 +4,7 @@
  * Extracted helper functions for the brief command to reduce complexity.
  */
 
+import chalk from "chalk";
 import type { DecisionPoint } from "../decision-tracker.js";
 import type { RateLimitTracker } from "../rate-limit.js";
 import type { Task } from "../task.js";
@@ -196,4 +197,123 @@ export function buildRecommendations(
 	}
 
 	return recommendations;
+}
+
+/**
+ * Brief data structure for output
+ */
+export interface BriefData {
+	timestamp: string;
+	period: {
+		hours: number;
+		from: string;
+		to: string;
+	};
+	summary: {
+		tasksCompleted: number;
+		tasksFailed: number;
+		tasksInProgress: number;
+		tasksPending: number;
+		tokensUsed: number;
+		estimatedCost: number;
+	};
+	accomplishments: Array<{
+		taskId: string;
+		objective: string;
+		completedAt: string;
+		filesModified?: number;
+	}>;
+	failures: Array<{
+		taskId: string;
+		objective: string;
+		error: string;
+		failedAt: string;
+	}>;
+	inProgress: Array<{
+		taskId: string;
+		objective: string;
+		startedAt?: string;
+		elapsed?: string;
+	}>;
+	blockers: Blocker[];
+	trajectory: {
+		velocity: number;
+		estimatedClearTime?: string;
+		trend: "accelerating" | "steady" | "slowing" | "stalled";
+	};
+	recommendations: Recommendation[];
+}
+
+/**
+ * Format brief data for human-readable output
+ */
+export function formatBriefHuman(briefData: BriefData, analysis: TaskAnalysis, pendingCount: number): void {
+	const { completedInPeriod, failedInPeriod } = analysis;
+
+	console.log(chalk.bold.cyan(`\n📋 Undercity Brief (Last ${briefData.period.hours}h)\n`));
+
+	// Summary line
+	if (completedInPeriod.length > 0 || failedInPeriod.length > 0) {
+		console.log(
+			chalk.bold(
+				`Completed ${completedInPeriod.length} task(s), ${failedInPeriod.length} failed, ${pendingCount} remaining`,
+			),
+		);
+	} else {
+		console.log(chalk.dim("No tasks completed in this period"));
+	}
+	console.log();
+
+	// Accomplishments
+	if (completedInPeriod.length > 0) {
+		console.log(chalk.green.bold("Accomplishments:"));
+		for (const task of completedInPeriod.slice(0, 5)) {
+			console.log(chalk.green(`  ✓ ${task.objective.substring(0, 60)}${task.objective.length > 60 ? "..." : ""}`));
+		}
+		if (completedInPeriod.length > 5) {
+			console.log(chalk.dim(`  ... and ${completedInPeriod.length - 5} more`));
+		}
+		console.log();
+	}
+
+	// Failures
+	if (failedInPeriod.length > 0) {
+		console.log(chalk.red.bold("Failures:"));
+		for (const task of failedInPeriod.slice(0, 3)) {
+			console.log(chalk.red(`  ✗ ${task.objective.substring(0, 50)}...`));
+			console.log(chalk.dim(`    ${task.error?.substring(0, 60) || "Unknown error"}`));
+		}
+		if (failedInPeriod.length > 3) {
+			console.log(chalk.dim(`  ... and ${failedInPeriod.length - 3} more`));
+		}
+		console.log();
+	}
+
+	// Blockers
+	if (briefData.blockers.length > 0) {
+		console.log(chalk.yellow.bold("Blockers:"));
+		for (const blocker of briefData.blockers) {
+			console.log(chalk.yellow(`  ⚠ ${blocker.message}`));
+		}
+		console.log();
+	}
+
+	// Trajectory
+	console.log(chalk.bold("Trajectory:"));
+	console.log(`  Velocity: ${briefData.trajectory.velocity.toFixed(1)} tasks/hour`);
+	console.log(`  Trend: ${briefData.trajectory.trend}`);
+	if (briefData.trajectory.estimatedClearTime) {
+		console.log(`  Queue clear: ~${new Date(briefData.trajectory.estimatedClearTime).toLocaleString()}`);
+	}
+	console.log();
+
+	// Recommendations
+	if (briefData.recommendations.length > 0) {
+		console.log(chalk.bold("Recommendations:"));
+		for (const rec of briefData.recommendations) {
+			const icon = rec.priority === "high" ? "🔴" : rec.priority === "medium" ? "🟡" : "🟢";
+			console.log(`  ${icon} ${rec.action}`);
+			console.log(chalk.dim(`     ${rec.reason}`));
+		}
+	}
 }

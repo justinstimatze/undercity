@@ -7,7 +7,21 @@ import { type OracleCard, UndercityOracle } from "../oracle.js";
 import * as output from "../output.js";
 import { Persistence } from "../persistence.js";
 import { RateLimitTracker } from "../rate-limit.js";
-import { analyzeTasksInPeriod, buildBlockers, buildRecommendations, type LiveUsage } from "./brief-helpers.js";
+import {
+	analyzeTasksInPeriod,
+	type BriefData,
+	buildBlockers,
+	buildRecommendations,
+	formatBriefHuman,
+	type LiveUsage,
+} from "./brief-helpers.js";
+import {
+	type HumanInputContext,
+	handleListSubcommand,
+	handleProvideSubcommand,
+	handleRetrySubcommand,
+	handleStatsSubcommand,
+} from "./human-input-helpers.js";
 import {
 	addProposalsToBoard,
 	displayIdeationFindings,
@@ -17,7 +31,13 @@ import {
 	displayTopicRequired,
 	type TaskProposal,
 } from "./pm-helpers.js";
-import { buildActiveWorkersList, buildAttentionItems, calculatePacing } from "./pulse-helpers.js";
+import {
+	buildActiveWorkersList,
+	buildAttentionItems,
+	calculatePacing,
+	formatPulseHuman,
+	type PulseData,
+} from "./pulse-helpers.js";
 
 // Re-export grind module
 export { type GrindOptions, handleGrind } from "../grind/index.js";
@@ -95,61 +115,6 @@ export interface PMOptions {
 	propose?: boolean;
 	ideate?: boolean;
 	add?: boolean;
-}
-
-/**
- * Pulse data structure for JSON output
- */
-interface PulseData {
-	timestamp: string;
-	active: Array<{
-		taskId: string;
-		objective: string;
-		elapsed: string;
-		elapsedMs: number;
-		worktreePath: string;
-	}>;
-	queue: {
-		pending: number;
-		inProgress: number;
-		completed: number;
-		failed: number;
-		blocked: number;
-	};
-	health: {
-		rateLimit: {
-			fiveHourPercent: number;
-			weeklyPercent: number;
-			isPaused: boolean;
-			resumeAt?: string;
-		};
-		/** Live usage from claude.ai scraping */
-		liveUsage?: {
-			fiveHourPercent?: number;
-			weeklyPercent?: number;
-			observedAt?: string;
-			extraUsageEnabled?: boolean;
-			extraUsageSpend?: string;
-		};
-		recentActivity: {
-			completedLastHour: number;
-			failedLastHour: number;
-		};
-	};
-	pacing: {
-		tokenBudget: number;
-		tokensUsed: number;
-		remaining: number;
-		percentUsed: number;
-		queueSize: number;
-		estimatedTokensPerTask: number;
-		sustainablePaceTasksPerHour: number;
-	};
-	attention: Array<{
-		type: "decision" | "failure" | "rate_limit";
-		message: string;
-		id?: string;
-	}>;
 }
 
 /**
@@ -278,134 +243,13 @@ export async function handlePulse(options: PulseOptions): Promise<void> {
 		attention,
 	};
 
-	// Human-readable dashboard (opt-in with --human)
+	// Output JSON (default) or human-readable dashboard (--human flag)
 	if (!options.human) {
 		console.log(JSON.stringify(pulseData, null, 2));
 		return;
 	}
 
-	// Human-readable dashboard
-	console.log(chalk.bold.cyan("\n⚡ Undercity Pulse\n"));
-
-	// Active workers section
-	if (activeList.length > 0) {
-		console.log(chalk.bold(`ACTIVE (${activeList.length} workers)`));
-		for (const w of activeList) {
-			console.log(
-				chalk.green(`  🔄 ${w.taskId}: "${w.objective}${w.objective.length >= 50 ? "..." : ""}" (${w.elapsed})`),
-			);
-		}
-	} else {
-		console.log(chalk.bold("ACTIVE"));
-		console.log(chalk.dim("  No workers running"));
-	}
-	console.log();
-
-	// Queue section
-	console.log(chalk.bold(`QUEUE (${summary.pending} pending)`));
-	const queueTasks = allTasks.filter((t) => t.status === "pending" && !t.isDecomposed).slice(0, 3);
-	for (const t of queueTasks) {
-		const priority = t.priority !== undefined ? `#${t.priority}` : "";
-		console.log(chalk.dim(`  ${priority} "${t.objective.substring(0, 50)}${t.objective.length >= 50 ? "..." : ""}"`));
-	}
-	if (summary.pending > 3) {
-		console.log(chalk.dim(`  ... and ${summary.pending - 3} more`));
-	}
-	console.log();
-
-	// Health section
-	console.log(chalk.bold("HEALTH"));
-	if (liveUsage?.fiveHourPercent !== undefined) {
-		// Live data from claude.ai
-		const fiveHrColor =
-			liveUsage.fiveHourPercent >= 80 ? chalk.red : liveUsage.fiveHourPercent >= 50 ? chalk.yellow : chalk.green;
-		console.log(`  Claude Max: ${fiveHrColor(`${liveUsage.fiveHourPercent}%`)} of 5hr budget`);
-		if (liveUsage.weeklyPercent !== undefined) {
-			console.log(`  Weekly: ${liveUsage.weeklyPercent}%`);
-		}
-	} else {
-		// Fall back to local tracking
-		const fiveHrColor =
-			usage.percentages.fiveHour >= 0.8 ? chalk.red : usage.percentages.fiveHour >= 0.5 ? chalk.yellow : chalk.green;
-		console.log(
-			`  Rate limit: ${fiveHrColor(`${Math.round(usage.percentages.fiveHour * 100)}%`)} used (local tracking)`,
-		);
-	}
-	console.log(`  Last hour: ${completedLastHour} completed, ${failedLastHour} failed`);
-	console.log();
-
-	// Pacing section
-	console.log(chalk.bold("PACING"));
-	console.log(`  Budget: ${(pacing.tokenBudget / 1000000).toFixed(1)}M tokens/5hr window`);
-	console.log(`  Used: ${(pacing.tokensUsed / 1000).toFixed(0)}K (${pacing.percentUsed}%)`);
-	console.log(`  Sustainable pace: ~${pacing.sustainablePaceTasksPerHour} tasks/hour to last 5 hours`);
-	console.log();
-
-	// Attention section (only if there are items)
-	if (attention.length > 0) {
-		console.log(chalk.bold.yellow(`ATTENTION (${attention.length})`));
-		for (const item of attention) {
-			const icon = item.type === "decision" ? "⚠️" : item.type === "rate_limit" ? "🚨" : "❌";
-			console.log(chalk.yellow(`  ${icon} ${item.message}`));
-		}
-		console.log();
-	}
-
-	// Hint for more details
-	console.log(chalk.dim("Run 'undercity brief' for detailed report, 'undercity decide' to handle pending decisions."));
-}
-
-/**
- * Brief data structure for JSON output
- */
-interface BriefData {
-	timestamp: string;
-	period: {
-		hours: number;
-		from: string;
-		to: string;
-	};
-	summary: {
-		tasksCompleted: number;
-		tasksFailed: number;
-		tasksInProgress: number;
-		tasksPending: number;
-		tokensUsed: number;
-		estimatedCost: number;
-	};
-	accomplishments: Array<{
-		taskId: string;
-		objective: string;
-		completedAt: string;
-		filesModified?: number;
-	}>;
-	failures: Array<{
-		taskId: string;
-		objective: string;
-		error: string;
-		failedAt: string;
-	}>;
-	inProgress: Array<{
-		taskId: string;
-		objective: string;
-		startedAt?: string;
-		elapsed?: string;
-	}>;
-	blockers: Array<{
-		type: "rate_limit" | "decision_required" | "merge_conflict" | "verification_failed";
-		message: string;
-		taskId?: string;
-	}>;
-	trajectory: {
-		velocity: number; // tasks/hour
-		estimatedClearTime?: string; // when queue will be empty at current pace
-		trend: "accelerating" | "steady" | "slowing" | "stalled";
-	};
-	recommendations: Array<{
-		priority: "high" | "medium" | "low";
-		action: string;
-		reason: string;
-	}>;
+	formatPulseHuman(pulseData, allTasks, usage);
 }
 
 /**
@@ -500,79 +344,13 @@ export async function handleBrief(options: BriefOptions): Promise<void> {
 		recommendations,
 	};
 
-	// JSON output (default)
+	// Output JSON (default) or human-readable narrative (--human flag)
 	if (!options.human) {
 		console.log(JSON.stringify(briefData, null, 2));
 		return;
 	}
 
-	// Human-readable narrative
-	console.log(chalk.bold.cyan(`\n📋 Undercity Brief (Last ${hours}h)\n`));
-
-	// Summary line
-	if (completedInPeriod.length > 0 || failedInPeriod.length > 0) {
-		console.log(
-			chalk.bold(
-				`Completed ${completedInPeriod.length} task(s), ${failedInPeriod.length} failed, ${pendingCount} remaining`,
-			),
-		);
-	} else {
-		console.log(chalk.dim("No tasks completed in this period"));
-	}
-	console.log();
-
-	// Accomplishments
-	if (completedInPeriod.length > 0) {
-		console.log(chalk.green.bold("Accomplishments:"));
-		for (const task of completedInPeriod.slice(0, 5)) {
-			console.log(chalk.green(`  ✓ ${task.objective.substring(0, 60)}${task.objective.length > 60 ? "..." : ""}`));
-		}
-		if (completedInPeriod.length > 5) {
-			console.log(chalk.dim(`  ... and ${completedInPeriod.length - 5} more`));
-		}
-		console.log();
-	}
-
-	// Failures
-	if (failedInPeriod.length > 0) {
-		console.log(chalk.red.bold("Failures:"));
-		for (const task of failedInPeriod.slice(0, 3)) {
-			console.log(chalk.red(`  ✗ ${task.objective.substring(0, 50)}...`));
-			console.log(chalk.dim(`    ${task.error?.substring(0, 60) || "Unknown error"}`));
-		}
-		if (failedInPeriod.length > 3) {
-			console.log(chalk.dim(`  ... and ${failedInPeriod.length - 3} more`));
-		}
-		console.log();
-	}
-
-	// Blockers
-	if (blockers.length > 0) {
-		console.log(chalk.yellow.bold("Blockers:"));
-		for (const blocker of blockers) {
-			console.log(chalk.yellow(`  ⚠ ${blocker.message}`));
-		}
-		console.log();
-	}
-
-	// Trajectory
-	console.log(chalk.bold("Trajectory:"));
-	console.log(`  Velocity: ${velocity.toFixed(1)} tasks/hour`);
-	console.log(`  Trend: ${trend}`);
-	if (estimatedClearTime) {
-		console.log(`  Queue clear: ~${new Date(estimatedClearTime).toLocaleString()}`);
-	}
-	console.log();
-
-	// Recommendations
-	if (recommendations.length > 0) {
-		console.log(chalk.bold("Recommendations:"));
-		for (const rec of recommendations) {
-			const icon = rec.priority === "high" ? "🔴" : rec.priority === "medium" ? "🟡" : "🟢";
-			console.log(`  ${icon} ${rec.action}`);
-			console.log(chalk.dim(`     ${rec.reason}`));
-		}
-	}
+	formatBriefHuman(briefData, analysis, pendingCount);
 }
 
 /**
@@ -1954,182 +1732,37 @@ export interface HumanInputOptions {
 export async function handleHumanInput(options: HumanInputOptions): Promise<void> {
 	const { getTasksNeedingInput, saveHumanGuidance, clearNeedsHumanInput, getHumanInputStats, getHumanGuidance } =
 		await import("../human-input-tracking.js");
+	const { addTask } = await import("../task.js");
 
 	const isHuman = options.human ?? output.isHumanMode();
 
-	// Default to --list if no option specified
-	const showList = options.list || (!options.provide && !options.stats && !options.retry);
+	// Build context for helpers
+	const ctx: HumanInputContext = {
+		getTasksNeedingInput,
+		saveHumanGuidance,
+		clearNeedsHumanInput,
+		getHumanInputStats,
+		getHumanGuidance,
+		addTask,
+		isHuman,
+	};
 
+	// Route to appropriate subcommand handler
 	if (options.retry) {
-		// Re-queue tasks that have guidance available
-		const { addTask } = await import("../task.js");
-		const tasksNeedingInput = getTasksNeedingInput();
-
-		// Filter to tasks that have guidance available
-		const retryableTasks = tasksNeedingInput.filter((task) => {
-			const guidance = getHumanGuidance(task.errorSignature);
-			return guidance !== null;
-		});
-
-		if (retryableTasks.length === 0) {
-			if (isHuman) {
-				const total = tasksNeedingInput.length;
-				if (total === 0) {
-					console.log(chalk.green("\n✓ No tasks need human input"));
-				} else {
-					console.log(chalk.yellow(`\n⚠ ${total} task(s) need human input but none have guidance yet`));
-					console.log(
-						chalk.dim("Provide guidance first with: undercity human-input --provide <signature> --guidance '...'"),
-					);
-				}
-			} else {
-				console.log(JSON.stringify({ retried: 0, message: "No tasks with guidance to retry" }));
-			}
-			return;
-		}
-
-		// Re-queue each task with a hint about the guidance
-		const requeued: string[] = [];
-		for (const task of retryableTasks) {
-			const guidance = getHumanGuidance(task.errorSignature);
-			if (!guidance) continue;
-
-			// Add task back to board with guidance context
-			const newTask = addTask(task.objective, {
-				priority: 50, // Higher priority for retries
-				handoffContext: {
-					isRetry: true,
-					humanGuidance: guidance.guidance,
-					previousError: task.sampleMessage,
-					previousAttempts: task.failedAttempts,
-				},
-			});
-
-			// Clear from needs_human_input table
-			clearNeedsHumanInput(task.taskId);
-			requeued.push(newTask.id);
-		}
-
-		if (isHuman) {
-			console.log(chalk.green(`\n✓ Re-queued ${requeued.length} task(s) with human guidance`));
-			console.log(chalk.dim("Run 'undercity grind' to process them"));
-		} else {
-			console.log(JSON.stringify({ retried: requeued.length, taskIds: requeued }));
-		}
+		await handleRetrySubcommand(ctx);
 		return;
 	}
 
 	if (options.stats) {
-		// Show stats about human input tracking
-		const stats = getHumanInputStats();
-
-		if (isHuman) {
-			console.log(chalk.bold("\n📊 Human Input Statistics\n"));
-			console.log(`Guidance entries: ${stats.guidanceCount}`);
-			console.log(`Successful guidance: ${stats.successfulGuidance}`);
-			console.log(`Tasks needing input: ${stats.tasksNeedingInput}`);
-
-			if (stats.topPatterns.length > 0) {
-				console.log(chalk.dim("\nTop patterns with guidance:"));
-				for (const pattern of stats.topPatterns) {
-					const status = pattern.successful ? chalk.green("✓") : chalk.yellow("○");
-					console.log(`  ${status} ${pattern.signature.substring(0, 60)}... (used ${pattern.timesUsed}x)`);
-				}
-			}
-		} else {
-			console.log(JSON.stringify(stats));
-		}
+		handleStatsSubcommand(ctx);
 		return;
 	}
 
 	if (options.provide) {
-		// Provide guidance for a specific error signature
-		if (!options.guidance) {
-			if (isHuman) {
-				console.log(chalk.red("Error: --guidance is required when using --provide"));
-				console.log(chalk.dim("Usage: undercity human-input --provide <signature> --guidance 'Your guidance here'"));
-			} else {
-				console.log(JSON.stringify({ error: "--guidance is required when using --provide" }));
-			}
-			process.exitCode = 1;
-			return;
-		}
-
-		const id = saveHumanGuidance(options.provide, options.guidance);
-
-		// Count tasks that match this signature
-		const tasksNeedingInput = getTasksNeedingInput();
-		const matchingTasks = tasksNeedingInput.filter((task) => task.errorSignature === options.provide);
-
-		if (isHuman) {
-			console.log(chalk.green(`\n✓ Guidance saved (${id})`));
-			if (matchingTasks.length > 0) {
-				console.log(chalk.cyan(`\n${matchingTasks.length} task(s) can now be retried with this guidance.`));
-				console.log(chalk.dim("Run: undercity human-input --retry"));
-			} else {
-				console.log(chalk.dim("This guidance will be applied to future tasks with matching errors."));
-			}
-		} else {
-			console.log(JSON.stringify({ success: true, id, matchingTasks: matchingTasks.length }));
-		}
+		handleProvideSubcommand(ctx, options.provide, options.guidance);
 		return;
 	}
 
-	if (showList) {
-		// List tasks needing human input
-		const tasks = getTasksNeedingInput();
-
-		if (tasks.length === 0) {
-			if (isHuman) {
-				console.log(chalk.green("\n✓ No tasks currently need human input"));
-			} else {
-				console.log(JSON.stringify({ tasks: [] }));
-			}
-			return;
-		}
-
-		if (isHuman) {
-			console.log(chalk.bold(`\n🧑 ${tasks.length} Task(s) Need Human Input\n`));
-
-			// Check which tasks have guidance available
-			let withGuidance = 0;
-			for (const task of tasks) {
-				const guidance = getHumanGuidance(task.errorSignature);
-				const hasGuidance = guidance !== null;
-				if (hasGuidance) withGuidance++;
-
-				const statusIcon = hasGuidance ? chalk.green("✓") : chalk.yellow("○");
-				console.log(`${statusIcon} ${chalk.yellow(`Task: ${task.taskId}`)}`);
-				console.log(`  Objective: ${task.objective.substring(0, 80)}${task.objective.length > 80 ? "..." : ""}`);
-				console.log(`  Category: ${task.category}`);
-				console.log(`  Error: ${task.sampleMessage.substring(0, 100)}${task.sampleMessage.length > 100 ? "..." : ""}`);
-				console.log(`  Failed attempts: ${task.failedAttempts} (last model: ${task.modelUsed})`);
-				console.log(`  Signature: ${task.errorSignature.substring(0, 60)}...`);
-				if (hasGuidance) {
-					console.log(chalk.green(`  Has guidance: "${guidance.guidance.substring(0, 50)}..."`));
-				} else if (task.previousGuidance) {
-					console.log(chalk.dim(`  Previous guidance was tried but didn't help`));
-				}
-				console.log("");
-			}
-
-			// Show next steps
-			if (withGuidance > 0) {
-				console.log(chalk.cyan(`${withGuidance} task(s) have guidance and can be retried:`));
-				console.log(chalk.dim("  undercity human-input --retry"));
-				console.log("");
-			}
-			if (withGuidance < tasks.length) {
-				console.log(chalk.dim("To provide guidance for remaining tasks:"));
-				console.log(chalk.dim(`  undercity human-input --provide "<signature>" --guidance "Your guidance here"`));
-			}
-		} else {
-			// Include guidance status in JSON output
-			const tasksWithStatus = tasks.map((task) => ({
-				...task,
-				hasGuidance: getHumanGuidance(task.errorSignature) !== null,
-			}));
-			console.log(JSON.stringify({ tasks: tasksWithStatus }));
-		}
-	}
+	// Default to --list
+	handleListSubcommand(ctx);
 }

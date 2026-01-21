@@ -4,6 +4,7 @@
  * Extracted helper functions for the pulse command to reduce complexity.
  */
 
+import chalk from "chalk";
 import type { DecisionPoint } from "../decision-tracker.js";
 import type { RateLimitTracker } from "../rate-limit.js";
 import type { Task } from "../task.js";
@@ -122,6 +123,120 @@ export function buildAttentionItems(
 	}
 
 	return attention;
+}
+
+/**
+ * Pulse data structure for output
+ */
+export interface PulseData {
+	timestamp: string;
+	active: ActiveWorker[];
+	queue: {
+		pending: number;
+		inProgress: number;
+		completed: number;
+		failed: number;
+		blocked: number;
+	};
+	health: {
+		rateLimit: {
+			fiveHourPercent: number;
+			weeklyPercent: number;
+			isPaused: boolean;
+			resumeAt?: string;
+		};
+		liveUsage?: {
+			fiveHourPercent?: number;
+			weeklyPercent?: number;
+			observedAt?: string;
+			extraUsageEnabled?: boolean;
+			extraUsageSpend?: string;
+		};
+		recentActivity: {
+			completedLastHour: number;
+			failedLastHour: number;
+		};
+	};
+	pacing: PacingInfo;
+	attention: AttentionItem[];
+}
+
+/**
+ * Format pulse data for human-readable output
+ */
+export function formatPulseHuman(
+	pulseData: PulseData,
+	allTasks: Task[],
+	usage: { percentages: { fiveHour: number } },
+): void {
+	console.log(chalk.bold.cyan("\n⚡ Undercity Pulse\n"));
+
+	// Active workers section
+	if (pulseData.active.length > 0) {
+		console.log(chalk.bold(`ACTIVE (${pulseData.active.length} workers)`));
+		for (const w of pulseData.active) {
+			console.log(
+				chalk.green(`  🔄 ${w.taskId}: "${w.objective}${w.objective.length >= 50 ? "..." : ""}" (${w.elapsed})`),
+			);
+		}
+	} else {
+		console.log(chalk.bold("ACTIVE"));
+		console.log(chalk.dim("  No workers running"));
+	}
+	console.log();
+
+	// Queue section
+	console.log(chalk.bold(`QUEUE (${pulseData.queue.pending} pending)`));
+	const queueTasks = allTasks.filter((t) => t.status === "pending" && !t.isDecomposed).slice(0, 3);
+	for (const t of queueTasks) {
+		const priority = t.priority !== undefined ? `#${t.priority}` : "";
+		console.log(chalk.dim(`  ${priority} "${t.objective.substring(0, 50)}${t.objective.length >= 50 ? "..." : ""}"`));
+	}
+	if (pulseData.queue.pending > 3) {
+		console.log(chalk.dim(`  ... and ${pulseData.queue.pending - 3} more`));
+	}
+	console.log();
+
+	// Health section
+	console.log(chalk.bold("HEALTH"));
+	const liveUsage = pulseData.health.liveUsage;
+	if (liveUsage?.fiveHourPercent !== undefined) {
+		const fiveHrColor =
+			liveUsage.fiveHourPercent >= 80 ? chalk.red : liveUsage.fiveHourPercent >= 50 ? chalk.yellow : chalk.green;
+		console.log(`  Claude Max: ${fiveHrColor(`${liveUsage.fiveHourPercent}%`)} of 5hr budget`);
+		if (liveUsage.weeklyPercent !== undefined) {
+			console.log(`  Weekly: ${liveUsage.weeklyPercent}%`);
+		}
+	} else {
+		const fiveHrColor =
+			usage.percentages.fiveHour >= 0.8 ? chalk.red : usage.percentages.fiveHour >= 0.5 ? chalk.yellow : chalk.green;
+		console.log(
+			`  Rate limit: ${fiveHrColor(`${Math.round(usage.percentages.fiveHour * 100)}%`)} used (local tracking)`,
+		);
+	}
+	console.log(
+		`  Last hour: ${pulseData.health.recentActivity.completedLastHour} completed, ${pulseData.health.recentActivity.failedLastHour} failed`,
+	);
+	console.log();
+
+	// Pacing section
+	console.log(chalk.bold("PACING"));
+	console.log(`  Budget: ${(pulseData.pacing.tokenBudget / 1000000).toFixed(1)}M tokens/5hr window`);
+	console.log(`  Used: ${(pulseData.pacing.tokensUsed / 1000).toFixed(0)}K (${pulseData.pacing.percentUsed}%)`);
+	console.log(`  Sustainable pace: ~${pulseData.pacing.sustainablePaceTasksPerHour} tasks/hour to last 5 hours`);
+	console.log();
+
+	// Attention section
+	if (pulseData.attention.length > 0) {
+		console.log(chalk.bold.yellow(`ATTENTION (${pulseData.attention.length})`));
+		for (const item of pulseData.attention) {
+			const icon = item.type === "decision" ? "⚠️" : item.type === "rate_limit" ? "🚨" : "❌";
+			console.log(chalk.yellow(`  ${icon} ${item.message}`));
+		}
+		console.log();
+	}
+
+	console.log(chalk.dim("Run 'undercity brief' for detailed report, 'undercity decide' to handle pending decisions."));
 }
 
 /**

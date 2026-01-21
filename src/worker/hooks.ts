@@ -6,12 +6,7 @@
  */
 
 import { sessionLogger } from "../logger.js";
-import type {
-	HookCallbackMatcher,
-	SDKHookCallback,
-	SDKHookOutput,
-	SDKPreToolUseHookInput,
-} from "./agent-execution.js";
+import type { HookCallbackMatcher, SDKHookCallback, SDKHookOutput, SDKPreToolUseHookInput } from "./agent-execution.js";
 
 // Re-export stop hooks for backwards compatibility
 export {
