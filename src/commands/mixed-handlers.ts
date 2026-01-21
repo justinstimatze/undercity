@@ -2,17 +2,13 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writ
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
-import {
-	analyzeTasksInPeriod,
-	buildBlockers,
-	buildRecommendations,
-	type LiveUsage,
-} from "./brief-helpers.js";
 import { getConfigSource, loadConfig } from "../config.js";
 import { type OracleCard, UndercityOracle } from "../oracle.js";
 import * as output from "../output.js";
 import { Persistence } from "../persistence.js";
 import { RateLimitTracker } from "../rate-limit.js";
+import { analyzeTasksInPeriod, buildBlockers, buildRecommendations, type LiveUsage } from "./brief-helpers.js";
+import { buildActiveWorkersList, buildAttentionItems, calculatePacing } from "./pulse-helpers.js";
 
 // Re-export grind module
 export { type GrindOptions, handleGrind } from "../grind/index.js";
@@ -228,85 +224,18 @@ export async function handlePulse(options: PulseOptions): Promise<void> {
 	const failedLastHour = recentTasks.filter((t) => t.status === "failed").length;
 
 	// Calculate pacing info
-	// Prefer live Claude Max data over stale local tracking
 	const config = tracker.getState().config;
-	const tokenBudget = config.maxTokensPer5Hours;
 	const pendingCount = summary.pending + summary.inProgress;
-
-	// Use live percentages if available, otherwise fall back to local tracking
-	const fiveHourPercentUsed =
-		liveUsage?.fiveHourPercent ?? Math.round((usage.current.last5HoursSonnet / tokenBudget) * 100);
-	const tokensUsed = Math.round((fiveHourPercentUsed / 100) * tokenBudget);
-	const remaining = tokenBudget - tokensUsed;
-
-	// Estimate tokens per task from historical data (default 50k if no data)
-	const totalTasks = Object.values(usage.modelBreakdown).reduce((sum, m) => sum + m.totalTasks, 0);
-	const totalTokens = Object.values(usage.modelBreakdown).reduce((sum, m) => sum + m.sonnetEquivalentTokens, 0);
-	const estimatedTokensPerTask = totalTasks > 0 ? Math.round(totalTokens / totalTasks) : 50000;
-
-	// Calculate sustainable pace (tasks per hour to last 5 hours)
-	const sustainablePace = estimatedTokensPerTask > 0 ? Math.floor(remaining / estimatedTokensPerTask / 5) : 0;
+	const pacing = calculatePacing(liveUsage, usage, config, pendingCount);
 
 	// Build active workers list with elapsed time
-	const now = Date.now();
-	const activeList = activeWorktrees.map((w) => {
-		const task = allTasks.find((t) => t.sessionId === w.sessionId);
-		const elapsedMs = now - new Date(w.createdAt).getTime();
-		const elapsedMin = Math.floor(elapsedMs / 60000);
-		return {
-			taskId: w.sessionId.split("-").slice(0, 2).join("-"), // Short ID
-			objective: task?.objective?.substring(0, 50) || "Unknown task",
-			elapsed: `${elapsedMin}m`,
-			elapsedMs,
-			worktreePath: w.path,
-		};
-	});
+	const activeList = buildActiveWorkersList(activeWorktrees, allTasks);
 
 	// Build attention items
-	const attention: PulseData["attention"] = [];
-
-	// Add human-required decisions
-	for (const dec of humanRequiredDecisions.slice(0, 3)) {
-		attention.push({
-			type: "decision",
-			message: dec.question.substring(0, 60),
-			id: dec.id,
-		});
-	}
-
-	// Add PM-decidable decisions if there are many
-	if (pendingDecisions.length > 3) {
-		attention.push({
-			type: "decision",
-			message: `${pendingDecisions.length} pending decisions`,
-		});
-	}
-
-	// Add rate limit warning
-	if (tracker.isPaused()) {
-		const pauseState = tracker.getPauseState();
-		const resumeTime = pauseState.resumeAt ? new Date(pauseState.resumeAt).toLocaleTimeString() : "unknown";
-		attention.push({
-			type: "rate_limit",
-			message: `Rate limited - resume at ${resumeTime}`,
-		});
-	} else if (usage.percentages.fiveHour >= 0.8) {
-		attention.push({
-			type: "rate_limit",
-			message: `Rate limit warning: ${Math.round(usage.percentages.fiveHour * 100)}% of 5hr budget used`,
-		});
-	}
-
-	// Add recent failures
 	const recentFailures = allTasks.filter(
 		(t) => t.status === "failed" && t.completedAt && new Date(t.completedAt) >= oneHourAgo,
 	);
-	if (recentFailures.length > 0) {
-		attention.push({
-			type: "failure",
-			message: `${recentFailures.length} task(s) failed in last hour`,
-		});
-	}
+	const attention = buildAttentionItems(humanRequiredDecisions, pendingDecisions, tracker, usage, recentFailures);
 
 	const pauseState = tracker.getPauseState();
 	const resumeAtDate = pauseState.resumeAt ? new Date(pauseState.resumeAt) : undefined;
@@ -336,15 +265,7 @@ export async function handlePulse(options: PulseOptions): Promise<void> {
 				failedLastHour,
 			},
 		},
-		pacing: {
-			tokenBudget,
-			tokensUsed,
-			remaining,
-			percentUsed: Math.round((tokensUsed / tokenBudget) * 100),
-			queueSize: pendingCount,
-			estimatedTokensPerTask,
-			sustainablePaceTasksPerHour: sustainablePace,
-		},
+		pacing,
 		attention,
 	};
 
@@ -406,9 +327,9 @@ export async function handlePulse(options: PulseOptions): Promise<void> {
 
 	// Pacing section
 	console.log(chalk.bold("PACING"));
-	console.log(`  Budget: ${(tokenBudget / 1000000).toFixed(1)}M tokens/5hr window`);
-	console.log(`  Used: ${(tokensUsed / 1000).toFixed(0)}K (${Math.round((tokensUsed / tokenBudget) * 100)}%)`);
-	console.log(`  Sustainable pace: ~${sustainablePace} tasks/hour to last 5 hours`);
+	console.log(`  Budget: ${(pacing.tokenBudget / 1000000).toFixed(1)}M tokens/5hr window`);
+	console.log(`  Used: ${(pacing.tokensUsed / 1000).toFixed(0)}K (${pacing.percentUsed}%)`);
+	console.log(`  Sustainable pace: ~${pacing.sustainablePaceTasksPerHour} tasks/hour to last 5 hours`);
 	console.log();
 
 	// Attention section (only if there are items)
