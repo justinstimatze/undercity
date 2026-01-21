@@ -553,7 +553,8 @@ export function shouldSkipIntentCompletion(objective: string): boolean {
 	}
 
 	// Skip if objective contains file paths
-	if (objective.match(/[\w-]+\/[\w.-]+\.[\w]+/)) {
+	// Use bounded quantifiers to prevent ReDoS (catastrophic backtracking)
+	if (objective.match(/[\w-]{1,50}\/[\w.-]{1,100}\.[\w]{1,10}/)) {
 		return true;
 	}
 

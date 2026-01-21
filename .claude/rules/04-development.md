@@ -46,15 +46,24 @@ pnpm syncpack:fix   # Fix version mismatches
 ## Security Scanning
 
 ```bash
-pnpm security        # Pre-commit security scan (gitleaks + semgrep if installed)
+pnpm security        # Pre-commit security scan (gitleaks + semgrep)
 pnpm security:full   # Full codebase scan
 ```
 
-**Tools (install locally for pre-commit):**
-- **gitleaks**: Secrets detection - `brew install gitleaks` (macOS) or download from GitHub
-- **semgrep** (optional): Static security analysis - `pip install semgrep` or `brew install semgrep`
+**Required tools** (commits blocked if missing):
+- **gitleaks**: Secrets detection
+- **semgrep**: Static security analysis (command injection, ReDoS, etc.)
 
-Pre-commit hook runs `gitleaks protect --staged` automatically. CI runs full gitleaks scan via GitHub Action.
+```bash
+# Debian/Ubuntu
+sudo apt install gitleaks
+sudo apt install pipx && pipx install semgrep
+
+# macOS
+brew install gitleaks semgrep
+```
+
+Pre-commit hook runs both tools automatically. Security is mandatory given undercity's autonomous execution model.
 
 ## Git & CI
 

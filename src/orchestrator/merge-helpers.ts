@@ -8,7 +8,7 @@
 import { execSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import * as output from "../output.js";
-import { execGitInDir, validateGitRef } from "./git-utils.js";
+import { execGitInDir, validateCwd, validateGitRef } from "./git-utils.js";
 
 /**
  * Validate that a worktree path exists and is a directory
@@ -71,6 +71,8 @@ export function fetchMainIntoWorktree(
 	mainRepo: string,
 	mainBranch: string,
 ): void {
+	// Validate both mainRepo (path) and mainBranch (ref) to prevent injection
+	validateCwd(mainRepo);
 	validateGitRef(mainBranch);
 	try {
 		execGitInDir(["fetch", mainRepo, mainBranch], worktreePath);

@@ -32,7 +32,20 @@
 | Node.js | 24+ | `node --version` |
 | pnpm | 9+ | `pnpm --version` |
 | Git | 2.20+ | `git --version` |
+| gitleaks | Latest | `gitleaks version` |
+| semgrep | Latest | `semgrep --version` |
 | Claude Max subscription | Active | Required for OAuth |
+
+**Security tools installation:**
+```bash
+# gitleaks (secrets detection)
+sudo apt install gitleaks        # Debian/Ubuntu
+# or: brew install gitleaks      # macOS
+
+# semgrep (static analysis) - use pipx for isolated install
+sudo apt install pipx && pipx install semgrep   # Debian/Ubuntu
+# or: brew install semgrep                       # macOS
+```
 
 ### For Humans (Manual Setup)
 

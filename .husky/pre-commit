@@ -4,6 +4,9 @@
 # This ensures what gets committed is what was checked
 pnpm exec lint-staged
 
+# Run security scan (gitleaks for secrets, semgrep for code vulnerabilities)
+pnpm security
+
 # Run full verification (typecheck, tests, etc.)
 pnpm exec tsx src/verification-cli.ts
 
