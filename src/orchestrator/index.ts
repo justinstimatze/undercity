@@ -4,6 +4,7 @@
  * Modular components for the Orchestrator extracted for better maintainability.
  */
 
+export * from "./conflict-detection.js";
 export * from "./git-utils.js";
 export * from "./merge-helpers.js";
 export * from "./recommendation-handlers.js";

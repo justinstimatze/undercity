@@ -34,14 +34,18 @@ import { sessionLogger } from "./logger.js";
 import { nameFromId } from "./names.js";
 import {
 	applyRecommendation,
+	buildPredictedConflicts,
 	cleanWorktreeDirectory,
+	detectFileConflicts,
 	execGitInDir,
 	fetchMainIntoWorktree,
 	handleTaskDecomposition,
 	mergeIntoLocalMain,
+	type PredictedConflict,
 	reportTaskOutcome,
 	runPostRebaseVerification,
 	validateGitRef,
+	validateRecommendation,
 	validateWorktreePath,
 } from "./orchestrator/index.js";
 import * as output from "./output.js";
@@ -363,7 +367,7 @@ export class Orchestrator {
 		let addCount = 0;
 
 		for (const rec of recommendations) {
-			const validation = this.validateRecommendation(rec, allTasks, taskIds, metaTaskId);
+			const validation = validateRecommendation(rec, allTasks, taskIds, metaTaskId);
 
 			if (!validation.valid) {
 				rejected++;
@@ -418,92 +422,6 @@ export class Orchestrator {
 				tasksAnalyzed: metaResult.metrics.tasksAnalyzed,
 			});
 		}
-	}
-
-	/**
-	 * Validate a recommendation against the actual task board state.
-	 * Returns whether the recommendation should be applied.
-	 */
-	private validateRecommendation(
-		rec: MetaTaskRecommendation,
-		tasks: Task[],
-		taskIds: Set<string>,
-		metaTaskId: string,
-	): { valid: boolean; reason?: string } {
-		// Self-protection: don't let meta-task modify itself
-		if (rec.taskId === metaTaskId) {
-			return { valid: false, reason: "cannot modify self" };
-		}
-
-		// Actions that require existing task
-		const requiresExistingTask = ["remove", "complete", "fix_status", "prioritize", "update", "block", "unblock"];
-
-		if (requiresExistingTask.includes(rec.action)) {
-			if (!rec.taskId) {
-				return { valid: false, reason: "missing taskId" };
-			}
-
-			if (!taskIds.has(rec.taskId)) {
-				return { valid: false, reason: "task does not exist" };
-			}
-
-			const task = tasks.find((t) => t.id === rec.taskId);
-			if (!task) {
-				return { valid: false, reason: "task not found" };
-			}
-
-			// State transition validation
-			switch (rec.action) {
-				case "complete":
-				case "fix_status":
-					if (task.status === "complete") {
-						return { valid: false, reason: "task already complete" };
-					}
-					break;
-
-				case "unblock":
-					if (task.status !== "blocked") {
-						return { valid: false, reason: "task is not blocked" };
-					}
-					break;
-
-				case "block":
-					if (task.status === "blocked") {
-						return { valid: false, reason: "task already blocked" };
-					}
-					if (task.status === "complete") {
-						return { valid: false, reason: "cannot block completed task" };
-					}
-					break;
-			}
-		}
-
-		// Validate "add" action
-		if (rec.action === "add") {
-			if (!rec.newTask?.objective) {
-				return { valid: false, reason: "missing objective for new task" };
-			}
-
-			// Check for obvious duplicates (exact match)
-			const isDuplicate = tasks.some((t) => t.objective.toLowerCase() === rec.newTask!.objective.toLowerCase());
-			if (isDuplicate) {
-				return { valid: false, reason: "duplicate objective" };
-			}
-		}
-
-		// Validate "merge" action
-		if (rec.action === "merge") {
-			if (!rec.relatedTaskIds || rec.relatedTaskIds.length === 0) {
-				return { valid: false, reason: "merge requires relatedTaskIds" };
-			}
-			for (const relatedId of rec.relatedTaskIds) {
-				if (!taskIds.has(relatedId)) {
-					return { valid: false, reason: `related task ${relatedId} does not exist` };
-				}
-			}
-		}
-
-		return { valid: true };
 	}
 
 	/**
@@ -1283,7 +1201,7 @@ export class Orchestrator {
 			return;
 		}
 
-		const fileConflicts = this.detectFileConflicts(successfulTasks);
+		const fileConflicts = detectFileConflicts(successfulTasks);
 		if (fileConflicts.size > 0) {
 			const conflictMap: Record<string, string[]> = {};
 			for (const [file, taskIds] of fileConflicts) {
@@ -1503,81 +1421,24 @@ export class Orchestrator {
 	}
 
 	/**
-	 * Detect file conflicts between parallel tasks
-	 * Returns a map of file -> taskIds that modified it
-	 */
-	private detectFileConflicts(tasks: ParallelTaskResult[]): Map<string, string[]> {
-		const fileToTasks = new Map<string, string[]>();
-
-		for (const task of tasks) {
-			if (!task.modifiedFiles) continue;
-
-			for (const file of task.modifiedFiles) {
-				const existing = fileToTasks.get(file) || [];
-				existing.push(task.taskId);
-				fileToTasks.set(file, existing);
-			}
-		}
-
-		// Filter to only files with multiple tasks
-		const conflicts = new Map<string, string[]>();
-		for (const [file, taskIds] of fileToTasks) {
-			if (taskIds.length > 1) {
-				conflicts.set(file, taskIds);
-			}
-		}
-
-		return conflicts;
-	}
-
-	/**
-	 * Paths that are prone to merge conflicts when modified in parallel
-	 */
-	private static CONFLICT_PRONE_PATHS = [".claude/rules/", ".claude/", "docs/", "ARCHITECTURE.md", "README.md"];
-
-	/**
 	 * Detect predicted file conflicts before tasks execute
 	 * Uses task-file patterns to predict what files each task will modify,
 	 * then warns about potential conflicts on documentation/rules files
 	 */
-	private detectPredictedConflicts(
-		tasks: Array<{ task: string; taskId: string }>,
-	): Array<{ file: string; tasks: string[]; severity: "warning" | "error" }> {
-		const predictedConflicts: Array<{ file: string; tasks: string[]; severity: "warning" | "error" }> = [];
-
+	private detectPredictedConflicts(tasks: Array<{ task: string; taskId: string }>): PredictedConflict[] {
 		// Get predicted files for each task
 		const taskPredictions = new Map<string, string[]>();
+		const taskObjectives = new Map<string, string>();
+
 		for (const { task, taskId } of tasks) {
 			const relevant = findRelevantFiles(task, 10);
 			const predictedFiles = relevant.map((r) => r.file);
 			taskPredictions.set(taskId, predictedFiles);
+			taskObjectives.set(taskId, task);
 		}
 
-		// Build file -> tasks map
-		const fileToTasks = new Map<string, Array<{ taskId: string; task: string }>>();
-		for (const { task, taskId } of tasks) {
-			const files = taskPredictions.get(taskId) || [];
-			for (const file of files) {
-				const existing = fileToTasks.get(file) || [];
-				existing.push({ taskId, task });
-				fileToTasks.set(file, existing);
-			}
-		}
-
-		// Find files with multiple tasks (potential conflicts)
-		for (const [file, taskInfos] of fileToTasks) {
-			if (taskInfos.length > 1) {
-				// Determine severity based on file path
-				const isConflictProne = Orchestrator.CONFLICT_PRONE_PATHS.some((path) => file.includes(path));
-				predictedConflicts.push({
-					file,
-					tasks: taskInfos.map((t) => t.task.substring(0, 50)),
-					severity: isConflictProne ? "error" : "warning",
-				});
-			}
-		}
-
-		return predictedConflicts;
+		// Use extracted pure function for conflict detection
+		return buildPredictedConflicts(taskPredictions, taskObjectives);
 	}
 
 	/**
