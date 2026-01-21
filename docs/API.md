@@ -14,7 +14,6 @@
 The knowledge system enables learning from completed tasks. For comprehensive documentation, see:
 - [Knowledge System Guide](./knowledge-system.md) - Architecture, categories, confidence scoring
 - [Worker Integration Guide](./worker-knowledge-integration.md) - How workers use knowledge
-- [Worker Usage Guide](./worker-knowledge-usage-guide.md) - Step-by-step integration guide
 - [Workflow Formulas Guide](./guides/workflow-formulas-guide.md) - 9 integration patterns and formulas
 - [Examples](../examples/knowledge-queries.ts) - Basic query examples
 - [Worker Patterns](../examples/worker-knowledge-patterns.ts) - Real-world usage patterns
