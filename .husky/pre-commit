@@ -1,7 +1,10 @@
 #!/bin/bash
 
-# Single source of truth: run verification script
-# Uses tsx to run TypeScript directly (no build required)
+# Run lint-staged for format/lint fixes on staged files
+# This ensures what gets committed is what was checked
+pnpm exec lint-staged
+
+# Run full verification (typecheck, tests, etc.)
 pnpm exec tsx src/verification-cli.ts
 
 # Regenerate call-graph.json if source files changed
