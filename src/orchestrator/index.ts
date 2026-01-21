@@ -6,4 +6,5 @@
 
 export * from "./git-utils.js";
 export * from "./merge-helpers.js";
+export * from "./recommendation-handlers.js";
 export * from "./result-handlers.js";

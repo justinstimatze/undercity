@@ -33,6 +33,7 @@ import { getTasksNeedingInput } from "./human-input-tracking.js";
 import { sessionLogger } from "./logger.js";
 import { nameFromId } from "./names.js";
 import {
+	applyRecommendation,
 	cleanWorktreeDirectory,
 	execGitInDir,
 	fetchMainIntoWorktree,
@@ -46,19 +47,7 @@ import {
 import * as output from "./output.js";
 import { Persistence, readTaskAssignment, writeTaskAssignment } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
-import {
-	addTask,
-	findSimilarInProgressTask,
-	getAllTasks,
-	getTaskById,
-	type HandoffContext,
-	markTaskBlocked,
-	markTaskComplete,
-	removeTasks,
-	type Task,
-	unblockTask,
-	updateTaskFields,
-} from "./task.js";
+import { addTask, findSimilarInProgressTask, getAllTasks, type HandoffContext, type Task } from "./task.js";
 import { findRelevantFiles } from "./task-file-patterns.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
 import type {
@@ -402,7 +391,7 @@ export class Orchestrator {
 			}
 
 			try {
-				this.applyRecommendation(rec);
+				this.applyRecommendationLocal(rec);
 				applied++;
 			} catch (err) {
 				rejected++;
@@ -520,103 +509,8 @@ export class Orchestrator {
 	/**
 	 * Apply a single recommendation to the task board
 	 */
-	private applyRecommendation(rec: MetaTaskRecommendation): void {
-		switch (rec.action) {
-			case "remove": {
-				if (rec.taskId) {
-					const removed = removeTasks([rec.taskId]);
-					if (removed > 0 && this.verbose) {
-						output.debug(`Removed task ${rec.taskId}: ${rec.reason}`);
-					}
-				}
-				break;
-			}
-
-			case "add": {
-				if (rec.newTask) {
-					const task = addTask(rec.newTask.objective, rec.newTask.priority);
-					if (this.verbose) {
-						output.debug(`Added task ${task.id}: ${rec.newTask.objective.substring(0, 50)}...`);
-					}
-				}
-				break;
-			}
-
-			case "complete":
-			case "fix_status": {
-				if (rec.taskId) {
-					const task = getTaskById(rec.taskId);
-					if (task) {
-						markTaskComplete(rec.taskId);
-						if (this.verbose) {
-							output.debug(`Marked ${rec.taskId} complete: ${rec.reason}`);
-						}
-					}
-				}
-				break;
-			}
-
-			case "prioritize": {
-				if (rec.taskId && rec.updates?.priority !== undefined) {
-					const task = getTaskById(rec.taskId);
-					if (task) {
-						updateTaskFields(rec.taskId, { priority: rec.updates.priority });
-						if (this.verbose) {
-							output.debug(`Updated priority for ${rec.taskId} to ${rec.updates.priority}`);
-						}
-					}
-				}
-				break;
-			}
-
-			case "update": {
-				if (rec.taskId && rec.updates) {
-					const task = getTaskById(rec.taskId);
-					if (task) {
-						updateTaskFields(rec.taskId, {
-							objective: rec.updates.objective,
-							priority: rec.updates.priority,
-							tags: rec.updates.tags,
-						});
-						if (this.verbose) {
-							output.debug(`Updated task ${rec.taskId}`);
-						}
-					}
-				}
-				break;
-			}
-
-			case "block": {
-				if (rec.taskId) {
-					const task = getTaskById(rec.taskId);
-					if (task) {
-						markTaskBlocked({ id: rec.taskId, reason: rec.reason ?? "Blocked by triage" });
-					}
-				}
-				break;
-			}
-
-			case "unblock": {
-				if (rec.taskId) {
-					const task = getTaskById(rec.taskId);
-					if (task?.status === "blocked") {
-						unblockTask(rec.taskId);
-					}
-				}
-				break;
-			}
-
-			// merge and decompose are more complex - log for manual review
-			case "merge":
-			case "decompose": {
-				output.info(`Recommendation requires manual review: ${rec.action}`, {
-					taskId: rec.taskId,
-					relatedTaskIds: rec.relatedTaskIds,
-					reason: rec.reason,
-				});
-				break;
-			}
-		}
+	private applyRecommendationLocal(rec: MetaTaskRecommendation): void {
+		applyRecommendation(rec, { verbose: this.verbose });
 	}
 
 	/**
