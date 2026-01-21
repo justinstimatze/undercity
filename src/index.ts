@@ -12,11 +12,10 @@
  * - Structured output and logging systems
  * - Core type definitions and interfaces
  *
- * Architecture Inspirations:
- * - Gas Town (Steve Yegge) - Multi-agent autonomous orchestration
- * - BMAD-METHOD - Iterative, planning-first execution strategy
+ * Architecture Inspirations: See INFLUENCES.md for full documentation.
+ * Key influences: Gas Town, Rule of Five, Zeroshot, multiclaude, claude-mem, Ralph Wiggum loop, Agent-Native.
  *
- * @see https://github.com/steveyegge/gastown
+ * @see INFLUENCES.md
  */
 
 // Capability ledger (model performance tracking)

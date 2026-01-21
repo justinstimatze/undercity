@@ -40,9 +40,7 @@ export function checkRepeatedErrorLoop(
 	errorMessage: string,
 	errorHistory: Array<{ message: string }>,
 ): EscalationResult | null {
-	const sameErrorCount = errorHistory.filter(
-		(e) => e.message.slice(0, 80) === errorMessage.slice(0, 80),
-	).length;
+	const sameErrorCount = errorHistory.filter((e) => e.message.slice(0, 80) === errorMessage.slice(0, 80)).length;
 
 	if (sameErrorCount >= 3) {
 		sessionLogger.warn(
@@ -192,10 +190,7 @@ export function checkSeriousErrors(
 /**
  * Check default retry limit
  */
-export function checkDefaultRetryLimit(
-	sameModelRetries: number,
-	maxRetriesPerTier: number,
-): EscalationResult {
+export function checkDefaultRetryLimit(sameModelRetries: number, maxRetriesPerTier: number): EscalationResult {
 	if (sameModelRetries >= maxRetriesPerTier) {
 		return { shouldEscalate: true, reason: `max retries at tier (${maxRetriesPerTier})` };
 	}

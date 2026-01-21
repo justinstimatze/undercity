@@ -4,25 +4,17 @@
  * Extracted learning/recording operations for task failures.
  */
 
-import { markLearningsUsed } from "../knowledge.js";
-import { sessionLogger } from "../logger.js";
-import * as output from "../output.js";
-import {
-	clearPendingError,
-	recordPermanentFailure,
-} from "../error-fix-patterns.js";
-import {
-	flagNeedsHumanInput,
-	getHumanGuidance,
-	shouldRequestHumanInput,
-} from "../human-input-tracking.js";
-import { recordTaskFiles } from "../task-file-patterns.js";
-import { updateDecisionOutcome } from "../decision-tracker.js";
 import { recordPlanCreationOutcome } from "../ax-programs.js";
 import type { ComplexityAssessment } from "../complexity.js";
-import type { ModelTier } from "../types.js";
-import type { TieredPlanResult } from "../task-planner.js";
 import type { ContextBriefing } from "../context.js";
+import { updateDecisionOutcome } from "../decision-tracker.js";
+import { clearPendingError, recordPermanentFailure } from "../error-fix-patterns.js";
+import { flagNeedsHumanInput, getHumanGuidance, shouldRequestHumanInput } from "../human-input-tracking.js";
+import { markLearningsUsed } from "../knowledge.js";
+import * as output from "../output.js";
+import { recordTaskFiles } from "../task-file-patterns.js";
+import type { TieredPlanResult } from "../task-planner.js";
+import type { ModelTier } from "../types.js";
 
 /**
  * Context for recording a permanent failure
@@ -135,9 +127,7 @@ export async function updateDecisionOutcomesToFailure(taskId: string, stateDir: 
 	try {
 		const { loadDecisionStore } = await import("../decision-tracker.js");
 		const store = loadDecisionStore(stateDir);
-		const taskDecisions = store.resolved.filter(
-			(d) => d.taskId === taskId && d.resolution.outcome === undefined,
-		);
+		const taskDecisions = store.resolved.filter((d) => d.taskId === taskId && d.resolution.outcome === undefined);
 		for (const decision of taskDecisions) {
 			updateDecisionOutcome(decision.id, "failure", stateDir);
 		}

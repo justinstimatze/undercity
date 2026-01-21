@@ -4,9 +4,9 @@
  * Extracted helpers for executeAgent to reduce complexity.
  */
 
-import type { TokenUsage, ModelTier } from "../types.js";
-import { sessionLogger } from "../logger.js";
 import { recordQueryResult } from "../live-metrics.js";
+import { sessionLogger } from "../logger.js";
+import type { ModelTier } from "../types.js";
 import { parseTaskMarkers, type TaskMarkers } from "./message-tracker.js";
 
 /**
@@ -75,10 +75,7 @@ export function createMessageTiming(): MessageTiming {
 /**
  * Log slow message gaps (>5s between messages)
  */
-export function logSlowMessageGap(
-	message: Record<string, unknown>,
-	timing: MessageTiming,
-): void {
+export function logSlowMessageGap(message: Record<string, unknown>, timing: MessageTiming): void {
 	const now = Date.now();
 	const delta = now - timing.lastMsgTime;
 	const msgType = message.type as string;
@@ -156,11 +153,7 @@ export function extractResultMessageData(message: Record<string, unknown>): Resu
 /**
  * Record query result to live metrics
  */
-export function recordAgentQueryResult(
-	data: ResultMessageData,
-	turns: number,
-	model: ModelTier,
-): void {
+export function recordAgentQueryResult(data: ResultMessageData, turns: number, model: ModelTier): void {
 	recordQueryResult({
 		success: data.isSuccess,
 		rateLimited: !data.isSuccess && data.result.includes("rate"),
@@ -187,10 +180,7 @@ export function parseResultMarkers(result: string): TaskMarkers {
 /**
  * Update execution state with markers from result
  */
-export function updateStateWithMarkers(
-	state: ExecutionState,
-	markers: TaskMarkers,
-): void {
+export function updateStateWithMarkers(state: ExecutionState, markers: TaskMarkers): void {
 	if (markers.taskAlreadyComplete && !state.taskAlreadyCompleteReason) {
 		state.taskAlreadyCompleteReason = markers.taskAlreadyComplete;
 		sessionLogger.info({ reason: markers.taskAlreadyComplete }, "Agent reported task already complete");
@@ -214,3 +204,93 @@ export const DISALLOWED_GIT_PUSH_TOOLS = [
 	"Bash(git push -*)",
 	"Bash(git remote push)",
 ];
+
+/**
+ * Parameters for building query options
+ */
+export interface QueryOptionsParams {
+	modelName: string;
+	workingDirectory: string;
+	maxTurns: number;
+	stopHooks: Array<{ hooks: Array<() => Promise<{ continue: boolean; reason?: string }>> }>;
+}
+
+/**
+ * Build query options for SDK agent execution
+ */
+export function buildQueryOptions(params: QueryOptionsParams): AgentQueryOptions {
+	const { modelName, workingDirectory, maxTurns, stopHooks } = params;
+
+	return {
+		model: modelName,
+		permissionMode: "bypassPermissions" as const,
+		allowDangerouslySkipPermissions: true,
+		settingSources: ["project"] as ("project" | "user")[],
+		cwd: workingDirectory,
+		maxTurns,
+		disallowedTools: DISALLOWED_GIT_PUSH_TOOLS,
+		hooks:
+			stopHooks.length > 0
+				? {
+						Stop: stopHooks,
+					}
+				: undefined,
+	};
+}
+
+/**
+ * Build query params based on whether we're resuming or starting fresh
+ */
+export type QueryParamsResult =
+	| { prompt: string; options: AgentQueryOptions }
+	| { resume: string; prompt: string; options: AgentQueryOptions };
+
+/**
+ * Build query parameters for SDK agent execution
+ */
+export function buildQueryParams(
+	canResume: boolean,
+	sessionId: string | null | undefined,
+	resumePrompt: string | undefined,
+	prompt: string,
+	queryOptions: AgentQueryOptions,
+): QueryParamsResult {
+	if (canResume && sessionId && resumePrompt) {
+		return { resume: sessionId, prompt: resumePrompt, options: queryOptions };
+	}
+	return { prompt, options: queryOptions };
+}
+
+/**
+ * Capture decision points from agent output
+ */
+export function captureDecisionsFromOutput(
+	result: string,
+	taskId: string,
+	parseAgentOutputForDecisions: (result: string, taskId: string) => Array<{
+		question: string;
+		context: string;
+		options?: string[];
+	}>,
+	captureDecision: (
+		taskId: string,
+		question: string,
+		context: string,
+		options: string[],
+		stateDir: string,
+	) => { id: string; category: string },
+	stateDir: string,
+): void {
+	try {
+		const decisions = parseAgentOutputForDecisions(result, taskId);
+		for (const d of decisions) {
+			const captured = captureDecision(taskId, d.question, d.context, d.options ?? [], stateDir);
+			sessionLogger.debug(
+				{ decisionId: captured.id, category: captured.category },
+				"Captured decision point from agent output",
+			);
+		}
+	} catch {
+		// Non-critical - continue without decision capture
+	}
+}

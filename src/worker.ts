@@ -41,24 +41,15 @@ import { type ContextBriefing, type ContextMode, prepareContext } from "./contex
 import { captureDecision, parseAgentOutputForDecisions, updateDecisionOutcome } from "./decision-tracker.js";
 import { dualLogger } from "./dual-logger.js";
 import {
-	clearPendingError,
 	formatFixSuggestionsForPrompt,
 	recordPendingError,
-	recordPermanentFailure,
 	recordSuccessfulFix,
 	tryAutoRemediate,
 } from "./error-fix-patterns.js";
 import { createAndCheckout } from "./git.js";
-import {
-	flagNeedsHumanInput,
-	formatGuidanceForWorker,
-	getHumanGuidance,
-	markGuidanceUsed,
-	shouldRequestHumanInput,
-} from "./human-input-tracking.js";
+import { formatGuidanceForWorker, markGuidanceUsed } from "./human-input-tracking.js";
 import { markLearningsUsed } from "./knowledge.js";
 import { extractAndStoreLearnings } from "./knowledge-extractor.js";
-import { recordQueryResult } from "./live-metrics.js";
 import { sessionLogger } from "./logger.js";
 import { parseMetaTaskResult } from "./meta-tasks.js";
 import { MetricsTracker } from "./metrics.js";
@@ -80,11 +71,13 @@ import {
 } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
 import {
+	buildQueryOptions,
+	buildQueryParams,
+	captureDecisionsFromOutput,
 	createMessageTiming,
 	DISALLOWED_GIT_PUSH_TOOLS,
 	extractResultMessageData,
 	logSlowMessageGap,
-	type MessageTiming,
 	parseResultMarkers,
 	recordAgentQueryResult,
 	updateStateWithMarkers,
@@ -103,10 +96,10 @@ import {
 import {
 	buildFailureErrorMessage,
 	markLearningsAsFailed,
+	recordComplexityFailure,
 	recordFailedTaskPattern,
 	recordPermanentFailureWithHumanInput,
 	recordPlanFailure,
-	recordComplexityFailure,
 	updateDecisionOutcomesToFailure,
 } from "./worker/failure-recording.js";
 import {
@@ -116,6 +109,13 @@ import {
 	type TaskMarkers,
 	type WriteTrackingState,
 } from "./worker/message-tracker.js";
+import {
+	recordComplexitySuccess,
+	recordKnowledgeLearnings,
+	recordPlanSuccess,
+	recordSuccessfulTaskPattern,
+	updateDecisionOutcomesToSuccess,
+} from "./worker/success-recording.js";
 import { buildMetaTaskPrompt, buildResearchPrompt, buildResumePrompt } from "./worker/prompt-builder.js";
 import { getMaxTurnsForModel } from "./worker/stop-hooks.js";
 import {
@@ -126,6 +126,15 @@ import {
 	handleFastPathSuccess,
 	writePMResearchOutput,
 } from "./worker/task-helpers.js";
+import {
+	buildInvalidTargetResult,
+	buildNeedsDecompositionResult,
+	buildTokenUsageSummary,
+	buildValidationFailureResult,
+	type FailureResultContext,
+	isStandardImplementationTask,
+	isTaskAlreadyComplete,
+} from "./worker/task-results.js";
 
 /**
  * Extract explicitly mentioned file names from task description
@@ -700,8 +709,10 @@ export class TaskWorker {
 		const context = this.initializeTaskContext(task, handoffContext);
 		const { taskId, sessionId, metaType, baseCommit } = context;
 
+		const isStandardTask = isStandardImplementationTask(this.isCurrentTaskMeta, this.isCurrentTaskResearch);
+
 		// Pre-validate task targets to catch impossible tasks early
-		if (!this.isCurrentTaskMeta && !this.isCurrentTaskResearch) {
+		if (isStandardTask) {
 			const validation = validateTaskTargets(task, this.workingDirectory);
 			if (!validation.valid) {
 				sessionLogger.warn(
@@ -714,25 +725,18 @@ export class TaskWorker {
 					"Task validation failed - target files do not exist",
 				);
 				output.error(`Task ${taskId} validation failed: ${validation.reason}`);
-				return {
-					task,
-					status: "failed",
-					model: this.currentModel,
-					attempts: 0,
-					error: `INVALID_TARGET: ${validation.reason}`,
-					durationMs: Date.now() - startTime,
-				};
+				return buildValidationFailureResult(task, this.currentModel, validation.reason ?? "unknown", startTime);
 			}
 		}
 
 		// Fast-path: Try ast-grep for trivial mechanical tasks
-		if (!this.isCurrentTaskMeta && !this.isCurrentTaskResearch) {
+		if (isStandardTask) {
 			const fastResult = await this.tryFastPath(task, taskId, sessionId, baseCommit, startTime);
 			if (fastResult) return fastResult;
 		}
 
 		// Pre-execution planning phase: haiku plans, sonnet reviews
-		if (this.enablePlanning && !this.isCurrentTaskMeta && !this.isCurrentTaskResearch) {
+		if (this.enablePlanning && isStandardTask) {
 			output.workerPhase(taskId, "planning");
 			const planResult = await this.runPlanningPhase(task, taskId);
 			if (planResult) return planResult;
@@ -1417,70 +1421,29 @@ export class TaskWorker {
 
 		const errorCategories = categorizeErrors(verification);
 
+		// Build context for result helpers
+		const resultCtx: FailureResultContext = {
+			task,
+			taskId,
+			model: this.currentModel,
+			attempts: this.attempts,
+			verification,
+			startTime,
+			tokenUsageThisTask: this.tokenUsageThisTask,
+		};
+
 		// Check for invalid target - fail immediately, no retries
 		if (this.invalidTargetReason !== null) {
-			sessionLogger.warn(
-				{ taskId, reason: this.invalidTargetReason },
-				"Task failed: invalid target (file/function doesn't exist)",
-			);
-			return {
-				task,
-				status: "failed",
-				model: this.currentModel,
-				attempts: this.attempts,
-				verification,
-				error: `INVALID_TARGET: ${this.invalidTargetReason}`,
-				durationMs: Date.now() - startTime,
-				tokenUsage: {
-					attempts: this.tokenUsageThisTask,
-					total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
-				},
-			};
+			return buildInvalidTargetResult(resultCtx, this.invalidTargetReason);
 		}
 
 		// Check for needs decomposition - return to orchestrator for decomposition
 		if (this.needsDecompositionReason !== null) {
-			sessionLogger.info(
-				{ taskId, reason: this.needsDecompositionReason },
-				"Task needs decomposition - returning to orchestrator",
-			);
-			// Parse suggested subtasks from the reason if present
-			// Format: "NEEDS_DECOMPOSITION: subtask1; subtask2; subtask3" or just a description
-			const suggestedSubtasks = this.needsDecompositionReason.includes(";")
-				? this.needsDecompositionReason
-						.split(";")
-						.map((s) => s.trim())
-						.filter(Boolean)
-				: undefined;
-
-			return {
-				task,
-				status: "failed", // Mark as failed so orchestrator handles it
-				model: this.currentModel,
-				attempts: this.attempts,
-				verification,
-				error: `NEEDS_DECOMPOSITION: ${this.needsDecompositionReason}`,
-				durationMs: Date.now() - startTime,
-				tokenUsage: {
-					attempts: this.tokenUsageThisTask,
-					total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
-				},
-				needsDecomposition: {
-					reason: this.needsDecompositionReason,
-					suggestedSubtasks,
-				},
-			};
+			return buildNeedsDecompositionResult(resultCtx, this.needsDecompositionReason);
 		}
 
-		// Check for task already complete
-		// IMPORTANT: Even if agent claims complete, verification must pass.
-		// This prevents hallucinated "already complete" claims from being trusted.
-		const taskAlreadyComplete =
-			verification.passed &&
-			verification.filesChanged === 0 &&
-			(this.taskAlreadyCompleteReason !== null || this.noOpEditCount > 0);
-
-		if (taskAlreadyComplete) {
+		// Check for task already complete (verification must pass to trust agent's claim)
+		if (isTaskAlreadyComplete(verification, this.taskAlreadyCompleteReason, this.noOpEditCount)) {
 			return this.buildAlreadyCompleteResult(task, taskId, verification, startTime);
 		}
 
@@ -1571,10 +1534,7 @@ export class TaskWorker {
 			verification,
 			commitSha: undefined,
 			durationMs: Date.now() - startTime,
-			tokenUsage: {
-				attempts: this.tokenUsageThisTask,
-				total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
-			},
+			tokenUsage: buildTokenUsageSummary(this.tokenUsageThisTask),
 			taskAlreadyComplete: true,
 		};
 	}
@@ -1741,114 +1701,34 @@ export class TaskWorker {
 	 * Record learnings and patterns after successful task completion
 	 */
 	private async recordSuccessLearnings(taskId: string, task: string): Promise<void> {
-		// Knowledge extraction
-		try {
-			const extracted = await extractAndStoreLearnings(taskId, this.lastAgentOutput, this.stateDir);
-			if (extracted.length > 0) {
-				output.debug(`Extracted ${extracted.length} learnings from task`, { taskId });
-			}
-			if (this.injectedLearningIds.length > 0) {
-				markLearningsUsed(this.injectedLearningIds, true, this.stateDir);
-				output.debug(`Marked ${this.injectedLearningIds.length} learnings as used (success)`, { taskId });
-			}
-		} catch (error) {
-			sessionLogger.debug({ error: String(error) }, "Knowledge extraction failed");
-		}
+		// Knowledge extraction and learnings
+		await recordKnowledgeLearnings(taskId, this.lastAgentOutput, this.injectedLearningIds, this.stateDir);
 
 		// Task-file patterns
-		try {
-			const modifiedFiles = this.getFilesFromLastCommit();
-			if (modifiedFiles.length > 0) {
-				recordTaskFiles(taskId, task, modifiedFiles, true);
-				output.debug(`Recorded task-file pattern: ${modifiedFiles.length} files`, { taskId });
-			}
-		} catch {
-			// Non-critical
-		}
+		recordSuccessfulTaskPattern(taskId, task, this.getFilesFromLastCommit());
 
 		// Decision outcomes
-		try {
-			const { loadDecisionStore } = await import("./decision-tracker.js");
-			const store = loadDecisionStore(this.stateDir);
-			const taskDecisions = store.resolved.filter((d) => d.taskId === taskId && d.resolution.outcome === undefined);
-			for (const decision of taskDecisions) {
-				updateDecisionOutcome(decision.id, "success", this.stateDir);
-			}
-			if (taskDecisions.length > 0) {
-				output.debug(`Updated ${taskDecisions.length} decision outcomes to success`, { taskId });
-			}
-		} catch {
-			// Non-critical
-		}
+		await updateDecisionOutcomesToSuccess(taskId, this.stateDir);
 
 		// Plan outcome recording (for Ax few-shot learning)
-		if (this.executionPlan?.proceedWithExecution) {
-			try {
-				const plan = this.executionPlan.plan;
-				const briefing = this.currentBriefing?.briefingDoc || "";
+		recordPlanSuccess({
+			task,
+			taskId,
+			executionPlan: this.executionPlan,
+			briefing: this.currentBriefing,
+			stateDir: this.stateDir,
+		});
 
-				recordPlanCreationOutcome(
-					{ task, contextBriefing: briefing },
-					{
-						filesToRead: plan.filesToRead,
-						filesToModify: plan.filesToModify,
-						filesToCreate: plan.filesToCreate,
-						steps: plan.steps,
-						risks: plan.risks,
-						expectedOutcome: plan.expectedOutcome,
-						alreadyComplete: plan.alreadyComplete?.likely || false,
-						needsDecomposition: plan.needsDecomposition?.needed || false,
-						reasoning: "",
-					},
-					true, // Task succeeded
-					this.stateDir,
-				);
+		// Complexity assessment outcome
+		recordComplexitySuccess(task, this.complexityAssessment, this.stateDir, recordComplexityOutcome);
 
-				recordPlanReviewOutcome(
-					{ task, plan: JSON.stringify(plan) },
-					{
-						approved: this.executionPlan.review.approved,
-						issues: this.executionPlan.review.issues,
-						suggestions: this.executionPlan.review.suggestions,
-						skipExecution: this.executionPlan.review.skipExecution?.skip || false,
-						reasoning: "",
-					},
-					true, // Review was accurate (task succeeded after approval)
-					this.stateDir,
-				);
-
-				output.debug("Recorded plan outcomes for Ax learning", { taskId });
-			} catch {
-				// Non-critical
-			}
-		}
-
-		// Record complexity assessment outcome for Ax learning
-		if (this.complexityAssessment) {
-			try {
-				recordComplexityOutcome(
-					task,
-					{
-						level: this.complexityAssessment.level,
-						scope: this.complexityAssessment.estimatedScope,
-						reasoning: this.complexityAssessment.signals.join(", "),
-						confidence: this.complexityAssessment.confidence,
-					},
-					true, // Task succeeded
-					this.stateDir,
-				);
-			} catch {
-				// Non-critical
-			}
-		}
-
-		// Record review triage outcome for Ax learning
+		// Review triage outcome
 		if (this.reviewTriageResult) {
 			try {
 				recordReviewTriageOutcome(
-					{ task, diff: "" }, // diff not available at this point
+					{ task, diff: "" },
 					this.reviewTriageResult,
-					true, // Task succeeded, so review triage was accurate
+					true,
 					this.stateDir,
 				);
 			} catch {
@@ -2138,12 +2018,7 @@ export class TaskWorker {
 		// Record review triage outcome for Ax learning (task failed)
 		if (this.reviewTriageResult) {
 			try {
-				recordReviewTriageOutcome(
-					{ task, diff: "" },
-					this.reviewTriageResult,
-					false,
-					this.stateDir,
-				);
+				recordReviewTriageOutcome({ task, diff: "" }, this.reviewTriageResult, false, this.stateDir);
 			} catch {
 				// Non-critical
 			}
@@ -2452,31 +2327,22 @@ Be concise and specific. Focus on actionable insights.`;
 		const maxTurns = getMaxTurnsForModel(this.currentModel);
 		sessionLogger.debug({ model: this.currentModel, maxTurns }, `Agent maxTurns: ${maxTurns}`);
 
-		// Build query parameters - use resume if we have a session to continue
-		const queryOptions = {
-			model: MODEL_NAMES[this.currentModel],
-			permissionMode: "bypassPermissions" as const,
-			allowDangerouslySkipPermissions: true,
-			settingSources: ["project"] as ("project" | "user")[],
-			// CRITICAL: Use workingDirectory so agent edits files in the correct location (worktree)
-			cwd: this.workingDirectory,
-			// Limit turns to prevent runaway exploration - simple tasks don't need 20+ turns
+		// Build query options using helper
+		const queryOptions = buildQueryOptions({
+			modelName: MODEL_NAMES[this.currentModel],
+			workingDirectory: this.workingDirectory,
 			maxTurns,
-			// Defense-in-depth: explicitly block git push even if settings fail to load
-			disallowedTools: DISALLOWED_GIT_PUSH_TOOLS,
-			// Stop hook: prevent agent from finishing without making changes (disabled for meta-tasks)
-			hooks:
-				stopHooks.length > 0
-					? {
-							Stop: stopHooks,
-						}
-					: undefined,
-		};
+			stopHooks,
+		});
 
-		// Use resume to continue the session, or prompt to start fresh
-		const queryParams = canResume
-			? { resume: this.currentAgentSessionId!, prompt: resumePrompt!, options: queryOptions }
-			: { prompt, options: queryOptions };
+		// Build query params using helper
+		const queryParams = buildQueryParams(
+			!!canResume,
+			this.currentAgentSessionId,
+			resumePrompt,
+			prompt,
+			queryOptions,
+		);
 
 		// Log prompt size for performance analysis
 		const promptSize = prompt?.length || resumePrompt?.length || 0;
@@ -2547,18 +2413,13 @@ Be concise and specific. Focus on actionable insights.`;
 		}
 
 		// Parse agent output for decision points and capture them
-		try {
-			const decisions = parseAgentOutputForDecisions(result, this.currentTaskId);
-			for (const d of decisions) {
-				const captured = captureDecision(this.currentTaskId, d.question, d.context, d.options, this.stateDir);
-				sessionLogger.debug(
-					{ decisionId: captured.id, category: captured.category },
-					"Captured decision point from agent output",
-				);
-			}
-		} catch {
-			// Non-critical - continue without decision capture
-		}
+		captureDecisionsFromOutput(
+			result,
+			this.currentTaskId,
+			parseAgentOutputForDecisions,
+			captureDecision,
+			this.stateDir,
+		);
 
 		return result;
 	}
