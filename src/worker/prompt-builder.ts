@@ -5,19 +5,13 @@
  * maintainability and testability.
  */
 
-import { findRelevantLearnings, formatLearningsCompact } from "../knowledge.js";
-import { getMetaTaskPrompt } from "../meta-tasks.js";
-import {
-	formatCoModificationHints,
-	formatFileSuggestionsForPrompt,
-} from "../task-file-patterns.js";
-import { formatExecutionPlanAsContext, type TieredPlanResult } from "../task-planner.js";
 import type { ContextBriefing } from "../context.js";
 import { generateToolsPrompt } from "../efficiency-tools.js";
-import {
-	formatPatternsAsRules,
-	getFailureWarningsForTask,
-} from "../error-fix-patterns.js";
+import { formatPatternsAsRules, getFailureWarningsForTask } from "../error-fix-patterns.js";
+import { findRelevantLearnings, formatLearningsCompact } from "../knowledge.js";
+import { getMetaTaskPrompt } from "../meta-tasks.js";
+import { formatCoModificationHints, formatFileSuggestionsForPrompt } from "../task-file-patterns.js";
+import { formatExecutionPlanAsContext, type TieredPlanResult } from "../task-planner.js";
 import type { MetaTaskType } from "../types.js";
 
 /**
@@ -253,7 +247,7 @@ export function buildContextSections(ctx: PromptBuildContext): {
 /**
  * Check if task might already be complete
  */
-export function checkTaskMayBeComplete(task: string, workingDirectory: string): string | null {
+export function checkTaskMayBeComplete(_task: string, _workingDirectory: string): string | null {
 	// Import dynamically to avoid circular dependencies
 	// This is a simple heuristic check - the worker has the full implementation
 	return null; // Let the worker handle this with its full implementation
@@ -306,10 +300,7 @@ RULES:
 /**
  * Main entry point: build prompt based on task type
  */
-export function buildPromptForTask(
-	ctx: PromptBuildContext,
-	currentAgentSessionId?: string,
-): PromptBuildResult {
+export function buildPromptForTask(ctx: PromptBuildContext, currentAgentSessionId?: string): PromptBuildResult {
 	const isRetry = ctx.attempts > 1 && ctx.lastFeedback;
 	const canResume = isRetry && currentAgentSessionId && !ctx.lastPostMortem;
 
@@ -326,13 +317,7 @@ export function buildPromptForTask(
 	// Meta-task
 	if (ctx.isMetaTask && ctx.metaType) {
 		return {
-			prompt: buildMetaTaskPrompt(
-				ctx.metaType,
-				ctx.task,
-				ctx.workingDirectory,
-				ctx.attempts,
-				ctx.lastFeedback,
-			),
+			prompt: buildMetaTaskPrompt(ctx.metaType, ctx.task, ctx.workingDirectory, ctx.attempts, ctx.lastFeedback),
 			canResume: false,
 			injectedLearningIds: [],
 		};
@@ -341,12 +326,7 @@ export function buildPromptForTask(
 	// Research task
 	if (ctx.isResearchTask) {
 		return {
-			prompt: buildResearchPrompt(
-				ctx.task,
-				ctx.attempts,
-				ctx.lastFeedback,
-				ctx.consecutiveNoWriteAttempts,
-			),
+			prompt: buildResearchPrompt(ctx.task, ctx.attempts, ctx.lastFeedback, ctx.consecutiveNoWriteAttempts),
 			canResume: false,
 			injectedLearningIds: [],
 		};

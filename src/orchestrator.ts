@@ -13,10 +13,10 @@
  * | 6    | User pushes local main when ready               |
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, normalize } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { updateLedger } from "./capability-ledger.js";
 import {
@@ -32,6 +32,15 @@ import { checkAndFixBareRepo } from "./git.js";
 import { getTasksNeedingInput } from "./human-input-tracking.js";
 import { sessionLogger } from "./logger.js";
 import { nameFromId } from "./names.js";
+import {
+	cleanWorktreeDirectory,
+	execGitInDir,
+	fetchMainIntoWorktree,
+	mergeIntoLocalMain,
+	runPostRebaseVerification,
+	validateGitRef,
+	validateWorktreePath,
+} from "./orchestrator/index.js";
 import * as output from "./output.js";
 import { Persistence, readTaskAssignment, writeTaskAssignment } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
@@ -137,46 +146,6 @@ function generateTaskId(): string {
  */
 function generateBatchId(): string {
 	return `batch-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
-}
-
-/**
- * Validate a directory path before executing commands in it
- */
-function validateCwd(cwd: string): void {
-	const normalized = normalize(cwd);
-	if (!isAbsolute(normalized)) {
-		throw new Error(`Invalid cwd: must be absolute path, got ${cwd}`);
-	}
-	if (!existsSync(normalized)) {
-		throw new Error(`Invalid cwd: path does not exist: ${cwd}`);
-	}
-}
-
-/**
- * Execute a git command in a specific directory (safe from shell injection)
- */
-function execGitInDir(args: string[], cwd: string): string {
-	validateCwd(cwd);
-	return execFileSync("git", args, { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
-}
-
-/**
- * Run a shell command in a specific directory (use only for trusted commands)
- */
-function execInDir(command: string, cwd: string): string {
-	validateCwd(cwd);
-	return execSync(command, { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
-}
-
-/**
- * Validate a git ref name (branch, tag, etc.) to prevent injection
- */
-function validateGitRef(ref: string): void {
-	// Git ref names cannot contain: space, ~, ^, :, ?, *, [, \, control chars
-	// Also reject shell metacharacters for extra safety
-	if (!/^[\w./-]+$/.test(ref)) {
-		throw new Error(`Invalid git ref: ${ref}`);
-	}
 }
 
 /**
@@ -1793,62 +1762,36 @@ export class Orchestrator {
 	 * then fast-forward merge into local main. No automatic push to origin.
 	 */
 	private async mergeBranch(_branch: string, taskId: string, worktreePath: string): Promise<void> {
-		const { existsSync, statSync } = await import("node:fs");
-
 		// Validate worktree path before proceeding
-		if (!worktreePath) {
-			throw new Error(`Worktree path is empty for ${taskId}`);
-		}
-
-		if (!existsSync(worktreePath)) {
-			throw new Error(`Worktree path does not exist for ${taskId}: ${worktreePath}`);
-		}
-
-		try {
-			const stats = statSync(worktreePath);
-			if (!stats.isDirectory()) {
-				throw new Error(`Worktree path is not a directory for ${taskId}: ${worktreePath}`);
-			}
-		} catch (statError) {
-			throw new Error(`Cannot stat worktree path for ${taskId}: ${worktreePath} - ${statError}`);
-		}
+		validateWorktreePath(taskId, worktreePath);
 
 		const mainBranch = this.worktreeManager.getMainBranch();
 		const mainRepo = this.worktreeManager.getMainRepoPath();
 
 		// Ensure clean working directory before rebase
-		// Verification or build artifacts may have left unstaged changes
-		try {
-			const status = execGitInDir(["status", "--porcelain"], worktreePath);
-			if (status.trim()) {
-				output.debug(`Cleaning unstaged changes in worktree for ${taskId}`);
-				// Reset any unstaged changes (keeps committed work)
-				execGitInDir(["checkout", "--", "."], worktreePath);
-				// Clean any untracked files (build artifacts, etc.)
-				execGitInDir(["clean", "-fd"], worktreePath);
-			}
-		} catch (cleanError) {
-			// If git status fails, the worktree is likely corrupted or deleted
-			const errorStr = String(cleanError);
-			if (errorStr.includes("not a work tree") || errorStr.includes("must be run in a work tree")) {
-				throw new Error(
-					`Worktree for ${taskId} was deleted or corrupted before merge could complete. ` +
-						`This may be a race condition - try running with lower parallelism.`,
-				);
-			}
-			output.warning(`Failed to clean worktree for ${taskId}: ${cleanError}`);
-		}
+		cleanWorktreeDirectory(taskId, worktreePath);
 
 		// Fetch latest local main into the worktree
-		// This ensures we rebase onto the current state of main, including unpushed commits
-		validateGitRef(mainBranch);
-		try {
-			execGitInDir(["fetch", mainRepo, mainBranch], worktreePath);
-		} catch (fetchError) {
-			throw new Error(`Git fetch from main repo failed for ${taskId}: ${fetchError}`);
-		}
+		fetchMainIntoWorktree(taskId, worktreePath, mainRepo, mainBranch);
 
 		// Rebase onto local main (via FETCH_HEAD from the fetch above)
+		await this.rebaseOntoMain(taskId, worktreePath);
+
+		// Run verification after rebase with fix loop
+		await runPostRebaseVerification(
+			taskId,
+			worktreePath,
+			this.attemptMergeVerificationFix.bind(this),
+		);
+
+		// Merge worktree changes into local main
+		mergeIntoLocalMain(taskId, worktreePath, mainRepo, mainBranch);
+	}
+
+	/**
+	 * Rebase worktree onto local main with conflict resolution
+	 */
+	private async rebaseOntoMain(taskId: string, worktreePath: string): Promise<void> {
 		try {
 			execGitInDir(["rebase", "FETCH_HEAD"], worktreePath);
 		} catch (error) {
@@ -1861,135 +1804,29 @@ export class Orchestrator {
 				try {
 					const resolved = await this.attemptRebaseConflictResolution(taskId, worktreePath);
 					if (!resolved) {
-						// Resolution failed, abort and throw
-						try {
-							execGitInDir(["rebase", "--abort"], worktreePath);
-						} catch {
-							// Ignore abort errors
-						}
+						this.abortRebase(worktreePath);
 						throw new Error(`Rebase failed for ${taskId}: Unable to resolve conflicts`);
 					}
 					output.success(`Resolved rebase conflict for ${taskId}`);
 				} catch (resolveError) {
-					// Resolution failed, abort and throw
-					try {
-						execGitInDir(["rebase", "--abort"], worktreePath);
-					} catch {
-						// Ignore abort errors
-					}
+					this.abortRebase(worktreePath);
 					throw new Error(`Rebase failed for ${taskId}: ${resolveError}`);
 				}
 			} else {
-				// Not a conflict, abort and throw
-				try {
-					execGitInDir(["rebase", "--abort"], worktreePath);
-				} catch {
-					// Ignore abort errors
-				}
+				this.abortRebase(worktreePath);
 				throw new Error(`Rebase failed for ${taskId}: ${error}`);
 			}
 		}
+	}
 
-		// Run verification after rebase with fix loop (catches any merge issues)
-		const maxMergeFixAttempts = 2;
-		let lastVerifyError: unknown = null;
-
-		for (let attempt = 0; attempt <= maxMergeFixAttempts; attempt++) {
-			try {
-				output.progress(`Running verification for ${taskId}${attempt > 0 ? ` (fix attempt ${attempt})` : ""}...`);
-				execInDir(`pnpm typecheck`, worktreePath);
-				// Set UNDERCITY_VERIFICATION to skip integration tests during merge verification
-				execSync(`pnpm test --run`, {
-					cwd: worktreePath,
-					encoding: "utf-8",
-					stdio: ["pipe", "pipe", "pipe"],
-					env: { ...process.env, UNDERCITY_VERIFICATION: "true" },
-				});
-				// Verification passed
-				lastVerifyError = null;
-				break;
-			} catch (verifyError) {
-				lastVerifyError = verifyError;
-
-				// If we have more attempts, try to fix
-				if (attempt < maxMergeFixAttempts) {
-					output.warning(
-						`Verification failed for ${taskId}, attempting fix (${attempt + 1}/${maxMergeFixAttempts})...`,
-					);
-
-					try {
-						await this.attemptMergeVerificationFix(taskId, worktreePath, String(verifyError));
-					} catch (fixError) {
-						output.warning(`Fix attempt failed for ${taskId}: ${fixError}`);
-					}
-				}
-			}
-		}
-
-		if (lastVerifyError) {
-			throw new Error(
-				`Verification failed for ${taskId} after ${maxMergeFixAttempts} fix attempts: ${lastVerifyError}`,
-			);
-		}
-
-		// Merge worktree changes into local main
-		// Since worktree already rebased onto local main, this should fast-forward
-		let didStash = false;
+	/**
+	 * Safely abort a rebase operation
+	 */
+	private abortRebase(worktreePath: string): void {
 		try {
-			// Get the current commit SHA before detaching
-			const commitSha = execGitInDir(["rev-parse", "HEAD"], worktreePath).trim();
-
-			// Detach HEAD in worktree to release the branch lock
-			// This prevents "refusing to fetch into branch checked out" error
-			execGitInDir(["checkout", "--detach"], worktreePath);
-
-			// Check if main repo has uncommitted changes that would block merge
-			// Exclude .undercity/ files since they're managed by the orchestrator
-			const mainStatus = execGitInDir(["status", "--porcelain"], mainRepo);
-			const nonUndercityChanges = mainStatus
-				.split("\n")
-				.filter((line) => line.trim() && !line.includes(".undercity/"))
-				.join("\n");
-
-			if (nonUndercityChanges.trim()) {
-				output.warning(`Main repo has uncommitted changes, stashing before merge for ${taskId}`);
-				try {
-					// Only stash tracked changes outside .undercity/
-					execGitInDir(["stash", "push", "-m", `Auto-stash before merging ${taskId}`], mainRepo);
-					didStash = true;
-				} catch (stashError) {
-					throw new Error(`Cannot merge: main repo has uncommitted changes and stash failed: ${stashError}`);
-				}
-			}
-
-			// Checkout main and fast-forward merge the worktree branch
-			execGitInDir(["checkout", mainBranch], mainRepo);
-			execGitInDir(["merge", "--ff-only", commitSha], mainRepo);
-
-			output.debug(`Merged ${taskId} into local main (${commitSha.slice(0, 7)})`);
-
-			// Restore stashed changes after successful merge
-			if (didStash) {
-				try {
-					execGitInDir(["stash", "pop"], mainRepo);
-					output.debug(`Restored stashed changes after merge for ${taskId}`);
-				} catch (popError) {
-					// Stash pop might fail if there are conflicts with merged changes
-					// Log the issue but don't fail the merge - the changes are in the stash
-					output.warning(`Could not auto-restore stashed changes after ${taskId} merge: ${popError}`);
-					output.info(`Run 'git stash pop' manually to restore your changes`);
-				}
-			}
-		} catch (mergeError) {
-			// If merge failed and we stashed, try to restore the stash
-			if (didStash) {
-				try {
-					execGitInDir(["stash", "pop"], mainRepo);
-				} catch {
-					// Silent failure - stash is still available
-				}
-			}
-			throw new Error(`Merge into local main failed for ${taskId}: ${mergeError}`);
+			execGitInDir(["rebase", "--abort"], worktreePath);
+		} catch {
+			// Ignore abort errors
 		}
 	}
 

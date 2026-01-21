@@ -59,7 +59,7 @@ import { findRelevantLearnings, formatLearningsCompact, markLearningsUsed } from
 import { extractAndStoreLearnings } from "./knowledge-extractor.js";
 import { recordQueryResult } from "./live-metrics.js";
 import { sessionLogger } from "./logger.js";
-import { getMetaTaskPrompt, parseMetaTaskResult } from "./meta-tasks.js";
+import { parseMetaTaskResult } from "./meta-tasks.js";
 import { MetricsTracker } from "./metrics.js";
 import * as output from "./output.js";
 import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
@@ -78,12 +78,8 @@ import {
 	type TokenUsage,
 } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
-import {
-	buildMetaTaskPrompt,
-	buildResearchPrompt,
-	buildResumePrompt,
-} from "./worker/prompt-builder.js";
-import { createStandardStopHooks, getMaxTurnsForModel } from "./worker/stop-hooks.js";
+import { buildMetaTaskPrompt, buildResearchPrompt, buildResumePrompt } from "./worker/prompt-builder.js";
+import { getMaxTurnsForModel } from "./worker/stop-hooks.js";
 
 /**
  * Get a few-shot example for common task patterns to help the agent succeed.
@@ -2496,21 +2492,10 @@ Be concise and specific. Focus on actionable insights.`;
 			);
 		} else if (this.isCurrentTaskMeta && metaType) {
 			// Meta-task prompt
-			prompt = buildMetaTaskPrompt(
-				metaType,
-				task,
-				this.workingDirectory,
-				this.attempts,
-				this.lastFeedback,
-			);
+			prompt = buildMetaTaskPrompt(metaType, task, this.workingDirectory, this.attempts, this.lastFeedback);
 		} else if (this.isCurrentTaskResearch) {
 			// Research task prompt
-			prompt = buildResearchPrompt(
-				task,
-				this.attempts,
-				this.lastFeedback,
-				this.consecutiveNoWriteAttempts,
-			);
+			prompt = buildResearchPrompt(task, this.attempts, this.lastFeedback, this.consecutiveNoWriteAttempts);
 		} else {
 			// Standard implementation task: build prompt with context
 			let contextSection = "";
