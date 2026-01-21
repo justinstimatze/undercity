@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-21T07:26:58.035Z",
+  "generatedAt": "2026-01-21T07:30:51.388Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -28,8 +28,8 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1624,
-          "context": "log"
+          "line": 1589,
+          "context": "if"
         },
         {
           "file": "mcp-protocol.ts",
@@ -309,7 +309,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1447,
+          "line": 1455,
           "context": "if"
         }
       ]
@@ -320,17 +320,17 @@
       "calledFrom": [
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 190,
+          "line": 198,
           "context": "if"
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 291,
+          "line": 299,
           "context": "if"
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1470,
+          "line": 1478,
           "context": "log"
         },
         {
@@ -383,7 +383,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1673,
+          "line": 1618,
           "context": "log"
         }
       ]
@@ -399,7 +399,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1680,
+          "line": 1625,
           "context": "log"
         }
       ]
@@ -410,7 +410,7 @@
       "calledFrom": [
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1690,
+          "line": 1635,
           "context": "log"
         },
         {

@@ -23,6 +23,14 @@ import {
 	handleStatsSubcommand,
 } from "./human-input-helpers.js";
 import {
+	displayAllLearnings,
+	displayKnowledgeStats,
+	displayKnowledgeUsage,
+	displaySearchResults,
+	type KnowledgeStats,
+	type LearningEntry,
+} from "./knowledge-helpers.js";
+import {
 	addProposalsToBoard,
 	displayIdeationFindings,
 	displayPMError,
@@ -1553,30 +1561,12 @@ export async function handleDecide(options: DecideOptions): Promise<void> {
  */
 export async function handleKnowledge(query: string | undefined, options: KnowledgeOptions): Promise<void> {
 	const { findRelevantLearnings, getKnowledgeStats, loadKnowledge } = await import("../knowledge.js");
+	const isHuman = options.human ?? false;
 
 	// Stats mode - show knowledge base statistics
 	if (options.stats) {
-		const stats = getKnowledgeStats();
-		if (options.human) {
-			console.log(chalk.bold("\n📚 Knowledge Base Stats\n"));
-			console.log(`  Total learnings: ${chalk.cyan(stats.totalLearnings)}`);
-			console.log(`  Average confidence: ${chalk.cyan(`${(stats.avgConfidence * 100).toFixed(1)}%`)}`);
-			console.log();
-			console.log(chalk.bold("  By category:"));
-			console.log(`    Patterns: ${stats.byCategory.pattern}`);
-			console.log(`    Gotchas: ${stats.byCategory.gotcha}`);
-			console.log(`    Preferences: ${stats.byCategory.preference}`);
-			console.log(`    Facts: ${stats.byCategory.fact}`);
-			if (stats.mostUsed.length > 0) {
-				console.log();
-				console.log(chalk.bold("  Most used:"));
-				for (const item of stats.mostUsed) {
-					console.log(`    - ${item.content} (${item.usedCount} uses)`);
-				}
-			}
-		} else {
-			console.log(JSON.stringify(stats, null, 2));
-		}
+		const stats = getKnowledgeStats() as KnowledgeStats;
+		displayKnowledgeStats(stats, isHuman);
 		return;
 	}
 
@@ -1584,65 +1574,20 @@ export async function handleKnowledge(query: string | undefined, options: Knowle
 	if (options.all) {
 		const kb = loadKnowledge();
 		const limit = options.limit ? Number.parseInt(options.limit, 10) : 50;
-		const learnings = kb.learnings.slice(0, limit);
-
-		if (options.human) {
-			console.log(chalk.bold(`\n📚 All Learnings (${learnings.length}/${kb.learnings.length})\n`));
-			for (const learning of learnings) {
-				const confidenceColor =
-					learning.confidence >= 0.7 ? chalk.green : learning.confidence >= 0.4 ? chalk.yellow : chalk.red;
-				console.log(`  ${chalk.cyan(`[${learning.category}]`)} ${learning.content}`);
-				console.log(
-					chalk.dim(
-						`    ID: ${learning.id} | Confidence: ${confidenceColor(`${(learning.confidence * 100).toFixed(0)}%`)} | Used: ${learning.usedCount}x`,
-					),
-				);
-				console.log();
-			}
-			if (kb.learnings.length > limit) {
-				console.log(chalk.dim(`  ... and ${kb.learnings.length - limit} more (use --limit to see more)`));
-			}
-		} else {
-			console.log(JSON.stringify({ learnings, total: kb.learnings.length }, null, 2));
-		}
+		const learnings = kb.learnings.slice(0, limit) as LearningEntry[];
+		displayAllLearnings(learnings, kb.learnings.length, isHuman, limit);
 		return;
 	}
 
 	// Search mode - requires query
 	if (!query) {
-		if (options.human) {
-			console.log(chalk.yellow("Usage: undercity knowledge <search query>"));
-			console.log(chalk.dim("       undercity knowledge --stats"));
-			console.log(chalk.dim("       undercity knowledge --all"));
-		} else {
-			console.log(JSON.stringify({ error: "Query required for search. Use --stats or --all for other modes." }));
-		}
+		displayKnowledgeUsage(isHuman);
 		return;
 	}
 
 	const limit = options.limit ? Number.parseInt(options.limit, 10) : 10;
-	const relevant = findRelevantLearnings(query, limit);
-
-	if (options.human) {
-		console.log(chalk.bold(`\n🔍 Learnings matching "${query}"\n`));
-		if (relevant.length === 0) {
-			console.log(chalk.dim("  No relevant learnings found."));
-		} else {
-			for (const learning of relevant) {
-				const confidenceColor =
-					learning.confidence >= 0.7 ? chalk.green : learning.confidence >= 0.4 ? chalk.yellow : chalk.red;
-				console.log(`  ${chalk.cyan(`[${learning.category}]`)} ${learning.content}`);
-				console.log(
-					chalk.dim(
-						`    Confidence: ${confidenceColor(`${(learning.confidence * 100).toFixed(0)}%`)} | Keywords: ${learning.keywords.slice(0, 5).join(", ")}`,
-					),
-				);
-				console.log();
-			}
-		}
-	} else {
-		console.log(JSON.stringify({ query, results: relevant }, null, 2));
-	}
+	const relevant = findRelevantLearnings(query, limit) as LearningEntry[];
+	displaySearchResults(query, relevant, isHuman);
 }
 
 /**
