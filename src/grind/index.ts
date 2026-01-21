@@ -250,10 +250,11 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		// Phase 5: Decomposition & Model Assignment
 		// =========================================================================
 
-		const { tasksByModel, atomicityResults: _atomicityResults, decomposedCount } = await processTasksForExecution(
-			validation.validTasks,
-			config,
-		);
+		const {
+			tasksByModel,
+			atomicityResults: _atomicityResults,
+			decomposedCount,
+		} = await processTasksForExecution(validation.validTasks, config);
 
 		const totalTasks = tasksByModel.haiku.length + tasksByModel.sonnet.length + tasksByModel.opus.length;
 

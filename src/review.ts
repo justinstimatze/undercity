@@ -10,7 +10,6 @@
 import { execSync } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
-import { AnnealingReview } from "./annealing-review.js";
 import { sessionLogger } from "./logger.js";
 import { MODEL_NAMES, type ModelTier } from "./types.js";
 import { verifyWork } from "./verification.js";
@@ -57,7 +56,7 @@ export interface UnresolvedTicket {
  * For trivial/simple/standard tasks, we cap at sonnet - opus review is overkill.
  *
  * @param task - The task being reviewed
- * @param useAnnealing - Whether to use annealing review at opus tier
+ * @param useMultiLens - Whether to use multi-lens focused review at opus tier
  * @param maxReviewTier - Maximum tier to escalate to (default: opus)
  * @param maxReviewPassesPerTier - Max passes per tier before escalating
  * @param maxOpusReviewPasses - Max passes at opus tier (no escalation path)
@@ -69,7 +68,7 @@ export interface UnresolvedTicket {
 export async function runEscalatingReview(
 	task: string,
 	options: {
-		useAnnealing?: boolean;
+		useMultiLens?: boolean;
 		maxReviewTier?: ModelTier;
 		maxReviewPassesPerTier?: number;
 		maxOpusReviewPasses?: number;
@@ -83,12 +82,12 @@ export async function runEscalatingReview(
 	issuesFound: string[];
 	reviewPasses: number;
 	finalTier: ModelTier;
-	annealingInsights?: string[];
+	multiLensInsights?: string[];
 	/** Tickets for issues that couldn't be fixed - queue these as child tasks */
 	unresolvedTickets?: UnresolvedTicket[];
 }> {
 	const {
-		useAnnealing = false,
+		useMultiLens = false,
 		maxReviewTier = "opus",
 		maxReviewPassesPerTier = 2,
 		maxOpusReviewPasses = maxReviewPassesPerTier * 3,
@@ -111,18 +110,18 @@ export async function runEscalatingReview(
 
 	const allIssuesFound: string[] = [];
 	let totalPasses = 0;
-	const annealingInsights: string[] = [];
+	const multiLensInsights: string[] = [];
 
 	const cappedNote = maxReviewTier !== "opus" ? ` (capped at ${maxReviewTier})` : "";
 	console.log(chalk.cyan(`\n  ━━━ Review Passes${cappedNote} ━━━`));
 
 	for (const tier of tiers) {
-		// At opus tier, optionally use annealing review (advisory mode)
-		// Annealing uses Sonnet for cost efficiency - 3 passes for ~60% cost of 1 Opus pass
-		if (tier === "opus" && useAnnealing) {
-			console.log(chalk.magenta("  [opus] Annealing review (3x sonnet passes)"));
-			const insights = await runAnnealingReview(task, workingDirectory, log, "sonnet", 3);
-			annealingInsights.push(...insights);
+		// At opus tier, optionally use focused review (advisory mode)
+		// Focused review uses Sonnet with deterministic lenses for systematic coverage
+		if (tier === "opus" && useMultiLens) {
+			console.log(chalk.magenta("  [opus] Focused review (4 lenses × sonnet)"));
+			const insights = await runFocusedReview(task, workingDirectory, log, "sonnet");
+			multiLensInsights.push(...insights);
 
 			// Still do a final convergence check with standard review
 			const finalReview = await runSingleReview(task, "opus", workingDirectory, log);
@@ -143,7 +142,7 @@ export async function runEscalatingReview(
 						issuesFound: allIssuesFound,
 						reviewPasses: totalPasses,
 						finalTier: "opus",
-						annealingInsights,
+						multiLensInsights,
 					};
 				}
 			} else if (finalReview.foundIssues) {
@@ -235,7 +234,7 @@ export async function runEscalatingReview(
 					issuesFound: allIssuesFound,
 					reviewPasses: totalPasses,
 					finalTier: tier,
-					annealingInsights: annealingInsights.length > 0 ? annealingInsights : undefined,
+					multiLensInsights: multiLensInsights.length > 0 ? multiLensInsights : undefined,
 					unresolvedTickets: tickets.length > 0 ? tickets : undefined,
 				};
 			}
@@ -256,7 +255,7 @@ export async function runEscalatingReview(
 		issuesFound: allIssuesFound,
 		reviewPasses: totalPasses,
 		finalTier: highestTierUsed,
-		annealingInsights: annealingInsights.length > 0 ? annealingInsights : undefined,
+		multiLensInsights: multiLensInsights.length > 0 ? multiLensInsights : undefined,
 	};
 }
 
@@ -328,33 +327,27 @@ function generateTicketsFromIssues(
 }
 
 /**
- * Run annealing review - multi-angle advisory review using tarot cards
+ * Run focused review - deterministic multi-lens advisory review
  *
- * Uses Sonnet by default for cost efficiency - 3 Sonnet passes cost ~60% of 1 Opus pass
- * while providing more diverse perspectives. Multiple viewpoints often catch more issues
- * than a single deeper review.
+ * Uses evidence-based review lenses that ensure consistent coverage of
+ * critical review dimensions: security, error handling, correctness, edge cases.
+ *
+ * Uses Sonnet for cost efficiency - 4 Sonnet passes (critical + high priority lenses)
+ * cost ~80% of 1 Opus pass while providing systematic coverage.
  *
  * @param task - The task being reviewed
  * @param workingDirectory - Working directory for git operations
  * @param log - Logging function
- * @param annealingModel - Model to use for annealing (default: sonnet)
- * @param maxPasses - Maximum number of annealing passes (default: 3)
+ * @param reviewModel - Model to use for review (default: sonnet)
  */
-async function runAnnealingReview(
+async function runFocusedReview(
 	task: string,
 	workingDirectory: string,
 	log: (message: string, data?: Record<string, unknown>) => void,
-	annealingModel: ModelTier = "sonnet",
-	maxPasses: number = 3,
+	reviewModel: ModelTier = "sonnet",
 ): Promise<string[]> {
-	const annealing = new AnnealingReview({
-		passesPerTemperature: 1,
-		coolingRate: 0.4,
-	});
-
-	// Use multiple passes with Sonnet (cheaper) for diverse perspectives
-	// 3 Sonnet passes cost ~60% of 1 Opus pass but provide more angles
-	const schedule = annealing.generateSchedule().slice(0, maxPasses);
+	const { getQuickReviewLenses, formatLens } = await import("./review-lenses.js");
+	const lenses = getQuickReviewLenses(); // Critical + High priority lenses
 	const insights: string[] = [];
 
 	let diffOutput = "";
@@ -368,35 +361,39 @@ async function runAnnealingReview(
 		diffOutput = "Unable to get diff";
 	}
 
-	for (const pass of schedule) {
-		const cardName = pass.isMajor
-			? (pass.card as { name: string }).name
-			: `${(pass.card as { rank: string }).rank} of ${(pass.card as { suit: string }).suit}`;
+	if (!diffOutput || diffOutput.trim() === "") {
+		log("No diff to review", {});
+		return insights;
+	}
 
-		console.log(chalk.dim(`    🃏 ${cardName}: ${pass.prompt.slice(0, 50)}...`));
+	for (const lens of lenses) {
+		console.log(chalk.dim(`    ${formatLens(lens)}`));
 
-		const annealingPrompt = `You are reviewing code through a specific lens. Be brief.
+		const reviewPrompt = `You are reviewing code changes. Be specific and actionable.
 
 Task: ${task}
-Lens: ${pass.prompt}
+
+Review Focus (${lens.name}):
+${lens.prompt}
 
 Changes:
 \`\`\`diff
 ${diffOutput.slice(0, 6000)}
 \`\`\`
 
-Provide ONE key insight (1-2 sentences). If nothing notable, say "Nothing notable."`;
+If you find issues, describe them specifically (file, line if possible, what's wrong).
+If nothing notable for this lens, respond with exactly: "Nothing notable."`;
 
 		try {
 			let response = "";
 			for await (const message of query({
-				prompt: annealingPrompt,
+				prompt: reviewPrompt,
 				options: {
 					maxTurns: 1,
-					model: MODEL_NAMES[annealingModel],
+					model: MODEL_NAMES[reviewModel],
 					permissionMode: "bypassPermissions",
 					allowDangerouslySkipPermissions: true,
-					settingSources: ["project"], // Load disallowedTools from settings
+					settingSources: ["project"],
 				},
 			})) {
 				if (message.type === "result" && message.subtype === "success") {
@@ -405,20 +402,23 @@ Provide ONE key insight (1-2 sentences). If nothing notable, say "Nothing notabl
 			}
 
 			if (response && !response.toLowerCase().includes("nothing notable")) {
-				insights.push(`${cardName}: ${response.trim()}`);
-				console.log(chalk.cyan(`      → ${response.trim().slice(0, 60)}...`));
+				insights.push(`[${lens.name}] ${response.trim()}`);
+				console.log(chalk.cyan(`      → ${response.trim().slice(0, 80)}...`));
 			}
 		} catch (error) {
-			log("Annealing review card failed", { card: cardName, error: String(error) });
+			log("Focused review lens failed", { lens: lens.name, error: String(error) });
 		}
 	}
 
 	if (insights.length > 0) {
-		console.log(chalk.magenta(`    ${insights.length} insight(s) from annealing review`));
+		console.log(chalk.magenta(`    ${insights.length} issue(s) found across ${lenses.length} lenses`));
+	} else {
+		console.log(chalk.green(`    No issues found across ${lenses.length} lenses`));
 	}
 
 	return insights;
 }
+
 
 /**
  * Run a review pass that can directly fix issues.

@@ -1066,7 +1066,7 @@ export class TaskWorker {
 		taskId: string,
 	): Promise<{
 		assessment: ComplexityAssessment;
-		reviewLevel: { review: boolean; annealing: boolean; maxReviewTier: ModelTier };
+		reviewLevel: { review: boolean; multiLens: boolean; maxReviewTier: ModelTier };
 		phaseTimings: Record<string, number>;
 	}> {
 		output.workerPhase(taskId, "analyzing");
@@ -1147,7 +1147,7 @@ export class TaskWorker {
 		this.log("Starting task", { task, model: this.currentModel, assessment: assessment.level, reviewLevel });
 		output.info(`Model: ${this.currentModel}`, { taskId, model: this.currentModel });
 		if (reviewLevel.review) {
-			const reviewMode = reviewLevel.annealing ? "escalating + annealing" : "escalating";
+			const reviewMode = reviewLevel.multiLens ? "escalating + multi-lens" : "escalating";
 			const reviewCap = reviewLevel.maxReviewTier !== "opus" ? ` (cap: ${reviewLevel.maxReviewTier})` : "";
 			output.info(`Reviews: ${reviewMode}${reviewCap}`, { taskId, reviewMode, maxTier: reviewLevel.maxReviewTier });
 		}
@@ -1434,7 +1434,7 @@ export class TaskWorker {
 		task: string,
 		taskId: string,
 		baseCommit: string | undefined,
-		reviewLevel: { review: boolean; annealing: boolean; maxReviewTier: ModelTier },
+		reviewLevel: { review: boolean; multiLens: boolean; maxReviewTier: ModelTier },
 		attemptStart: number,
 		startTime: number,
 		phaseTimings: Record<string, number>,
@@ -1623,7 +1623,7 @@ export class TaskWorker {
 		taskId: string,
 		baseCommit: string | undefined,
 		verification: VerificationResult,
-		reviewLevel: { review: boolean; annealing: boolean; maxReviewTier: ModelTier },
+		reviewLevel: { review: boolean; multiLens: boolean; maxReviewTier: ModelTier },
 		errorCategories: ErrorCategory[],
 		attemptStart: number,
 		startTime: number,
@@ -1729,13 +1729,13 @@ export class TaskWorker {
 		task: string,
 		taskId: string,
 		baseCommit: string | undefined,
-		reviewLevel: { review: boolean; annealing: boolean; maxReviewTier: ModelTier },
+		reviewLevel: { review: boolean; multiLens: boolean; maxReviewTier: ModelTier },
 	): Promise<{ continue: boolean; verification?: VerificationResult }> {
 		this.saveCheckpoint("reviewing", { passed: true });
 		output.workerPhase(taskId, "reviewing");
 
 		const reviewResult = await runEscalatingReview(task, {
-			useAnnealing: reviewLevel.annealing,
+			useMultiLens: reviewLevel.multiLens,
 			maxReviewTier: reviewLevel.maxReviewTier,
 			maxReviewPassesPerTier: this.maxReviewPassesPerTier,
 			maxOpusReviewPasses: this.maxOpusReviewPasses,
@@ -2416,20 +2416,20 @@ Be concise and specific. Focus on actionable insights.`;
 	 */
 	private determineReviewLevel(assessment: ComplexityAssessment): {
 		review: boolean;
-		annealing: boolean;
+		multiLens: boolean;
 		maxReviewTier: ModelTier;
 	} {
-		// If user explicitly set annealing, respect it (full escalation, capped at maxTier)
+		// If user explicitly set multi-lens, respect it (full escalation, capped at maxTier)
 		if (this.annealingAtOpus) {
 			const cappedTier = this.capAtMaxTier("opus");
-			// Disable annealing if we can't reach opus
-			const canAnneal = cappedTier === "opus";
-			return { review: true, annealing: canAnneal, maxReviewTier: cappedTier };
+			// Disable multi-lens if we can't reach opus
+			const canMultiLens = cappedTier === "opus";
+			return { review: true, multiLens: canMultiLens, maxReviewTier: cappedTier };
 		}
 
 		// If user explicitly disabled reviews, respect that
 		if (!this.reviewPasses) {
-			return { review: false, annealing: false, maxReviewTier: this.capAtMaxTier("sonnet") };
+			return { review: false, multiLens: false, maxReviewTier: this.capAtMaxTier("sonnet") };
 		}
 
 		// Reviews are enabled - determine escalation cap based on complexity
@@ -2441,16 +2441,16 @@ Be concise and specific. Focus on actionable insights.`;
 			case "complex":
 				// Simple and complex tasks get capped review: haiku → sonnet only
 				// Complex tasks execution was demoted from opus to sonnet, review follows
-				return { review: true, annealing: false, maxReviewTier: this.capAtMaxTier("sonnet") };
+				return { review: true, multiLens: false, maxReviewTier: this.capAtMaxTier("sonnet") };
 			case "critical": {
-				// Only critical tasks get opus review + annealing (capped at maxTier)
+				// Only critical tasks get opus review + multi-lens (capped at maxTier)
 				const cappedTier = this.capAtMaxTier("opus");
-				const canAnneal = cappedTier === "opus";
-				return { review: true, annealing: canAnneal, maxReviewTier: cappedTier };
+				const canMultiLens = cappedTier === "opus";
+				return { review: true, multiLens: canMultiLens, maxReviewTier: cappedTier };
 			}
 			default:
 				// Default to capped review
-				return { review: true, annealing: false, maxReviewTier: this.capAtMaxTier("sonnet") };
+				return { review: true, multiLens: false, maxReviewTier: this.capAtMaxTier("sonnet") };
 		}
 	}
 
