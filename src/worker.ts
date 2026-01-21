@@ -35,12 +35,9 @@ import {
 import { type ContextBriefing, type ContextMode, prepareContext } from "./context.js";
 import { captureDecision, parseAgentOutputForDecisions, updateDecisionOutcome } from "./decision-tracker.js";
 import { dualLogger } from "./dual-logger.js";
-import { generateToolsPrompt } from "./efficiency-tools.js";
 import {
 	clearPendingError,
 	formatFixSuggestionsForPrompt,
-	formatPatternsAsRules,
-	getFailureWarningsForTask,
 	recordPendingError,
 	recordPermanentFailure,
 	recordSuccessfulFix,
@@ -54,7 +51,7 @@ import {
 	markGuidanceUsed,
 	shouldRequestHumanInput,
 } from "./human-input-tracking.js";
-import { findRelevantLearnings, formatLearningsCompact, markLearningsUsed } from "./knowledge.js";
+import { markLearningsUsed } from "./knowledge.js";
 import { extractAndStoreLearnings } from "./knowledge-extractor.js";
 import { recordQueryResult } from "./live-metrics.js";
 import { sessionLogger } from "./logger.js";
@@ -64,8 +61,8 @@ import * as output from "./output.js";
 import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
 import { runEscalatingReview, type UnresolvedTicket } from "./review.js";
 import { addTask, type HandoffContext } from "./task.js";
-import { formatCoModificationHints, formatFileSuggestionsForPrompt, recordTaskFiles } from "./task-file-patterns.js";
-import { formatExecutionPlanAsContext, isTestTask, planTaskWithReview, type TieredPlanResult } from "./task-planner.js";
+import { formatCoModificationHints, recordTaskFiles } from "./task-file-patterns.js";
+import { isTestTask, planTaskWithReview, type TieredPlanResult } from "./task-planner.js";
 import { extractMetaTaskType, isMetaTask, isResearchTask, parseResearchResult } from "./task-schema.js";
 import {
 	type AttemptRecord,
@@ -78,6 +75,13 @@ import {
 } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
 import { buildImplementationContext } from "./worker/context-builder.js";
+import {
+	type PendingWriteTool,
+	processAssistantMessage,
+	processUserMessage,
+	type TaskMarkers,
+	type WriteTrackingState,
+} from "./worker/message-tracker.js";
 import { buildMetaTaskPrompt, buildResearchPrompt, buildResumePrompt } from "./worker/prompt-builder.js";
 import { getMaxTurnsForModel } from "./worker/stop-hooks.js";
 import {
@@ -169,7 +173,7 @@ function validateTaskTargets(task: string, cwd: string): TaskValidationResult {
  * Check if a task might already be complete by scanning recent commits
  * Returns a hint if likely done, undefined otherwise
  */
-function checkTaskMayBeComplete(task: string, cwd: string): string | undefined {
+function _checkTaskMayBeComplete(task: string, cwd: string): string | undefined {
 	try {
 		// Extract keywords from task
 		const keywords = task
@@ -2689,159 +2693,58 @@ Be concise and specific. Focus on actionable insights.`;
 	 * Track write operations from SDK messages for the Stop hook
 	 */
 	/** Pending write tools awaiting result (maps tool_use_id to tool name) */
-	private pendingWriteTools: Map<string, { name: string; filePath?: string }> = new Map();
+	private pendingWriteTools: Map<string, PendingWriteTool> = new Map();
 
 	private trackWriteOperations(message: unknown): void {
 		const msg = message as Record<string, unknown>;
 
-		// Check assistant messages for tool use REQUESTS and TASK_ALREADY_COMPLETE marker
+		// Check assistant messages for task markers and write tool requests
 		if (msg.type === "assistant") {
-			const betaMessage = msg.message as
-				| {
-						content?: Array<{
-							type: string;
-							text?: string;
-							name?: string;
-							id?: string;
-							input?: { file_path?: string };
-						}>;
-				  }
-				| undefined;
+			const betaMessage = msg.message as { content?: Array<Record<string, unknown>> } | undefined;
 			if (betaMessage?.content) {
-				for (const block of betaMessage.content) {
-					// Check for TASK_ALREADY_COMPLETE marker in text blocks
-					if (block.type === "text" && block.text) {
-						const match = block.text.match(/TASK_ALREADY_COMPLETE:\s*(.+?)(?:\n|$)/i);
-						if (match && !this.taskAlreadyCompleteReason) {
-							this.taskAlreadyCompleteReason = match[1].trim();
-							sessionLogger.info(
-								{ reason: this.taskAlreadyCompleteReason },
-								"Agent reported task already complete (streaming)",
-							);
-						}
-						// Check for INVALID_TARGET marker in text blocks
-						const invalidMatch = block.text.match(/INVALID_TARGET:\s*(.+?)(?:\n|$)/i);
-						if (invalidMatch && !this.invalidTargetReason) {
-							this.invalidTargetReason = invalidMatch[1].trim();
-							sessionLogger.warn({ reason: this.invalidTargetReason }, "Agent reported invalid target (streaming)");
-						}
-						// Check for NEEDS_DECOMPOSITION marker in text blocks
-						const decompMatch = block.text.match(/NEEDS_DECOMPOSITION:\s*(.+?)(?:\n|$)/i);
-						if (decompMatch && !this.needsDecompositionReason) {
-							this.needsDecompositionReason = decompMatch[1].trim();
-							sessionLogger.info(
-								{ reason: this.needsDecompositionReason },
-								"Agent reported needs decomposition (streaming)",
-							);
-						}
-					}
-					// Track write tool requests
-					if (block.type === "tool_use" && block.name && block.id) {
-						if (["Write", "Edit", "NotebookEdit"].includes(block.name)) {
-							const filePath = block.input?.file_path;
-							this.pendingWriteTools.set(block.id, { name: block.name, filePath });
-							sessionLogger.debug({ tool: block.name, filePath, toolId: block.id }, "Write tool requested");
-						}
-					}
+				const currentMarkers: TaskMarkers = {
+					taskAlreadyComplete: this.taskAlreadyCompleteReason ?? undefined,
+					invalidTarget: this.invalidTargetReason ?? undefined,
+					needsDecomposition: this.needsDecompositionReason ?? undefined,
+				};
+				const updatedMarkers = processAssistantMessage(
+					betaMessage.content as unknown as Parameters<typeof processAssistantMessage>[0],
+					currentMarkers,
+					this.pendingWriteTools,
+				);
+				// Update instance state from markers
+				if (updatedMarkers.taskAlreadyComplete && !this.taskAlreadyCompleteReason) {
+					this.taskAlreadyCompleteReason = updatedMarkers.taskAlreadyComplete;
+				}
+				if (updatedMarkers.invalidTarget && !this.invalidTargetReason) {
+					this.invalidTargetReason = updatedMarkers.invalidTarget;
+				}
+				if (updatedMarkers.needsDecomposition && !this.needsDecompositionReason) {
+					this.needsDecompositionReason = updatedMarkers.needsDecomposition;
 				}
 			}
 		}
 
-		// Check for tool RESULTS (success or failure)
+		// Check for tool results (success or failure)
 		if (msg.type === "user") {
-			const userMessage = msg.message as
-				| {
-						content?: Array<{
-							type: string;
-							tool_use_id?: string;
-							content?: string;
-							is_error?: boolean;
-						}>;
-				  }
-				| undefined;
+			const userMessage = msg.message as { content?: Array<Record<string, unknown>> } | undefined;
 			if (userMessage?.content) {
-				for (const block of userMessage.content) {
-					if (block.type === "tool_result" && block.tool_use_id) {
-						const pendingTool = this.pendingWriteTools.get(block.tool_use_id);
-						if (pendingTool) {
-							this.pendingWriteTools.delete(block.tool_use_id);
-							const isError = block.is_error === true;
-							// Handle both string and array content types from Anthropic API
-							const contentStr =
-								typeof block.content === "string"
-									? block.content
-									: Array.isArray(block.content)
-										? (block.content as Array<string | { text?: string }>)
-												.map((c: string | { text?: string }) => (typeof c === "string" ? c : c.text || ""))
-												.join("")
-										: "";
-							// Only count as error if it's a tool_use_error, not just contains "error" in success message
-							const contentHasError =
-								contentStr.includes("<tool_use_error>") ||
-								(contentStr.toLowerCase().includes("error") && !contentStr.toLowerCase().includes("successfully"));
-							const succeeded = !isError && !contentHasError;
-
-							if (succeeded) {
-								this.writeCountThisExecution++;
-								// Reset no-write counter since agent made progress
-								this.consecutiveNoWriteAttempts = 0;
-								// Track per-file writes to detect thrashing
-								const filePath = pendingTool.filePath || "unknown";
-								const fileWriteCount = (this.writesPerFile.get(filePath) || 0) + 1;
-								this.writesPerFile.set(filePath, fileWriteCount);
-
-								sessionLogger.debug(
-									{
-										tool: pendingTool.name,
-										filePath: pendingTool.filePath,
-										writeCount: this.writeCountThisExecution,
-										fileWriteCount,
-									},
-									`Write succeeded (total: ${this.writeCountThisExecution}, file: ${fileWriteCount})`,
-								);
-
-								// Check for file thrashing (too many writes to same file)
-								if (fileWriteCount >= TaskWorker.MAX_WRITES_PER_FILE) {
-									sessionLogger.warn(
-										{
-											filePath,
-											writeCount: fileWriteCount,
-											maxAllowed: TaskWorker.MAX_WRITES_PER_FILE,
-										},
-										"File thrashing detected - too many writes to same file without progress",
-									);
-								}
-							} else {
-								// Check if this is a no-op edit (content already correct)
-								const isNoOpEdit =
-									contentStr.includes("exactly the same") ||
-									contentStr.includes("No changes to make") ||
-									contentStr.includes("already exists");
-								if (isNoOpEdit) {
-									this.noOpEditCount++;
-									sessionLogger.debug(
-										{
-											tool: pendingTool.name,
-											filePath: pendingTool.filePath,
-											noOpCount: this.noOpEditCount,
-										},
-										"No-op edit detected (content already correct)",
-									);
-								} else {
-									sessionLogger.debug(
-										{
-											tool: pendingTool.name,
-											filePath: pendingTool.filePath,
-											isError,
-											contentPreview: contentStr.slice(0, 100),
-										},
-										"Write tool FAILED - not counting",
-									);
-								}
-							}
-						}
-					}
-				}
+				const writeState: WriteTrackingState = {
+					writeCount: this.writeCountThisExecution,
+					consecutiveNoWriteAttempts: this.consecutiveNoWriteAttempts,
+					noOpEditCount: this.noOpEditCount,
+					writesPerFile: this.writesPerFile,
+				};
+				processUserMessage(
+					userMessage.content as unknown as Parameters<typeof processUserMessage>[0],
+					this.pendingWriteTools,
+					writeState,
+					TaskWorker.MAX_WRITES_PER_FILE,
+				);
+				// Update instance state from write tracking
+				this.writeCountThisExecution = writeState.writeCount;
+				this.consecutiveNoWriteAttempts = writeState.consecutiveNoWriteAttempts;
+				this.noOpEditCount = writeState.noOpEditCount;
 			}
 		}
 	}
