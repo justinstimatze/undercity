@@ -30,6 +30,7 @@ import { quickDecision } from "./automated-pm.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { findRelevantLearnings, formatLearningsCompact } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
+import { findRelevantFiles } from "./task-file-patterns.js";
 import {
 	buildAlreadyCompleteResult,
 	buildDecompositionResult,
@@ -40,7 +41,6 @@ import {
 	shouldEscalatePlanner,
 	validatePlanSpecificity,
 } from "./task-planner/index.js";
-import { findRelevantFiles } from "./task-file-patterns.js";
 import { MODEL_NAMES, type ModelTier } from "./types.js";
 
 const logger = sessionLogger.child({ module: "task-planner" });
@@ -531,7 +531,6 @@ RULES:
 		} as ExecutionPlan & { _parsingFailed?: boolean };
 	}
 }
-
 
 /**
  * Detect if a task is test-related (needs special handling)

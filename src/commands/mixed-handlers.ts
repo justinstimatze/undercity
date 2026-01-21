@@ -40,6 +40,13 @@ import {
 	type TaskProposal,
 } from "./pm-helpers.js";
 import {
+	checkDaemonRunning,
+	type DaemonStatus,
+	displayDaemonActionResult,
+	displayDaemonStatus,
+	executeDaemonAction,
+} from "./daemon-helpers.js";
+import {
 	buildActiveWorkersList,
 	buildAttentionItems,
 	calculatePacing,
@@ -904,86 +911,34 @@ export async function handleServe(options: ServeOptions): Promise<void> {
 export async function handleDaemon(action?: string): Promise<void> {
 	const { isDaemonRunning, queryDaemon } = await import("../server.js");
 
+	// Status action (default)
 	if (!action || action === "status") {
-		if (!isDaemonRunning()) {
-			console.log(chalk.gray("Daemon not running"));
-			console.log(chalk.dim("Start with: undercity serve"));
+		if (!checkDaemonRunning(isDaemonRunning)) {
 			return;
 		}
 
 		try {
-			const status = (await queryDaemon("/status")) as Record<string, unknown>;
-			const daemon = status.daemon as Record<string, unknown>;
-			const session = status.session as Record<string, unknown> | null;
-			const agents = status.agents as Array<Record<string, unknown>>;
-			const tasks = status.tasks as Record<string, number>;
-
-			console.log(chalk.green.bold("✓ Daemon Running"));
-			console.log(chalk.dim(`  Port: ${daemon.port} | PID: ${daemon.pid}`));
-			console.log(chalk.dim(`  Uptime: ${Math.round(daemon.uptime as number)}s`));
-			console.log(chalk.dim(`  State: ${daemon.paused ? chalk.yellow("PAUSED") : chalk.green("active")}`));
-
-			if (session) {
-				console.log();
-				console.log(chalk.bold("Session:"));
-				console.log(chalk.dim(`  ${session.id}: ${session.goal}`));
-			}
-
-			if (agents && agents.length > 0) {
-				console.log();
-				console.log(chalk.bold(`Agents (${agents.length}):`));
-				for (const a of agents) {
-					console.log(chalk.dim(`  ${a.type}: ${a.status}`));
-				}
-			}
-
-			console.log();
-			console.log(chalk.bold("Tasks:"));
-			console.log(chalk.dim(`  ${tasks.pending} pending, ${tasks.inProgress} in progress, ${tasks.complete} complete`));
+			const status = (await queryDaemon("/status")) as DaemonStatus;
+			displayDaemonStatus(status);
 		} catch (error) {
 			console.error(chalk.red(`Failed to query daemon: ${error}`));
 		}
-	} else if (action === "stop") {
-		if (!isDaemonRunning()) {
-			console.log(chalk.gray("Daemon not running"));
-			return;
-		}
-
-		try {
-			await queryDaemon("/stop", "POST");
-			console.log(chalk.green("Daemon stopping..."));
-		} catch {
-			// Expected - daemon shuts down
-			console.log(chalk.green("Daemon stopped"));
-		}
-	} else if (action === "pause") {
-		if (!isDaemonRunning()) {
-			console.log(chalk.gray("Daemon not running"));
-			return;
-		}
-
-		await queryDaemon("/pause", "POST");
-		console.log(chalk.yellow("Grind paused"));
-	} else if (action === "resume") {
-		if (!isDaemonRunning()) {
-			console.log(chalk.gray("Daemon not running"));
-			return;
-		}
-
-		await queryDaemon("/resume", "POST");
-		console.log(chalk.green("Grind resumed"));
-	} else if (action === "drain") {
-		if (!isDaemonRunning()) {
-			console.log(chalk.gray("Daemon not running"));
-			return;
-		}
-
-		await queryDaemon("/drain", "POST");
-		console.log(chalk.yellow("Drain initiated - finishing current tasks, starting no more"));
-	} else {
-		console.log(chalk.red(`Unknown action: ${action}`));
-		console.log(chalk.dim("Available: status, stop, pause, resume, drain"));
+		return;
 	}
+
+	// Action commands: stop, pause, resume, drain
+	const validActions = ["stop", "pause", "resume", "drain"] as const;
+	if (validActions.includes(action as (typeof validActions)[number])) {
+		if (!checkDaemonRunning(isDaemonRunning, false)) {
+			return;
+		}
+		await executeDaemonAction(action as "stop" | "pause" | "resume" | "drain", queryDaemon);
+		return;
+	}
+
+	// Unknown action
+	console.log(chalk.red(`Unknown action: ${action}`));
+	console.log(chalk.dim("Available: status, stop, pause, resume, drain"));
 }
 
 /**

@@ -75,12 +75,7 @@ export function displayKnowledgeStats(stats: KnowledgeStats, isHuman: boolean): 
 /**
  * Display all learnings from the knowledge base
  */
-export function displayAllLearnings(
-	learnings: LearningEntry[],
-	total: number,
-	isHuman: boolean,
-	limit: number,
-): void {
+export function displayAllLearnings(learnings: LearningEntry[], total: number, isHuman: boolean, limit: number): void {
 	if (!isHuman) {
 		console.log(JSON.stringify({ learnings, total }, null, 2));
 		return;

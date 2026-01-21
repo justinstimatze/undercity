@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-21T07:30:51.388Z",
+  "generatedAt": "2026-01-21T07:35:49.099Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -28,7 +28,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1589,
+          "line": 1538,
           "context": "if"
         },
         {
@@ -309,7 +309,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1455,
+          "line": 1404,
           "context": "if"
         }
       ]
@@ -320,17 +320,17 @@
       "calledFrom": [
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 198,
+          "line": 199,
           "context": "if"
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 299,
+          "line": 300,
           "context": "if"
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1478,
+          "line": 1427,
           "context": "log"
         },
         {
@@ -383,7 +383,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1618,
+          "line": 1567,
           "context": "log"
         }
       ]
@@ -399,7 +399,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1625,
+          "line": 1574,
           "context": "log"
         }
       ]
@@ -410,7 +410,7 @@
       "calledFrom": [
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1635,
+          "line": 1584,
           "context": "log"
         },
         {
