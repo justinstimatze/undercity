@@ -13,7 +13,7 @@
  * - Core type definitions and interfaces
  *
  * Architecture Inspirations: See INFLUENCES.md for full documentation.
- * Key influences: Gas Town, Rule of Five, Zeroshot, multiclaude, claude-mem, Ralph Wiggum loop, Agent-Native.
+ * Key influences: Gas Town, Rule of Five, Zeroshot, multiclaude, claude-mem, Ralph Wiggum loop, Agent-Native, DSPy/Ax.
  *
  * @see INFLUENCES.md
  */
