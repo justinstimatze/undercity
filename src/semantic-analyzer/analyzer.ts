@@ -47,19 +47,8 @@ export class SemanticAnalyzer {
 			} catch (_error) {}
 		}
 
-		// Detect cross-file issues
-		const duplicates = this.issueDetector.detectDuplicateDefinitions(fileContents);
-
-		// Add duplicate issues to file analyses
-		for (const [filePath, issues] of duplicates.entries()) {
-			const analysis = fileAnalyses.find((a) => a.path === filePath);
-			if (analysis) {
-				analysis.issues.push(...issues);
-			}
-		}
-
-		// Build redundancy report
-		const redundancies = this.detectRedundancies(fileAnalyses);
+		// No cross-file duplicate detection - same-named types are normal in TS
+		const redundancies: Redundancy[] = [];
 
 		// Generate actions
 		const actions = this.generateActions(fileAnalyses, redundancies);
@@ -96,7 +85,6 @@ export class SemanticAnalyzer {
 
 		if (fileType === "code" || fileType === "test") {
 			issues.push(...this.issueDetector.detectRedundantComments(content, filePath));
-			issues.push(...this.issueDetector.detectUnclearNaming(content, filePath));
 		}
 
 		if (fileType === "docs" || fileType === "claude_rules") {
@@ -122,39 +110,7 @@ export class SemanticAnalyzer {
 		return "other";
 	}
 
-	private detectRedundancies(analyses: FileAnalysis[]): Redundancy[] {
-		const redundancies: Redundancy[] = [];
-
-		// Group issues by type
-		const duplicatesByName = new Map<string, string[]>();
-
-		for (const analysis of analyses) {
-			for (const issue of analysis.issues) {
-				if (issue.type === "duplicate_definition" && issue.data?.name) {
-					const name = issue.data.name as string;
-					if (!duplicatesByName.has(name)) {
-						duplicatesByName.set(name, []);
-					}
-					duplicatesByName.get(name)?.push(`${analysis.path}:${issue.line}`);
-				}
-			}
-		}
-
-		for (const [name, locations] of duplicatesByName.entries()) {
-			if (locations.length > 1) {
-				redundancies.push({
-					fact: `Definition of ${name}`,
-					locations,
-					action: "consolidate",
-					primaryLocation: locations[0],
-				});
-			}
-		}
-
-		return redundancies;
-	}
-
-	private generateActions(analyses: FileAnalysis[], redundancies: Redundancy[]): Action[] {
+	private generateActions(analyses: FileAnalysis[], _redundancies: Redundancy[]): Action[] {
 		const actions: Action[] = [];
 
 		// Generate actions from issues
@@ -187,39 +143,11 @@ export class SemanticAnalyzer {
 							});
 						}
 						break;
-
-					case "unclear_naming":
-						actions.push({
-							priority: "low",
-							type: "rename_symbol",
-							file: analysis.path,
-							data: {
-								line: issue.line,
-								current: issue.data?.name,
-							},
-							description: `Rename unclear symbol: ${issue.data?.name}`,
-						});
-						break;
 				}
 			}
 		}
 
-		// Generate actions from redundancies
-		for (const redundancy of redundancies) {
-			if (redundancy.primaryLocation) {
-				actions.push({
-					priority: "high",
-					type: "consolidate_definition",
-					file: redundancy.primaryLocation.split(":")[0],
-					data: {
-						fact: redundancy.fact,
-						locations: redundancy.locations,
-						primary: redundancy.primaryLocation,
-					},
-					description: `Consolidate ${redundancy.fact} to ${redundancy.primaryLocation}`,
-				});
-			}
-		}
+		// Redundancies array is always empty now (duplicate detection removed)
 
 		return actions;
 	}

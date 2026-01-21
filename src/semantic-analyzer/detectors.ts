@@ -33,39 +33,6 @@ export class IssueDetector {
 		return issues;
 	}
 
-	detectUnclearNaming(content: string, _filePath: string): Issue[] {
-		const issues: Issue[] = [];
-		const lines = content.split("\n");
-
-		// Unclear variable names
-		const unclearPatterns = [
-			/\b(foo|bar|baz|tmp|temp|data|info|obj|val|item)\b/,
-			/\b[a-z]\b/, // Single letter variables
-		];
-
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			const lineNum = i + 1;
-
-			for (const pattern of unclearPatterns) {
-				if (pattern.test(line)) {
-					const match = line.match(pattern);
-					if (match) {
-						issues.push({
-							type: "unclear_naming",
-							line: lineNum,
-							severity: "low",
-							message: "Generic/unclear variable name",
-							data: { name: match[0] },
-						});
-					}
-				}
-			}
-		}
-
-		return issues;
-	}
-
 	detectLowDensityProse(content: string, _filePath: string): Issue[] {
 		const issues: Issue[] = [];
 		const lines = content.split("\n");
@@ -110,56 +77,6 @@ export class IssueDetector {
 		}
 
 		return issues;
-	}
-
-	detectDuplicateDefinitions(allFiles: Map<string, string>): Map<string, Issue[]> {
-		const definitions = new Map<string, string[]>();
-		const issuesByFile = new Map<string, Issue[]>();
-
-		// Extract all type/interface/enum names
-		for (const [filePath, content] of allFiles.entries()) {
-			const lines = content.split("\n");
-
-			for (let i = 0; i < lines.length; i++) {
-				const line = lines[i].trim();
-				const match = line.match(/^(export\s+)?(interface|type|enum|class)\s+(\w+)/);
-
-				if (match) {
-					const name = match[3];
-					if (!definitions.has(name)) {
-						definitions.set(name, []);
-					}
-					definitions.get(name)?.push(`${filePath}:${i + 1}`);
-				}
-			}
-		}
-
-		// Find duplicates
-		for (const [name, locations] of definitions.entries()) {
-			if (locations.length > 1) {
-				for (const location of locations) {
-					const [filePath, lineStr] = location.split(":");
-					const line = Number.parseInt(lineStr, 10);
-
-					if (!issuesByFile.has(filePath)) {
-						issuesByFile.set(filePath, []);
-					}
-
-					issuesByFile.get(filePath)?.push({
-						type: "duplicate_definition",
-						line,
-						severity: "high",
-						message: `Definition of ${name} duplicated`,
-						data: {
-							name,
-							locations: locations.filter((loc) => loc !== location),
-						},
-					});
-				}
-			}
-		}
-
-		return issuesByFile;
 	}
 
 	private isRedundant(comment: string, code: string): boolean {
