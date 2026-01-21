@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-21T06:22:27.174Z",
+  "generatedAt": "2026-01-21T06:34:07.842Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -158,7 +158,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1830,
+          "line": 1851,
           "context": "if"
         }
       ]
@@ -201,7 +201,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1460,
+          "line": 1481,
           "context": "if"
         }
       ]
@@ -212,7 +212,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1767,
+          "line": 1788,
           "context": "recordReviewTriageOutcome"
         }
       ]
@@ -223,7 +223,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1555,
+          "line": 1576,
           "context": "if"
         }
       ]
@@ -293,7 +293,7 @@
       "calledFrom": [
         {
           "file": "worker/agent-execution.ts",
-          "line": 290,
+          "line": 442,
           "context": "for"
         }
       ]
@@ -378,7 +378,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1256,
+          "line": 1277,
           "context": "info"
         },
         {
@@ -426,7 +426,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 935,
+          "line": 956,
           "context": "info"
         }
       ]

@@ -70,6 +70,14 @@ export interface UndercityRc {
 	/** Maximum review passes at opus tier (default: 6) */
 	maxOpusReviewPasses?: number;
 
+	// Security options
+	/** Enable bash command auditing via PreToolUse hooks (default: false) */
+	auditBash?: boolean;
+
+	// Experimental options
+	/** Use SDK systemPrompt preset with claude_code (default: false) */
+	useSystemPromptPreset?: boolean;
+
 	// Legacy session options
 	autoApprove?: boolean;
 	maxRetries?: number;
@@ -95,6 +103,8 @@ const DEFAULT_CONFIG: Required<UndercityRc> = {
 	maxRetriesPerTier: 3,
 	maxReviewPassesPerTier: 2,
 	maxOpusReviewPasses: 6,
+	auditBash: false,
+	useSystemPromptPreset: false,
 	autoApprove: false,
 	maxRetries: 3,
 };
@@ -150,6 +160,8 @@ function validateConfig(raw: unknown, filePath: string): UndercityRc | null {
 		"supervised",
 		"autoApprove",
 		"push",
+		"auditBash",
+		"useSystemPromptPreset",
 	];
 
 	for (const key of booleanKeys) {

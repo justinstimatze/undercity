@@ -10,6 +10,80 @@ import type { ModelTier } from "../types.js";
 import { parseTaskMarkers, type TaskMarkers } from "./message-tracker.js";
 
 /**
+ * SDK hook input types (simplified for our use cases)
+ * Full types are in @anthropic-ai/claude-agent-sdk
+ */
+export interface SDKPreToolUseHookInput {
+	hook_event_name: "PreToolUse";
+	tool_name: string;
+	tool_input: unknown;
+	tool_use_id: string;
+	session_id: string;
+	transcript_path: string;
+	cwd: string;
+	permission_mode?: string;
+}
+
+export interface SDKStopHookInput {
+	hook_event_name: "Stop";
+	session_id: string;
+	transcript_path: string;
+	cwd: string;
+	permission_mode?: string;
+}
+
+/**
+ * SDK hook output type (synchronous)
+ */
+export interface SDKHookOutput {
+	continue?: boolean;
+	decision?: "approve" | "block";
+	reason?: string;
+	stopReason?: string;
+	suppressOutput?: boolean;
+	hookSpecificOutput?: {
+		hookEventName: "PreToolUse";
+		permissionDecision?: "allow" | "deny" | "ask";
+		permissionDecisionReason?: string;
+	};
+}
+
+/**
+ * SDK hook callback type
+ */
+export type SDKHookCallback = (
+	input: SDKPreToolUseHookInput | SDKStopHookInput,
+	toolUseID: string | undefined,
+	options: { signal: AbortSignal },
+) => Promise<SDKHookOutput>;
+
+/**
+ * System prompt configuration options
+ *
+ * Either use a preset (like claude_code) or provide a custom system prompt.
+ */
+export type SystemPromptConfig =
+	| { type: "preset"; preset: "claude_code"; append?: string }
+	| { type: "custom"; content: string };
+
+/**
+ * Hook event types supported by the SDK
+ */
+export type HookEvent =
+	| "PreToolUse"
+	| "PostToolUse"
+	| "PostToolUseFailure"
+	| "Notification"
+	| "UserPromptSubmit"
+	| "SessionStart"
+	| "SessionEnd"
+	| "Stop"
+	| "SubagentStart"
+	| "SubagentStop"
+	| "PreCompact"
+	| "PermissionRequest";
+
+/**
  * SDK query options for agent execution
  */
 export interface AgentQueryOptions {
@@ -20,9 +94,12 @@ export interface AgentQueryOptions {
 	cwd: string;
 	maxTurns: number;
 	disallowedTools: string[];
-	hooks?: {
-		Stop: Array<{ hooks: Array<() => Promise<{ continue: boolean; reason?: string }>> }>;
-	};
+	/** Limit thinking tokens for Opus extended thinking (cost control) */
+	maxThinkingTokens?: number;
+	/** System prompt configuration (preset or custom) */
+	systemPrompt?: SystemPromptConfig;
+	/** Hooks for agent execution */
+	hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
 }
 
 /**
@@ -104,6 +181,15 @@ export function logSlowMessageGap(message: Record<string, unknown>, timing: Mess
 }
 
 /**
+ * SDK result subtypes for error classification
+ * - success: Task completed successfully
+ * - error_max_turns: Hit maxTurns limit
+ * - error_max_budget_usd: Hit budget limit (not applicable for Claude Max)
+ * - error_during_execution: Error during agent execution
+ */
+export type ResultSubtype = "success" | "error_max_turns" | "error_max_budget_usd" | "error_during_execution";
+
+/**
  * Result message data extracted from SDK response
  */
 export interface ResultMessageData {
@@ -121,6 +207,10 @@ export interface ResultMessageData {
 	durationMs: number;
 	apiDurationMs: number;
 	isSuccess: boolean;
+	/** SDK error subtype when isSuccess is false */
+	errorSubtype?: ResultSubtype;
+	/** Error details array from SDK (for error_during_execution) */
+	errors?: string[];
 }
 
 /**
@@ -129,9 +219,15 @@ export interface ResultMessageData {
 export function extractResultMessageData(message: Record<string, unknown>): ResultMessageData {
 	const usageData = message.usage as Record<string, number> | undefined;
 	const modelUsage = message.modelUsage as Record<string, Record<string, number>> | undefined;
+	const subtype = message.subtype as ResultSubtype | undefined;
+	const isSuccess = subtype === "success";
+
+	// Extract errors array for error_during_execution
+	const errorsRaw = message.errors as Array<unknown> | undefined;
+	const errors = errorsRaw?.map((e) => String(e));
 
 	return {
-		result: message.subtype === "success" ? (message.result as string) : "",
+		result: isSuccess ? (message.result as string) : "",
 		conversationId: message.conversationId as string | undefined,
 		numTurns: (message.num_turns as number) ?? 0,
 		usage: usageData
@@ -146,7 +242,9 @@ export function extractResultMessageData(message: Record<string, unknown>): Resu
 		totalCostUsd: (message.total_cost_usd as number) ?? 0,
 		durationMs: (message.duration_ms as number) ?? 0,
 		apiDurationMs: (message.duration_api_ms as number) ?? 0,
-		isSuccess: message.subtype === "success",
+		isSuccess,
+		errorSubtype: isSuccess ? undefined : subtype,
+		errors,
 	};
 }
 
@@ -206,44 +304,98 @@ export const DISALLOWED_GIT_PUSH_TOOLS = [
 ];
 
 /**
+ * Default maxThinkingTokens for Opus extended thinking
+ * Balances reasoning quality with cost control
+ */
+export const DEFAULT_MAX_THINKING_TOKENS = 16000;
+
+/**
+ * Hook callback matcher structure (matches SDK's HookCallbackMatcher)
+ */
+export interface HookCallbackMatcher {
+	matcher?: string;
+	hooks: SDKHookCallback[];
+	timeout?: number;
+}
+
+/**
  * Parameters for building query options
  */
 export interface QueryOptionsParams {
 	modelName: string;
 	workingDirectory: string;
 	maxTurns: number;
-	stopHooks: Array<{ hooks: Array<() => Promise<{ continue: boolean; reason?: string }>> }>;
+	stopHooks: HookCallbackMatcher[];
+	/** Whether this is an Opus model (enables maxThinkingTokens) */
+	isOpus?: boolean;
+	/** PreToolUse hooks for security auditing */
+	preToolUseHooks?: HookCallbackMatcher[];
+	/** Use SDK systemPrompt preset (experimental) */
+	useSystemPromptPreset?: boolean;
+	/** Task context to append to system prompt when using preset */
+	taskContextForPrompt?: string;
 }
 
 /**
  * Build query options for SDK agent execution
+ *
+ * Note: We use type assertions for hooks because the SDK's internal types
+ * (HookCallbackMatcher, HookCallback, HookInput) are not exported directly,
+ * and our compatible types don't match structurally. The runtime behavior is correct.
  */
-export function buildQueryOptions(params: QueryOptionsParams): AgentQueryOptions {
-	const { modelName, workingDirectory, maxTurns, stopHooks } = params;
+export function buildQueryOptions(params: QueryOptionsParams): Record<string, unknown> {
+	const {
+		modelName,
+		workingDirectory,
+		maxTurns,
+		stopHooks,
+		isOpus,
+		preToolUseHooks,
+		useSystemPromptPreset,
+		taskContextForPrompt,
+	} = params;
+
+	// Build hooks object only if we have any hooks
+	const hasStopHooks = stopHooks.length > 0;
+	const hasPreToolUseHooks = preToolUseHooks && preToolUseHooks.length > 0;
+	const hooks =
+		hasStopHooks || hasPreToolUseHooks
+			? {
+					...(hasStopHooks ? { Stop: stopHooks } : {}),
+					...(hasPreToolUseHooks ? { PreToolUse: preToolUseHooks } : {}),
+				}
+			: undefined;
+
+	// Build system prompt config if using preset
+	const systemPrompt: SystemPromptConfig | undefined = useSystemPromptPreset
+		? { type: "preset", preset: "claude_code", append: taskContextForPrompt }
+		: undefined;
 
 	return {
 		model: modelName,
-		permissionMode: "bypassPermissions" as const,
+		permissionMode: "bypassPermissions",
 		allowDangerouslySkipPermissions: true,
-		settingSources: ["project"] as ("project" | "user")[],
+		settingSources: ["project"],
 		cwd: workingDirectory,
 		maxTurns,
 		disallowedTools: DISALLOWED_GIT_PUSH_TOOLS,
-		hooks:
-			stopHooks.length > 0
-				? {
-						Stop: stopHooks,
-					}
-				: undefined,
+		// Limit thinking tokens for Opus to control costs
+		maxThinkingTokens: isOpus ? DEFAULT_MAX_THINKING_TOKENS : undefined,
+		systemPrompt,
+		hooks,
 	};
 }
 
 /**
  * Build query params based on whether we're resuming or starting fresh
  */
+/**
+ * Query parameters for SDK agent execution
+ * Uses Record<string, unknown> for options to allow SDK type checking at runtime
+ */
 export type QueryParamsResult =
-	| { prompt: string; options: AgentQueryOptions }
-	| { resume: string; prompt: string; options: AgentQueryOptions };
+	| { prompt: string; options: Record<string, unknown> }
+	| { resume: string; prompt: string; options: Record<string, unknown> };
 
 /**
  * Build query parameters for SDK agent execution
@@ -253,7 +405,7 @@ export function buildQueryParams(
 	sessionId: string | null | undefined,
 	resumePrompt: string | undefined,
 	prompt: string,
-	queryOptions: AgentQueryOptions,
+	queryOptions: Record<string, unknown>,
 ): QueryParamsResult {
 	if (canResume && sessionId && resumePrompt) {
 		return { resume: sessionId, prompt: resumePrompt, options: queryOptions };

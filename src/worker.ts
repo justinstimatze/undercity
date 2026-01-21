@@ -69,9 +69,12 @@ import {
 	captureDecisionsFromOutput,
 	createMessageTiming,
 	extractResultMessageData,
+	type HookCallbackMatcher,
 	logSlowMessageGap,
 	parseResultMarkers,
 	recordAgentQueryResult,
+	type ResultMessageData,
+	type SDKHookOutput,
 } from "./worker/agent-execution.js";
 import { buildImplementationContext } from "./worker/context-builder.js";
 import {
@@ -101,7 +104,7 @@ import {
 	type WriteTrackingState,
 } from "./worker/message-tracker.js";
 import { buildMetaTaskPrompt, buildResearchPrompt, buildResumePrompt } from "./worker/prompt-builder.js";
-import { getMaxTurnsForModel } from "./worker/stop-hooks.js";
+import { createPreToolUseHooks, getMaxTurnsForModel } from "./worker/hooks.js";
 import {
 	recordComplexitySuccess,
 	recordKnowledgeLearnings,
@@ -348,6 +351,18 @@ export interface SoloOptions {
 	 * Default: "opus" (no cap)
 	 */
 	maxTier?: ModelTier;
+	/**
+	 * Enable bash command auditing via PreToolUse hooks.
+	 * Logs all bash commands and blocks dangerous patterns.
+	 * Default: false
+	 */
+	auditBash?: boolean;
+	/**
+	 * Use SDK systemPrompt preset (claude_code) instead of custom prompts.
+	 * Experimental - uses SDK's built-in Claude Code system prompt with task context appended.
+	 * Default: false
+	 */
+	useSystemPromptPreset?: boolean;
 }
 
 /**
@@ -373,6 +388,8 @@ export class TaskWorker {
 	private maxOpusRetries: number;
 	private skipOptionalVerification: boolean;
 	private maxTier: ModelTier;
+	private auditBash: boolean;
+	private useSystemPromptPreset: boolean;
 
 	private currentModel: ModelTier;
 	private attempts: number = 0;
@@ -509,6 +526,10 @@ export class TaskWorker {
 		this.skipOptionalVerification = options.skipOptionalVerification ?? false;
 		// Maximum tier to escalate to (default: opus = no cap)
 		this.maxTier = options.maxTier ?? "opus";
+		// Bash command auditing (opt-in security feature)
+		this.auditBash = options.auditBash ?? false;
+		// SDK systemPrompt preset (experimental)
+		this.useSystemPromptPreset = options.useSystemPromptPreset ?? false;
 		this.currentModel = this.startingModel;
 		this.metricsTracker = new MetricsTracker();
 	}
@@ -2313,12 +2334,24 @@ Be concise and specific. Focus on actionable insights.`;
 		const maxTurns = getMaxTurnsForModel(this.currentModel);
 		sessionLogger.debug({ model: this.currentModel, maxTurns }, `Agent maxTurns: ${maxTurns}`);
 
+		// Build PreToolUse hooks for bash auditing (if enabled)
+		const preToolUseHooks = createPreToolUseHooks(this.currentTaskId, this.auditBash);
+
+		// Build task context for system prompt preset (condensed version of task + context)
+		const taskContextForPrompt = this.useSystemPromptPreset
+			? `\n\n## Current Task\n${task}${this.executionPlan ? `\n\n## Plan\n${this.executionPlan.plan}` : ""}`
+			: undefined;
+
 		// Build query options using helper
 		const queryOptions = buildQueryOptions({
 			modelName: MODEL_NAMES[this.currentModel],
 			workingDirectory: this.workingDirectory,
 			maxTurns,
 			stopHooks,
+			isOpus: this.currentModel === "opus",
+			preToolUseHooks,
+			useSystemPromptPreset: this.useSystemPromptPreset,
+			taskContextForPrompt,
 		});
 
 		// Build query params using helper
@@ -2370,6 +2403,9 @@ Be concise and specific. Focus on actionable insights.`;
 
 				if (resultData.isSuccess) {
 					result = resultData.result;
+				} else {
+					// Handle SDK error subtypes distinctly
+					this.handleAgentErrorSubtype(resultData);
 				}
 			}
 		}
@@ -2409,8 +2445,9 @@ Be concise and specific. Focus on actionable insights.`;
 	 *
 	 * These hooks prevent the agent from finishing without making changes,
 	 * while allowing legitimate completion scenarios.
+	 * Returns SDK-compatible HookCallbackMatcher array.
 	 */
-	private buildExecutionStopHooks(): Array<{ hooks: Array<() => Promise<{ continue: boolean; reason?: string }>> }> {
+	private buildExecutionStopHooks(): HookCallbackMatcher[] {
 		// Meta-tasks don't need the "must write files" check
 		if (this.isCurrentTaskMeta) {
 			return [];
@@ -2419,7 +2456,7 @@ Be concise and specific. Focus on actionable insights.`;
 		return [
 			{
 				hooks: [
-					async () => {
+					async (_input, _toolUseID, _options): Promise<SDKHookOutput> => {
 						// Allow stopping if agent reported task is already complete
 						if (this.taskAlreadyCompleteReason) {
 							sessionLogger.info(
@@ -2560,6 +2597,70 @@ Be concise and specific. Focus on actionable insights.`;
 				this.consecutiveNoWriteAttempts = writeState.consecutiveNoWriteAttempts;
 				this.noOpEditCount = writeState.noOpEditCount;
 			}
+		}
+	}
+
+	/**
+	 * Handle SDK error subtypes distinctly
+	 *
+	 * Different error types warrant different handling:
+	 * - error_max_turns: Agent hit turn limit, consider escalation or task decomposition
+	 * - error_max_budget_usd: Budget exhausted (not applicable for Claude Max, but log anyway)
+	 * - error_during_execution: Execution error, log details for debugging
+	 */
+	private handleAgentErrorSubtype(resultData: ResultMessageData): void {
+		const { errorSubtype, errors, numTurns } = resultData;
+
+		switch (errorSubtype) {
+			case "error_max_turns":
+				sessionLogger.warn(
+					{
+						model: this.currentModel,
+						turns: numTurns,
+						taskId: this.currentTaskId,
+					},
+					`Agent hit maxTurns limit (${numTurns} turns) - task may need decomposition or model escalation`,
+				);
+				// Track this as a potential signal for task complexity
+				if (!this.needsDecompositionReason) {
+					this.needsDecompositionReason = `Agent exhausted ${numTurns} turns without completing task`;
+				}
+				break;
+
+			case "error_max_budget_usd":
+				// This shouldn't happen with Claude Max, but log if it does
+				sessionLogger.error(
+					{
+						model: this.currentModel,
+						taskId: this.currentTaskId,
+					},
+					"Agent hit budget limit - unexpected with Claude Max plan",
+				);
+				break;
+
+			case "error_during_execution":
+				sessionLogger.error(
+					{
+						model: this.currentModel,
+						taskId: this.currentTaskId,
+						errors: errors ?? [],
+					},
+					`Agent execution error: ${errors?.join("; ") ?? "unknown error"}`,
+				);
+				break;
+
+			default:
+				// Unknown error subtype
+				if (errorSubtype) {
+					sessionLogger.warn(
+						{
+							subtype: errorSubtype,
+							model: this.currentModel,
+							taskId: this.currentTaskId,
+						},
+						`Unknown SDK error subtype: ${errorSubtype}`,
+					);
+				}
 		}
 	}
 
