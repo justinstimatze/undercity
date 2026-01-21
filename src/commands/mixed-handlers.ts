@@ -8,6 +8,15 @@ import * as output from "../output.js";
 import { Persistence } from "../persistence.js";
 import { RateLimitTracker } from "../rate-limit.js";
 import { analyzeTasksInPeriod, buildBlockers, buildRecommendations, type LiveUsage } from "./brief-helpers.js";
+import {
+	addProposalsToBoard,
+	displayIdeationFindings,
+	displayPMError,
+	displayProposals,
+	displayResearchResults,
+	displayTopicRequired,
+	type TaskProposal,
+} from "./pm-helpers.js";
 import { buildActiveWorkersList, buildAttentionItems, calculatePacing } from "./pulse-helpers.js";
 
 // Re-export grind module
@@ -1864,8 +1873,6 @@ export async function handleKnowledge(query: string | undefined, options: Knowle
 export async function handlePM(topic: string | undefined, options: PMOptions): Promise<void> {
 	// Lazy import to avoid circular dependencies
 	const { pmResearch, pmPropose, pmIdeate } = await import("../automated-pm.js");
-	const { addTask } = await import("../task.js");
-	type TaskProposal = Awaited<ReturnType<typeof pmPropose>>[number];
 
 	const cwd = process.cwd();
 	const isHuman = output.isHumanMode();
@@ -1873,19 +1880,9 @@ export async function handlePM(topic: string | undefined, options: PMOptions): P
 	// Default to ideate if no specific option chosen
 	const mode = options.research ? "research" : options.propose ? "propose" : "ideate";
 
-	if (mode === "ideate" || mode === "research") {
-		if (!topic) {
-			if (isHuman) {
-				console.log(chalk.yellow("Usage: undercity pm <topic> [--research|--propose|--ideate]"));
-				console.log(chalk.dim("Examples:"));
-				console.log(chalk.dim("  undercity pm 'testing best practices' --research"));
-				console.log(chalk.dim("  undercity pm 'code quality improvements' --propose"));
-				console.log(chalk.dim("  undercity pm 'error handling patterns' --ideate"));
-			} else {
-				console.log(JSON.stringify({ error: "Topic required for research or ideate mode" }));
-			}
-			return;
-		}
+	if ((mode === "ideate" || mode === "research") && !topic) {
+		displayTopicRequired(isHuman);
+		return;
 	}
 
 	try {
@@ -1897,25 +1894,7 @@ export async function handlePM(topic: string | undefined, options: PMOptions): P
 			}
 			const result = await pmResearch(topic!, cwd);
 			proposals = result.taskProposals;
-
-			if (isHuman) {
-				console.log(chalk.bold("Findings:"));
-				for (const finding of result.findings) {
-					console.log(`  • ${finding}`);
-				}
-				console.log();
-				console.log(chalk.bold("Recommendations:"));
-				for (const rec of result.recommendations) {
-					console.log(`  → ${rec}`);
-				}
-				console.log();
-				console.log(chalk.bold("Sources:"));
-				for (const source of result.sources) {
-					console.log(chalk.dim(`  ${source}`));
-				}
-			} else {
-				console.log(JSON.stringify(result, null, 2));
-			}
+			displayResearchResults(result, isHuman);
 		} else if (mode === "propose") {
 			if (isHuman) {
 				console.log(chalk.cyan(`\n💡 PM analyzing codebase${topic ? ` for: ${topic}` : ""}...\n`));
@@ -1934,11 +1913,7 @@ export async function handlePM(topic: string | undefined, options: PMOptions): P
 			proposals = result.proposals;
 
 			if (isHuman) {
-				console.log(chalk.bold("Research Findings:"));
-				for (const finding of result.research.findings) {
-					console.log(`  • ${finding}`);
-				}
-				console.log();
+				displayIdeationFindings(result.research.findings);
 			} else {
 				console.log(JSON.stringify(result, null, 2));
 			}
@@ -1946,41 +1921,17 @@ export async function handlePM(topic: string | undefined, options: PMOptions): P
 
 		// Show proposals
 		if (proposals.length > 0 && isHuman) {
-			console.log(chalk.bold(`\nTask Proposals (${proposals.length}):\n`));
-			for (let i = 0; i < proposals.length; i++) {
-				const p = proposals[i];
-				const priorityColor =
-					p.suggestedPriority >= 800 ? chalk.red : p.suggestedPriority >= 600 ? chalk.yellow : chalk.white;
-				console.log(`  ${i + 1}. ${p.objective}`);
-				console.log(chalk.dim(`     ${p.rationale}`));
-				console.log(chalk.dim(`     Priority: ${priorityColor(String(p.suggestedPriority))} | Source: ${p.source}`));
-				console.log();
-			}
+			displayProposals(proposals);
 		}
 
 		// Add to board if requested
 		if (options.add && proposals.length > 0) {
-			if (isHuman) {
-				console.log(chalk.yellow("\n⚠️  Adding proposals to task board...\n"));
-			}
-			for (const p of proposals) {
-				const task = addTask(p.objective, p.suggestedPriority);
-				if (isHuman) {
-					console.log(chalk.green(`  ✓ Added: ${task.id} - ${p.objective.substring(0, 50)}...`));
-				}
-			}
-			if (!isHuman) {
-				console.log(JSON.stringify({ added: proposals.length, taskIds: proposals.map((_, i) => `task-${i}`) }));
-			}
+			await addProposalsToBoard(proposals, isHuman);
 		} else if (proposals.length > 0 && isHuman && !options.add) {
 			console.log(chalk.dim("Use --add to add these proposals to the task board"));
 		}
 	} catch (error) {
-		if (isHuman) {
-			console.log(chalk.red(`\n✗ PM operation failed: ${error}`));
-		} else {
-			console.log(JSON.stringify({ error: String(error) }));
-		}
+		displayPMError(error, isHuman);
 	}
 }
 
