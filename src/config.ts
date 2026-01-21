@@ -52,7 +52,7 @@ export interface UndercityRc {
 	typecheck?: boolean;
 	local?: boolean;
 	review?: boolean;
-	annealing?: boolean;
+	multiLens?: boolean;
 	supervised?: boolean;
 
 	// Grind options
@@ -87,7 +87,7 @@ const DEFAULT_CONFIG: Required<UndercityRc> = {
 	typecheck: true,
 	local: true,
 	review: false,
-	annealing: false,
+	multiLens: false,
 	supervised: false,
 	parallel: 1,
 	push: false,
@@ -146,7 +146,7 @@ function validateConfig(raw: unknown, filePath: string): UndercityRc | null {
 		"typecheck",
 		"local",
 		"review",
-		"annealing",
+		"multiLens",
 		"supervised",
 		"autoApprove",
 		"push",

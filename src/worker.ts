@@ -319,8 +319,8 @@ export interface SoloOptions {
 	 * Defaults to maxReviewPassesPerTier * 3 if not set.
 	 */
 	maxOpusReviewPasses?: number;
-	/** Use annealing review at opus tier (multi-angle advisory review) */
-	annealingAtOpus?: boolean;
+	/** Use multi-lens review at opus tier (multi-angle advisory review) */
+	multiLensAtOpus?: boolean;
 	/**
 	 * Maximum fix attempts at the same model tier before escalating.
 	 * Allows the model to retry fixing errors multiple times before moving to a stronger model.
@@ -372,7 +372,7 @@ export class TaskWorker {
 	private reviewPasses: boolean;
 	private maxReviewPassesPerTier: number;
 	private maxOpusReviewPasses: number;
-	private annealingAtOpus: boolean;
+	private multiLensAtOpus: boolean;
 	private maxRetriesPerTier: number;
 	private maxOpusRetries: number;
 	private skipOptionalVerification: boolean;
@@ -491,7 +491,7 @@ export class TaskWorker {
 		this.maxReviewPassesPerTier = options.maxReviewPassesPerTier ?? 2;
 		// Opus is final tier - no escalation path, so give it more attempts by default
 		this.maxOpusReviewPasses = options.maxOpusReviewPasses ?? this.maxReviewPassesPerTier * 3;
-		this.annealingAtOpus = options.annealingAtOpus ?? false;
+		this.multiLensAtOpus = options.multiLensAtOpus ?? false;
 		// 2 retries per tier before escalating (was 3, but that's too slow)
 		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
 		this.maxOpusRetries = options.maxOpusRetries ?? 7;
@@ -2407,7 +2407,7 @@ Be concise and specific. Focus on actionable insights.`;
 	 *
 	 * Review escalation is capped by task complexity to save opus tokens:
 	 * - trivial/simple/standard: haiku → sonnet only (no opus review)
-	 * - complex/critical: haiku → sonnet → opus (full escalation + annealing)
+	 * - complex/critical: haiku → sonnet → opus (full escalation + multi-lens)
 	 *
 	 * Also respects maxTier cap - review tier will not exceed configured maximum.
 	 *
@@ -2420,7 +2420,7 @@ Be concise and specific. Focus on actionable insights.`;
 		maxReviewTier: ModelTier;
 	} {
 		// If user explicitly set multi-lens, respect it (full escalation, capped at maxTier)
-		if (this.annealingAtOpus) {
+		if (this.multiLensAtOpus) {
 			const cappedTier = this.capAtMaxTier("opus");
 			// Disable multi-lens if we can't reach opus
 			const canMultiLens = cappedTier === "opus";

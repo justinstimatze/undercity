@@ -3,7 +3,7 @@
  *
  * Provides:
  * - Escalating review passes (haiku → sonnet → opus)
- * - Annealing review (multi-angle advisory review)
+ * - Multi-lens review (focused review perspectives)
  * - Ticket generation for unresolved issues
  */
 
@@ -418,7 +418,6 @@ If nothing notable for this lens, respond with exactly: "Nothing notable."`;
 
 	return insights;
 }
-
 
 /**
  * Run a review pass that can directly fix issues.

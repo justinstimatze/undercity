@@ -776,7 +776,7 @@ export interface ParallelRecoveryState {
 		maxConcurrent: number;
 		autoCommit: boolean;
 		reviewPasses: boolean;
-		annealingAtOpus: boolean;
+		multiLensAtOpus: boolean;
 	};
 	/** Whether batch is complete */
 	isComplete: boolean;
@@ -803,7 +803,7 @@ export interface BatchMetadata {
 		maxConcurrent: number;
 		autoCommit: boolean;
 		reviewPasses: boolean;
-		annealingAtOpus: boolean;
+		multiLensAtOpus: boolean;
 	};
 }
 

@@ -99,7 +99,7 @@ function createMockBatchMetadata(overrides: Partial<BatchMetadata> = {}): BatchM
 			maxConcurrent: 3,
 			autoCommit: true,
 			reviewPasses: false,
-			annealingAtOpus: false,
+			multiLensAtOpus: false,
 		},
 		...overrides,
 	};
@@ -564,7 +564,7 @@ describe("Batch Timeout Handling", () => {
 					maxConcurrent: 3,
 					autoCommit: true,
 					reviewPasses: false,
-					annealingAtOpus: false,
+					multiLensAtOpus: false,
 				},
 				isComplete: false,
 				lastUpdated: new Date(),
@@ -603,7 +603,7 @@ describe("Batch Timeout Handling", () => {
 					maxConcurrent: 3,
 					autoCommit: true,
 					reviewPasses: false,
-					annealingAtOpus: false,
+					multiLensAtOpus: false,
 				},
 				isComplete: false,
 				lastUpdated: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes stale

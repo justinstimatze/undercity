@@ -1,7 +1,7 @@
 /**
  * Review Lenses - Focused code review perspectives
  *
- * Replaces the tarot-based annealing system with deterministic,
+ * Replaces the tarot-based system with deterministic,
  * evidence-based review lenses that ensure consistent coverage
  * of critical review dimensions.
  */

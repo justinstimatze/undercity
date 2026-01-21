@@ -76,7 +76,7 @@ describe("config.ts", () => {
 			expect(config.typecheck).toBe(true);
 			expect(config.local).toBe(true);
 			expect(config.review).toBe(false);
-			expect(config.annealing).toBe(false);
+			expect(config.multiLens).toBe(false);
 			expect(config.supervised).toBe(false);
 			expect(config.parallel).toBe(1);
 			expect(config.push).toBe(false);
@@ -239,7 +239,7 @@ describe("config.ts", () => {
 				typecheck: false,
 				local: true,
 				review: false,
-				annealing: true,
+				multiLens: true,
 				supervised: false,
 				push: true,
 			};
@@ -251,7 +251,7 @@ describe("config.ts", () => {
 			expect(loaded.verbose).toBe(false);
 			expect(loaded.autoCommit).toBe(true);
 			expect(loaded.review).toBe(false);
-			expect(loaded.annealing).toBe(true);
+			expect(loaded.multiLens).toBe(true);
 		});
 
 		it("should validate number options and reject invalid ranges", () => {
@@ -489,7 +489,7 @@ describe("config.ts", () => {
 			expect(merged.typecheck).toBeDefined();
 			expect(merged.local).toBeDefined();
 			expect(merged.review).toBeDefined();
-			expect(merged.annealing).toBeDefined();
+			expect(merged.multiLens).toBeDefined();
 			expect(merged.supervised).toBeDefined();
 			expect(merged.parallel).toBeDefined();
 			expect(merged.push).toBeDefined();
@@ -524,7 +524,7 @@ describe("config.ts", () => {
 			expect(defaults.typecheck).toBe(true);
 			expect(defaults.local).toBe(true);
 			expect(defaults.review).toBe(false);
-			expect(defaults.annealing).toBe(false);
+			expect(defaults.multiLens).toBe(false);
 			expect(defaults.supervised).toBe(false);
 			expect(defaults.parallel).toBe(1);
 			expect(defaults.push).toBe(false);

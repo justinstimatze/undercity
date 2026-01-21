@@ -70,7 +70,7 @@ export interface ParallelSoloOptions {
 	stream?: boolean;
 	verbose?: boolean;
 	reviewPasses?: boolean; // Enable escalating review (haiku → sonnet → opus)
-	annealingAtOpus?: boolean; // Enable annealing review at opus tier
+	multiLensAtOpus?: boolean; // Enable multi-lens review at opus tier
 	pushOnSuccess?: boolean; // Push to remote after successful merge (default: false)
 	// Verification retry options
 	maxAttempts?: number; // Maximum attempts per task before failing (default: 7)
@@ -211,7 +211,7 @@ export class Orchestrator {
 	private stream: boolean;
 	private verbose: boolean;
 	private reviewPasses: boolean;
-	private annealingAtOpus: boolean;
+	private multiLensAtOpus: boolean;
 	private pushOnSuccess: boolean;
 	// Verification retry options
 	private maxAttempts: number;
@@ -262,7 +262,7 @@ export class Orchestrator {
 		this.stream = options.stream ?? false;
 		this.verbose = options.verbose ?? false;
 		this.reviewPasses = options.reviewPasses ?? false; // Default to no automatic reviews - use --review flag to enable
-		this.annealingAtOpus = options.annealingAtOpus ?? false;
+		this.multiLensAtOpus = options.multiLensAtOpus ?? false;
 		this.pushOnSuccess = options.pushOnSuccess ?? false; // Default to no push - user must explicitly opt in
 		// Verification retry options with defaults
 		// maxAttempts of 7 allows: 3 at first tier + 3 at second + 1 at third (or more at opus)
@@ -703,7 +703,7 @@ export class Orchestrator {
 				stream: this.stream,
 				verbose: this.verbose,
 				reviewPasses: this.reviewPasses,
-				annealingAtOpus: this.annealingAtOpus,
+				multiLensAtOpus: this.multiLensAtOpus,
 				maxAttempts: this.maxAttempts,
 				maxRetriesPerTier: this.maxRetriesPerTier,
 				maxReviewPassesPerTier: this.maxReviewPassesPerTier,
@@ -1218,7 +1218,7 @@ export class Orchestrator {
 				verbose: this.verbose,
 				workingDirectory: worktreePath,
 				reviewPasses: effectiveReview,
-				annealingAtOpus: this.annealingAtOpus,
+				multiLensAtOpus: this.multiLensAtOpus,
 				maxAttempts: this.maxAttempts,
 				maxRetriesPerTier: this.maxRetriesPerTier,
 				maxReviewPassesPerTier: this.maxReviewPassesPerTier,
@@ -2349,7 +2349,7 @@ Working directory: ${worktreePath}`;
 				maxConcurrent: this.maxConcurrent,
 				autoCommit: this.autoCommit,
 				reviewPasses: this.reviewPasses,
-				annealingAtOpus: this.annealingAtOpus,
+				multiLensAtOpus: this.multiLensAtOpus,
 			},
 		};
 		this.persistence.saveBatchMetadata(metadata);
