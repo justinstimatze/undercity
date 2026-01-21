@@ -8,8 +8,8 @@ import { recordPlanCreationOutcome, recordPlanReviewOutcome } from "../ax-progra
 import type { ComplexityAssessment } from "../complexity.js";
 import type { ContextBriefing } from "../context.js";
 import { updateDecisionOutcome } from "../decision-tracker.js";
-import { extractAndStoreLearnings } from "../knowledge-extractor.js";
 import { markLearningsUsed } from "../knowledge.js";
+import { extractAndStoreLearnings } from "../knowledge-extractor.js";
 import { sessionLogger } from "../logger.js";
 import * as output from "../output.js";
 import { recordTaskFiles } from "../task-file-patterns.js";
@@ -41,11 +41,7 @@ export async function recordKnowledgeLearnings(
 /**
  * Record successful task file patterns
  */
-export function recordSuccessfulTaskPattern(
-	taskId: string,
-	task: string,
-	modifiedFiles: string[],
-): void {
+export function recordSuccessfulTaskPattern(taskId: string, task: string, modifiedFiles: string[]): void {
 	if (modifiedFiles.length === 0) return;
 	try {
 		recordTaskFiles(taskId, task, modifiedFiles, true);
@@ -62,9 +58,7 @@ export async function updateDecisionOutcomesToSuccess(taskId: string, stateDir: 
 	try {
 		const { loadDecisionStore } = await import("../decision-tracker.js");
 		const store = loadDecisionStore(stateDir);
-		const taskDecisions = store.resolved.filter(
-			(d) => d.taskId === taskId && d.resolution.outcome === undefined,
-		);
+		const taskDecisions = store.resolved.filter((d) => d.taskId === taskId && d.resolution.outcome === undefined);
 		for (const decision of taskDecisions) {
 			updateDecisionOutcome(decision.id, "success", stateDir);
 		}

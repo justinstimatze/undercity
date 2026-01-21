@@ -25,12 +25,7 @@ import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
 import { type PMResearchResult, pmResearch } from "./automated-pm.js";
-import {
-	recordComplexityOutcome,
-	recordPlanCreationOutcome,
-	recordPlanReviewOutcome,
-	recordReviewTriageOutcome,
-} from "./ax-programs.js";
+import { recordComplexityOutcome, recordReviewTriageOutcome } from "./ax-programs.js";
 import {
 	adjustModelFromMetrics,
 	assessComplexityFast,
@@ -38,7 +33,7 @@ import {
 	type ComplexityAssessment,
 } from "./complexity.js";
 import { type ContextBriefing, type ContextMode, prepareContext } from "./context.js";
-import { captureDecision, parseAgentOutputForDecisions, updateDecisionOutcome } from "./decision-tracker.js";
+import { captureDecision, parseAgentOutputForDecisions } from "./decision-tracker.js";
 import { dualLogger } from "./dual-logger.js";
 import {
 	formatFixSuggestionsForPrompt,
@@ -48,8 +43,6 @@ import {
 } from "./error-fix-patterns.js";
 import { createAndCheckout } from "./git.js";
 import { formatGuidanceForWorker, markGuidanceUsed } from "./human-input-tracking.js";
-import { markLearningsUsed } from "./knowledge.js";
-import { extractAndStoreLearnings } from "./knowledge-extractor.js";
 import { sessionLogger } from "./logger.js";
 import { parseMetaTaskResult } from "./meta-tasks.js";
 import { MetricsTracker } from "./metrics.js";
@@ -57,7 +50,7 @@ import * as output from "./output.js";
 import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
 import { runEscalatingReview, type UnresolvedTicket } from "./review.js";
 import { addTask, type HandoffContext } from "./task.js";
-import { formatCoModificationHints, recordTaskFiles } from "./task-file-patterns.js";
+import { formatCoModificationHints } from "./task-file-patterns.js";
 import { isTestTask, planTaskWithReview, type TieredPlanResult } from "./task-planner.js";
 import { extractMetaTaskType, isMetaTask, isResearchTask, parseResearchResult } from "./task-schema.js";
 import {
@@ -75,12 +68,10 @@ import {
 	buildQueryParams,
 	captureDecisionsFromOutput,
 	createMessageTiming,
-	DISALLOWED_GIT_PUSH_TOOLS,
 	extractResultMessageData,
 	logSlowMessageGap,
 	parseResultMarkers,
 	recordAgentQueryResult,
-	updateStateWithMarkers,
 } from "./worker/agent-execution.js";
 import { buildImplementationContext } from "./worker/context-builder.js";
 import {
@@ -109,6 +100,8 @@ import {
 	type TaskMarkers,
 	type WriteTrackingState,
 } from "./worker/message-tracker.js";
+import { buildMetaTaskPrompt, buildResearchPrompt, buildResumePrompt } from "./worker/prompt-builder.js";
+import { getMaxTurnsForModel } from "./worker/stop-hooks.js";
 import {
 	recordComplexitySuccess,
 	recordKnowledgeLearnings,
@@ -116,8 +109,6 @@ import {
 	recordSuccessfulTaskPattern,
 	updateDecisionOutcomesToSuccess,
 } from "./worker/success-recording.js";
-import { buildMetaTaskPrompt, buildResearchPrompt, buildResumePrompt } from "./worker/prompt-builder.js";
-import { getMaxTurnsForModel } from "./worker/stop-hooks.js";
 import {
 	commitResearchOutput,
 	type FastPathAttemptResult,
@@ -1725,12 +1716,7 @@ export class TaskWorker {
 		// Review triage outcome
 		if (this.reviewTriageResult) {
 			try {
-				recordReviewTriageOutcome(
-					{ task, diff: "" },
-					this.reviewTriageResult,
-					true,
-					this.stateDir,
-				);
+				recordReviewTriageOutcome({ task, diff: "" }, this.reviewTriageResult, true, this.stateDir);
 			} catch {
 				// Non-critical
 			}
@@ -2336,13 +2322,7 @@ Be concise and specific. Focus on actionable insights.`;
 		});
 
 		// Build query params using helper
-		const queryParams = buildQueryParams(
-			!!canResume,
-			this.currentAgentSessionId,
-			resumePrompt,
-			prompt,
-			queryOptions,
-		);
+		const queryParams = buildQueryParams(!!canResume, this.currentAgentSessionId, resumePrompt, prompt, queryOptions);
 
 		// Log prompt size for performance analysis
 		const promptSize = prompt?.length || resumePrompt?.length || 0;

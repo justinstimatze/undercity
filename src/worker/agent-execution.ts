@@ -267,7 +267,10 @@ export function buildQueryParams(
 export function captureDecisionsFromOutput(
 	result: string,
 	taskId: string,
-	parseAgentOutputForDecisions: (result: string, taskId: string) => Array<{
+	parseAgentOutputForDecisions: (
+		result: string,
+		taskId: string,
+	) => Array<{
 		question: string;
 		context: string;
 		options?: string[];

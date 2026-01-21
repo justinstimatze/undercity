@@ -65,10 +65,7 @@ export interface FailureResultContext {
 /**
  * Build result for invalid target failure
  */
-export function buildInvalidTargetResult(
-	ctx: FailureResultContext,
-	invalidTargetReason: string,
-): TaskResultBase {
+export function buildInvalidTargetResult(ctx: FailureResultContext, invalidTargetReason: string): TaskResultBase {
 	sessionLogger.warn(
 		{ taskId: ctx.taskId, reason: invalidTargetReason },
 		"Task failed: invalid target (file/function doesn't exist)",
@@ -138,9 +135,7 @@ export function isTaskAlreadyComplete(
 	noOpEditCount: number,
 ): boolean {
 	return (
-		verification.passed &&
-		verification.filesChanged === 0 &&
-		(taskAlreadyCompleteReason !== null || noOpEditCount > 0)
+		verification.passed && verification.filesChanged === 0 && (taskAlreadyCompleteReason !== null || noOpEditCount > 0)
 	);
 }
 
