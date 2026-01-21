@@ -1211,14 +1211,14 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		}
 
 		const {
-			getAllItems,
+			getAllTasks,
 			markTaskComplete,
 			markTaskFailed,
 			decomposeTaskIntoSubtasks,
 			completeParentIfAllSubtasksDone,
 			getTaskById,
 		} = await import("../task.js");
-		const allTasks = getAllItems();
+		const allTasks = getAllTasks();
 		// Include both "pending" and "in_progress" tasks
 		// in_progress tasks may be stale from a previous crashed session
 		// Also filter out decomposed tasks (their subtasks will be picked up instead)
@@ -1480,7 +1480,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			// If all tasks were decomposed, refetch to get subtasks
 			if (tasksWithModels.length === 0) {
 				output.info("All tasks were decomposed. Fetching subtasks...");
-				const refreshedTasks = getAllItems();
+				const refreshedTasks = getAllTasks();
 				const newPendingTasks = refreshedTasks
 					.filter((q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed)
 					.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0)); // Higher priority first
@@ -3414,7 +3414,7 @@ export async function handleKnowledge(query: string | undefined, options: Knowle
 export async function handlePM(topic: string | undefined, options: PMOptions): Promise<void> {
 	// Lazy import to avoid circular dependencies
 	const { pmResearch, pmPropose, pmIdeate } = await import("../automated-pm.js");
-	const { addGoal } = await import("../task.js");
+	const { addTask } = await import("../task.js");
 	type TaskProposal = Awaited<ReturnType<typeof pmPropose>>[number];
 
 	const cwd = process.cwd();
@@ -3514,7 +3514,7 @@ export async function handlePM(topic: string | undefined, options: PMOptions): P
 				console.log(chalk.yellow("\n⚠️  Adding proposals to task board...\n"));
 			}
 			for (const p of proposals) {
-				const task = addGoal(p.objective, p.suggestedPriority);
+				const task = addTask(p.objective, p.suggestedPriority);
 				if (isHuman) {
 					console.log(chalk.green(`  ✓ Added: ${task.id} - ${p.objective.substring(0, 50)}...`));
 				}

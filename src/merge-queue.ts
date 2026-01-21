@@ -58,8 +58,8 @@ async function autoDetectCompletedTasks(): Promise<number> {
 		const commitSha = execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
 		const commitMessage = execSync("git log -1 --format=%s", { encoding: "utf-8" }).trim();
 
-		const { getAllItems, markTaskComplete } = await import("./task.js");
-		const pendingTasks = getAllItems().filter((t) => t.status === "pending" || t.status === "in_progress");
+		const { getAllTasks, markTaskComplete } = await import("./task.js");
+		const pendingTasks = getAllTasks().filter((t) => t.status === "pending" || t.status === "in_progress");
 
 		if (pendingTasks.length === 0) {
 			gitLogger.debug("No pending tasks to auto-detect");

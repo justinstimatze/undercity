@@ -28,7 +28,7 @@ import { join } from "node:path";
 import { serverLogger } from "./logger.js";
 import { handleMCPRequest } from "./mcp-protocol.js";
 import { Persistence } from "./persistence.js";
-import { addGoal, getAllItems, getBacklogSummary } from "./task.js";
+import { addTask, getAllTasks, getTaskBoardSummary } from "./task.js";
 
 const DEFAULT_PORT = 7331;
 const LOCALHOST = "127.0.0.1"; // SECURITY: Only bind to localhost
@@ -277,7 +277,7 @@ export class UndercityServer {
 	private handleStatus(res: ServerResponse): void {
 		const recovery = this.persistence.getSessionRecovery();
 		const inventory = this.persistence.getInventory();
-		const summary = getBacklogSummary();
+		const summary = getTaskBoardSummary();
 
 		this.sendJson(res, 200, {
 			daemon: {
@@ -306,8 +306,8 @@ export class UndercityServer {
 	}
 
 	private handleGetTasks(res: ServerResponse): void {
-		const items = getAllItems();
-		const summary = getBacklogSummary();
+		const items = getAllTasks();
+		const summary = getTaskBoardSummary();
 
 		this.sendJson(res, 200, {
 			summary,
@@ -336,7 +336,7 @@ export class UndercityServer {
 		}
 
 		const priority = typeof body.priority === "number" ? body.priority : undefined;
-		const task = addGoal(body.objective, priority);
+		const task = addTask(body.objective, priority);
 		serverLogger.info({ taskId: task.id, objective: task.objective }, "Task added via API");
 
 		this.sendJson(res, 201, { success: true, task: { id: task.id, objective: task.objective } });
@@ -347,7 +347,7 @@ export class UndercityServer {
 		const summary = await getMetricsSummary();
 
 		// Get task board summary for additional context
-		const taskSummary = getBacklogSummary();
+		const taskSummary = getTaskBoardSummary();
 
 		this.sendJson(res, 200, {
 			tasks: {

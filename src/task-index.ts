@@ -19,8 +19,7 @@
  * - Manual refresh available for consistency checks
  */
 
-import type { Task, TaskBoard } from "./task.js";
-import { loadTaskBoard } from "./task.js";
+import { type Task, type TaskBoard, getAllTasks } from "./task.js";
 
 /**
  * Pre-computed priority score for fast task selection
@@ -134,7 +133,7 @@ export class TaskIndex {
 			this.invalidateAll();
 		}
 
-		const board = loadTaskBoard(this.taskBoardPath);
+		const board: TaskBoard = { tasks: getAllTasks(this.taskBoardPath), lastUpdated: new Date() };
 
 		// Rebuild dirty indices
 		if (

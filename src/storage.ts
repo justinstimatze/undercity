@@ -19,7 +19,7 @@
  * - human_overrides: Human corrections to PM/auto decisions
  */
 
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import type { ConfidenceLevel, DecisionCategory } from "./decision-tracker.js";
@@ -30,7 +30,7 @@ const logger = sessionLogger.child({ module: "storage" });
 
 const DEFAULT_STATE_DIR = ".undercity";
 const DB_FILENAME = "undercity.db";
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 // =============================================================================
 // Database Instance Management
@@ -245,6 +245,38 @@ function initializeSchema(db: Database.Database): void {
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_human_overrides_decision_id ON human_overrides(decision_id);
+
+		-- Tasks table (task board)
+		CREATE TABLE IF NOT EXISTS tasks (
+			id TEXT PRIMARY KEY,
+			objective TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			priority REAL,
+			created_at TEXT NOT NULL,
+			started_at TEXT,
+			completed_at TEXT,
+			session_id TEXT,
+			error TEXT,
+			resolution TEXT,
+			duplicate_of_commit TEXT,
+			package_hints TEXT,  -- JSON array
+			depends_on TEXT,  -- JSON array
+			conflicts TEXT,  -- JSON array
+			estimated_files TEXT,  -- JSON array
+			tags TEXT,  -- JSON array
+			computed_packages TEXT,  -- JSON array
+			risk_score REAL,
+			parent_id TEXT,
+			subtask_ids TEXT,  -- JSON array
+			is_decomposed INTEGER DEFAULT 0,
+			decomposition_depth INTEGER DEFAULT 0,
+			handoff_context TEXT,  -- JSON object
+			last_attempt TEXT  -- JSON object
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+		CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_id);
+		CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
 
 		-- Schema version
 		PRAGMA user_version = ${SCHEMA_VERSION};
@@ -1994,3 +2026,513 @@ export function autoMigrateIfNeeded(stateDir: string = DEFAULT_STATE_DIR): Migra
 
 	return result;
 }
+
+// =============================================================================
+// Task Operations
+// =============================================================================
+
+/**
+ * Task status values
+ */
+export type TaskStatus =
+	| "pending"
+	| "in_progress"
+	| "decomposed"
+	| "complete"
+	| "failed"
+	| "blocked"
+	| "duplicate"
+	| "canceled"
+	| "obsolete";
+
+/**
+ * Last attempt context for retry tasks
+ */
+export interface LastAttemptContext {
+	model: string;
+	category: string;
+	error: string;
+	filesModified: string[];
+	attemptedAt: string;
+	attemptCount: number;
+}
+
+/**
+ * Handoff context from Claude Code session
+ */
+export interface HandoffContext {
+	filesRead?: string[];
+	decisions?: string[];
+	codeContext?: string;
+	notes?: string;
+	lastAttempt?: LastAttemptContext;
+	isRetry?: boolean;
+	humanGuidance?: string;
+	previousError?: string;
+	previousAttempts?: number;
+}
+
+/**
+ * Task record matching the database schema
+ */
+export interface TaskRecord {
+	id: string;
+	objective: string;
+	status: TaskStatus;
+	priority?: number;
+	createdAt: string;
+	startedAt?: string;
+	completedAt?: string;
+	sessionId?: string;
+	error?: string;
+	resolution?: string;
+	duplicateOfCommit?: string;
+	packageHints?: string[];
+	dependsOn?: string[];
+	conflicts?: string[];
+	estimatedFiles?: string[];
+	tags?: string[];
+	computedPackages?: string[];
+	riskScore?: number;
+	parentId?: string;
+	subtaskIds?: string[];
+	isDecomposed?: boolean;
+	decompositionDepth?: number;
+	handoffContext?: HandoffContext;
+	lastAttempt?: LastAttemptContext;
+}
+
+interface TaskRow {
+	id: string;
+	objective: string;
+	status: string;
+	priority: number | null;
+	created_at: string;
+	started_at: string | null;
+	completed_at: string | null;
+	session_id: string | null;
+	error: string | null;
+	resolution: string | null;
+	duplicate_of_commit: string | null;
+	package_hints: string | null;
+	depends_on: string | null;
+	conflicts: string | null;
+	estimated_files: string | null;
+	tags: string | null;
+	computed_packages: string | null;
+	risk_score: number | null;
+	parent_id: string | null;
+	subtask_ids: string | null;
+	is_decomposed: number;
+	decomposition_depth: number;
+	handoff_context: string | null;
+	last_attempt: string | null;
+}
+
+function rowToTask(row: TaskRow): TaskRecord {
+	return {
+		id: row.id,
+		objective: row.objective,
+		status: row.status as TaskStatus,
+		priority: row.priority ?? undefined,
+		createdAt: row.created_at,
+		startedAt: row.started_at ?? undefined,
+		completedAt: row.completed_at ?? undefined,
+		sessionId: row.session_id ?? undefined,
+		error: row.error ?? undefined,
+		resolution: row.resolution ?? undefined,
+		duplicateOfCommit: row.duplicate_of_commit ?? undefined,
+		packageHints: row.package_hints ? (JSON.parse(row.package_hints) as string[]) : undefined,
+		dependsOn: row.depends_on ? (JSON.parse(row.depends_on) as string[]) : undefined,
+		conflicts: row.conflicts ? (JSON.parse(row.conflicts) as string[]) : undefined,
+		estimatedFiles: row.estimated_files ? (JSON.parse(row.estimated_files) as string[]) : undefined,
+		tags: row.tags ? (JSON.parse(row.tags) as string[]) : undefined,
+		computedPackages: row.computed_packages ? (JSON.parse(row.computed_packages) as string[]) : undefined,
+		riskScore: row.risk_score ?? undefined,
+		parentId: row.parent_id ?? undefined,
+		subtaskIds: row.subtask_ids ? (JSON.parse(row.subtask_ids) as string[]) : undefined,
+		isDecomposed: row.is_decomposed === 1,
+		decompositionDepth: row.decomposition_depth,
+		handoffContext: row.handoff_context ? (JSON.parse(row.handoff_context) as HandoffContext) : undefined,
+		lastAttempt: row.last_attempt ? (JSON.parse(row.last_attempt) as LastAttemptContext) : undefined,
+	};
+}
+
+/**
+ * Insert a new task
+ */
+export function insertTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DIR): void {
+	const db = getDatabase(stateDir);
+
+	const stmt = db.prepare(`
+		INSERT INTO tasks (
+			id, objective, status, priority, created_at, started_at, completed_at,
+			session_id, error, resolution, duplicate_of_commit, package_hints,
+			depends_on, conflicts, estimated_files, tags, computed_packages,
+			risk_score, parent_id, subtask_ids, is_decomposed, decomposition_depth,
+			handoff_context, last_attempt
+		) VALUES (
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		)
+	`);
+
+	stmt.run(
+		task.id,
+		task.objective,
+		task.status,
+		task.priority ?? null,
+		task.createdAt,
+		task.startedAt ?? null,
+		task.completedAt ?? null,
+		task.sessionId ?? null,
+		task.error ?? null,
+		task.resolution ?? null,
+		task.duplicateOfCommit ?? null,
+		task.packageHints ? JSON.stringify(task.packageHints) : null,
+		task.dependsOn ? JSON.stringify(task.dependsOn) : null,
+		task.conflicts ? JSON.stringify(task.conflicts) : null,
+		task.estimatedFiles ? JSON.stringify(task.estimatedFiles) : null,
+		task.tags ? JSON.stringify(task.tags) : null,
+		task.computedPackages ? JSON.stringify(task.computedPackages) : null,
+		task.riskScore ?? null,
+		task.parentId ?? null,
+		task.subtaskIds ? JSON.stringify(task.subtaskIds) : null,
+		task.isDecomposed ? 1 : 0,
+		task.decompositionDepth ?? 0,
+		task.handoffContext ? JSON.stringify(task.handoffContext) : null,
+		task.lastAttempt ? JSON.stringify(task.lastAttempt) : null,
+	);
+}
+
+/**
+ * Update an existing task
+ */
+export function updateTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DIR): void {
+	const db = getDatabase(stateDir);
+
+	const stmt = db.prepare(`
+		UPDATE tasks SET
+			objective = ?, status = ?, priority = ?, started_at = ?, completed_at = ?,
+			session_id = ?, error = ?, resolution = ?, duplicate_of_commit = ?,
+			package_hints = ?, depends_on = ?, conflicts = ?, estimated_files = ?,
+			tags = ?, computed_packages = ?, risk_score = ?, parent_id = ?,
+			subtask_ids = ?, is_decomposed = ?, decomposition_depth = ?,
+			handoff_context = ?, last_attempt = ?
+		WHERE id = ?
+	`);
+
+	stmt.run(
+		task.objective,
+		task.status,
+		task.priority ?? null,
+		task.startedAt ?? null,
+		task.completedAt ?? null,
+		task.sessionId ?? null,
+		task.error ?? null,
+		task.resolution ?? null,
+		task.duplicateOfCommit ?? null,
+		task.packageHints ? JSON.stringify(task.packageHints) : null,
+		task.dependsOn ? JSON.stringify(task.dependsOn) : null,
+		task.conflicts ? JSON.stringify(task.conflicts) : null,
+		task.estimatedFiles ? JSON.stringify(task.estimatedFiles) : null,
+		task.tags ? JSON.stringify(task.tags) : null,
+		task.computedPackages ? JSON.stringify(task.computedPackages) : null,
+		task.riskScore ?? null,
+		task.parentId ?? null,
+		task.subtaskIds ? JSON.stringify(task.subtaskIds) : null,
+		task.isDecomposed ? 1 : 0,
+		task.decompositionDepth ?? 0,
+		task.handoffContext ? JSON.stringify(task.handoffContext) : null,
+		task.lastAttempt ? JSON.stringify(task.lastAttempt) : null,
+		task.id,
+	);
+}
+
+/**
+ * Get all tasks
+ */
+export function getAllTasksDB(stateDir: string = DEFAULT_STATE_DIR): TaskRecord[] {
+	const db = getDatabase(stateDir);
+	const rows = db.prepare("SELECT * FROM tasks ORDER BY priority ASC, created_at ASC").all() as TaskRow[];
+	return rows.map(rowToTask);
+}
+
+/**
+ * Get task by ID
+ */
+export function getTaskByIdDB(id: string, stateDir: string = DEFAULT_STATE_DIR): TaskRecord | null {
+	const db = getDatabase(stateDir);
+	const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id) as TaskRow | undefined;
+	return row ? rowToTask(row) : null;
+}
+
+/**
+ * Get tasks by status
+ */
+export function getTasksByStatusDB(status: TaskStatus, stateDir: string = DEFAULT_STATE_DIR): TaskRecord[] {
+	const db = getDatabase(stateDir);
+	const rows = db
+		.prepare("SELECT * FROM tasks WHERE status = ? ORDER BY priority ASC, created_at ASC")
+		.all(status) as TaskRow[];
+	return rows.map(rowToTask);
+}
+
+/**
+ * Get pending tasks that are ready to execute (not decomposed, dependencies met)
+ */
+export function getReadyTasksDB(limit: number = 10, stateDir: string = DEFAULT_STATE_DIR): TaskRecord[] {
+	const db = getDatabase(stateDir);
+
+	// Get pending, non-decomposed tasks
+	const rows = db
+		.prepare(
+			`
+		SELECT * FROM tasks
+		WHERE status = 'pending'
+		AND is_decomposed = 0
+		ORDER BY priority ASC, created_at ASC
+		LIMIT ?
+	`,
+		)
+		.all(limit) as TaskRow[];
+
+	const tasks = rows.map(rowToTask);
+
+	// Filter out tasks with unmet dependencies
+	const allTasks = getAllTasksDB(stateDir);
+	const completedIds = new Set(allTasks.filter((t) => t.status === "complete").map((t) => t.id));
+
+	return tasks.filter((task) => {
+		if (!task.dependsOn || task.dependsOn.length === 0) {
+			return true;
+		}
+		return task.dependsOn.every((depId) => completedIds.has(depId));
+	});
+}
+
+/**
+ * Update task status
+ */
+export function updateTaskStatusDB(
+	id: string,
+	status: TaskStatus,
+	updates: {
+		startedAt?: string;
+		completedAt?: string;
+		sessionId?: string;
+		error?: string;
+		resolution?: string;
+		duplicateOfCommit?: string;
+		lastAttempt?: LastAttemptContext;
+	} = {},
+	stateDir: string = DEFAULT_STATE_DIR,
+): boolean {
+	const db = getDatabase(stateDir);
+
+	const setClauses = ["status = ?"];
+	const params: (string | null)[] = [status];
+
+	if (updates.startedAt !== undefined) {
+		setClauses.push("started_at = ?");
+		params.push(updates.startedAt);
+	}
+	if (updates.completedAt !== undefined) {
+		setClauses.push("completed_at = ?");
+		params.push(updates.completedAt);
+	}
+	if (updates.sessionId !== undefined) {
+		setClauses.push("session_id = ?");
+		params.push(updates.sessionId);
+	}
+	if (updates.error !== undefined) {
+		setClauses.push("error = ?");
+		params.push(updates.error);
+	}
+	if (updates.resolution !== undefined) {
+		setClauses.push("resolution = ?");
+		params.push(updates.resolution);
+	}
+	if (updates.duplicateOfCommit !== undefined) {
+		setClauses.push("duplicate_of_commit = ?");
+		params.push(updates.duplicateOfCommit);
+	}
+	if (updates.lastAttempt !== undefined) {
+		setClauses.push("last_attempt = ?");
+		params.push(JSON.stringify(updates.lastAttempt));
+	}
+
+	params.push(id);
+
+	const result = db.prepare(`UPDATE tasks SET ${setClauses.join(", ")} WHERE id = ?`).run(...params);
+
+	return result.changes > 0;
+}
+
+/**
+ * Remove a task by ID
+ */
+export function removeTaskDB(id: string, stateDir: string = DEFAULT_STATE_DIR): boolean {
+	const db = getDatabase(stateDir);
+	const result = db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
+	return result.changes > 0;
+}
+
+/**
+ * Remove multiple tasks by ID
+ */
+export function removeTasksDB(ids: string[], stateDir: string = DEFAULT_STATE_DIR): number {
+	if (ids.length === 0) return 0;
+
+	const db = getDatabase(stateDir);
+	const placeholders = ids.map(() => "?").join(",");
+	const result = db.prepare(`DELETE FROM tasks WHERE id IN (${placeholders})`).run(...ids);
+	return result.changes;
+}
+
+/**
+ * Get task board summary
+ */
+export function getTaskBoardSummaryDB(stateDir: string = DEFAULT_STATE_DIR): Record<TaskStatus, number> {
+	const db = getDatabase(stateDir);
+
+	const rows = db.prepare("SELECT status, COUNT(*) as count FROM tasks GROUP BY status").all() as Array<{
+		status: string;
+		count: number;
+	}>;
+
+	const summary: Record<TaskStatus, number> = {
+		pending: 0,
+		in_progress: 0,
+		decomposed: 0,
+		complete: 0,
+		failed: 0,
+		blocked: 0,
+		duplicate: 0,
+		canceled: 0,
+		obsolete: 0,
+	};
+
+	for (const row of rows) {
+		summary[row.status as TaskStatus] = row.count;
+	}
+
+	return summary;
+}
+
+/**
+ * Clear completed tasks (remove them from database)
+ */
+export function clearCompletedTasksDB(stateDir: string = DEFAULT_STATE_DIR): number {
+	const db = getDatabase(stateDir);
+	const result = db.prepare("DELETE FROM tasks WHERE status = 'complete'").run();
+	return result.changes;
+}
+
+/**
+ * Update task with decomposition info
+ */
+export function markTaskDecomposedDB(
+	parentId: string,
+	subtaskIds: string[],
+	stateDir: string = DEFAULT_STATE_DIR,
+): void {
+	const db = getDatabase(stateDir);
+
+	db.prepare(
+		`
+		UPDATE tasks SET
+			status = 'decomposed',
+			is_decomposed = 1,
+			subtask_ids = ?
+		WHERE id = ?
+	`,
+	).run(JSON.stringify(subtaskIds), parentId);
+}
+
+/**
+ * Update task analysis fields
+ */
+export function updateTaskAnalysisDB(
+	id: string,
+	analysis: {
+		computedPackages?: string[];
+		riskScore?: number;
+		estimatedFiles?: string[];
+		tags?: string[];
+	},
+	stateDir: string = DEFAULT_STATE_DIR,
+): void {
+	const db = getDatabase(stateDir);
+
+	const setClauses: string[] = [];
+	const params: (string | number | null)[] = [];
+
+	if (analysis.computedPackages !== undefined) {
+		setClauses.push("computed_packages = ?");
+		params.push(JSON.stringify(analysis.computedPackages));
+	}
+	if (analysis.riskScore !== undefined) {
+		setClauses.push("risk_score = ?");
+		params.push(analysis.riskScore);
+	}
+	if (analysis.estimatedFiles !== undefined) {
+		setClauses.push("estimated_files = ?");
+		params.push(JSON.stringify(analysis.estimatedFiles));
+	}
+	if (analysis.tags !== undefined) {
+		setClauses.push("tags = ?");
+		params.push(JSON.stringify(analysis.tags));
+	}
+
+	if (setClauses.length === 0) return;
+
+	params.push(id);
+	db.prepare(`UPDATE tasks SET ${setClauses.join(", ")} WHERE id = ?`).run(...params);
+}
+
+/**
+ * Update task fields (objective, priority, tags, status)
+ */
+export function updateTaskFieldsDB(
+	id: string,
+	updates: {
+		objective?: string;
+		priority?: number;
+		tags?: string[];
+		status?: TaskStatus;
+	},
+	stateDir: string = DEFAULT_STATE_DIR,
+): boolean {
+	const db = getDatabase(stateDir);
+
+	const setClauses: string[] = [];
+	const params: (string | number | null)[] = [];
+
+	if (updates.objective !== undefined) {
+		setClauses.push("objective = ?");
+		params.push(updates.objective);
+	}
+	if (updates.priority !== undefined) {
+		setClauses.push("priority = ?");
+		params.push(updates.priority);
+	}
+	if (updates.tags !== undefined) {
+		setClauses.push("tags = ?");
+		params.push(JSON.stringify(updates.tags));
+	}
+	if (updates.status !== undefined) {
+		setClauses.push("status = ?");
+		params.push(updates.status);
+		if (["complete", "failed", "canceled", "obsolete"].includes(updates.status)) {
+			setClauses.push("completed_at = ?");
+			params.push(new Date().toISOString());
+		}
+	}
+
+	if (setClauses.length === 0) return false;
+
+	params.push(id);
+	const result = db.prepare(`UPDATE tasks SET ${setClauses.join(", ")} WHERE id = ?`).run(...params);
+	return result.changes > 0;
+}
+

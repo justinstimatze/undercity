@@ -22,22 +22,19 @@ import {
 	planToTasks,
 } from "../plan-parser.js";
 import {
-	addGoals,
 	addTask,
 	addTasks,
-	getAllItems,
-	getBacklogSummary,
-	getNextGoal,
+	getAllTasks,
+	getNextTask,
 	getReadyTasksForBatch,
 	getTaskBoardAnalytics,
+	getTaskBoardSummary,
 	getTaskById,
 	type HandoffContext,
-	loadTaskBoard,
-	markComplete,
-	markFailed,
-	markInProgress,
+	markTaskComplete,
+	markTaskFailed,
+	markTaskInProgress,
 	removeTasks,
-	saveTaskBoard,
 	updateTaskFields,
 } from "../task.js";
 import { TaskBoardAnalyzer } from "../task-board-analyzer.js";
@@ -95,8 +92,8 @@ export interface TasksOptions {
  * Handle the tasks command - show task board
  */
 export function handleTasks(options: TasksOptions = {}): void {
-	const items = getAllItems();
-	const summary = getBacklogSummary();
+	const items = getAllTasks();
+	const summary = getTaskBoardSummary();
 
 	console.log(chalk.bold("Task Board"));
 	console.log(
@@ -333,7 +330,7 @@ export function handleLoad(file: string): void {
 			return;
 		}
 
-		const items = addGoals(goals);
+		const items = addTasks(goals);
 		console.log(chalk.green(`Loaded ${items.length} goals from ${file}`));
 	} catch (error) {
 		console.error(chalk.red(`Error loading file: ${error instanceof Error ? error.message : error}`));
@@ -578,7 +575,7 @@ export async function handleWork(options: WorkOptions): Promise<void> {
 	console.log();
 
 	while (true) {
-		const nextGoal = getNextGoal();
+		const nextGoal = getNextTask();
 
 		if (!nextGoal) {
 			console.log(chalk.green("\n✓ Backlog empty - all tasks processed"));
@@ -600,18 +597,18 @@ export async function handleWork(options: WorkOptions): Promise<void> {
 			verbose: true,
 		});
 
-		markInProgress(nextGoal.id, `grind-${Date.now()}`);
+		markTaskInProgress(nextGoal.id, `grind-${Date.now()}`);
 
 		try {
 			const result = await orchestrator.runParallel([nextGoal.objective]);
 			const taskResult = result.results[0]?.result;
 
 			if (taskResult?.status === "complete") {
-				markComplete(nextGoal.id);
+				markTaskComplete(nextGoal.id);
 				console.log(chalk.green(`✓ Task complete: ${nextGoal.objective.substring(0, 40)}...`));
 			} else {
 				const errorMsg = taskResult?.error || "Unknown error";
-				markFailed(nextGoal.id, errorMsg);
+				markTaskFailed(nextGoal.id, errorMsg);
 				console.log(chalk.red(`✗ Task failed: ${nextGoal.objective.substring(0, 40)}...`));
 				if (taskResult?.error) {
 					console.log(chalk.dim(`  Error: ${taskResult.error.substring(0, 100)}`));
@@ -620,12 +617,12 @@ export async function handleWork(options: WorkOptions): Promise<void> {
 
 			processed++;
 		} catch (error) {
-			markFailed(nextGoal.id, error instanceof Error ? error.message : String(error));
+			markTaskFailed(nextGoal.id, error instanceof Error ? error.message : String(error));
 			console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
 		}
 	}
 
-	const summary = getBacklogSummary();
+	const summary = getTaskBoardSummary();
 	console.log(
 		`\nFinal: ${chalk.green(summary.complete)} complete, ${chalk.red(summary.failed)} failed, ${chalk.yellow(summary.pending)} pending`,
 	);
@@ -744,7 +741,7 @@ export function handleTaskStatus(): void {
 	console.log();
 
 	// Basic task board summary
-	const summary = getBacklogSummary();
+	const summary = getTaskBoardSummary();
 	const analytics = getTaskBoardAnalytics();
 
 	console.log(chalk.cyan("Current Status:"));
@@ -872,7 +869,7 @@ interface TriageReport {
  */
 function analyzeTaskBoard(): TriageReport {
 	// Import synchronously from task module (already imported at top)
-	const items = getAllItems();
+	const items = getAllTasks();
 	const issues: TriageIssue[] = [];
 
 	// Test task patterns
@@ -1261,17 +1258,15 @@ export function handlePrune(options: PruneOptions): void {
 	}
 
 	if (toFix.length > 0) {
-		const board = loadTaskBoard();
 		let fixed = 0;
 		for (const issue of toFix) {
-			const task = board.tasks.find((t: { id: string }) => t.id === issue.taskId);
+			const task = getTaskById(issue.taskId);
 			if (task && task.status === "pending" && task.completedAt) {
-				task.status = "complete";
+				markTaskComplete(issue.taskId);
 				fixed++;
 			}
 		}
 		if (fixed > 0) {
-			saveTaskBoard(board);
 			console.log(chalk.green(`Fixed ${fixed} task status(es)`));
 		}
 	}
@@ -1281,8 +1276,7 @@ export function handlePrune(options: PruneOptions): void {
  * Handle the complete command - mark a task as complete
  */
 export function handleComplete(taskId: string, options: CompleteOptions): void {
-	const board = loadTaskBoard();
-	const task = board.tasks.find((t: { id: string }) => t.id === taskId);
+	const task = getTaskById(taskId);
 
 	if (!task) {
 		console.log(chalk.red(`Task not found: ${taskId}`));
@@ -1295,15 +1289,8 @@ export function handleComplete(taskId: string, options: CompleteOptions): void {
 		return;
 	}
 
-	task.status = "complete";
-	task.completedAt = new Date();
-	// Support both --resolution and --reason (reason is alias for resolution)
-	const resolutionText = options.resolution || options.reason;
-	if (resolutionText) {
-		task.resolution = resolutionText;
-	}
+	markTaskComplete(taskId);
 
-	saveTaskBoard(board);
 	console.log(chalk.green(`Marked complete: ${task.objective.slice(0, 60)}...`));
 }
 

@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { resetDatabase } from "../storage.js";
 import {
 	addTask,
 	addTasks,
@@ -15,8 +16,8 @@ import {
 	blockTask,
 	completeParentIfAllSubtasksDone,
 	decomposeTaskIntoSubtasks,
+	getAllTasks,
 	getTaskById,
-	loadTaskBoard,
 	markTaskCanceled,
 	markTaskComplete,
 	markTaskFailed,
@@ -24,7 +25,6 @@ import {
 	markTaskObsolete,
 	removeTask,
 	removeTasks,
-	saveTaskBoard,
 	unblockTask,
 } from "../task.js";
 
@@ -33,6 +33,9 @@ describe("task.ts", () => {
 	let tasksPath: string;
 
 	beforeEach(() => {
+		// Reset database singleton between tests
+		resetDatabase();
+
 		// Create a temp directory for each test
 		testDir = mkdtempSync(join(tmpdir(), "task-test-"));
 		mkdirSync(join(testDir, ".undercity"), { recursive: true });
@@ -40,37 +43,27 @@ describe("task.ts", () => {
 	});
 
 	afterEach(() => {
+		// Close database before removing temp directory
+		resetDatabase();
+
 		if (existsSync(testDir)) {
 			rmSync(testDir, { recursive: true, force: true });
 		}
 	});
 
-	describe("loadTaskBoard / saveTaskBoard", () => {
-		it("should create empty board if file does not exist", () => {
-			const board = loadTaskBoard(tasksPath);
-			expect(board.tasks).toEqual([]);
-			expect(board.lastUpdated).toBeInstanceOf(Date);
+	describe("getAllTasks", () => {
+		it("should return empty array if no tasks exist", () => {
+			const tasks = getAllTasks(tasksPath);
+			expect(tasks).toEqual([]);
 		});
 
-		it("should save and load board correctly", () => {
-			const board = {
-				tasks: [
-					{
-						id: "test-1",
-						objective: "Test task",
-						status: "pending" as const,
-						createdAt: new Date(),
-					},
-				],
-				lastUpdated: new Date(),
-			};
+		it("should return tasks added via addTask", () => {
+			const task = addTask("Test task", undefined, tasksPath);
+			const tasks = getAllTasks(tasksPath);
 
-			saveTaskBoard(board, tasksPath);
-			const loaded = loadTaskBoard(tasksPath);
-
-			expect(loaded.tasks).toHaveLength(1);
-			expect(loaded.tasks[0].id).toBe("test-1");
-			expect(loaded.tasks[0].objective).toBe("Test task");
+			expect(tasks).toHaveLength(1);
+			expect(tasks[0].id).toBe(task.id);
+			expect(tasks[0].objective).toBe("Test task");
 		});
 	});
 
@@ -93,9 +86,9 @@ describe("task.ts", () => {
 		it("should persist task to board", () => {
 			addTask("Test task", undefined, tasksPath);
 
-			const board = loadTaskBoard(tasksPath);
-			expect(board.tasks).toHaveLength(1);
-			expect(board.tasks[0].objective).toBe("Test task");
+			const tasks = getAllTasks(tasksPath);
+			expect(tasks).toHaveLength(1);
+			expect(tasks[0].objective).toBe("Test task");
 		});
 	});
 
@@ -108,8 +101,8 @@ describe("task.ts", () => {
 			expect(tasks[1].objective).toBe("Task 2");
 			expect(tasks[2].objective).toBe("Task 3");
 
-			const board = loadTaskBoard(tasksPath);
-			expect(board.tasks).toHaveLength(3);
+			const allTasks = getAllTasks(tasksPath);
+			expect(allTasks).toHaveLength(3);
 		});
 	});
 
@@ -120,8 +113,8 @@ describe("task.ts", () => {
 			const removed = removeTask(task.id, tasksPath);
 
 			expect(removed).toBe(true);
-			const board = loadTaskBoard(tasksPath);
-			expect(board.tasks).toHaveLength(0);
+			const tasks = getAllTasks(tasksPath);
+			expect(tasks).toHaveLength(0);
 		});
 
 		it("should return false for non-existent task", () => {
@@ -139,9 +132,9 @@ describe("task.ts", () => {
 			const removed = removeTasks([t1.id, t2.id], tasksPath);
 
 			expect(removed).toBe(2);
-			const board = loadTaskBoard(tasksPath);
-			expect(board.tasks).toHaveLength(1);
-			expect(board.tasks[0].objective).toBe("Task 3");
+			const tasks = getAllTasks(tasksPath);
+			expect(tasks).toHaveLength(1);
+			expect(tasks[0].objective).toBe("Task 3");
 		});
 
 		it("should return 0 for empty array", () => {

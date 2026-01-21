@@ -39,11 +39,15 @@ import {
 	addTask,
 	decomposeTaskIntoSubtasks,
 	findSimilarInProgressTask,
+	getAllTasks,
+	getTaskById,
 	type HandoffContext,
-	loadTaskBoard,
+	markTaskBlocked,
+	markTaskComplete,
 	removeTasks,
-	saveTaskBoard,
 	type Task,
+	unblockTask,
+	updateTaskFields,
 } from "./task.js";
 import { findRelevantFiles } from "./task-file-patterns.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
@@ -384,9 +388,9 @@ export class Orchestrator {
 			summary,
 		});
 
-		// Load current task board for validation
-		const board = loadTaskBoard();
-		const taskIds = new Set(board.tasks.map((t) => t.id));
+		// Load current tasks for validation
+		const allTasks = getAllTasks();
+		const taskIds = new Set(allTasks.map((t) => t.id));
 
 		// Track actions
 		let applied = 0;
@@ -400,7 +404,7 @@ export class Orchestrator {
 		let addCount = 0;
 
 		for (const rec of recommendations) {
-			const validation = this.validateRecommendation(rec, board, taskIds, metaTaskId);
+			const validation = this.validateRecommendation(rec, allTasks, taskIds, metaTaskId);
 
 			if (!validation.valid) {
 				rejected++;
@@ -411,7 +415,7 @@ export class Orchestrator {
 			// Check sanity limits
 			if (rec.action === "remove") {
 				removeCount++;
-				if (removeCount > board.tasks.length * MAX_REMOVES_PERCENT) {
+				if (removeCount > allTasks.length * MAX_REMOVES_PERCENT) {
 					rejected++;
 					rejectionReasons.push(`remove(${rec.taskId}): exceeds ${MAX_REMOVES_PERCENT * 100}% removal limit`);
 					continue;
@@ -463,7 +467,7 @@ export class Orchestrator {
 	 */
 	private validateRecommendation(
 		rec: MetaTaskRecommendation,
-		board: { tasks: Array<{ id: string; status: string; objective: string }> },
+		tasks: Task[],
 		taskIds: Set<string>,
 		metaTaskId: string,
 	): { valid: boolean; reason?: string } {
@@ -484,7 +488,7 @@ export class Orchestrator {
 				return { valid: false, reason: "task does not exist" };
 			}
 
-			const task = board.tasks.find((t) => t.id === rec.taskId);
+			const task = tasks.find((t) => t.id === rec.taskId);
 			if (!task) {
 				return { valid: false, reason: "task not found" };
 			}
@@ -522,7 +526,7 @@ export class Orchestrator {
 			}
 
 			// Check for obvious duplicates (exact match)
-			const isDuplicate = board.tasks.some((t) => t.objective.toLowerCase() === rec.newTask!.objective.toLowerCase());
+			const isDuplicate = tasks.some((t) => t.objective.toLowerCase() === rec.newTask!.objective.toLowerCase());
 			if (isDuplicate) {
 				return { valid: false, reason: "duplicate objective" };
 			}
@@ -571,13 +575,9 @@ export class Orchestrator {
 			case "complete":
 			case "fix_status": {
 				if (rec.taskId) {
-					const board = loadTaskBoard();
-					const task = board.tasks.find((t) => t.id === rec.taskId);
+					const task = getTaskById(rec.taskId);
 					if (task) {
-						task.status = "complete";
-						task.completedAt = new Date();
-						task.resolution = rec.reason;
-						saveTaskBoard(board);
+						markTaskComplete(rec.taskId);
 						if (this.verbose) {
 							output.debug(`Marked ${rec.taskId} complete: ${rec.reason}`);
 						}
@@ -588,11 +588,9 @@ export class Orchestrator {
 
 			case "prioritize": {
 				if (rec.taskId && rec.updates?.priority !== undefined) {
-					const board = loadTaskBoard();
-					const task = board.tasks.find((t) => t.id === rec.taskId);
+					const task = getTaskById(rec.taskId);
 					if (task) {
-						task.priority = rec.updates.priority;
-						saveTaskBoard(board);
+						updateTaskFields(rec.taskId, { priority: rec.updates.priority });
 						if (this.verbose) {
 							output.debug(`Updated priority for ${rec.taskId} to ${rec.updates.priority}`);
 						}
@@ -603,13 +601,13 @@ export class Orchestrator {
 
 			case "update": {
 				if (rec.taskId && rec.updates) {
-					const board = loadTaskBoard();
-					const task = board.tasks.find((t) => t.id === rec.taskId);
+					const task = getTaskById(rec.taskId);
 					if (task) {
-						if (rec.updates.objective) task.objective = rec.updates.objective;
-						if (rec.updates.priority !== undefined) task.priority = rec.updates.priority;
-						if (rec.updates.tags) task.tags = rec.updates.tags;
-						saveTaskBoard(board);
+						updateTaskFields(rec.taskId, {
+							objective: rec.updates.objective,
+							priority: rec.updates.priority,
+							tags: rec.updates.tags,
+						});
 						if (this.verbose) {
 							output.debug(`Updated task ${rec.taskId}`);
 						}
@@ -620,12 +618,9 @@ export class Orchestrator {
 
 			case "block": {
 				if (rec.taskId) {
-					const board = loadTaskBoard();
-					const task = board.tasks.find((t) => t.id === rec.taskId);
+					const task = getTaskById(rec.taskId);
 					if (task) {
-						task.status = "blocked";
-						task.resolution = rec.reason;
-						saveTaskBoard(board);
+						markTaskBlocked({ id: rec.taskId, reason: rec.reason ?? "Blocked by triage" });
 					}
 				}
 				break;
@@ -633,12 +628,9 @@ export class Orchestrator {
 
 			case "unblock": {
 				if (rec.taskId) {
-					const board = loadTaskBoard();
-					const task = board.tasks.find((t) => t.id === rec.taskId);
-					if (task && task.status === "blocked") {
-						task.status = "pending";
-						task.resolution = undefined;
-						saveTaskBoard(board);
+					const task = getTaskById(rec.taskId);
+					if (task?.status === "blocked") {
+						unblockTask(rec.taskId);
 					}
 				}
 				break;
@@ -1285,9 +1277,9 @@ export class Orchestrator {
 				// Use the original task ID from the board, not the worktree ID
 				let originalTaskId = this.originalTaskIds.get(task);
 				if (!originalTaskId) {
-					// Fallback: lookup from board by objective (handles recovery path where only strings are passed)
-					const board = loadTaskBoard();
-					const matchingTask = board.tasks.find((t) => t.objective === task);
+					// Fallback: lookup from tasks by objective (handles recovery path where only strings are passed)
+					const allTasks = getAllTasks();
+					const matchingTask = allTasks.find((t) => t.objective === task);
 					if (matchingTask) {
 						originalTaskId = matchingTask.id;
 						// Cache it for future lookups

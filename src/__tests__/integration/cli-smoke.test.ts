@@ -137,10 +137,9 @@ describe("CLI Smoke Tests", () => {
 		it("add command adds task to board", () => {
 			runCli(["add", "Test task from smoke test"], { cwd: testDir });
 
-			// Verify task was added by reading tasks.json directly
-			const tasksFile = join(testDir, ".undercity", "tasks.json");
-			const content = readFileSync(tasksFile, "utf-8");
-			expect(content).toContain("Test task from smoke test");
+			// Verify task was added by checking tasks command output (tasks now in SQLite)
+			const result = runCli(["tasks"], { cwd: testDir });
+			expect(result).toContain("Test task from smoke test");
 		});
 
 		it("task-analyze command works", () => {
