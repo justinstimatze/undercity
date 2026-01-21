@@ -186,6 +186,18 @@ Projects and concepts that shaped undercity's design. Links preserved for refere
 
 ---
 
+### "What Used to Take Months Now Takes Days" (Obie Fernandez)
+
+**Link:** https://obie.medium.com/what-used-to-take-months-now-takes-days-cc8883cc21e9
+
+**What it is:** Case study of building a production knowledge management system (Nexus) in 4 days with Claude Code. Demonstrates TDD as a forcing function in AI-assisted development and the strategic calculus of competitive advantage when replication barriers collapse.
+
+**Why included:**
+- Validates that substantial production systems can be built rapidly with AI assistance
+- Articulates why TDD matters more, not less, with AI code generation
+
+---
+
 ## Quick Reference
 
 | Influence | Key Concept | Primary Files |
@@ -199,3 +211,4 @@ Projects and concepts that shaped undercity's design. Links preserved for refere
 | Agent-Native | Outcomes via loops, context injection | `worker.ts`, `context.ts`, `dashboard.ts` |
 | BMAD-METHOD | Planning-first execution | `task-planner.ts` |
 | DSPy/Ax | Self-improving prompts via examples | `ax-programs.ts` |
+| Obie Fernandez | TDD as forcing function, rapid AI dev | (validation) |
