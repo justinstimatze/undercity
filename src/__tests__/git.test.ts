@@ -17,11 +17,14 @@ vi.mock("node:child_process", () => ({
 import { execFileSync } from "node:child_process";
 import {
 	GitError,
+	execGit,
 	generateBranchName,
 	getCurrentBranch,
 	getDefaultBranch,
 	hashFingerprint,
 	hashGoal,
+	mergeWithFallback,
+	rebase,
 	resolveRepositoryPath,
 } from "../git.js";
 import { DEFAULT_RETRY_CONFIG, MergeQueue } from "../merge-queue.js";
@@ -531,6 +534,212 @@ describe("hashFingerprint", () => {
 			timestamp: new Date(),
 		};
 		expect(hashFingerprint(fingerprint)).toMatch(/^[a-f0-9]{64}$/);
+	});
+});
+
+// =============================================================================
+// mergeWithFallback Tests
+// =============================================================================
+
+describe("mergeWithFallback", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns success with default strategy when clean merge succeeds", () => {
+		// Import mergeWithFallback
+		
+		// Mock clean merge success
+		vi.mocked(execFileSync).mockReturnValue("");
+
+		const result = mergeWithFallback("feature/test", "Merge feature");
+
+		expect(result.success).toBe(true);
+		expect(result.strategyUsed).toBe("default");
+		expect(result.conflictFiles).toBeUndefined();
+	});
+
+	it("falls back to ours strategy when clean merge fails", () => {
+		
+		vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+			if (Array.isArray(args)) {
+				// First merge call (clean) fails
+				if (args.includes("merge") && !args.includes("-X")) {
+					throw new Error("Merge conflict");
+				}
+				// Abort always succeeds
+				if (args.includes("--abort")) {
+					return "";
+				}
+				// Second merge call (with -X ours) succeeds
+				if (args.includes("-X") && args.includes("ours")) {
+					return "";
+				}
+			}
+			return "";
+		});
+
+		const result = mergeWithFallback("feature/test", "Merge feature");
+
+		expect(result.success).toBe(true);
+		expect(result.strategyUsed).toBe("ours");
+	});
+
+	it("returns conflict files when all strategies fail", () => {
+		
+		vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+			if (Array.isArray(args)) {
+				// All merge attempts fail
+				if (args.includes("merge")) {
+					throw new Error("Merge conflict");
+				}
+				// Abort succeeds
+				if (args.includes("--abort")) {
+					return "";
+				}
+				// MERGE_HEAD check fails (no merge in progress after abort)
+				if (args.includes("MERGE_HEAD")) {
+					throw new Error("Not found");
+				}
+				// Conflict file list
+				if (args.includes("--diff-filter=U")) {
+					return "file1.ts\nfile2.ts";
+				}
+			}
+			return "";
+		});
+
+		const result = mergeWithFallback("feature/test", "Merge feature");
+
+		expect(result.success).toBe(false);
+		expect(result.conflictFiles).toBeDefined();
+		expect(result.error).toContain("unresolvable conflicts");
+	});
+});
+
+// =============================================================================
+// rebase Tests
+// =============================================================================
+
+describe("rebase", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns true when rebase succeeds", () => {
+		
+		vi.mocked(execFileSync).mockReturnValue("");
+
+		const result = rebase("main");
+
+		expect(result).toBe(true);
+		expect(execFileSync).toHaveBeenCalledWith(
+			"git",
+			["rebase", "main"],
+			expect.anything(),
+		);
+	});
+
+	it("returns false and aborts when rebase fails", () => {
+		
+		let abortCalled = false;
+		vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+			if (Array.isArray(args)) {
+				if (args[0] === "rebase" && args[1] === "main") {
+					throw new Error("Rebase conflict");
+				}
+				if (args.includes("--abort")) {
+					abortCalled = true;
+					return "";
+				}
+			}
+			return "";
+		});
+
+		const result = rebase("main");
+
+		expect(result).toBe(false);
+		expect(abortCalled).toBe(true);
+	});
+
+	it("handles abort failure gracefully", () => {
+		
+		vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+			if (Array.isArray(args)) {
+				if (args[0] === "rebase" && args[1] === "main") {
+					throw new Error("Rebase conflict");
+				}
+				if (args.includes("--abort")) {
+					throw new Error("Abort failed");
+				}
+			}
+			return "";
+		});
+
+		// Should not throw, just return false
+		const result = rebase("main");
+
+		expect(result).toBe(false);
+	});
+});
+
+// =============================================================================
+// execGit Error Handling
+// =============================================================================
+
+describe("execGit error handling", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("throws GitError with command and exit code on failure", () => {
+		const error = new Error("Command failed") as Error & {
+			status: number;
+			stderr: Buffer;
+		};
+		error.status = 128;
+		error.stderr = Buffer.from("fatal: not a git repository");
+
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw error;
+		});
+
+		try {
+			execGit(["status"]);
+			expect.fail("Should have thrown");
+		} catch (e) {
+			expect(e).toBeInstanceOf(GitError);
+			expect((e as GitError).command).toBe("git status");
+			expect((e as GitError).exitCode).toBe(128);
+		}
+	});
+
+	it("includes stderr in error message", () => {
+		const error = new Error("Command failed") as Error & {
+			status: number;
+			stderr: Buffer;
+		};
+		error.status = 1;
+		error.stderr = Buffer.from("error: pathspec 'foo' did not match any file(s)");
+
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw error;
+		});
+
+		try {
+			execGit(["checkout", "foo"]);
+			expect.fail("Should have thrown");
+		} catch (e) {
+			expect((e as GitError).message).toContain("pathspec");
+		}
+	});
+
+	it("trims output from successful commands", () => {
+		vi.mocked(execFileSync).mockReturnValue("  output with whitespace  \n");
+
+		const result = execGit(["status"]);
+
+		expect(result).toBe("output with whitespace");
 	});
 });
 

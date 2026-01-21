@@ -649,7 +649,9 @@ export function updateTaskFields(
 export function getNextTask(path?: string): Task | undefined {
 	const stateDir = getStateDirFromPath(path);
 
-	const readyTasks = getReadyTasksDB(1, stateDir);
+	// Fetch more tasks to account for dependency filtering
+	// (getReadyTasksDB filters dependencies after SQL LIMIT)
+	const readyTasks = getReadyTasksDB(100, stateDir);
 	if (readyTasks.length === 0) {
 		return undefined;
 	}
