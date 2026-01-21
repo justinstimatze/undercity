@@ -36,7 +36,9 @@ import {
 	cleanWorktreeDirectory,
 	execGitInDir,
 	fetchMainIntoWorktree,
+	handleTaskDecomposition,
 	mergeIntoLocalMain,
+	reportTaskOutcome,
 	runPostRebaseVerification,
 	validateGitRef,
 	validateWorktreePath,
@@ -46,7 +48,6 @@ import { Persistence, readTaskAssignment, writeTaskAssignment } from "./persiste
 import { RateLimitTracker } from "./rate-limit.js";
 import {
 	addTask,
-	decomposeTaskIntoSubtasks,
 	findSimilarInProgressTask,
 	getAllTasks,
 	getTaskById,
@@ -1240,73 +1241,21 @@ export class Orchestrator {
 		this.fileTracker.stopTaskTracking(taskId);
 
 		// Handle decomposition: agent determined task needs to be broken down
-		if (result.needsDecomposition) {
-			const { reason, suggestedSubtasks } = result.needsDecomposition;
-			if (suggestedSubtasks && suggestedSubtasks.length > 0) {
-				// Use the original task ID from the board, not the worktree ID
-				let originalTaskId = this.originalTaskIds.get(task);
-				if (!originalTaskId) {
-					// Fallback: lookup from tasks by objective (handles recovery path where only strings are passed)
-					const allTasks = getAllTasks();
-					const matchingTask = allTasks.find((t) => t.objective === task);
-					if (matchingTask) {
-						originalTaskId = matchingTask.id;
-						// Cache it for future lookups
-						this.originalTaskIds.set(task, originalTaskId);
-						output.debug(`Resolved task ID from board fallback lookup`, { taskId: originalTaskId });
-					}
-				}
-				if (!originalTaskId) {
-					// Still no ID - cannot decompose (task not on board)
-					output.warning(`Cannot decompose task: no board task ID found`, {
-						taskId,
-						task: task.substring(0, 50),
-					});
-					// Fall through to failure handling
-				} else {
-					output.info(`Decomposing task into ${suggestedSubtasks.length} subtasks`, {
-						taskId: originalTaskId,
-						reason,
-					});
-					try {
-						const subtaskIds = decomposeTaskIntoSubtasks({
-							parentTaskId: originalTaskId,
-							subtasks: suggestedSubtasks.map((objective, i) => ({
-								objective,
-								order: i,
-							})),
-						});
-						output.info(`Created subtasks: ${subtaskIds.join(", ")}`, { taskId: originalTaskId });
-						// Return early - task is now decomposed into subtasks
-						return {
-							task,
-							taskId,
-							result: { ...result, status: "failed", error: "DECOMPOSED" }, // Not a real failure, just decomposed
-							worktreePath,
-							branch,
-							merged: false, // No merge needed for decomposed tasks
-							decomposed: true, // Track separately from executed tasks
-							modifiedFiles,
-						};
-					} catch (decomposeError) {
-						output.warning(`Failed to decompose task: ${decomposeError}`, { taskId, originalTaskId });
-						// Fall through to failure handling
-					}
-				}
-			}
-			// No suggested subtasks - fall through to failure handling
-			output.warning(`Task needs decomposition but no subtasks suggested: ${reason}`, { taskId });
+		const decompositionResult = handleTaskDecomposition(
+			task,
+			taskId,
+			worktreePath,
+			branch,
+			result,
+			modifiedFiles,
+			this.originalTaskIds,
+		);
+		if (decompositionResult.earlyReturn) {
+			return decompositionResult.earlyReturn;
 		}
 
 		const workerName = nameFromId(taskId);
-		if (result.status === "complete") {
-			output.taskComplete(taskId, "Task completed", { workerName, modifiedFiles: modifiedFiles.length });
-			if (result.metaTaskResult) {
-				this.processMetaTaskResult(result.metaTaskResult, taskId);
-			}
-		} else {
-			output.taskFailed(taskId, "Task failed", result.error, { workerName });
-		}
+		reportTaskOutcome(taskId, result, modifiedFiles, workerName, this.processMetaTaskResult.bind(this));
 
 		if (modifiedFiles.length > 0 && this.verbose) {
 			output.debug(`[${taskId}] Modified ${modifiedFiles.length} files`);
@@ -1778,11 +1727,7 @@ export class Orchestrator {
 		await this.rebaseOntoMain(taskId, worktreePath);
 
 		// Run verification after rebase with fix loop
-		await runPostRebaseVerification(
-			taskId,
-			worktreePath,
-			this.attemptMergeVerificationFix.bind(this),
-		);
+		await runPostRebaseVerification(taskId, worktreePath, this.attemptMergeVerificationFix.bind(this));
 
 		// Merge worktree changes into local main
 		mergeIntoLocalMain(taskId, worktreePath, mainRepo, mainBranch);

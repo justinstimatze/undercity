@@ -5,8 +5,8 @@
  * complexity in the main Orchestrator class.
  */
 
-import { existsSync, statSync } from "node:fs";
 import { execSync } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
 import * as output from "../output.js";
 import { execGitInDir, validateGitRef } from "./git-utils.js";
 
@@ -113,9 +113,7 @@ export async function runPostRebaseVerification(
 
 			// If we have more attempts, try to fix
 			if (attempt < maxMergeFixAttempts) {
-				output.warning(
-					`Verification failed for ${taskId}, attempting fix (${attempt + 1}/${maxMergeFixAttempts})...`,
-				);
+				output.warning(`Verification failed for ${taskId}, attempting fix (${attempt + 1}/${maxMergeFixAttempts})...`);
 
 				try {
 					await attemptFix(taskId, worktreePath, String(verifyError));
@@ -127,9 +125,7 @@ export async function runPostRebaseVerification(
 	}
 
 	if (lastVerifyError) {
-		throw new Error(
-			`Verification failed for ${taskId} after ${maxMergeFixAttempts} fix attempts: ${lastVerifyError}`,
-		);
+		throw new Error(`Verification failed for ${taskId} after ${maxMergeFixAttempts} fix attempts: ${lastVerifyError}`);
 	}
 }
 
@@ -137,12 +133,7 @@ export async function runPostRebaseVerification(
  * Merge worktree changes into local main via fast-forward
  * Handles stashing of uncommitted changes in main repo
  */
-export function mergeIntoLocalMain(
-	taskId: string,
-	worktreePath: string,
-	mainRepo: string,
-	mainBranch: string,
-): void {
+export function mergeIntoLocalMain(taskId: string, worktreePath: string, mainRepo: string, mainBranch: string): void {
 	let didStash = false;
 	try {
 		// Get the current commit SHA before detaching
