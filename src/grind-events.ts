@@ -102,6 +102,7 @@ interface TaskCompleteEvent extends BaseEvent {
 	tokens: number;
 	secs: number;
 	sha?: string;
+	escalations?: string[]; // e.g., ["sonnet→opus@2"]
 }
 
 /**
@@ -387,6 +388,11 @@ export function getLastGrindSummary(): {
 	merged: number;
 	tokens: number;
 	failureBreakdown: Record<FailureReason, number>;
+	escalations: {
+		total: number;
+		tasksWithEscalation: number;
+		byPath: Record<string, number>; // e.g., "sonnet→opus": 3
+	};
 } | null {
 	const events = readRecentEvents(500);
 	if (!events.length) return null;
@@ -429,6 +435,25 @@ export function getLastGrindSummary(): {
 		failureBreakdown[f.reason]++;
 	}
 
+	// Track escalations from complete events
+	const escalations = {
+		total: 0,
+		tasksWithEscalation: 0,
+		byPath: {} as Record<string, number>,
+	};
+
+	for (const c of completes) {
+		if (c.escalations && c.escalations.length > 0) {
+			escalations.tasksWithEscalation++;
+			for (const esc of c.escalations) {
+				escalations.total++;
+				// Parse escalation string like "haiku→sonnet@2" to get just the path
+				const path = esc.split("@")[0];
+				escalations.byPath[path] = (escalations.byPath[path] ?? 0) + 1;
+			}
+		}
+	}
+
 	const totalTokens = completes.reduce((sum, c) => sum + c.tokens, 0) + failures.reduce((sum, f) => sum + f.tokens, 0);
 
 	return {
@@ -441,6 +466,7 @@ export function getLastGrindSummary(): {
 		merged: end?.merged ?? 0,
 		tokens: totalTokens,
 		failureBreakdown,
+		escalations,
 	};
 }
 

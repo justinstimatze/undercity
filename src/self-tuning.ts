@@ -426,11 +426,13 @@ export function getRecommendedModel(complexity: ComplexityLevel, basePath: strin
 	const profile = loadRoutingProfile(basePath);
 
 	// Start with default recommendation based on complexity
+	// Note: We skip haiku entirely - sonnet requires less steering and has
+	// higher first-attempt success rates, making it cheaper overall.
 	const defaultModels: Record<ComplexityLevel, ModelTier> = {
-		trivial: "haiku",
+		trivial: "sonnet",
 		simple: "sonnet",
 		standard: "sonnet",
-		complex: "opus",
+		complex: "sonnet",
 		critical: "opus",
 	};
 

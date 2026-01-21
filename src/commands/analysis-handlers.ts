@@ -24,6 +24,12 @@ interface PostmortemReport {
 		breakdown: Record<FailureReason, number>;
 		topIssues: string[];
 	};
+	escalations: {
+		total: number;
+		tasksWithEscalation: number;
+		escalationRate: string;
+		byPath: Record<string, number>;
+	};
 	recommendations: string[];
 	sessionMetrics?: {
 		totalQueries: number;
@@ -39,9 +45,13 @@ interface PostmortemReport {
 }
 
 /**
- * Generate insights from failure breakdown
+ * Generate insights from failure breakdown and escalation data
  */
-function generateRecommendations(breakdown: Record<FailureReason, number>, successRate: number): string[] {
+function generateRecommendations(
+	breakdown: Record<FailureReason, number>,
+	successRate: number,
+	escalationRate?: number,
+): string[] {
 	const recommendations: string[] = [];
 
 	// Plan rejection issues
@@ -101,6 +111,19 @@ function generateRecommendations(breakdown: Record<FailureReason, number>, succe
 		recommendations.push("Success rate is excellent (90%+). System is operating well.");
 	}
 
+	// Escalation rate insights
+	if (escalationRate !== undefined) {
+		if (escalationRate > 30) {
+			recommendations.push(
+				`High escalation rate (${escalationRate.toFixed(1)}%). Consider:`,
+				"  - Improving task context/planning to help sonnet succeed",
+				"  - Breaking complex tasks into smaller pieces",
+			);
+		} else if (escalationRate === 0 && successRate >= 80) {
+			recommendations.push("No escalations needed - sonnet is handling tasks well.");
+		}
+	}
+
 	if (recommendations.length === 0) {
 		recommendations.push("No specific issues detected. Grind completed successfully.");
 	}
@@ -147,7 +170,9 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 	}
 
 	// Generate recommendations
-	const recommendations = generateRecommendations(summary.failureBreakdown, successRate);
+	// Calculate escalation rate
+	const escalationRate = total > 0 ? (summary.escalations.tasksWithEscalation / total) * 100 : 0;
+	const recommendations = generateRecommendations(summary.failureBreakdown, successRate, escalationRate);
 
 	// Get session metrics if available
 	const liveMetrics = loadLiveMetrics();
@@ -165,6 +190,12 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 		failureAnalysis: {
 			breakdown: summary.failureBreakdown,
 			topIssues,
+		},
+		escalations: {
+			total: summary.escalations.total,
+			tasksWithEscalation: summary.escalations.tasksWithEscalation,
+			escalationRate: `${escalationRate.toFixed(1)}%`,
+			byPath: summary.escalations.byPath,
 		},
 		recommendations,
 	};
@@ -219,6 +250,22 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 				console.log(`  ${reason}: ${count}`);
 			}
 		}
+	}
+
+	// Show escalation stats
+	if (report.escalations.total > 0 || report.escalations.tasksWithEscalation > 0) {
+		console.log(chalk.bold("\nModel Escalations"));
+		console.log(`  Tasks requiring escalation: ${report.escalations.tasksWithEscalation} (${report.escalations.escalationRate})`);
+		console.log(`  Total escalations: ${report.escalations.total}`);
+		if (Object.keys(report.escalations.byPath).length > 0) {
+			console.log("  By path:");
+			for (const [path, count] of Object.entries(report.escalations.byPath).sort(([, a], [, b]) => b - a)) {
+				console.log(`    ${path}: ${count}`);
+			}
+		}
+	} else if (total > 0) {
+		console.log(chalk.bold("\nModel Escalations"));
+		console.log(chalk.green("  No escalations needed - sonnet handled all tasks"));
 	}
 
 	console.log(chalk.bold("\nRecommendations"));

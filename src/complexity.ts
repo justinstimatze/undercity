@@ -439,19 +439,21 @@ export function getTeamComposition(
 		return modelIdx > ceilingIdx ? ceiling : model;
 	};
 
+	// Note: We skip haiku entirely - sonnet requires less steering and has
+	// higher first-attempt success rates, making it cheaper overall.
 	const compositions: Record<ComplexityLevel, TeamComposition> = {
 		trivial: {
 			needsPlanning: false,
-			workerModel: "haiku",
+			workerModel: "sonnet",
 			validatorCount: 0,
-			validatorModel: "haiku",
+			validatorModel: "sonnet",
 			independentValidators: false,
 		},
 		simple: {
 			needsPlanning: false,
-			workerModel: "haiku",
+			workerModel: "sonnet",
 			validatorCount: 1,
-			validatorModel: "haiku",
+			validatorModel: "sonnet",
 			independentValidators: true,
 		},
 		standard: {
@@ -526,13 +528,14 @@ function getLevelConfig(
 			defaultModelCeiling?: "haiku" | "sonnet" | "opus";
 		}
 	> = {
-		// Trivial tasks: typos, comments, version bumps - use haiku, no review
+		// Trivial tasks: typos, comments, version bumps
+		// Note: We skip haiku - sonnet requires less steering, higher first-attempt success
 		trivial: {
-			model: "haiku",
+			model: "sonnet",
 			useFullChain: false,
 			needsReview: false,
 			description: "Minimal changes, no review needed",
-			defaultModelCeiling: "haiku",
+			defaultModelCeiling: "sonnet",
 		},
 		// Simple tasks: small changes, single function/file tweaks - cap at sonnet
 		simple: {
@@ -872,11 +875,11 @@ const SCOPE_SIGNALS = {
  * - **>100 words**: +1 additional point ("very-long-description")
  *
  * ### Score → Complexity Level Mapping:
- * - **≤1**: trivial (haiku, no review)
- * - **2-3**: simple (sonnet, no review)
- * - **4-6**: standard (sonnet, review recommended)
- * - **7-9**: complex (sonnet, full chain + review)
- * - **≥10**: critical (opus, full chain + review)
+ * - **≤2**: trivial (sonnet, no review) - haiku skipped for better first-attempt success
+ * - **3-5**: simple (sonnet, no review)
+ * - **6-8**: standard (sonnet, review recommended)
+ * - **9-11**: complex (sonnet, full chain + review)
+ * - **≥12**: critical (opus, full chain + review)
  *
  * ### Special Cases:
  * - **Empty task**: Returns "simple" with score 1
@@ -895,7 +898,7 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 		const assessment = {
 			level: "simple" as ComplexityLevel,
 			confidence: 0.5,
-			model: "haiku",
+			model: "sonnet", // haiku skipped - sonnet is the minimum
 			useFullChain: false,
 			needsReview: false,
 			estimatedScope: "single-file" as ComplexityAssessment["estimatedScope"],
@@ -922,7 +925,7 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 		const assessment = {
 			level: "trivial" as ComplexityLevel,
 			confidence: 1.0,
-			model: "haiku", // Not used, but required field
+			model: "sonnet", // Not used for local tools, but required field
 			useFullChain: false,
 			needsReview: false,
 			estimatedScope: "single-file" as ComplexityAssessment["estimatedScope"],
@@ -1028,14 +1031,12 @@ export function assessComplexityFast(task: string): ComplexityAssessment {
 	}
 
 	// Determine level from score
-	// Thresholds tuned for optimal model ratios: 40-50% haiku, 40-50% sonnet, 5-10% opus
-	// Ralph-style: prefer cheaper models, escalate only when genuinely needed
+	// Thresholds tuned for ~85-90% sonnet, 5-10% opus (haiku skipped)
+	// Opus reserved for critical/high-stakes tasks only
 	let level: ComplexityLevel;
 	if (score <= 2) {
-		// Expanded trivial range for more haiku routing
 		level = "trivial";
 	} else if (score <= 5) {
-		// Expanded simple range - haiku can handle more than we think
 		level = "simple";
 	} else if (score <= 8) {
 		level = "standard";

@@ -123,9 +123,10 @@ describe("complexity", () => {
 
 			it("identifies typo fixes as trivial", () => {
 				// Typo fixes are trivial - negative weight counteracts other signals
+				// Note: Even trivial tasks use sonnet now (haiku skipped)
 				const result = assessComplexityFast("fix typo in README");
 				expect(result.level).toBe("trivial");
-				expect(result.model).toBe("haiku");
+				expect(result.model).toBe("sonnet");
 			});
 		});
 
@@ -225,7 +226,7 @@ describe("complexity", () => {
 			const composition = getTeamComposition("trivial");
 			expect(composition.needsPlanning).toBe(false);
 			expect(composition.validatorCount).toBe(0);
-			expect(composition.workerModel).toBe("haiku");
+			expect(composition.workerModel).toBe("sonnet"); // haiku skipped
 		});
 
 		it("returns 1 validator for simple tasks", () => {
@@ -261,9 +262,9 @@ describe("complexity", () => {
 				expect(composition.workerModel).toBe("sonnet");
 			});
 
-			it("allows models below ceiling", () => {
+			it("allows models at or below ceiling", () => {
 				const composition = getTeamComposition("trivial", "sonnet");
-				expect(composition.workerModel).toBe("haiku");
+				expect(composition.workerModel).toBe("sonnet"); // trivial now uses sonnet, within ceiling
 			});
 		});
 	});

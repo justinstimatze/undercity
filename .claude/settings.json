@@ -19,5 +19,31 @@
     "Bash(git stash --include-untracked)",
     "Bash(git push)",
     "Bash(git push *)"
-  ]
+  ],
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": {
+          "toolName": "edit"
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pnpm format:fix $CC_EDIT_FILE_PATH 2>/dev/null || true"
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "toolName": "write"
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pnpm format:fix $CC_WRITE_FILE_PATH 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
 }

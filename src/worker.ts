@@ -2292,15 +2292,15 @@ Be concise and specific. Focus on actionable insights.`;
 		}
 
 		// Use assessment to pick model, capped at maxTier
+		// Note: We skip haiku entirely - sonnet requires less steering and has
+		// higher first-attempt success rates, making it cheaper overall despite
+		// higher per-token cost. Opus reserved for critical tasks only.
 		switch (assessment.level) {
 			case "trivial":
-				return this.capAtMaxTier("haiku");
 			case "simple":
-				return this.capAtMaxTier("haiku");
 			case "standard":
-				return this.capAtMaxTier("sonnet");
 			case "complex":
-				return this.capAtMaxTier("sonnet"); // Start with sonnet, escalate if needed
+				return this.capAtMaxTier("sonnet");
 			case "critical":
 				return this.capAtMaxTier("opus"); // Critical tasks go straight to opus (capped at maxTier)
 			default:

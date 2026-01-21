@@ -130,8 +130,8 @@ describe("Self-Tuning Module", () => {
 	});
 
 	describe("getRecommendedModel", () => {
-		it("should recommend haiku for trivial tasks", () => {
-			expect(getRecommendedModel("trivial", testDir)).toBe("haiku");
+		it("should recommend sonnet for trivial tasks (haiku skipped)", () => {
+			expect(getRecommendedModel("trivial", testDir)).toBe("sonnet");
 		});
 
 		it("should recommend sonnet for standard tasks", () => {
