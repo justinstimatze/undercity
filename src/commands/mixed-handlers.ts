@@ -2,6 +2,12 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writ
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
+import {
+	analyzeTasksInPeriod,
+	buildBlockers,
+	buildRecommendations,
+	type LiveUsage,
+} from "./brief-helpers.js";
 import { getConfigSource, loadConfig } from "../config.js";
 import { type OracleCard, UndercityOracle } from "../oracle.js";
 import * as output from "../output.js";
@@ -487,14 +493,8 @@ export async function handleBrief(options: BriefOptions): Promise<void> {
 	const savedState = persistence.getRateLimitState();
 	const tracker = new RateLimitTracker(savedState ?? undefined);
 
-	// Auto-fetch Claude Max usage from claude.ai (see claude-usage.ts for the sketchy details)
-	let liveUsage: {
-		fiveHourPercent?: number;
-		weeklyPercent?: number;
-		observedAt?: string;
-		extraUsageEnabled?: boolean;
-		extraUsageSpend?: string;
-	} | null = null;
+	// Auto-fetch Claude Max usage from claude.ai
+	let liveUsage: LiveUsage | null = null;
 	const fetchedUsage = await fetchClaudeUsage();
 	if (fetchedUsage.success) {
 		liveUsage = {
@@ -516,115 +516,15 @@ export async function handleBrief(options: BriefOptions): Promise<void> {
 	const summary = getTaskBoardSummary();
 	const pendingDecisions = getPendingDecisions();
 	const usage = tracker.getUsageSummary();
-
-	// Filter tasks by time window
-	const completedInPeriod = allTasks.filter(
-		(t) => t.status === "complete" && t.completedAt && new Date(t.completedAt) >= periodStart,
-	);
-	const failedInPeriod = allTasks.filter(
-		(t) => t.status === "failed" && t.completedAt && new Date(t.completedAt) >= periodStart,
-	);
-	const inProgressTasks = allTasks.filter((t) => t.status === "in_progress");
-
-	// Calculate velocity (tasks per hour over the period)
-	const tasksInPeriod = completedInPeriod.length + failedInPeriod.length;
-	const velocity = hours > 0 ? tasksInPeriod / hours : 0;
-
-	// Estimate clear time
 	const pendingCount = summary.pending + summary.inProgress;
-	let estimatedClearTime: string | undefined;
-	if (velocity > 0 && pendingCount > 0) {
-		const hoursToComplete = pendingCount / velocity;
-		const clearDate = new Date(Date.now() + hoursToComplete * 60 * 60 * 1000);
-		estimatedClearTime = clearDate.toISOString();
-	}
 
-	// Determine trend
-	let trend: "accelerating" | "steady" | "slowing" | "stalled" = "steady";
-	if (velocity === 0 && inProgressTasks.length === 0) {
-		trend = "stalled";
-	} else if (failedInPeriod.length > completedInPeriod.length) {
-		trend = "slowing";
-	}
+	// Analyze tasks using helper
+	const analysis = analyzeTasksInPeriod(allTasks, periodStart, hours, pendingCount);
+	const { completedInPeriod, failedInPeriod, inProgressTasks, velocity, trend, estimatedClearTime } = analysis;
 
-	// Build blockers list
-	const blockers: BriefData["blockers"] = [];
-
-	// Rate limit blocker
-	if (tracker.isPaused()) {
-		const pauseState = tracker.getPauseState();
-		blockers.push({
-			type: "rate_limit",
-			message: `Rate limited until ${pauseState.resumeAt ? new Date(pauseState.resumeAt).toLocaleTimeString() : "unknown"}`,
-		});
-	}
-
-	// Decision blockers
-	if (pendingDecisions.length > 0) {
-		blockers.push({
-			type: "decision_required",
-			message: `${pendingDecisions.length} decision(s) awaiting input`,
-		});
-	}
-
-	// Claude Max weekly budget blocker
-	if (liveUsage?.weeklyPercent !== undefined && liveUsage.weeklyPercent >= 95) {
-		blockers.push({
-			type: "rate_limit",
-			message: `Weekly Claude Max budget nearly exhausted (${liveUsage.weeklyPercent}%)`,
-		});
-	}
-
-	// Build recommendations
-	const recommendations: BriefData["recommendations"] = [];
-
-	// Recommend addressing failures if many
-	if (failedInPeriod.length >= 3) {
-		recommendations.push({
-			priority: "high",
-			action: "Review failed tasks and consider manual intervention or task revision",
-			reason: `${failedInPeriod.length} tasks failed in the last ${hours}h`,
-		});
-	}
-
-	// Recommend handling decisions
-	if (pendingDecisions.length > 0) {
-		recommendations.push({
-			priority: pendingDecisions.length > 5 ? "high" : "medium",
-			action: "Run 'undercity decide' to handle pending decisions",
-			reason: `${pendingDecisions.length} decision(s) blocking progress`,
-		});
-	}
-
-	// Recommend rate limit awareness (prefer live usage if available)
-	if (liveUsage?.weeklyPercent !== undefined && liveUsage.weeklyPercent >= 80) {
-		recommendations.push({
-			priority: "high",
-			action: "Weekly rate limit critical - pause or reduce task volume",
-			reason: `${liveUsage.weeklyPercent}% of weekly Claude Max budget used`,
-		});
-	} else if (liveUsage?.fiveHourPercent !== undefined && liveUsage.fiveHourPercent >= 70) {
-		recommendations.push({
-			priority: "medium",
-			action: "Consider pacing - session budget getting low",
-			reason: `${liveUsage.fiveHourPercent}% of 5-hour Claude Max budget used`,
-		});
-	} else if (usage.percentages.fiveHour >= 0.7) {
-		recommendations.push({
-			priority: "medium",
-			action: "Consider pacing - rate limit budget is getting low",
-			reason: `${Math.round(usage.percentages.fiveHour * 100)}% of 5-hour budget used (local tracking)`,
-		});
-	}
-
-	// Recommend adding tasks if queue is empty
-	if (pendingCount === 0 && completedInPeriod.length > 0) {
-		recommendations.push({
-			priority: "low",
-			action: "Add more tasks to the queue",
-			reason: "Queue is empty - Undercity is idle",
-		});
-	}
+	// Build blockers and recommendations using helpers
+	const blockers = buildBlockers(tracker, pendingDecisions, liveUsage);
+	const recommendations = buildRecommendations(analysis, pendingDecisions, liveUsage, usage, pendingCount, hours);
 
 	// Estimate cost (rough: $3/1M input, $15/1M output for sonnet)
 	const estimatedCost = (usage.current.last5HoursSonnet / 1_000_000) * 9; // Average of input/output
