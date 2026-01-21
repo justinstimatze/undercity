@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-21T07:35:49.099Z",
+  "generatedAt": "2026-01-21T07:39:08.152Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -96,7 +96,7 @@
       "calledFrom": [
         {
           "file": "orchestrator.ts",
-          "line": 1434,
+          "line": 1437,
           "context": "for"
         },
         {
@@ -277,7 +277,7 @@
       "calledFrom": [
         {
           "file": "orchestrator.ts",
-          "line": 1095,
+          "line": 1098,
           "context": "if"
         }
       ]

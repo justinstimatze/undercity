@@ -38,10 +38,13 @@ import {
 	cleanWorktreeDirectory,
 	detectFileConflicts,
 	execGitInDir,
+	extractCheckpointsAndCleanup,
 	fetchMainIntoWorktree,
+	formatResumeMessage,
 	handleTaskDecomposition,
 	mergeIntoLocalMain,
 	type PredictedConflict,
+	type RecoveryTask,
 	reportTaskOutcome,
 	runPostRebaseVerification,
 	validateGitRef,
@@ -1727,44 +1730,25 @@ Working directory: ${worktreePath}`;
 		// Clear recovered checkpoints from any previous recovery
 		this.recoveredCheckpoints.clear();
 
+		// Worktree cleanup function bound to manager
+		const removeWorktree = (taskId: string, force: boolean) => this.worktreeManager.removeWorktree(taskId, force);
+
 		// Try new atomic system first
 		const activeTasks = this.persistence.scanActiveTasks();
 		if (activeTasks.length > 0) {
 			const metadata = this.persistence.getBatchMetadata();
 			output.progress(`Resuming interrupted batch: ${metadata?.batchId ?? "unknown"}`);
 
-			// Extract checkpoints from worktrees before cleaning them up
-			for (const task of activeTasks) {
-				if (task.status === "running" && task.worktreePath) {
-					try {
-						// Read the assignment file to get checkpoint data
-						const assignment = readTaskAssignment(task.worktreePath);
-						if (assignment?.checkpoint) {
-							// Store checkpoint keyed by task objective for use in runParallel
-							this.recoveredCheckpoints.set(task.task, assignment.checkpoint);
-							output.debug(`Recovered checkpoint for: ${task.task.substring(0, 40)}...`);
-						}
-					} catch {
-						// Ignore read errors - checkpoint recovery is best-effort
-					}
-
-					// Clean up the stale worktree
-					try {
-						this.worktreeManager.removeWorktree(task.taskId, true);
-						output.debug(`Cleaned up stale worktree: ${task.taskId}`);
-					} catch {
-						// Ignore cleanup errors
-					}
-				}
-			}
+			// Extract checkpoints and cleanup worktrees
+			const checkpointsRecovered = extractCheckpointsAndCleanup(
+				activeTasks as RecoveryTask[],
+				this.recoveredCheckpoints,
+				removeWorktree,
+			);
 
 			// Get tasks that need to be re-run
 			const pendingTasks = activeTasks.map((t) => t.task);
-
-			const checkpointsRecovered = this.recoveredCheckpoints.size;
-			output.info(
-				`${pendingTasks.length} tasks to resume${checkpointsRecovered > 0 ? ` (${checkpointsRecovered} with checkpoints)` : ""}`,
-			);
+			output.info(formatResumeMessage(pendingTasks.length, checkpointsRecovered));
 
 			// Clear the active tasks - runParallel will create new state
 			if (metadata) {
@@ -1782,38 +1766,16 @@ Working directory: ${worktreePath}`;
 
 		output.progress(`Resuming interrupted batch: ${state.batchId}`);
 
-		// Extract checkpoints from worktrees before cleaning them up
-		for (const task of state.tasks) {
-			if (task.status === "running" && task.worktreePath) {
-				try {
-					// Read the assignment file to get checkpoint data
-					const assignment = readTaskAssignment(task.worktreePath);
-					if (assignment?.checkpoint) {
-						// Store checkpoint keyed by task objective for use in runParallel
-						this.recoveredCheckpoints.set(task.task, assignment.checkpoint);
-						output.debug(`Recovered checkpoint for: ${task.task.substring(0, 40)}...`);
-					}
-				} catch {
-					// Ignore read errors - checkpoint recovery is best-effort
-				}
-
-				// Clean up the stale worktree
-				try {
-					this.worktreeManager.removeWorktree(task.taskId, true);
-					output.debug(`Cleaned up stale worktree: ${task.taskId}`);
-				} catch {
-					// Ignore cleanup errors
-				}
-			}
-		}
+		// Extract checkpoints and cleanup worktrees
+		const checkpointsRecovered = extractCheckpointsAndCleanup(
+			state.tasks as RecoveryTask[],
+			this.recoveredCheckpoints,
+			removeWorktree,
+		);
 
 		// Get tasks that need to be re-run
 		const pendingTasks = state.tasks.filter((t) => t.status === "pending" || t.status === "running").map((t) => t.task);
-
-		const checkpointsRecovered = this.recoveredCheckpoints.size;
-		output.info(
-			`${pendingTasks.length} tasks to resume${checkpointsRecovered > 0 ? ` (${checkpointsRecovered} with checkpoints)` : ""}`,
-		);
+		output.info(formatResumeMessage(pendingTasks.length, checkpointsRecovered));
 
 		// Clear the old state - runParallel will create new state
 		this.persistence.clearParallelRecoveryState();
