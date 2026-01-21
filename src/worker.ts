@@ -25,7 +25,12 @@ import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
 import { type PMResearchResult, pmResearch } from "./automated-pm.js";
-import { recordPlanCreationOutcome, recordPlanReviewOutcome } from "./ax-programs.js";
+import {
+	recordComplexityOutcome,
+	recordPlanCreationOutcome,
+	recordPlanReviewOutcome,
+	recordReviewTriageOutcome,
+} from "./ax-programs.js";
 import {
 	adjustModelFromMetrics,
 	assessComplexityFast,
@@ -437,6 +442,18 @@ export class TaskWorker {
 
 	/** Whether to run pre-execution planning (tiered: haiku plans, sonnet reviews) */
 	private enablePlanning: boolean;
+
+	/** Stored complexity assessment for Ax recording at task completion */
+	private complexityAssessment: ComplexityAssessment | null = null;
+
+	/** Stored review triage result for Ax recording at task completion */
+	private reviewTriageResult: {
+		riskLevel: string;
+		focusAreas: string[];
+		suggestedTier: string;
+		reasoning: string;
+		confidence: number;
+	} | null = null;
 
 	constructor(options: SoloOptions = {}) {
 		// Default 7 attempts allows full escalation: 2 haiku + 2 sonnet + 3 opus
@@ -1048,6 +1065,9 @@ export class TaskWorker {
 			output.info(`Complexity: ${assessment.level} (keyword-based)`, { taskId, complexity: assessment.level });
 		}
 
+		// Store complexity assessment for Ax recording at task completion
+		this.complexityAssessment = assessment;
+
 		this.currentModel = this.determineStartingModel(assessment, task);
 
 		if (this.startingModel === "sonnet") {
@@ -1064,6 +1084,15 @@ export class TaskWorker {
 		}
 
 		const reviewLevel = this.determineReviewLevel(assessment);
+
+		// Store review triage for Ax recording at task completion
+		this.reviewTriageResult = {
+			riskLevel: assessment.level,
+			focusAreas: assessment.signals,
+			suggestedTier: reviewLevel.maxReviewTier,
+			reasoning: `Complexity ${assessment.level}, review ${reviewLevel.review ? "enabled" : "disabled"}, multi-lens ${reviewLevel.multiLens}`,
+			confidence: assessment.confidence,
+		};
 
 		this.metricsTracker.startTask(taskId, task, `session_${Date.now()}`, this.currentModel);
 		this.metricsTracker.recordAgentSpawn(this.currentModel === "opus" ? "reviewer" : "builder");
@@ -1764,6 +1793,39 @@ export class TaskWorker {
 				// Non-critical
 			}
 		}
+
+		// Record complexity assessment outcome for Ax learning
+		if (this.complexityAssessment) {
+			try {
+				recordComplexityOutcome(
+					task,
+					{
+						level: this.complexityAssessment.level,
+						scope: this.complexityAssessment.estimatedScope,
+						reasoning: this.complexityAssessment.signals.join(", "),
+						confidence: this.complexityAssessment.confidence,
+					},
+					true, // Task succeeded
+					this.stateDir,
+				);
+			} catch {
+				// Non-critical
+			}
+		}
+
+		// Record review triage outcome for Ax learning
+		if (this.reviewTriageResult) {
+			try {
+				recordReviewTriageOutcome(
+					{ task, diff: "" }, // diff not available at this point
+					this.reviewTriageResult,
+					true, // Task succeeded, so review triage was accurate
+					this.stateDir,
+				);
+			} catch {
+				// Non-critical
+			}
+		}
 	}
 
 	/**
@@ -2119,6 +2181,39 @@ export class TaskWorker {
 				// Note: We don't necessarily blame the review for task failure
 				// The review was accurate if it approved and the plan was reasonable
 				// So we record as success unless the plan was clearly wrong
+			} catch {
+				// Non-critical
+			}
+		}
+
+		// Record complexity assessment outcome for Ax learning (task failed)
+		if (this.complexityAssessment) {
+			try {
+				recordComplexityOutcome(
+					task,
+					{
+						level: this.complexityAssessment.level,
+						scope: this.complexityAssessment.estimatedScope,
+						reasoning: this.complexityAssessment.signals.join(", "),
+						confidence: this.complexityAssessment.confidence,
+					},
+					false, // Task failed
+					this.stateDir,
+				);
+			} catch {
+				// Non-critical
+			}
+		}
+
+		// Record review triage outcome for Ax learning (task failed)
+		if (this.reviewTriageResult) {
+			try {
+				recordReviewTriageOutcome(
+					{ task, diff: "" }, // diff not available at this point
+					this.reviewTriageResult,
+					false, // Task failed, review triage may have been inaccurate
+					this.stateDir,
+				);
 			} catch {
 				// Non-critical
 			}

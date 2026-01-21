@@ -4,6 +4,7 @@
  * Task atomicity checking, decomposition, and model assignment.
  */
 
+import { recordAtomicityOutcome, recordDecompositionOutcome } from "../ax-programs.js";
 import * as output from "../output.js";
 import type { Task } from "../task.js";
 import type { AtomicityResult, GrindConfig, TasksByModel, TaskWithModel } from "./types.js";
@@ -65,6 +66,20 @@ export async function checkAndDecomposeTasks(
 				}
 
 				decomposedTaskIds.push(task.id);
+
+				// Record decomposition outcome for Ax learning
+				// Note: We assume success since subtasks were generated; actual outcome
+				// is only known after subtasks complete (which we can't track here)
+				try {
+					recordDecompositionOutcome(
+						task.objective,
+						result.subtasks.map((st) => st.objective),
+						result.reasoning || "Task decomposed into subtasks",
+						true, // Assume correct since subtasks were generated
+					);
+				} catch {
+					// Non-critical
+				}
 			} else {
 				// Decomposition attempted but failed to produce subtasks
 				output.warning(`Task too vague to decompose: "${task.objective.substring(0, 50)}..."`);
@@ -87,6 +102,25 @@ export async function checkAndDecomposeTasks(
 				recommendedModel: result.recommendedModel || "sonnet",
 				reasoning: result.reasoning,
 			});
+
+			// Record atomicity outcome for Ax learning
+			// Note: We assume success since task was assessed as atomic; actual outcome
+			// is only known after task completes (tracked via atomicityResults map)
+			try {
+				recordAtomicityOutcome(
+					task.objective,
+					{
+						isAtomic: true,
+						confidence: 0.8,
+						estimatedFiles: 1,
+						recommendedModel: result.recommendedModel || "sonnet",
+						reasoning: result.reasoning || "Task assessed as atomic by decomposer",
+					},
+					true, // Assume correct since we're proceeding with task
+				);
+			} catch {
+				// Non-critical
+			}
 		}
 	}
 
