@@ -4,9 +4,9 @@
  * Extracted helper functions for the pulse command to reduce complexity.
  */
 
-import type { Task } from "../task.js";
-import type { RateLimitTracker } from "../rate-limit.js";
 import type { DecisionPoint } from "../decision-tracker.js";
+import type { RateLimitTracker } from "../rate-limit.js";
+import type { Task } from "../task.js";
 
 /**
  * Active worker information
@@ -53,10 +53,7 @@ interface WorktreeInfo {
 /**
  * Build list of active workers with elapsed time
  */
-export function buildActiveWorkersList(
-	activeWorktrees: WorktreeInfo[],
-	allTasks: Task[],
-): ActiveWorker[] {
+export function buildActiveWorkersList(activeWorktrees: WorktreeInfo[], allTasks: Task[]): ActiveWorker[] {
 	const now = Date.now();
 	return activeWorktrees.map((w) => {
 		const task = allTasks.find((t) => t.sessionId === w.sessionId);
@@ -132,7 +129,11 @@ export function buildAttentionItems(
  */
 export function calculatePacing(
 	liveUsage: { fiveHourPercent?: number } | null,
-	usage: { percentages: { fiveHour: number }; current: { last5HoursSonnet: number }; modelBreakdown: Record<string, { totalTasks: number; sonnetEquivalentTokens: number }> },
+	usage: {
+		percentages: { fiveHour: number };
+		current: { last5HoursSonnet: number };
+		modelBreakdown: Record<string, { totalTasks: number; sonnetEquivalentTokens: number }>;
+	},
 	config: { maxTokensPer5Hours: number },
 	pendingCount: number,
 ): PacingInfo {

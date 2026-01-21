@@ -255,7 +255,9 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 	// Show escalation stats
 	if (report.escalations.total > 0 || report.escalations.tasksWithEscalation > 0) {
 		console.log(chalk.bold("\nModel Escalations"));
-		console.log(`  Tasks requiring escalation: ${report.escalations.tasksWithEscalation} (${report.escalations.escalationRate})`);
+		console.log(
+			`  Tasks requiring escalation: ${report.escalations.tasksWithEscalation} (${report.escalations.escalationRate})`,
+		);
 		console.log(`  Total escalations: ${report.escalations.total}`);
 		if (Object.keys(report.escalations.byPath).length > 0) {
 			console.log("  By path:");

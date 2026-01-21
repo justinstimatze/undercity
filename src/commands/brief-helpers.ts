@@ -4,9 +4,9 @@
  * Extracted helper functions for the brief command to reduce complexity.
  */
 
-import type { Task } from "../task.js";
-import type { RateLimitTracker } from "../rate-limit.js";
 import type { DecisionPoint } from "../decision-tracker.js";
+import type { RateLimitTracker } from "../rate-limit.js";
+import type { Task } from "../task.js";
 
 /**
  * Live usage data from Claude Max

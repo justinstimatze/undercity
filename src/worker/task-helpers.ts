@@ -7,9 +7,9 @@
 import { execFileSync, execSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import * as output from "../output.js";
-import { sessionLogger } from "../logger.js";
 import { logFastPathComplete, logFastPathFailed } from "../grind-events.js";
+import { sessionLogger } from "../logger.js";
+import * as output from "../output.js";
 import { verifyWork } from "../verification.js";
 
 /**
@@ -132,7 +132,17 @@ export async function handleFastPathSuccess(
 	config: FastPathConfig,
 	startTime: number,
 ): Promise<FastPathVerificationResult> {
-	const { taskId, sessionId, task, baseCommit, workingDirectory, autoCommit, runTypecheck, runTests, skipOptionalVerification } = config;
+	const {
+		taskId,
+		sessionId,
+		task,
+		baseCommit,
+		workingDirectory,
+		autoCommit,
+		runTypecheck,
+		runTests,
+		skipOptionalVerification,
+	} = config;
 
 	output.success(`Fast-path completed: ${fastResult.filesChanged?.join(", ")}`, { taskId });
 
@@ -198,10 +208,7 @@ function commitFastPathChanges(files: string[], task: string, workingDirectory: 
 /**
  * Handle fast-path failure
  */
-export function handleFastPathFailure(
-	fastResult: FastPathAttemptResult,
-	config: FastPathConfig,
-): void {
+export function handleFastPathFailure(fastResult: FastPathAttemptResult, config: FastPathConfig): void {
 	const { taskId, sessionId, task } = config;
 	output.debug(`Fast-path attempted but failed: ${fastResult.error}`, { taskId });
 	logFastPathFailed({
@@ -226,11 +233,7 @@ interface PMResearchConfig {
 /**
  * Write PM research output to file
  */
-export function writePMResearchOutput(
-	topic: string,
-	designDoc: string,
-	config: PMResearchConfig,
-): string {
+export function writePMResearchOutput(topic: string, designDoc: string, config: PMResearchConfig): string {
 	const { taskId, workingDirectory } = config;
 
 	// Generate filename from topic
@@ -257,11 +260,7 @@ export function writePMResearchOutput(
 /**
  * Commit research output and return commit SHA
  */
-export function commitResearchOutput(
-	outputPath: string,
-	topic: string,
-	workingDirectory: string,
-): string | undefined {
+export function commitResearchOutput(outputPath: string, topic: string, workingDirectory: string): string | undefined {
 	try {
 		execFileSync("git", ["add", outputPath], { cwd: workingDirectory });
 		const commitMsg = `[research] ${topic.slice(0, 50)}`;

@@ -92,9 +92,7 @@ export function parseTaskMarkers(text: string): TaskMarkers {
 /**
  * Extract write tool requests from assistant message content
  */
-export function extractWriteToolRequests(
-	content: AssistantContentBlock[],
-): Map<string, PendingWriteTool> {
+export function extractWriteToolRequests(content: AssistantContentBlock[]): Map<string, PendingWriteTool> {
 	const pending = new Map<string, PendingWriteTool>();
 	const WRITE_TOOLS = ["Write", "Edit", "NotebookEdit"];
 
@@ -119,9 +117,7 @@ function normalizeToolResultContent(content: ToolResultBlock["content"]): string
 		return content;
 	}
 	if (Array.isArray(content)) {
-		return content
-			.map((c) => (typeof c === "string" ? c : c.text || ""))
-			.join("");
+		return content.map((c) => (typeof c === "string" ? c : c.text || "")).join("");
 	}
 	return "";
 }
@@ -259,26 +255,17 @@ export function processAssistantMessage(
 
 			if (parsed.taskAlreadyComplete && !updatedMarkers.taskAlreadyComplete) {
 				updatedMarkers.taskAlreadyComplete = parsed.taskAlreadyComplete;
-				sessionLogger.info(
-					{ reason: parsed.taskAlreadyComplete },
-					"Agent reported task already complete (streaming)",
-				);
+				sessionLogger.info({ reason: parsed.taskAlreadyComplete }, "Agent reported task already complete (streaming)");
 			}
 
 			if (parsed.invalidTarget && !updatedMarkers.invalidTarget) {
 				updatedMarkers.invalidTarget = parsed.invalidTarget;
-				sessionLogger.warn(
-					{ reason: parsed.invalidTarget },
-					"Agent reported invalid target (streaming)",
-				);
+				sessionLogger.warn({ reason: parsed.invalidTarget }, "Agent reported invalid target (streaming)");
 			}
 
 			if (parsed.needsDecomposition && !updatedMarkers.needsDecomposition) {
 				updatedMarkers.needsDecomposition = parsed.needsDecomposition;
-				sessionLogger.info(
-					{ reason: parsed.needsDecomposition },
-					"Agent reported needs decomposition (streaming)",
-				);
+				sessionLogger.info({ reason: parsed.needsDecomposition }, "Agent reported needs decomposition (streaming)");
 			}
 		}
 

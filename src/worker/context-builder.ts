@@ -4,20 +4,14 @@
  * Extracted context building logic from executeAgent to reduce complexity.
  */
 
-import {
-	formatCoModificationHints,
-	formatFileSuggestionsForPrompt,
-} from "../task-file-patterns.js";
-import {
-	formatPatternsAsRules,
-	getFailureWarningsForTask,
-} from "../error-fix-patterns.js";
-import { findRelevantLearnings, formatLearningsCompact } from "../knowledge.js";
-import { generateToolsPrompt } from "../efficiency-tools.js";
-import { formatExecutionPlanAsContext, type TieredPlanResult } from "../task-planner.js";
 import type { ContextBriefing } from "../context.js";
-import { getFewShotExample } from "./task-helpers.js";
+import { generateToolsPrompt } from "../efficiency-tools.js";
+import { formatPatternsAsRules, getFailureWarningsForTask } from "../error-fix-patterns.js";
+import { findRelevantLearnings, formatLearningsCompact } from "../knowledge.js";
+import { formatCoModificationHints, formatFileSuggestionsForPrompt } from "../task-file-patterns.js";
+import { formatExecutionPlanAsContext, type TieredPlanResult } from "../task-planner.js";
 import { checkTaskMayBeComplete } from "./prompt-builder.js";
+import { getFewShotExample } from "./task-helpers.js";
 
 /**
  * Configuration for building agent context
@@ -128,7 +122,7 @@ export function buildImplementationContext(config: ContextBuildConfig): ContextB
 	}
 
 	// Build context section with separators
-	const contextSection = sections.length > 0 ? sections.join("\n\n---\n\n") + "\n\n---\n\n" : "";
+	const contextSection = sections.length > 0 ? `${sections.join("\n\n---\n\n")}\n\n---\n\n` : "";
 
 	// Build post-mortem context (for escalation retries)
 	const postMortemContext = lastPostMortem
