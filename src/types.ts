@@ -631,6 +631,22 @@ export interface TaskMetrics {
 	wasEscalated?: boolean;
 	/** Starting model before any escalation */
 	startingModel?: "haiku" | "sonnet" | "opus";
+	// ============== Effectiveness Tracking ==============
+	/** Learning IDs that were injected into the task prompt */
+	injectedLearningIds?: string[];
+	/** Files predicted to be modified based on task-file patterns */
+	predictedFiles?: string[];
+	/** Files actually modified during task execution */
+	actualFilesModified?: string[];
+	/** Review statistics */
+	reviewStats?: {
+		/** Number of issues found by review */
+		issuesFound: number;
+		/** Tokens used for review passes */
+		reviewTokens: number;
+		/** Number of review passes */
+		reviewPasses: number;
+	};
 }
 
 /**

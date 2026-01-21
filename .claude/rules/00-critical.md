@@ -14,6 +14,30 @@ These rules are non-negotiable.
 
 **The best PR does exactly what was asked—nothing more, nothing less.**
 
+## Update Documentation After Code Changes
+
+**CRITICAL**: When making code changes, always check if documentation needs updating.
+
+**Update `.claude/rules/01-undercity.md` when:**
+- Adding new CLI commands → Add to "Basic Commands" section
+- Adding new analysis commands → Add to "Analysis & Post-Mortem" section
+- Changing command behavior → Update relevant command descriptions
+- Adding new persistence files → Update "Persistence Files" table
+
+**Update `.claude/rules/05-codebase-map.md` when:**
+- Adding new source files → Add to "File → Purpose" table
+- Adding new exported functions → Add to "Task → File Mapping" section
+- Adding new state files → Add to "State Files" table
+- Changing file responsibilities → Update file descriptions
+
+**Checklist after implementation:**
+1. Did you add a new command? → Update 01-undercity.md
+2. Did you add a new file? → Update 05-codebase-map.md
+3. Did you add new exported functions? → Update 05-codebase-map.md
+4. Did you change how a feature works? → Update relevant rule file
+
+**Why**: Stale documentation causes agents to make incorrect assumptions and miss available tools.
+
 ## Git Rules
 
 ### Never Push Automatically

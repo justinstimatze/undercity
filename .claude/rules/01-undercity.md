@@ -118,6 +118,17 @@ undercity grind --postmortem               # Auto-run postmortem after grind
 undercity metrics                          # Performance overview
 undercity introspect                       # Self-analysis: success rates, routing, escalation
 undercity insights                         # Routing recommendations from historical data
+undercity effectiveness                    # Measure learning systems effectiveness
+```
+
+**A/B Testing (Experiments)**:
+```bash
+undercity experiment list                  # List all experiments
+undercity experiment create <name>         # Create experiment with variants
+undercity experiment create <name> --preset model-comparison  # Use preset
+undercity experiment activate <id>         # Activate for data collection
+undercity experiment results               # View per-variant metrics
+undercity experiment recommend             # Get statistical winner recommendation
 ```
 
 **Task board management**:
@@ -151,6 +162,8 @@ pnpm daemon:logs                           # View logs
 **"What should I work on?"** → `undercity pm --propose`
 **"Is my code healthy?"** → `undercity metrics` then `undercity introspect`
 **"How do I improve?"** → `undercity postmortem` → follow recommendations
+**"Are learning systems helping?"** → `undercity effectiveness`
+**"Which model routing works best?"** → `undercity experiment results` or `undercity experiment recommend`
 
 ## Learning Systems Integration
 
@@ -240,6 +253,34 @@ undercity grind --postmortem    # Run grind + auto-analyze
 # OR
 undercity grind                 # Run grind
 undercity postmortem            # Analyze separately
+```
+
+## Proactive Health Checks
+
+**When to run `undercity effectiveness`:**
+- After completing 20+ tasks (enough data for meaningful analysis)
+- When success rate drops unexpectedly
+- Before major overnight grind runs
+- Periodically (weekly) to monitor learning system health
+
+**What it tells you:**
+- File prediction accuracy (are we suggesting the right files?)
+- Knowledge injection correlation (is knowledge helping or hurting?)
+- Review ROI (are we spending tokens wisely on review?)
+
+**When to run `undercity experiment`:**
+- Testing new model routing strategies
+- Comparing review vs no-review approaches
+- Validating that haiku can handle certain task types
+- A/B testing prompt modifications
+
+**Typical experiment workflow:**
+```bash
+undercity experiment create "haiku-vs-sonnet" --variants haiku,sonnet
+undercity experiment activate <exp-id>
+undercity grind -n 30              # Run tasks to collect data
+undercity experiment results       # Check per-variant metrics
+undercity experiment recommend     # Get statistical recommendation
 ```
 
 ## Task Execution Flow

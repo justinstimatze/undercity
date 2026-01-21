@@ -8,7 +8,7 @@ import type { ContextBriefing } from "../context.js";
 import { generateToolsPrompt } from "../efficiency-tools.js";
 import { formatPatternsAsRules, getFailureWarningsForTask } from "../error-fix-patterns.js";
 import { findRelevantLearnings, formatLearningsCompact } from "../knowledge.js";
-import { formatCoModificationHints, formatFileSuggestionsForPrompt } from "../task-file-patterns.js";
+import { findRelevantFiles, formatCoModificationHints, formatFileSuggestionsForPrompt } from "../task-file-patterns.js";
 import { formatExecutionPlanAsContext, type TieredPlanResult } from "../task-planner.js";
 import { checkTaskMayBeComplete } from "./prompt-builder.js";
 import { getFewShotExample } from "./task-helpers.js";
@@ -34,6 +34,8 @@ export interface ContextBuildConfig {
 export interface ContextBuildResult {
 	prompt: string;
 	injectedLearningIds: string[];
+	/** Files predicted to be modified based on task-file patterns */
+	predictedFiles: string[];
 }
 
 /**
@@ -53,6 +55,7 @@ export function buildImplementationContext(config: ContextBuildConfig): ContextB
 
 	const sections: string[] = [];
 	let injectedLearningIds: string[] = [];
+	let predictedFiles: string[] = [];
 
 	// Add assignment context for worker identity and recovery
 	if (assignmentContext) {
@@ -96,7 +99,10 @@ export function buildImplementationContext(config: ContextBuildConfig): ContextB
 	}
 
 	// Add file suggestions based on task-file patterns
-	const fileSuggestions = formatFileSuggestionsForPrompt(task);
+	// Also capture predicted files for effectiveness tracking
+	const relevantFiles = findRelevantFiles(task, 10, stateDir);
+	predictedFiles = relevantFiles.map((f) => f.file);
+	const fileSuggestions = formatFileSuggestionsForPrompt(task, stateDir);
 	if (fileSuggestions) {
 		sections.push(fileSuggestions);
 	}
@@ -150,5 +156,5 @@ RULES:
 6. Minimal changes only - nothing beyond task scope
 7. No questions - decide and proceed`;
 
-	return { prompt, injectedLearningIds };
+	return { prompt, injectedLearningIds, predictedFiles };
 }

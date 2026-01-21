@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-21T20:00:19.725Z",
+  "generatedAt": "2026-01-21T22:03:24.773Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -8,12 +8,12 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 79,
+          "line": 82,
           "context": "if"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 211,
+          "line": 215,
           "context": "if"
         },
         {
@@ -95,9 +95,24 @@
       "definedIn": "task-file-patterns.ts",
       "calledFrom": [
         {
+          "file": "worker/context-builder.ts",
+          "line": 103,
+          "context": "if"
+        },
+        {
+          "file": "worker/prompt-builder.ts",
+          "line": 236,
+          "context": "if"
+        },
+        {
           "file": "orchestrator.ts",
           "line": 1437,
           "context": "for"
+        },
+        {
+          "file": "ast-index.ts",
+          "line": 349,
+          "context": "getRepoRoot"
         },
         {
           "file": "automated-pm.ts",
@@ -132,12 +147,12 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 99,
+          "line": 105,
           "context": "if"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 231,
+          "line": 238,
           "context": "if"
         }
       ]
@@ -148,12 +163,12 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 106,
+          "line": 112,
           "context": "if"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 238,
+          "line": 245,
           "context": "if"
         },
         {
@@ -245,12 +260,12 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 87,
+          "line": 90,
           "context": "if"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 219,
+          "line": 223,
           "context": "if"
         }
       ]

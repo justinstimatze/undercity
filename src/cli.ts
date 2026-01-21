@@ -42,6 +42,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { analysisCommands } from "./commands/analysis.js";
+import { experimentCommands } from "./commands/experiment.js";
 import { mixedCommands } from "./commands/mixed.js";
 import { taskCommands } from "./commands/task.js";
 import { configureOutput, type OutputMode } from "./output.js";
@@ -82,6 +83,7 @@ program
 // Register all command modules
 taskCommands.register(program);
 analysisCommands.register(program);
+experimentCommands.register(program);
 mixedCommands.register(program);
 
 // Parse and run

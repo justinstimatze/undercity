@@ -10,7 +10,11 @@ import { generateToolsPrompt } from "../efficiency-tools.js";
 import { formatPatternsAsRules, getFailureWarningsForTask } from "../error-fix-patterns.js";
 import { findRelevantLearnings, formatLearningsCompact } from "../knowledge.js";
 import { getMetaTaskPrompt } from "../meta-tasks.js";
-import { formatCoModificationHints, formatFileSuggestionsForPrompt } from "../task-file-patterns.js";
+import {
+	findRelevantFiles,
+	formatCoModificationHints,
+	formatFileSuggestionsForPrompt,
+} from "../task-file-patterns.js";
 import { formatExecutionPlanAsContext, type TieredPlanResult } from "../task-planner.js";
 import type { MetaTaskType } from "../types.js";
 
@@ -43,6 +47,8 @@ export interface PromptBuildResult {
 	resumePrompt?: string;
 	canResume: boolean;
 	injectedLearningIds: string[];
+	/** Files predicted to be modified based on task-file patterns */
+	predictedFiles: string[];
 }
 
 /**
@@ -182,9 +188,11 @@ The file MUST be created at ${outputPath} for this task to succeed.`;
 export function buildContextSections(ctx: PromptBuildContext): {
 	contextSection: string;
 	injectedLearningIds: string[];
+	predictedFiles: string[];
 } {
 	let contextSection = "";
 	let injectedLearningIds: string[] = [];
+	let predictedFiles: string[] = [];
 
 	// Add assignment context for worker identity and recovery
 	if (ctx.assignmentContext) {
@@ -228,7 +236,10 @@ export function buildContextSections(ctx: PromptBuildContext): {
 	}
 
 	// Add file suggestions based on task-file patterns
-	const fileSuggestions = formatFileSuggestionsForPrompt(ctx.task);
+	// Also capture predicted files for effectiveness tracking
+	const relevantFiles = findRelevantFiles(ctx.task, 10, ctx.stateDir);
+	predictedFiles = relevantFiles.map((f) => f.file);
+	const fileSuggestions = formatFileSuggestionsForPrompt(ctx.task, ctx.stateDir);
 	if (fileSuggestions) {
 		contextSection += `${fileSuggestions}\n\n---\n\n`;
 	}
@@ -241,7 +252,7 @@ export function buildContextSections(ctx: PromptBuildContext): {
 		}
 	}
 
-	return { contextSection, injectedLearningIds };
+	return { contextSection, injectedLearningIds, predictedFiles };
 }
 
 /**
@@ -257,7 +268,7 @@ export function checkTaskMayBeComplete(_task: string, _workingDirectory: string)
  * Build the complete standard implementation prompt
  */
 export function buildStandardPrompt(ctx: PromptBuildContext): PromptBuildResult {
-	const { contextSection, injectedLearningIds } = buildContextSections(ctx);
+	const { contextSection, injectedLearningIds, predictedFiles } = buildContextSections(ctx);
 
 	let fullContext = contextSection;
 
@@ -294,6 +305,7 @@ RULES:
 		prompt,
 		canResume: false,
 		injectedLearningIds,
+		predictedFiles,
 	};
 }
 
@@ -311,6 +323,7 @@ export function buildPromptForTask(ctx: PromptBuildContext, currentAgentSessionI
 			resumePrompt: buildResumePrompt(ctx.lastFeedback),
 			canResume: true,
 			injectedLearningIds: [],
+			predictedFiles: [],
 		};
 	}
 
@@ -320,6 +333,7 @@ export function buildPromptForTask(ctx: PromptBuildContext, currentAgentSessionI
 			prompt: buildMetaTaskPrompt(ctx.metaType, ctx.task, ctx.workingDirectory, ctx.attempts, ctx.lastFeedback),
 			canResume: false,
 			injectedLearningIds: [],
+			predictedFiles: [],
 		};
 	}
 
@@ -329,6 +343,7 @@ export function buildPromptForTask(ctx: PromptBuildContext, currentAgentSessionI
 			prompt: buildResearchPrompt(ctx.task, ctx.attempts, ctx.lastFeedback, ctx.consecutiveNoWriteAttempts),
 			canResume: false,
 			injectedLearningIds: [],
+			predictedFiles: [],
 		};
 	}
 

@@ -659,6 +659,23 @@ export const analysisCommands: CommandModule = {
 				const { handlePostmortem } = await import("./analysis-handlers.js");
 				await handlePostmortem(options);
 			});
+
+		// Effectiveness analysis command - measures learning systems impact
+		program
+			.command("effectiveness")
+			.description("Analyze effectiveness of learning systems (file prediction, knowledge, review)")
+			.option("--json", "Output as JSON")
+			.action(async (options) => {
+				const { analyzeEffectiveness, formatEffectivenessReport } = await import("../effectiveness-analysis.js");
+				const report = analyzeEffectiveness();
+
+				if (options.json) {
+					console.log(JSON.stringify(report, null, 2));
+					return;
+				}
+
+				console.log("\n" + formatEffectivenessReport(report));
+			});
 	},
 };
 

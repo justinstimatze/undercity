@@ -8,8 +8,9 @@
 | **commands/task.ts** | Task board commands (tasks, add, work, plan, plans, import-plan, reconcile, triage, prune) | taskCommands |
 | **commands/plan-handlers.ts** | Plan-task linkage command handlers | handlePlan (linkage) |
 | **commands/mixed.ts** | Execution + learning commands (grind, pm, usage, knowledge, decide, tuning, watch) | mixedCommands |
-| **commands/analysis.ts** | Metrics/analysis commands (patterns, decisions, ax, postmortem) | analysisCommands |
+| **commands/analysis.ts** | Metrics/analysis commands (patterns, decisions, ax, postmortem, effectiveness) | analysisCommands |
 | **commands/analysis-handlers.ts** | Analysis command handlers (postmortem) | handlePostmortem |
+| **commands/experiment.ts** | A/B testing CLI (create, activate, results, recommend) | experimentCommands |
 | **orchestrator.ts** | Main production orchestrator, parallel execution | Orchestrator |
 | **worker.ts** | Single-task executor, runs in worktree | TaskWorker |
 | **task.ts** | Task board CRUD (add, get, mark status) | addGoal, getAllItems, markComplete, etc. |
@@ -49,6 +50,7 @@
 | **task-planner.ts** | Pre-execution planning, tiered review, PM integration | planTaskWithReview, ExecutionPlan |
 | **capability-ledger.ts** | Track model success by keyword patterns | updateLedger, getRecommendedModel, getLedgerStats |
 | **experiment.ts** | A/B testing framework for grind | ExperimentManager, getExperimentManager |
+| **effectiveness-analysis.ts** | Analyze learning systems effectiveness | analyzeEffectiveness, formatEffectivenessReport |
 | **feedback-metrics.ts** | Historical metrics analysis, success rates | analyzeMetrics, suggestModelTier, analyzeTaskPatterns |
 | **self-tuning.ts** | Learned routing profile from historical data | loadRoutingProfile, computeOptimalThresholds, maybeUpdateProfile |
 | **knowledge.ts** | Knowledge compounding (learnings from tasks) | loadKnowledge, addLearning, findRelevantLearnings |
@@ -106,6 +108,9 @@
 - Track error→fix patterns → `error-fix-patterns.ts`
 - Fetch Claude Max usage → `claude-usage.ts`
 - View Ax/DSPy training stats → `ax-programs.ts`
+- Manage A/B experiments → `commands/experiment.ts` (create, activate, results, recommend)
+- Analyze learning effectiveness → `effectiveness-analysis.ts` (analyzeEffectiveness)
+- Find relevant files via AST → `ast-index.ts` (findRelevantFiles)
 
 ## Orchestrators
 

@@ -333,6 +333,206 @@ export class ASTIndexManager {
 		return this.repoRoot;
 	}
 
+	/**
+	 * Find files relevant to a task objective using AST-based analysis.
+	 *
+	 * This is the primary method for context reduction - given a task description,
+	 * returns only the files likely to be relevant, reducing token usage.
+	 *
+	 * Algorithm:
+	 * 1. Extract keywords from the objective
+	 * 2. Find symbols matching those keywords
+	 * 3. Get files containing those symbols
+	 * 4. Include dependency chain (imports/importers)
+	 * 5. Rank by relevance score
+	 */
+	findRelevantFiles(
+		objective: string,
+		maxResults: number = 10,
+	): Array<{ file: string; score: number; reason: string }> {
+		const keywords = this.extractKeywords(objective);
+		if (keywords.length === 0) {
+			return [];
+		}
+
+		const fileScores: Record<string, { score: number; reasons: Set<string> }> = {};
+
+		// Score helper
+		const addScore = (file: string, score: number, reason: string) => {
+			if (!fileScores[file]) {
+				fileScores[file] = { score: 0, reasons: new Set() };
+			}
+			fileScores[file].score += score;
+			fileScores[file].reasons.add(reason);
+		};
+
+		// 1. Find symbols matching keywords (highest weight)
+		for (const keyword of keywords) {
+			// Exact symbol match
+			const symbolFiles = this.index.symbolToFiles[keyword] || [];
+			for (const file of symbolFiles) {
+				addScore(file, 10, `exports symbol "${keyword}"`);
+			}
+
+			// Partial symbol match (symbol contains keyword)
+			for (const [symbolName, files] of Object.entries(this.index.symbolToFiles)) {
+				if (symbolName.toLowerCase().includes(keyword.toLowerCase()) && symbolName !== keyword) {
+					for (const file of files) {
+						addScore(file, 5, `exports symbol containing "${keyword}"`);
+					}
+				}
+			}
+		}
+
+		// 2. Find files by path matching keywords (medium weight)
+		for (const filePath of Object.keys(this.index.files)) {
+			const fileName = filePath.split("/").pop() || "";
+			const fileNameLower = fileName.toLowerCase();
+
+			for (const keyword of keywords) {
+				if (fileNameLower.includes(keyword.toLowerCase())) {
+					addScore(filePath, 3, `filename contains "${keyword}"`);
+				}
+			}
+		}
+
+		// 3. Add dependency chain for high-scoring files (lower weight)
+		const highScoringFiles = Object.entries(fileScores)
+			.filter(([, data]) => data.score >= 5)
+			.map(([file]) => file);
+
+		for (const file of highScoringFiles) {
+			// Files that import this file
+			const importers = this.findImporters(file);
+			for (const importer of importers.slice(0, 3)) {
+				addScore(importer, 2, `imports ${file.split("/").pop()}`);
+			}
+
+			// Files that this file imports
+			const imports = this.findImports(file);
+			for (const imported of imports.slice(0, 3)) {
+				addScore(imported, 1, `imported by ${file.split("/").pop()}`);
+			}
+		}
+
+		// 4. Sort by score and return top results
+		return Object.entries(fileScores)
+			.map(([file, data]) => ({
+				file,
+				score: data.score,
+				reason: Array.from(data.reasons).slice(0, 2).join("; "),
+			}))
+			.sort((a, b) => b.score - a.score)
+			.slice(0, maxResults);
+	}
+
+	/**
+	 * Extract keywords from objective text for symbol matching
+	 */
+	private extractKeywords(text: string): string[] {
+		// Common stop words to filter
+		const stopWords = new Set([
+			"the",
+			"a",
+			"an",
+			"is",
+			"are",
+			"was",
+			"were",
+			"be",
+			"been",
+			"being",
+			"have",
+			"has",
+			"had",
+			"do",
+			"does",
+			"did",
+			"will",
+			"would",
+			"could",
+			"should",
+			"may",
+			"might",
+			"must",
+			"to",
+			"of",
+			"in",
+			"for",
+			"on",
+			"with",
+			"at",
+			"by",
+			"from",
+			"as",
+			"into",
+			"this",
+			"that",
+			"these",
+			"those",
+			"it",
+			"its",
+			"and",
+			"or",
+			"but",
+			"if",
+			"then",
+			"else",
+			"when",
+			"where",
+			"how",
+			"what",
+			"which",
+			"who",
+			"all",
+			"each",
+			"every",
+			"both",
+			"few",
+			"more",
+			"most",
+			"other",
+			"some",
+			"such",
+			"no",
+			"not",
+			"only",
+			"own",
+			"same",
+			"so",
+			"than",
+			"too",
+			"very",
+			"just",
+			"also",
+			"now",
+			"add",
+			"fix",
+			"update",
+			"change",
+			"modify",
+			"create",
+			"remove",
+			"delete",
+			"implement",
+			"refactor",
+		]);
+
+		// Extract words, filter stop words, keep technical terms
+		const words = text
+			.toLowerCase()
+			.replace(/[^a-z0-9\s_-]/g, " ")
+			.split(/\s+/)
+			.filter((w) => w.length >= 3 && !stopWords.has(w));
+
+		// Also extract camelCase/PascalCase parts
+		const camelParts = text.match(/[A-Z][a-z]+|[a-z]+(?=[A-Z])|[A-Z]+(?![a-z])/g) || [];
+		const normalizedCamelParts = camelParts.map((p) => p.toLowerCase()).filter((p) => p.length >= 3);
+
+		// Deduplicate and return
+		return [...new Set([...words, ...normalizedCamelParts])].slice(0, 20);
+	}
+
 	// ==========================================================================
 	// Updating
 	// ==========================================================================
