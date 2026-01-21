@@ -7,6 +7,6 @@
 export * from "./conflict-detection.js";
 export * from "./git-utils.js";
 export * from "./merge-helpers.js";
-export * from "./recovery-helpers.js";
 export * from "./recommendation-handlers.js";
+export * from "./recovery-helpers.js";
 export * from "./result-handlers.js";

@@ -10,11 +10,7 @@ import { generateToolsPrompt } from "../efficiency-tools.js";
 import { formatPatternsAsRules, getFailureWarningsForTask } from "../error-fix-patterns.js";
 import { findRelevantLearnings, formatLearningsCompact } from "../knowledge.js";
 import { getMetaTaskPrompt } from "../meta-tasks.js";
-import {
-	findRelevantFiles,
-	formatCoModificationHints,
-	formatFileSuggestionsForPrompt,
-} from "../task-file-patterns.js";
+import { findRelevantFiles, formatCoModificationHints, formatFileSuggestionsForPrompt } from "../task-file-patterns.js";
 import { formatExecutionPlanAsContext, type TieredPlanResult } from "../task-planner.js";
 import type { MetaTaskType } from "../types.js";
 

@@ -7,9 +7,8 @@ dist/
 # Test coverage
 coverage/
 
-# Runtime state (but track tasks.json and research docs)
+# Runtime state (track research docs only, tasks now in SQLite)
 .undercity/*
-!.undercity/tasks.json
 !.undercity/research/
 
 # IDE

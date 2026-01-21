@@ -145,11 +145,7 @@ describe("worker/stop-hooks", () => {
 		});
 
 		it("returns hook structure with correct shape", () => {
-			const hooks = createStandardStopHooks(
-				() => createState(),
-				vi.fn(),
-				vi.fn() as unknown as (msg: string) => never,
-			);
+			const hooks = createStandardStopHooks(() => createState(), vi.fn(), vi.fn() as unknown as (msg: string) => never);
 
 			expect(hooks).toHaveLength(1);
 			expect(hooks[0]).toHaveProperty("hooks");

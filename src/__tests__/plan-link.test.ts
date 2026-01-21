@@ -5,21 +5,21 @@
  * Uses temp directories for file operations.
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	findLinkedPlans,
 	findPlanForTask,
 	linkTasksToPlan,
 	listPlans,
 	markPlanComplete,
+	type PlanMetadata,
 	parsePlanFile,
 	resolvePlanPath,
 	unlinkTasksFromPlan,
 	updatePlanMetadata,
-	type PlanMetadata,
 } from "../plan-link.js";
 
 describe("plan-link", () => {

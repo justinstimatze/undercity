@@ -19,7 +19,7 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 	query: vi.fn(),
 }));
 
-import { DEFAULT_RETRY_CONFIG, MergeQueue } from "../merge-queue.js";
+import { MergeQueue } from "../merge-queue.js";
 import type { MergeQueueItem } from "../types.js";
 
 describe("MergeQueue Unit Tests", () => {
@@ -56,10 +56,10 @@ describe("MergeQueue Unit Tests", () => {
 				queue as unknown as { calculateRetryDelay: (n: number) => number }
 			).calculateRetryDelay.bind(queue);
 
-			expect(calculateDelay(0)).toBe(1000);  // 1000 * 2^0 = 1000
-			expect(calculateDelay(1)).toBe(2000);  // 1000 * 2^1 = 2000
-			expect(calculateDelay(2)).toBe(4000);  // 1000 * 2^2 = 4000
-			expect(calculateDelay(3)).toBe(8000);  // 1000 * 2^3 = 8000
+			expect(calculateDelay(0)).toBe(1000); // 1000 * 2^0 = 1000
+			expect(calculateDelay(1)).toBe(2000); // 1000 * 2^1 = 2000
+			expect(calculateDelay(2)).toBe(4000); // 1000 * 2^2 = 4000
+			expect(calculateDelay(3)).toBe(8000); // 1000 * 2^3 = 8000
 			expect(calculateDelay(4)).toBe(16000); // 1000 * 2^4 = 16000
 		});
 
@@ -106,9 +106,7 @@ describe("MergeQueue Unit Tests", () => {
 			item.status = "conflict";
 			item.retryCount = 0;
 
-			const canRetry = (
-				queue as unknown as { canRetry: (item: MergeQueueItem) => boolean }
-			).canRetry.bind(queue);
+			const canRetry = (queue as unknown as { canRetry: (item: MergeQueueItem) => boolean }).canRetry.bind(queue);
 
 			expect(canRetry(item)).toBe(false);
 		});
@@ -120,9 +118,7 @@ describe("MergeQueue Unit Tests", () => {
 			item.status = "conflict";
 			item.retryCount = 3; // Equals maxRetries
 
-			const canRetry = (
-				queue as unknown as { canRetry: (item: MergeQueueItem) => boolean }
-			).canRetry.bind(queue);
+			const canRetry = (queue as unknown as { canRetry: (item: MergeQueueItem) => boolean }).canRetry.bind(queue);
 
 			expect(canRetry(item)).toBe(false);
 		});
@@ -135,9 +131,7 @@ describe("MergeQueue Unit Tests", () => {
 			item.retryCount = 1;
 			item.nextRetryAfter = new Date(Date.now() + 60000); // 1 minute in future
 
-			const canRetry = (
-				queue as unknown as { canRetry: (item: MergeQueueItem) => boolean }
-			).canRetry.bind(queue);
+			const canRetry = (queue as unknown as { canRetry: (item: MergeQueueItem) => boolean }).canRetry.bind(queue);
 
 			expect(canRetry(item)).toBe(false);
 		});
@@ -150,9 +144,7 @@ describe("MergeQueue Unit Tests", () => {
 			item.retryCount = 1;
 			item.nextRetryAfter = new Date(Date.now() - 1000); // 1 second ago
 
-			const canRetry = (
-				queue as unknown as { canRetry: (item: MergeQueueItem) => boolean }
-			).canRetry.bind(queue);
+			const canRetry = (queue as unknown as { canRetry: (item: MergeQueueItem) => boolean }).canRetry.bind(queue);
 
 			expect(canRetry(item)).toBe(true);
 		});
@@ -165,9 +157,7 @@ describe("MergeQueue Unit Tests", () => {
 			item.retryCount = 0;
 			item.nextRetryAfter = undefined;
 
-			const canRetry = (
-				queue as unknown as { canRetry: (item: MergeQueueItem) => boolean }
-			).canRetry.bind(queue);
+			const canRetry = (queue as unknown as { canRetry: (item: MergeQueueItem) => boolean }).canRetry.bind(queue);
 
 			expect(canRetry(item)).toBe(true);
 		});
@@ -181,9 +171,7 @@ describe("MergeQueue Unit Tests", () => {
 			item.status = "conflict";
 			item.retryCount = 2;
 
-			const canRetry = (
-				queue as unknown as { canRetry: (item: MergeQueueItem) => boolean }
-			).canRetry.bind(queue);
+			const canRetry = (queue as unknown as { canRetry: (item: MergeQueueItem) => boolean }).canRetry.bind(queue);
 
 			expect(canRetry(item)).toBe(false);
 		});
@@ -477,10 +465,7 @@ describe("MergeQueue Unit Tests", () => {
 			const conflictsForA = queue.getConflictsForBranch("branch-a");
 
 			expect(conflictsForA).toHaveLength(1);
-			expect(
-				conflictsForA[0].branch === "branch-a" ||
-				conflictsForA[0].conflictsWith === "branch-a"
-			).toBe(true);
+			expect(conflictsForA[0].branch === "branch-a" || conflictsForA[0].conflictsWith === "branch-a").toBe(true);
 		});
 
 		it("returns empty array for branch with no conflicts", () => {

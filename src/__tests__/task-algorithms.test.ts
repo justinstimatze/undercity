@@ -51,10 +51,7 @@ describe("Task Algorithms", () => {
 			addTask("Fix the bug in the authentication module", undefined, tasksPath);
 
 			// A similar task with different stop words should be detected
-			const duplicate = findDuplicateTask(
-				"Fix a bug to authentication with module",
-				join(testDir, ".undercity"),
-			);
+			const duplicate = findDuplicateTask("Fix a bug to authentication with module", join(testDir, ".undercity"));
 
 			// Should find the match because significant keywords overlap
 			expect(duplicate).not.toBeUndefined();
@@ -66,10 +63,7 @@ describe("Task Algorithms", () => {
 
 			// Search with same content - "UI" (2 chars) should be filtered
 			// "add", "new", "app", "for", "users" are the significant words
-			const duplicate = findDuplicateTask(
-				"Add new app to UI for users",
-				join(testDir, ".undercity"),
-			);
+			const duplicate = findDuplicateTask("Add new app to UI for users", join(testDir, ".undercity"));
 
 			expect(duplicate).not.toBeUndefined();
 		});
@@ -79,10 +73,7 @@ describe("Task Algorithms", () => {
 			addTask("Fix bug bug fix authentication authentication", undefined, tasksPath);
 
 			// Should match even though original had duplicates
-			const duplicate = findDuplicateTask(
-				"Fix authentication bug",
-				join(testDir, ".undercity"),
-			);
+			const duplicate = findDuplicateTask("Fix authentication bug", join(testDir, ".undercity"));
 
 			expect(duplicate).not.toBeUndefined();
 		});
@@ -97,10 +88,7 @@ describe("Task Algorithms", () => {
 			addTask("Implement user authentication system", undefined, tasksPath);
 
 			// Exact match should be found
-			const duplicate = findDuplicateTask(
-				"Implement user authentication system",
-				join(testDir, ".undercity"),
-			);
+			const duplicate = findDuplicateTask("Implement user authentication system", join(testDir, ".undercity"));
 
 			expect(duplicate).not.toBeUndefined();
 		});
@@ -120,10 +108,7 @@ describe("Task Algorithms", () => {
 			addTask("Implement user authentication", undefined, tasksPath);
 
 			// Completely different task
-			const duplicate = findDuplicateTask(
-				"Refactor database connection pooling",
-				join(testDir, ".undercity"),
-			);
+			const duplicate = findDuplicateTask("Refactor database connection pooling", join(testDir, ".undercity"));
 
 			expect(duplicate).toBeUndefined();
 		});
@@ -157,10 +142,7 @@ describe("Task Algorithms", () => {
 
 			// New has 5 keywords: add, user, authentication, oauth, login
 			// Intersection: 4, Union: 5, Jaccard: 4/5 = 0.8 (80%)
-			const duplicate = findDuplicateTask(
-				"Add user authentication OAuth login",
-				join(testDir, ".undercity"),
-			);
+			const duplicate = findDuplicateTask("Add user authentication OAuth login", join(testDir, ".undercity"));
 
 			expect(duplicate).not.toBeUndefined();
 		});
@@ -192,10 +174,7 @@ describe("Task Algorithms", () => {
 			addTask("Implement authentication system provider login", undefined, tasksPath);
 
 			// Only 1 shared keyword ("system") - should not match
-			const duplicate = findDuplicateTask(
-				"Database optimization system module",
-				join(testDir, ".undercity"),
-			);
+			const duplicate = findDuplicateTask("Database optimization system module", join(testDir, ".undercity"));
 
 			expect(duplicate).toBeUndefined();
 		});
@@ -230,10 +209,7 @@ describe("Task Algorithms", () => {
 		it("applies critical tag boost (-50)", () => {
 			// Lower priority number = processed first
 			addTask("Normal task", 100, tasksPath);
-			const criticalTask = addTask(
-				"Important task",
-				{ priority: 150, tags: ["critical"], path: tasksPath },
-			);
+			const _criticalTask = addTask("Important task", { priority: 150, tags: ["critical"], path: tasksPath });
 
 			const next = getNextTask(tasksPath);
 
@@ -245,10 +221,7 @@ describe("Task Algorithms", () => {
 
 		it("applies bugfix tag boost (-30)", () => {
 			addTask("Feature task", 50, tasksPath);
-			const bugfixTask = addTask(
-				"Fix authentication bug",
-				{ priority: 75, tags: ["bugfix"], path: tasksPath },
-			);
+			const bugfixTask = addTask("Fix authentication bug", { priority: 75, tags: ["bugfix"], path: tasksPath });
 
 			const next = getNextTask(tasksPath);
 
@@ -258,10 +231,7 @@ describe("Task Algorithms", () => {
 
 		it("applies security tag boost (-25)", () => {
 			addTask("Regular task", 50, tasksPath);
-			const securityTask = addTask(
-				"Security patch",
-				{ priority: 70, tags: ["security"], path: tasksPath },
-			);
+			const securityTask = addTask("Security patch", { priority: 70, tags: ["security"], path: tasksPath });
 
 			const next = getNextTask(tasksPath);
 
@@ -289,10 +259,11 @@ describe("Task Algorithms", () => {
 			markTaskComplete(prereq1.id, tasksPath);
 			markTaskComplete(prereq2.id, tasksPath);
 
-			const taskWithDeps = addTask(
-				"Task with dependencies",
-				{ priority: 20, dependsOn: [prereq1.id, prereq2.id], path: tasksPath },
-			);
+			const _taskWithDeps = addTask("Task with dependencies", {
+				priority: 20,
+				dependsOn: [prereq1.id, prereq2.id],
+				path: tasksPath,
+			});
 			const taskNoDeps = addTask("Task without dependencies", 20, tasksPath);
 
 			const next = getNextTask(tasksPath);
@@ -306,11 +277,7 @@ describe("Task Algorithms", () => {
 			addTask("Child task", 10, tasksPath);
 
 			// Mark parent as decomposed by decomposing it
-			decomposeTaskIntoSubtasks(
-				task.id,
-				[{ objective: "Subtask 1", order: 1 }],
-				tasksPath,
-			);
+			decomposeTaskIntoSubtasks(task.id, [{ objective: "Subtask 1", order: 1 }], tasksPath);
 
 			const next = getNextTask(tasksPath);
 
@@ -320,10 +287,7 @@ describe("Task Algorithms", () => {
 
 		it("skips tasks with unsatisfied dependencies", () => {
 			const prereq = addTask("Prerequisite", 100, tasksPath);
-			addTask(
-				"Dependent task",
-				{ priority: 1, dependsOn: [prereq.id], path: tasksPath },
-			);
+			addTask("Dependent task", { priority: 1, dependsOn: [prereq.id], path: tasksPath });
 
 			const next = getNextTask(tasksPath);
 
@@ -338,10 +302,7 @@ describe("Task Algorithms", () => {
 
 		it("combines multiple tag boosts", () => {
 			addTask("Normal task", 50, tasksPath);
-			const criticalBugfix = addTask(
-				"Critical bug",
-				{ priority: 130, tags: ["critical", "bugfix"], path: tasksPath },
-			);
+			const _criticalBugfix = addTask("Critical bug", { priority: 130, tags: ["critical", "bugfix"], path: tasksPath });
 
 			const next = getNextTask(tasksPath);
 
@@ -366,10 +327,7 @@ describe("Task Algorithms", () => {
 
 		it("allows skipDuplicateCheck option", () => {
 			addTask("Implement user authentication", undefined, tasksPath);
-			const newTask = addTask(
-				"Implement user authentication",
-				{ skipDuplicateCheck: true, path: tasksPath },
-			);
+			const _newTask = addTask("Implement user authentication", { skipDuplicateCheck: true, path: tasksPath });
 
 			expect(getAllTasks(tasksPath)).toHaveLength(2);
 		});

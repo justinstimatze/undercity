@@ -20,13 +20,13 @@ import {
 	calculateCodebaseFingerprint,
 	deleteBranch,
 	execGit,
+	GitError,
+	generateBranchName,
 	getConflictFiles,
 	getCurrentBranch,
 	getDefaultBranch,
 	getHeadCommitHash,
 	getWorkingTreeStatus,
-	GitError,
-	generateBranchName,
 	hashFingerprint,
 	hashGoal,
 	isCacheableState,
@@ -1071,11 +1071,7 @@ describe("abortMerge", () => {
 	it("calls git merge --abort", () => {
 		vi.mocked(execFileSync).mockReturnValue("");
 		abortMerge();
-		expect(execFileSync).toHaveBeenCalledWith(
-			"git",
-			["merge", "--abort"],
-			expect.anything(),
-		);
+		expect(execFileSync).toHaveBeenCalledWith("git", ["merge", "--abort"], expect.anything());
 	});
 
 	it("silently handles abort errors", () => {
@@ -1096,11 +1092,7 @@ describe("merge", () => {
 		vi.mocked(execFileSync).mockReturnValue("");
 		const result = merge("feature-branch");
 		expect(result).toBe(true);
-		expect(execFileSync).toHaveBeenCalledWith(
-			"git",
-			["merge", "--no-ff", "feature-branch"],
-			expect.anything(),
-		);
+		expect(execFileSync).toHaveBeenCalledWith("git", ["merge", "--no-ff", "feature-branch"], expect.anything());
 	});
 
 	it("includes commit message when provided", () => {
@@ -1164,21 +1156,13 @@ describe("deleteBranch", () => {
 	it("deletes branch with -d flag by default", () => {
 		vi.mocked(execFileSync).mockReturnValue("");
 		deleteBranch("feature-branch");
-		expect(execFileSync).toHaveBeenCalledWith(
-			"git",
-			["branch", "-d", "feature-branch"],
-			expect.anything(),
-		);
+		expect(execFileSync).toHaveBeenCalledWith("git", ["branch", "-d", "feature-branch"], expect.anything());
 	});
 
 	it("force deletes branch with -D flag when force is true", () => {
 		vi.mocked(execFileSync).mockReturnValue("");
 		deleteBranch("feature-branch", true);
-		expect(execFileSync).toHaveBeenCalledWith(
-			"git",
-			["branch", "-D", "feature-branch"],
-			expect.anything(),
-		);
+		expect(execFileSync).toHaveBeenCalledWith("git", ["branch", "-D", "feature-branch"], expect.anything());
 	});
 });
 
@@ -1190,21 +1174,13 @@ describe("pushToOrigin", () => {
 	it("pushes current branch when no branch specified", () => {
 		vi.mocked(execFileSync).mockReturnValue("");
 		pushToOrigin();
-		expect(execFileSync).toHaveBeenCalledWith(
-			"git",
-			["push", "origin"],
-			expect.anything(),
-		);
+		expect(execFileSync).toHaveBeenCalledWith("git", ["push", "origin"], expect.anything());
 	});
 
 	it("pushes specific branch when provided", () => {
 		vi.mocked(execFileSync).mockReturnValue("");
 		pushToOrigin("feature-branch");
-		expect(execFileSync).toHaveBeenCalledWith(
-			"git",
-			["push", "origin", "feature-branch"],
-			expect.anything(),
-		);
+		expect(execFileSync).toHaveBeenCalledWith("git", ["push", "origin", "feature-branch"], expect.anything());
 	});
 });
 

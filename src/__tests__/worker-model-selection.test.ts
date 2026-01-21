@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import type { ComplexityAssessment } from "../types.js";
 import {
 	capAtMaxTier,
 	determineReviewLevel,
@@ -14,7 +15,6 @@ import {
 	type ReviewLevelConfig,
 	type StartingModelConfig,
 } from "../worker/model-selection.js";
-import type { ComplexityAssessment } from "../types.js";
 
 const createAssessment = (level: ComplexityAssessment["level"]): ComplexityAssessment => ({
 	level,

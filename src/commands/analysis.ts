@@ -674,7 +674,7 @@ export const analysisCommands: CommandModule = {
 					return;
 				}
 
-				console.log("\n" + formatEffectivenessReport(report));
+				console.log(`\n${formatEffectivenessReport(report)}`);
 			});
 	},
 };

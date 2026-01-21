@@ -413,7 +413,9 @@ export function formatEffectivenessReport(report: EffectivenessReport): string {
 	if (report.knowledgeInjection.tasksWithKnowledge > 0 || report.knowledgeInjection.tasksWithoutKnowledge > 0) {
 		lines.push(`Tasks with knowledge: ${report.knowledgeInjection.tasksWithKnowledge}`);
 		lines.push(`Tasks without knowledge: ${report.knowledgeInjection.tasksWithoutKnowledge}`);
-		lines.push(`Success rate with knowledge: ${(report.knowledgeInjection.successRateWithKnowledge * 100).toFixed(1)}%`);
+		lines.push(
+			`Success rate with knowledge: ${(report.knowledgeInjection.successRateWithKnowledge * 100).toFixed(1)}%`,
+		);
 		lines.push(
 			`Success rate without knowledge: ${(report.knowledgeInjection.successRateWithoutKnowledge * 100).toFixed(1)}%`,
 		);

@@ -5,7 +5,7 @@
  * based on error patterns and task state.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	checkDefaultRetryLimit,
 	checkFileThrashing,
@@ -14,7 +14,6 @@ import {
 	checkRepeatedErrorLoop,
 	checkSeriousErrors,
 	checkTrivialErrors,
-	type EscalationContext,
 } from "../worker/escalation-logic.js";
 
 // Mock the logger to avoid noise

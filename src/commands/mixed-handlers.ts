@@ -15,6 +15,7 @@ import {
 	formatBriefHuman,
 	type LiveUsage,
 } from "./brief-helpers.js";
+import { checkDaemonRunning, type DaemonStatus, displayDaemonStatus, executeDaemonAction } from "./daemon-helpers.js";
 import {
 	type HumanInputContext,
 	handleListSubcommand,
@@ -39,13 +40,6 @@ import {
 	displayTopicRequired,
 	type TaskProposal,
 } from "./pm-helpers.js";
-import {
-	checkDaemonRunning,
-	type DaemonStatus,
-	displayDaemonActionResult,
-	displayDaemonStatus,
-	executeDaemonAction,
-} from "./daemon-helpers.js";
 import {
 	buildActiveWorkersList,
 	buildAttentionItems,

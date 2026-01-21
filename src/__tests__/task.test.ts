@@ -348,11 +348,7 @@ describe("task.ts", () => {
 		it("marks parent as isDecomposed=true after decompose", () => {
 			const parent = addTask("Parent task", undefined, tasksPath);
 
-			decomposeTaskIntoSubtasks(
-				parent.id,
-				[{ objective: "Subtask 1", order: 1 }],
-				tasksPath,
-			);
+			decomposeTaskIntoSubtasks(parent.id, [{ objective: "Subtask 1", order: 1 }], tasksPath);
 
 			const updatedParent = getTaskById(parent.id, tasksPath);
 			expect(updatedParent?.isDecomposed).toBe(true);
@@ -361,11 +357,7 @@ describe("task.ts", () => {
 		it("sets parent status to decomposed", () => {
 			const parent = addTask("Parent task", undefined, tasksPath);
 
-			decomposeTaskIntoSubtasks(
-				parent.id,
-				[{ objective: "Subtask 1", order: 1 }],
-				tasksPath,
-			);
+			decomposeTaskIntoSubtasks(parent.id, [{ objective: "Subtask 1", order: 1 }], tasksPath);
 
 			const updatedParent = getTaskById(parent.id, tasksPath);
 			expect(updatedParent?.status).toBe("decomposed");
@@ -488,11 +480,7 @@ describe("task.ts", () => {
 		it("handles nested subtasks", () => {
 			// Parent → Subtask → Sub-subtask
 			const parent = addTask("Parent", undefined, tasksPath);
-			const subtaskIds = decomposeTaskIntoSubtasks(
-				parent.id,
-				[{ objective: "Subtask", order: 1 }],
-				tasksPath,
-			);
+			const subtaskIds = decomposeTaskIntoSubtasks(parent.id, [{ objective: "Subtask", order: 1 }], tasksPath);
 
 			// Decompose the subtask further
 			const subSubtaskIds = decomposeTaskIntoSubtasks(
@@ -554,11 +542,7 @@ describe("task.ts", () => {
 
 		it("sets completedAt timestamp when completing parent", () => {
 			const parent = addTask("Parent", undefined, tasksPath);
-			const subtaskIds = decomposeTaskIntoSubtasks(
-				parent.id,
-				[{ objective: "Sub 1", order: 1 }],
-				tasksPath,
-			);
+			const subtaskIds = decomposeTaskIntoSubtasks(parent.id, [{ objective: "Sub 1", order: 1 }], tasksPath);
 
 			markTaskComplete(subtaskIds[0], tasksPath);
 			completeParentIfAllSubtasksDone(parent.id, tasksPath);
@@ -575,10 +559,7 @@ describe("task.ts", () => {
 	describe("dependency-aware task selection", () => {
 		it("getNextTask skips tasks with unsatisfied dependencies", () => {
 			const prereq = addTask("Prerequisite task", 50, tasksPath);
-			addTask(
-				"Dependent task",
-				{ priority: 1, dependsOn: [prereq.id], path: tasksPath },
-			);
+			addTask("Dependent task", { priority: 1, dependsOn: [prereq.id], path: tasksPath });
 
 			const next = getNextTask(tasksPath);
 
@@ -588,10 +569,7 @@ describe("task.ts", () => {
 
 		it("getNextTask returns dependent after prerequisite is complete", () => {
 			const prereq = addTask("Prerequisite task", 50, tasksPath);
-			const dependent = addTask(
-				"Dependent task",
-				{ priority: 1, dependsOn: [prereq.id], path: tasksPath },
-			);
+			const dependent = addTask("Dependent task", { priority: 1, dependsOn: [prereq.id], path: tasksPath });
 
 			// Complete the prerequisite
 			markTaskComplete(prereq.id, tasksPath);
@@ -605,10 +583,7 @@ describe("task.ts", () => {
 		it("handles multiple dependencies (all must be satisfied)", () => {
 			const prereq1 = addTask("Prereq 1", 50, tasksPath);
 			const prereq2 = addTask("Prereq 2", 50, tasksPath);
-			addTask(
-				"Dependent task",
-				{ priority: 1, dependsOn: [prereq1.id, prereq2.id], path: tasksPath },
-			);
+			addTask("Dependent task", { priority: 1, dependsOn: [prereq1.id, prereq2.id], path: tasksPath });
 
 			// Complete only one prerequisite
 			markTaskComplete(prereq1.id, tasksPath);
@@ -627,14 +602,8 @@ describe("task.ts", () => {
 
 		it("chain of dependencies resolves correctly", () => {
 			const task1 = addTask("Task 1", 10, tasksPath);
-			const task2 = addTask(
-				"Task 2",
-				{ priority: 20, dependsOn: [task1.id], path: tasksPath },
-			);
-			const task3 = addTask(
-				"Task 3",
-				{ priority: 30, dependsOn: [task2.id], path: tasksPath },
-			);
+			const task2 = addTask("Task 2", { priority: 20, dependsOn: [task1.id], path: tasksPath });
+			const task3 = addTask("Task 3", { priority: 30, dependsOn: [task2.id], path: tasksPath });
 
 			// Only task1 should be available
 			expect(getNextTask(tasksPath)?.id).toBe(task1.id);

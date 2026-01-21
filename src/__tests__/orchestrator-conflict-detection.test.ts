@@ -21,9 +21,7 @@ describe("orchestrator/conflict-detection", () => {
 		});
 
 		it("returns empty map when single task", () => {
-			const tasks: TaskWithModifiedFiles[] = [
-				{ taskId: "task-1", modifiedFiles: ["file1.ts", "file2.ts"] },
-			];
+			const tasks: TaskWithModifiedFiles[] = [{ taskId: "task-1", modifiedFiles: ["file1.ts", "file2.ts"] }];
 			const result = detectFileConflicts(tasks);
 			expect(result.size).toBe(0);
 		});

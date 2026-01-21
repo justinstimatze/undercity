@@ -4,19 +4,19 @@
  * Pure functions for building TaskResult objects.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { TokenUsage } from "../types.js";
 import {
 	buildInvalidTargetResult,
 	buildNeedsDecompositionResult,
 	buildTokenUsageSummary,
 	buildValidationFailureResult,
 	calculateTotalTokens,
+	type FailureResultContext,
 	isStandardImplementationTask,
 	isTaskAlreadyComplete,
 	parseSuggestedSubtasks,
-	type FailureResultContext,
 } from "../worker/task-results.js";
-import type { TokenUsage } from "../types.js";
 
 // Mock the logger to avoid noise
 vi.mock("../logger.js", () => ({

@@ -59,7 +59,7 @@ function calculateEfficiencyScore(metrics: VariantMetrics): number {
 /**
  * Format variant for display
  */
-function formatVariant(variant: ExperimentVariant): string {
+function _formatVariant(variant: ExperimentVariant): string {
 	const parts = [variant.name];
 	if (variant.model) parts.push(`model=${variant.model}`);
 	if (variant.reviewEnabled !== undefined) parts.push(`review=${variant.reviewEnabled}`);
@@ -144,7 +144,7 @@ export const experimentCommands: CommandModule = {
 					// Use built-in model comparison
 					const exp = manager.createModelComparisonExperiment();
 					console.log(chalk.green(`Created experiment: ${exp.name} (${exp.id})`));
-					console.log(chalk.dim("Activate with: undercity experiment activate " + exp.id));
+					console.log(chalk.dim(`Activate with: undercity experiment activate ${exp.id}`));
 					return;
 				}
 
@@ -179,7 +179,7 @@ export const experimentCommands: CommandModule = {
 
 				console.log(chalk.green(`Created experiment: ${exp.name} (${exp.id})`));
 				console.log(chalk.dim(`Variants: ${variants.map((v) => v.name).join(", ")}`));
-				console.log(chalk.dim("Activate with: undercity experiment activate " + exp.id));
+				console.log(chalk.dim(`Activate with: undercity experiment activate ${exp.id}`));
 			});
 
 		// Activate experiment

@@ -56,7 +56,7 @@ export function extractCheckpointsAndCleanup(
  * Try to recover checkpoint from worktree assignment file
  * Returns null if checkpoint can't be recovered (best-effort)
  */
-function tryRecoverCheckpoint(taskObjective: string, worktreePath: string): TaskCheckpoint | null {
+function tryRecoverCheckpoint(_taskObjective: string, worktreePath: string): TaskCheckpoint | null {
 	try {
 		const assignment = readTaskAssignment(worktreePath);
 		return assignment?.checkpoint ?? null;
