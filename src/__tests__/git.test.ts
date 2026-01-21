@@ -16,14 +16,25 @@ vi.mock("node:child_process", () => ({
 // Import after mocking
 import { execFileSync } from "node:child_process";
 import {
-	GitError,
+	abortMerge,
+	calculateCodebaseFingerprint,
+	deleteBranch,
 	execGit,
-	generateBranchName,
+	getConflictFiles,
 	getCurrentBranch,
 	getDefaultBranch,
+	getHeadCommitHash,
+	getWorkingTreeStatus,
+	GitError,
+	generateBranchName,
 	hashFingerprint,
 	hashGoal,
+	isCacheableState,
+	isMergeInProgress,
+	isWorkingTreeClean,
+	merge,
 	mergeWithFallback,
+	pushToOrigin,
 	rebase,
 	resolveRepositoryPath,
 } from "../git.js";
@@ -548,7 +559,7 @@ describe("mergeWithFallback", () => {
 
 	it("returns success with default strategy when clean merge succeeds", () => {
 		// Import mergeWithFallback
-		
+
 		// Mock clean merge success
 		vi.mocked(execFileSync).mockReturnValue("");
 
@@ -560,8 +571,7 @@ describe("mergeWithFallback", () => {
 	});
 
 	it("falls back to ours strategy when clean merge fails", () => {
-		
-		vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
 			if (Array.isArray(args)) {
 				// First merge call (clean) fails
 				if (args.includes("merge") && !args.includes("-X")) {
@@ -586,8 +596,7 @@ describe("mergeWithFallback", () => {
 	});
 
 	it("returns conflict files when all strategies fail", () => {
-		
-		vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
 			if (Array.isArray(args)) {
 				// All merge attempts fail
 				if (args.includes("merge")) {
@@ -627,23 +636,17 @@ describe("rebase", () => {
 	});
 
 	it("returns true when rebase succeeds", () => {
-		
 		vi.mocked(execFileSync).mockReturnValue("");
 
 		const result = rebase("main");
 
 		expect(result).toBe(true);
-		expect(execFileSync).toHaveBeenCalledWith(
-			"git",
-			["rebase", "main"],
-			expect.anything(),
-		);
+		expect(execFileSync).toHaveBeenCalledWith("git", ["rebase", "main"], expect.anything());
 	});
 
 	it("returns false and aborts when rebase fails", () => {
-		
 		let abortCalled = false;
-		vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
 			if (Array.isArray(args)) {
 				if (args[0] === "rebase" && args[1] === "main") {
 					throw new Error("Rebase conflict");
@@ -663,8 +666,7 @@ describe("rebase", () => {
 	});
 
 	it("handles abort failure gracefully", () => {
-		
-		vi.mocked(execFileSync).mockImplementation((cmd, args) => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
 			if (Array.isArray(args)) {
 				if (args[0] === "rebase" && args[1] === "main") {
 					throw new Error("Rebase conflict");
@@ -1036,5 +1038,366 @@ describe("MergeQueue additional tests", () => {
 			expect(pendingItems).toHaveLength(1);
 			expect(conflictItems).toHaveLength(1);
 		});
+	});
+});
+
+// =============================================================================
+// Additional Git Functions Tests
+// =============================================================================
+
+describe("isMergeInProgress", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns true when MERGE_HEAD exists", () => {
+		vi.mocked(execFileSync).mockReturnValue("abc123\n");
+		expect(isMergeInProgress()).toBe(true);
+	});
+
+	it("returns false when MERGE_HEAD does not exist", () => {
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw new Error("Not found");
+		});
+		expect(isMergeInProgress()).toBe(false);
+	});
+});
+
+describe("abortMerge", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("calls git merge --abort", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		abortMerge();
+		expect(execFileSync).toHaveBeenCalledWith(
+			"git",
+			["merge", "--abort"],
+			expect.anything(),
+		);
+	});
+
+	it("silently handles abort errors", () => {
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw new Error("No merge to abort");
+		});
+		// Should not throw
+		expect(() => abortMerge()).not.toThrow();
+	});
+});
+
+describe("merge", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns true on successful merge", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		const result = merge("feature-branch");
+		expect(result).toBe(true);
+		expect(execFileSync).toHaveBeenCalledWith(
+			"git",
+			["merge", "--no-ff", "feature-branch"],
+			expect.anything(),
+		);
+	});
+
+	it("includes commit message when provided", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		merge("feature-branch", "Merge feature into main");
+		expect(execFileSync).toHaveBeenCalledWith(
+			"git",
+			["merge", "--no-ff", "feature-branch", "-m", "Merge feature into main"],
+			expect.anything(),
+		);
+	});
+
+	it("uses theirs strategy when specified", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		merge("feature-branch", undefined, "theirs");
+		expect(execFileSync).toHaveBeenCalledWith(
+			"git",
+			["merge", "--no-ff", "-X", "theirs", "feature-branch"],
+			expect.anything(),
+		);
+	});
+
+	it("uses ours strategy when specified", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		merge("feature-branch", undefined, "ours");
+		expect(execFileSync).toHaveBeenCalledWith(
+			"git",
+			["merge", "--no-ff", "-X", "ours", "feature-branch"],
+			expect.anything(),
+		);
+	});
+
+	it("does not add -X flag for default strategy", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		merge("feature-branch", undefined, "default");
+		const call = vi.mocked(execFileSync).mock.calls[0];
+		expect(call[1]).not.toContain("-X");
+	});
+
+	it("returns false and aborts on conflict", () => {
+		let abortCalled = false;
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
+			if (Array.isArray(args) && args.includes("--abort")) {
+				abortCalled = true;
+				return "";
+			}
+			throw new Error("Merge conflict");
+		});
+
+		const result = merge("feature-branch");
+		expect(result).toBe(false);
+		expect(abortCalled).toBe(true);
+	});
+});
+
+describe("deleteBranch", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("deletes branch with -d flag by default", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		deleteBranch("feature-branch");
+		expect(execFileSync).toHaveBeenCalledWith(
+			"git",
+			["branch", "-d", "feature-branch"],
+			expect.anything(),
+		);
+	});
+
+	it("force deletes branch with -D flag when force is true", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		deleteBranch("feature-branch", true);
+		expect(execFileSync).toHaveBeenCalledWith(
+			"git",
+			["branch", "-D", "feature-branch"],
+			expect.anything(),
+		);
+	});
+});
+
+describe("pushToOrigin", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("pushes current branch when no branch specified", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		pushToOrigin();
+		expect(execFileSync).toHaveBeenCalledWith(
+			"git",
+			["push", "origin"],
+			expect.anything(),
+		);
+	});
+
+	it("pushes specific branch when provided", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		pushToOrigin("feature-branch");
+		expect(execFileSync).toHaveBeenCalledWith(
+			"git",
+			["push", "origin", "feature-branch"],
+			expect.anything(),
+		);
+	});
+});
+
+describe("getHeadCommitHash", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns commit hash", () => {
+		vi.mocked(execFileSync).mockReturnValue("abc123def456789\n");
+		expect(getHeadCommitHash()).toBe("abc123def456789");
+	});
+
+	it("returns empty string on error", () => {
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw new Error("Not a git repo");
+		});
+		expect(getHeadCommitHash()).toBe("");
+	});
+});
+
+describe("getWorkingTreeStatus", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns status output (trimmed)", () => {
+		// Note: execGit trims output, so leading spaces on first line are removed
+		vi.mocked(execFileSync).mockReturnValue(" M src/file.ts\n?? newfile.ts\n");
+		// After trim: "M src/file.ts\n?? newfile.ts"
+		expect(getWorkingTreeStatus()).toBe("M src/file.ts\n?? newfile.ts");
+	});
+
+	it("returns empty string for clean tree", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		expect(getWorkingTreeStatus()).toBe("");
+	});
+
+	it("returns empty string on error", () => {
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw new Error("Not a git repo");
+		});
+		expect(getWorkingTreeStatus()).toBe("");
+	});
+});
+
+describe("isWorkingTreeClean", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns true when status is empty", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		expect(isWorkingTreeClean()).toBe(true);
+	});
+
+	it("returns false when there are changes", () => {
+		vi.mocked(execFileSync).mockReturnValue(" M file.ts\n");
+		expect(isWorkingTreeClean()).toBe(false);
+	});
+
+	it("throws GitError on git command failure", () => {
+		// isWorkingTreeClean doesn't have error handling - it propagates GitError
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw new Error("Not a git repo");
+		});
+		expect(() => isWorkingTreeClean()).toThrow(GitError);
+	});
+});
+
+describe("getConflictFiles", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns list of conflict files", () => {
+		vi.mocked(execFileSync).mockReturnValue("file1.ts\nfile2.ts\nfile3.ts\n");
+		const conflicts = getConflictFiles();
+		expect(conflicts).toEqual(["file1.ts", "file2.ts", "file3.ts"]);
+	});
+
+	it("returns empty array when no conflicts", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		expect(getConflictFiles()).toEqual([]);
+	});
+
+	it("returns empty array on error", () => {
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw new Error("No merge in progress");
+		});
+		expect(getConflictFiles()).toEqual([]);
+	});
+});
+
+describe("calculateCodebaseFingerprint", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns fingerprint with all components", () => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
+			if (Array.isArray(args)) {
+				// Check most specific first: getCurrentBranch uses ["rev-parse", "--abbrev-ref", "HEAD"]
+				if (args.includes("--abbrev-ref")) {
+					return "main\n";
+				}
+				// getHeadCommitHash uses ["rev-parse", "HEAD"]
+				if (args.includes("HEAD") && args.includes("rev-parse")) {
+					return "abc123def456\n";
+				}
+				// getWorkingTreeStatus uses ["status", "--porcelain"]
+				if (args.includes("--porcelain")) {
+					// Note: execGit trims, so leading space removed
+					return " M file.ts\n";
+				}
+			}
+			return "";
+		});
+
+		const fingerprint = calculateCodebaseFingerprint();
+
+		expect(fingerprint).not.toBeNull();
+		expect(fingerprint?.commitHash).toBe("abc123def456");
+		// After trim: "M file.ts"
+		expect(fingerprint?.workingTreeStatus).toBe("M file.ts");
+		expect(fingerprint?.branch).toBe("main");
+		expect(fingerprint?.timestamp).toBeInstanceOf(Date);
+	});
+
+	it("returns null when not in git repo", () => {
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw new Error("Not a git repo");
+		});
+
+		const fingerprint = calculateCodebaseFingerprint();
+		expect(fingerprint).toBeNull();
+	});
+
+	it("returns null when commit hash is empty", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+
+		const fingerprint = calculateCodebaseFingerprint();
+		expect(fingerprint).toBeNull();
+	});
+});
+
+describe("isCacheableState", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns true when working tree is clean and has commit hash", () => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
+			if (Array.isArray(args)) {
+				if (args.includes("HEAD") && args.includes("rev-parse")) {
+					return "abc123\n";
+				}
+				if (args.includes("--porcelain")) {
+					return ""; // Clean
+				}
+			}
+			return "";
+		});
+
+		expect(isCacheableState()).toBe(true);
+	});
+
+	it("returns false when working tree is dirty", () => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
+			if (Array.isArray(args)) {
+				if (args.includes("HEAD") && args.includes("rev-parse")) {
+					return "abc123\n";
+				}
+				if (args.includes("--porcelain")) {
+					return " M file.ts\n"; // Dirty
+				}
+			}
+			return "";
+		});
+
+		expect(isCacheableState()).toBe(false);
+	});
+
+	it("returns false when not in git repo", () => {
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw new Error("Not a git repo");
+		});
+
+		expect(isCacheableState()).toBe(false);
+	});
+
+	it("returns false when commit hash is empty", () => {
+		vi.mocked(execFileSync).mockReturnValue("");
+		expect(isCacheableState()).toBe(false);
 	});
 });
