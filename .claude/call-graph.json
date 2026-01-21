@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-21T04:59:19.517Z",
+  "generatedAt": "2026-01-21T05:21:08.634Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -74,13 +74,13 @@
       "definedIn": "knowledge.ts",
       "calledFrom": [
         {
-          "file": "worker.ts",
-          "line": 1722,
-          "context": "if"
+          "file": "worker/failure-recording.ts",
+          "line": 105,
+          "context": "markLearningsAsFailed"
         },
         {
           "file": "worker.ts",
-          "line": 2077,
+          "line": 1740,
           "context": "if"
         },
         {
@@ -158,7 +158,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1935,
+          "line": 1953,
           "context": "if"
         }
       ]
@@ -168,14 +168,14 @@
       "definedIn": "task-file-patterns.ts",
       "calledFrom": [
         {
-          "file": "worker.ts",
-          "line": 1733,
-          "context": "if"
+          "file": "worker/failure-recording.ts",
+          "line": 116,
+          "context": "recordFailedTaskPattern"
         },
         {
           "file": "worker.ts",
-          "line": 2139,
-          "context": "unknown"
+          "line": 1751,
+          "context": "if"
         }
       ]
     },
@@ -201,7 +201,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1477,
+          "line": 1495,
           "context": "if"
         }
       ]
@@ -212,7 +212,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1872,
+          "line": 1890,
           "context": "unknown"
         }
       ]
@@ -223,7 +223,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1575,
+          "line": 1593,
           "context": "if"
         }
       ]
@@ -233,8 +233,8 @@
       "definedIn": "error-fix-patterns.ts",
       "calledFrom": [
         {
-          "file": "worker.ts",
-          "line": 2086,
+          "file": "worker/failure-recording.ts",
+          "line": 57,
           "context": "if"
         }
       ]
@@ -261,7 +261,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1717,
+          "line": 1735,
           "context": "recordSuccessLearnings"
         },
         {
@@ -293,7 +293,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2675,
+          "line": 2537,
           "context": "for"
         }
       ]
@@ -378,7 +378,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1232,
+          "line": 1250,
           "context": "info"
         },
         {
@@ -426,7 +426,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 911,
+          "line": 929,
           "context": "info"
         }
       ]

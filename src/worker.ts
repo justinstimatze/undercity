@@ -79,7 +79,36 @@ import {
 	type TokenUsage,
 } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
+import {
+	createMessageTiming,
+	DISALLOWED_GIT_PUSH_TOOLS,
+	extractResultMessageData,
+	logSlowMessageGap,
+	type MessageTiming,
+	parseResultMarkers,
+	recordAgentQueryResult,
+	updateStateWithMarkers,
+} from "./worker/agent-execution.js";
 import { buildImplementationContext } from "./worker/context-builder.js";
+import {
+	checkDefaultRetryLimit,
+	checkFileThrashing,
+	checkFinalTier,
+	checkNoChanges,
+	checkRepeatedErrorLoop,
+	checkSeriousErrors,
+	checkTrivialErrors,
+	type EscalationResult,
+} from "./worker/escalation-logic.js";
+import {
+	buildFailureErrorMessage,
+	markLearningsAsFailed,
+	recordFailedTaskPattern,
+	recordPermanentFailureWithHumanInput,
+	recordPlanFailure,
+	recordComplexityFailure,
+	updateDecisionOutcomesToFailure,
+} from "./worker/failure-recording.js";
 import {
 	type PendingWriteTool,
 	processAssistantMessage,
@@ -2065,153 +2094,54 @@ export class TaskWorker {
 	 * Build failure result after all attempts exhausted
 	 */
 	private buildFailureResult(task: string, taskId: string, startTime: number): TaskResult {
-		// Save debug info for analysis
+		// Save debug info and metrics
 		this.saveFailedTaskDebug(task, taskId);
 		this.metricsTracker.recordAttempts(this.attemptRecords);
 		this.metricsTracker.completeTask(false);
 		this.cleanupDirtyState();
 
-		// Mark injected learnings as failed
-		if (this.injectedLearningIds.length > 0) {
-			try {
-				markLearningsUsed(this.injectedLearningIds, false, this.stateDir);
-			} catch {
-				// Non-critical
-			}
-		}
+		// Record various failure learnings using helpers
+		markLearningsAsFailed(this.injectedLearningIds, this.stateDir);
 
-		// Record permanent failure (instead of just clearing pending error)
-		if (this.pendingErrorSignature && this.lastErrorCategory && this.lastErrorMessage) {
-			try {
-				recordPermanentFailure({
-					taskId: this.currentTaskId,
-					category: this.lastErrorCategory,
-					message: this.lastErrorMessage,
-					taskObjective: task,
-					modelUsed: this.currentModel,
-					attemptCount: this.attempts,
-					currentFiles: this.getModifiedFiles(),
-					detailedErrors: this.lastDetailedErrors,
-					stateDir: this.stateDir,
-				});
-				output.debug("Recorded permanent failure for learning", {
-					taskId,
-					category: this.lastErrorCategory,
-					detailedErrorCount: this.lastDetailedErrors.length,
-				});
+		recordPermanentFailureWithHumanInput({
+			taskId: this.currentTaskId,
+			task,
+			pendingErrorSignature: this.pendingErrorSignature,
+			lastErrorCategory: this.lastErrorCategory,
+			lastErrorMessage: this.lastErrorMessage,
+			lastDetailedErrors: this.lastDetailedErrors,
+			currentModel: this.currentModel,
+			attempts: this.attempts,
+			modifiedFiles: this.getModifiedFiles(),
+			stateDir: this.stateDir,
+		});
+		this.pendingErrorSignature = null;
+		this.lastErrorCategory = null;
+		this.lastErrorMessage = null;
+		this.lastDetailedErrors = [];
 
-				// Check if this failure pattern should request human input
-				if (
-					this.pendingErrorSignature &&
-					shouldRequestHumanInput(this.pendingErrorSignature, this.currentTaskId, this.stateDir)
-				) {
-					// Check if we already tried human guidance
-					const existingGuidance = getHumanGuidance(this.pendingErrorSignature, this.stateDir);
-					flagNeedsHumanInput(
-						this.currentTaskId,
-						task,
-						this.pendingErrorSignature,
-						this.lastErrorCategory,
-						this.lastErrorMessage,
-						this.attempts,
-						this.currentModel,
-						existingGuidance?.guidance,
-						this.stateDir,
-					);
-				}
-			} catch {
-				// Non-critical - fall back to just clearing
-				try {
-					clearPendingError(this.currentTaskId);
-				} catch {
-					// Ignore
-				}
-			}
-			this.pendingErrorSignature = null;
-			this.lastErrorCategory = null;
-			this.lastErrorMessage = null;
-			this.lastDetailedErrors = [];
-		}
+		recordFailedTaskPattern(taskId, task, this.getModifiedFiles());
+		updateDecisionOutcomesToFailure(taskId, this.stateDir);
 
-		// Record failed task pattern
-		try {
-			const modifiedFiles = this.getModifiedFiles();
-			recordTaskFiles(taskId, task, modifiedFiles, false);
-			output.debug(`Recorded failed task pattern`, { taskId });
-		} catch {
-			// Non-critical
-		}
+		recordPlanFailure({
+			task,
+			executionPlan: this.executionPlan,
+			briefing: this.currentBriefing,
+			stateDir: this.stateDir,
+		});
 
-		// Update decision outcomes
-		try {
-			import("./decision-tracker.js").then(({ loadDecisionStore }) => {
-				const store = loadDecisionStore(this.stateDir);
-				const taskDecisions = store.resolved.filter((d) => d.taskId === taskId && d.resolution.outcome === undefined);
-				for (const decision of taskDecisions) {
-					updateDecisionOutcome(decision.id, "failure", this.stateDir);
-				}
-			});
-		} catch {
-			// Non-critical
-		}
-
-		// Record plan failure for Ax learning (if we had a plan)
-		if (this.executionPlan?.proceedWithExecution) {
-			try {
-				const plan = this.executionPlan.plan;
-				const briefing = this.currentBriefing?.briefingDoc || "";
-
-				recordPlanCreationOutcome(
-					{ task, contextBriefing: briefing },
-					{
-						filesToRead: plan.filesToRead,
-						filesToModify: plan.filesToModify,
-						filesToCreate: plan.filesToCreate,
-						steps: plan.steps,
-						risks: plan.risks,
-						expectedOutcome: plan.expectedOutcome,
-						alreadyComplete: plan.alreadyComplete?.likely || false,
-						needsDecomposition: plan.needsDecomposition?.needed || false,
-						reasoning: "",
-					},
-					false, // Task failed
-					this.stateDir,
-				);
-
-				// Note: We don't necessarily blame the review for task failure
-				// The review was accurate if it approved and the plan was reasonable
-				// So we record as success unless the plan was clearly wrong
-			} catch {
-				// Non-critical
-			}
-		}
-
-		// Record complexity assessment outcome for Ax learning (task failed)
-		if (this.complexityAssessment) {
-			try {
-				recordComplexityOutcome(
-					task,
-					{
-						level: this.complexityAssessment.level,
-						scope: this.complexityAssessment.estimatedScope,
-						reasoning: this.complexityAssessment.signals.join(", "),
-						confidence: this.complexityAssessment.confidence,
-					},
-					false, // Task failed
-					this.stateDir,
-				);
-			} catch {
-				// Non-critical
-			}
-		}
+		recordComplexityFailure(
+			{ task, complexityAssessment: this.complexityAssessment, stateDir: this.stateDir },
+			recordComplexityOutcome,
+		);
 
 		// Record review triage outcome for Ax learning (task failed)
 		if (this.reviewTriageResult) {
 			try {
 				recordReviewTriageOutcome(
-					{ task, diff: "" }, // diff not available at this point
+					{ task, diff: "" },
 					this.reviewTriageResult,
-					false, // Task failed, review triage may have been inaccurate
+					false,
 					this.stateDir,
 				);
 			} catch {
@@ -2219,17 +2149,7 @@ export class TaskWorker {
 			}
 		}
 
-		// Provide more actionable error message based on failure type
-		let errorMessage: string;
-		if (this.consecutiveNoWriteAttempts >= 2) {
-			// Task failed primarily because agent couldn't identify what to change
-			errorMessage =
-				`NO_CHANGES: Agent couldn't identify what to modify after ${this.attempts} attempts. ` +
-				"Task may be too vague or already complete. Consider: (1) breaking into specific subtasks, " +
-				"(2) adding file paths to the task, (3) verifying the task still needs doing.";
-		} else {
-			errorMessage = "Max attempts reached without passing verification";
-		}
+		const errorMessage = buildFailureErrorMessage(this.consecutiveNoWriteAttempts, this.attempts);
 
 		return {
 			task,
@@ -2243,12 +2163,9 @@ export class TaskWorker {
 				total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
 			},
 			unresolvedTickets: this.pendingTickets.length > 0 ? this.pendingTickets : undefined,
-			// Add decomposition suggestion when task was too vague
 			needsDecomposition:
 				this.consecutiveNoWriteAttempts >= 2
-					? {
-							reason: "Agent could not identify what changes to make - task may need to be more specific",
-						}
+					? { reason: "Agent could not identify what changes to make - task may need to be more specific" }
 					: undefined,
 		};
 	}
@@ -2546,7 +2463,7 @@ Be concise and specific. Focus on actionable insights.`;
 			// Limit turns to prevent runaway exploration - simple tasks don't need 20+ turns
 			maxTurns,
 			// Defense-in-depth: explicitly block git push even if settings fail to load
-			disallowedTools: ["Bash(git push)", "Bash(git push *)", "Bash(git push -*)", "Bash(git remote push)"],
+			disallowedTools: DISALLOWED_GIT_PUSH_TOOLS,
 			// Stop hook: prevent agent from finishing without making changes (disabled for meta-tasks)
 			hooks:
 				stopHooks.length > 0
@@ -2565,32 +2482,15 @@ Be concise and specific. Focus on actionable insights.`;
 		const promptSize = prompt?.length || resumePrompt?.length || 0;
 		sessionLogger.info({ promptSize, hasContext: !!this.currentBriefing }, `Agent prompt size: ${promptSize} chars`);
 
-		const queryStart = Date.now();
-		let lastMsgTime = queryStart;
-		let msgCount = 0;
+		const timing = createMessageTiming();
 
 		for await (const message of query(queryParams)) {
-			msgCount++;
-			const now = Date.now();
-			const delta = now - lastMsgTime;
-			const msgType = (message as Record<string, unknown>).type as string;
+			timing.msgCount++;
+			const msg = message as Record<string, unknown>;
 
 			// Log slow messages (>5s between messages)
-			if (delta > 5000) {
-				const msg = message as Record<string, unknown>;
-				const subtype = msg.subtype as string | undefined;
-				const toolName =
-					msgType === "assistant"
-						? ((msg.message as Record<string, unknown>)?.content as Array<{ type: string; name?: string }>)?.find(
-								(c) => c.type === "tool_use",
-							)?.name
-						: undefined;
-				sessionLogger.info(
-					{ msgCount, msgType, subtype, toolName, deltaMs: delta, totalMs: now - queryStart },
-					`Slow message gap: ${delta}ms waiting for ${msgType}${toolName ? `:${toolName}` : ""}`,
-				);
-			}
-			lastMsgTime = now;
+			logSlowMessageGap(msg, timing);
+			timing.lastMsgTime = Date.now();
 
 			// Track token usage
 			const usage = this.metricsTracker.extractTokenUsage(message);
@@ -2608,38 +2508,22 @@ Be concise and specific. Focus on actionable insights.`;
 			}
 
 			if (message.type === "result") {
-				// Record SDK metrics to live-metrics.json
-				const msg = message as Record<string, unknown>;
-				const usageData = msg.usage as Record<string, number> | undefined;
-				const modelUsage = msg.modelUsage as Record<string, Record<string, number>> | undefined;
+				const resultData = extractResultMessageData(msg);
 
 				// Capture session ID for potential resume on retry
-				// The SDK returns conversationId in the result message
-				if (!this.currentAgentSessionId && msg.conversationId) {
-					this.currentAgentSessionId = msg.conversationId as string;
+				if (!this.currentAgentSessionId && resultData.conversationId) {
+					this.currentAgentSessionId = resultData.conversationId;
 					sessionLogger.debug({ sessionId: this.currentAgentSessionId }, "Captured agent session ID for resume");
 				}
 
 				// Capture turn count for performance analysis
-				this.lastAgentTurns = (msg.num_turns as number) ?? 0;
+				this.lastAgentTurns = resultData.numTurns;
 
-				recordQueryResult({
-					success: msg.subtype === "success",
-					rateLimited: msg.subtype === "error" && String(msg.result || "").includes("rate"),
-					inputTokens: usageData?.inputTokens ?? 0,
-					outputTokens: usageData?.outputTokens ?? 0,
-					cacheReadTokens: usageData?.cacheReadInputTokens ?? 0,
-					cacheCreationTokens: usageData?.cacheCreationInputTokens ?? 0,
-					costUsd: (msg.total_cost_usd as number) ?? 0,
-					durationMs: (msg.duration_ms as number) ?? 0,
-					apiDurationMs: (msg.duration_api_ms as number) ?? 0,
-					turns: this.lastAgentTurns,
-					model: this.currentModel,
-					modelUsage: modelUsage as Record<string, { inputTokens?: number; outputTokens?: number; costUSD?: number }>,
-				});
+				// Record SDK metrics to live-metrics.json
+				recordAgentQueryResult(resultData, this.lastAgentTurns, this.currentModel);
 
-				if (msg.subtype === "success") {
-					result = msg.result as string;
+				if (resultData.isSuccess) {
+					result = resultData.result;
 				}
 			}
 		}
@@ -2647,25 +2531,19 @@ Be concise and specific. Focus on actionable insights.`;
 		// Store output for knowledge extraction
 		this.lastAgentOutput = result;
 
-		// Check if agent reported task is already complete
-		const alreadyCompleteMatch = result.match(/TASK_ALREADY_COMPLETE:\s*(.+?)(?:\n|$)/i);
-		if (alreadyCompleteMatch) {
-			this.taskAlreadyCompleteReason = alreadyCompleteMatch[1].trim();
-			sessionLogger.info({ reason: this.taskAlreadyCompleteReason }, "Agent reported task already complete");
+		// Parse task markers from result and update instance state
+		const markers = parseResultMarkers(result);
+		if (markers.taskAlreadyComplete && !this.taskAlreadyCompleteReason) {
+			this.taskAlreadyCompleteReason = markers.taskAlreadyComplete;
+			sessionLogger.info({ reason: markers.taskAlreadyComplete }, "Agent reported task already complete");
 		}
-
-		// Check if agent reported invalid target
-		const invalidTargetMatch = result.match(/INVALID_TARGET:\s*(.+?)(?:\n|$)/i);
-		if (invalidTargetMatch) {
-			this.invalidTargetReason = invalidTargetMatch[1].trim();
-			sessionLogger.warn({ reason: this.invalidTargetReason }, "Agent reported invalid target");
+		if (markers.invalidTarget && !this.invalidTargetReason) {
+			this.invalidTargetReason = markers.invalidTarget;
+			sessionLogger.warn({ reason: markers.invalidTarget }, "Agent reported invalid target");
 		}
-
-		// Check if agent reported task needs decomposition
-		const needsDecompMatch = result.match(/NEEDS_DECOMPOSITION:\s*(.+?)(?:\n|$)/i);
-		if (needsDecompMatch) {
-			this.needsDecompositionReason = needsDecompMatch[1].trim();
-			sessionLogger.info({ reason: this.needsDecompositionReason }, "Agent reported task needs decomposition");
+		if (markers.needsDecomposition && !this.needsDecompositionReason) {
+			this.needsDecompositionReason = markers.needsDecomposition;
+			sessionLogger.info({ reason: markers.needsDecomposition }, "Agent reported task needs decomposition");
 		}
 
 		// Parse agent output for decision points and capture them
@@ -2860,131 +2738,36 @@ Be concise and specific. Focus on actionable insights.`;
 		verification: VerificationResult,
 		errorCategories: ErrorCategory[],
 		task: string,
-	): { shouldEscalate: boolean; reason: string; forceFailure?: boolean } {
-		// Ralph-style: detect repeated same errors (agent stuck in loop)
-		// If the same error message appears 3+ times, fail fast - more retries won't help
+	): EscalationResult {
 		const errorMessage = verification.issues[0] || "";
-		const sameErrorCount = this.errorHistory.filter((e) => e.message.slice(0, 80) === errorMessage.slice(0, 80)).length;
 
-		if (sameErrorCount >= 3) {
-			sessionLogger.warn(
-				{
-					errorMessage: errorMessage.slice(0, 100),
-					occurrences: sameErrorCount,
-					totalAttempts: this.attempts,
-				},
-				"Ralph loop detection: same error 3+ times - failing fast",
-			);
-			return {
-				shouldEscalate: false,
-				reason: `same error repeated ${sameErrorCount}x - agent stuck in loop, task needs different approach`,
-				forceFailure: true,
-			};
-		}
+		// Check escalation conditions in order of priority
+		let result: EscalationResult | null;
 
-		// Check for file thrashing (same file edited too many times without progress)
-		for (const [filePath, count] of this.writesPerFile) {
-			if (count >= TaskWorker.MAX_WRITES_PER_FILE) {
-				return {
-					shouldEscalate: false,
-					reason: `file thrashing: ${filePath} edited ${count} times without verification passing`,
-					forceFailure: true,
-				};
-			}
-		}
+		result = checkRepeatedErrorLoop(errorMessage, this.errorHistory);
+		if (result) return result;
 
-		// No changes made - check if this is because task is already complete
-		if (verification.filesChanged === 0) {
-			// If agent tried to make changes but content was already correct, task may be done
-			if (this.noOpEditCount > 0) {
-				return { shouldEscalate: false, reason: "task may already be complete (no-op edits detected)" };
-			}
+		result = checkFileThrashing(this.writesPerFile, TaskWorker.MAX_WRITES_PER_FILE);
+		if (result) return result;
 
-			// NO_CHANGES is a task quality problem, not a model capability problem.
-			// Data shows: tasks escalated to opus on no_changes have 34.6% success vs 95.2% for
-			// tasks that started at opus. Escalating wastes expensive opus tokens.
-			//
-			// Strategy: allow 1 retry at same tier (agent may need clearer instructions in retry),
-			// then fail fast. Don't escalate to next tier for no_changes.
-			const maxNoChangeRetries = 2;
+		result = checkNoChanges(
+			verification.filesChanged,
+			this.noOpEditCount,
+			this.consecutiveNoWriteAttempts,
+			this.currentModel,
+		);
+		if (result) return result;
 
-			if (this.consecutiveNoWriteAttempts < maxNoChangeRetries) {
-				return {
-					shouldEscalate: false,
-					reason: `no changes made, retry ${this.consecutiveNoWriteAttempts + 1}/${maxNoChangeRetries} at ${this.currentModel}`,
-				};
-			}
+		result = checkFinalTier(this.currentModel, this.maxTier, this.sameModelRetries, this.maxOpusRetries);
+		if (result) return result;
 
-			// After retries exhausted, fail fast - don't escalate
-			sessionLogger.warn(
-				{
-					consecutiveNoWrites: this.consecutiveNoWriteAttempts,
-					model: this.currentModel,
-				},
-				"No changes after retries - failing fast (task likely needs clarification, not escalation)",
-			);
-			return {
-				shouldEscalate: false,
-				reason: `${this.consecutiveNoWriteAttempts} consecutive no-change attempts - task may need decomposition or clarification`,
-				forceFailure: true,
-			};
-		}
+		result = checkTrivialErrors(errorCategories, this.sameModelRetries, this.maxRetriesPerTier);
+		if (result) return result;
 
-		// At final tier (opus OR maxTier cap), use maxOpusRetries for more attempts (no escalation available)
-		const isAtFinalTier = this.currentModel === "opus" || this.currentModel === this.maxTier;
-		if (isAtFinalTier) {
-			if (this.sameModelRetries < this.maxOpusRetries) {
-				const remaining = this.maxOpusRetries - this.sameModelRetries;
-				const tierLabel = this.maxTier === "opus" ? "opus tier" : `${this.currentModel} tier (max-tier cap)`;
-				return { shouldEscalate: false, reason: `${tierLabel}, ${remaining} retries left` };
-			}
-			return { shouldEscalate: true, reason: `max retries at final tier (${this.maxOpusRetries})` };
-		}
+		result = checkSeriousErrors(errorCategories, task, this.sameModelRetries, this.maxRetriesPerTier);
+		if (result) return result;
 
-		// Check if errors are only trivial (lint/spell)
-		const trivialOnly = errorCategories.every((c) => c === "lint" || c === "spell");
-		const hasSerious = errorCategories.some((c) => c === "typecheck" || c === "build" || c === "test");
-
-		if (trivialOnly) {
-			if (this.sameModelRetries < this.maxRetriesPerTier) {
-				const remaining = this.maxRetriesPerTier - this.sameModelRetries;
-				return { shouldEscalate: false, reason: `trivial error, ${remaining} retries left at tier` };
-			}
-			return { shouldEscalate: true, reason: `trivial errors persist after ${this.maxRetriesPerTier} retries` };
-		}
-
-		if (hasSerious) {
-			// Test-writing tasks get more retries when tests fail
-			// Test failures are expected during test development - give more chances
-			const isWritingTests = isTestTask(task);
-			const hasTestErrors = errorCategories.includes("test");
-
-			let seriousRetryLimit: number;
-			if (isWritingTests && hasTestErrors) {
-				// Test-writing tasks with test failures: full retries (tests are iterative)
-				seriousRetryLimit = this.maxRetriesPerTier + 1;
-				sessionLogger.debug(
-					{ retries: this.sameModelRetries, limit: seriousRetryLimit },
-					"Test task - allowing extra retries for test failures",
-				);
-			} else {
-				// Other serious errors: allow fewer retries to escalate faster
-				seriousRetryLimit = Math.max(2, this.maxRetriesPerTier - 1);
-			}
-
-			if (this.sameModelRetries < seriousRetryLimit) {
-				const remaining = seriousRetryLimit - this.sameModelRetries;
-				return { shouldEscalate: false, reason: `serious error, ${remaining} retries left at tier` };
-			}
-			return { shouldEscalate: true, reason: `serious errors after ${seriousRetryLimit} retries` };
-		}
-
-		// Default: escalate after maxRetriesPerTier
-		if (this.sameModelRetries >= this.maxRetriesPerTier) {
-			return { shouldEscalate: true, reason: `max retries at tier (${this.maxRetriesPerTier})` };
-		}
-
-		return { shouldEscalate: false, reason: "retrying" };
+		return checkDefaultRetryLimit(this.sameModelRetries, this.maxRetriesPerTier);
 	}
 
 	/**
