@@ -80,58 +80,16 @@ import {
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
 import { buildMetaTaskPrompt, buildResearchPrompt, buildResumePrompt } from "./worker/prompt-builder.js";
 import { getMaxTurnsForModel } from "./worker/stop-hooks.js";
+import {
+	commitResearchOutput,
+	type FastPathAttemptResult,
+	type FastPathConfig,
+	getFewShotExample,
+	handleFastPathFailure,
+	handleFastPathSuccess,
+	writePMResearchOutput,
+} from "./worker/task-helpers.js";
 
-/**
- * Get a few-shot example for common task patterns to help the agent succeed.
- * Returns undefined for tasks that don't match known patterns.
- */
-function getFewShotExample(task: string): string | undefined {
-	const taskLower = task.toLowerCase();
-
-	// Typo/comment tasks
-	if (taskLower.includes("typo") || taskLower.includes("comment") || taskLower.includes("spelling")) {
-		return `Task: "Fix typo in src/utils.ts"
-Action: Read the file, find the typo, use Edit tool to fix it
-Result: Changed "recieve" to "receive" on line 45`;
-	}
-
-	// Add/create function tasks
-	if ((taskLower.includes("add") || taskLower.includes("create")) && taskLower.includes("function")) {
-		return `Task: "Add validateEmail function to src/utils.ts"
-Action: Read file to understand patterns, then Edit to add new function
-Result: Added function following existing code style, exported it`;
-	}
-
-	// Fix bug tasks
-	if (taskLower.includes("fix") && (taskLower.includes("bug") || taskLower.includes("error"))) {
-		return `Task: "Fix null error in src/auth.ts:45"
-Action: Read file, understand the code path, add null check
-Result: Added optional chaining (?.) to prevent null access`;
-	}
-
-	// Update/change tasks
-	if (taskLower.includes("update") || taskLower.includes("change") || taskLower.includes("modify")) {
-		return `Task: "Update timeout value in config.ts to 30000"
-Action: Read file, find the timeout setting, Edit to change value
-Result: Changed timeout from 10000 to 30000`;
-	}
-
-	// Rename tasks
-	if (taskLower.includes("rename")) {
-		return `Task: "Rename getUserData to fetchUserProfile in src/api.ts"
-Action: Read file, use Edit with replace_all to rename all occurrences
-Result: Renamed function and all call sites`;
-	}
-
-	// Add test tasks
-	if (taskLower.includes("test") && (taskLower.includes("add") || taskLower.includes("write"))) {
-		return `Task: "Add tests for validateEmail in src/__tests__/utils.test.ts"
-Action: Read the function to understand behavior, then write test cases
-Result: Added 3 test cases: valid email, invalid email, empty string`;
-	}
-
-	return undefined;
-}
 
 /**
  * Extract explicitly mentioned file names from task description
@@ -877,76 +835,38 @@ export class TaskWorker {
 		baseCommit: string | undefined,
 		startTime: number,
 	): Promise<TaskResult | null> {
-		const { tryFastPath } = await import("./fast-path.js");
-		const fastResult = tryFastPath(task, this.workingDirectory);
+		const { tryFastPath: attemptFastPath } = await import("./fast-path.js");
+		const fastResult = attemptFastPath(task, this.workingDirectory);
 
 		if (!fastResult.handled) return null;
 
-		if (fastResult.success) {
-			output.success(`Fast-path completed: ${fastResult.filesChanged?.join(", ")}`, { taskId });
-			const verification = await verifyWork({
-				runTypecheck: this.runTypecheck,
-				runTests: this.runTests,
-				workingDirectory: this.workingDirectory,
-				baseCommit,
-				skipOptionalChecks: this.skipOptionalVerification,
-			});
+		const config: FastPathConfig = {
+			taskId,
+			sessionId,
+			task,
+			baseCommit,
+			workingDirectory: this.workingDirectory,
+			autoCommit: this.autoCommit,
+			runTypecheck: this.runTypecheck,
+			runTests: this.runTests,
+			skipOptionalVerification: this.skipOptionalVerification,
+		};
 
-			if (verification.passed) {
-				if (this.autoCommit && fastResult.filesChanged?.length) {
-					try {
-						for (const file of fastResult.filesChanged) {
-							execFileSync("git", ["add", file], { cwd: this.workingDirectory, stdio: "pipe" });
-						}
-						execFileSync("git", ["commit", "-m", task.substring(0, 50)], {
-							cwd: this.workingDirectory,
-							stdio: "pipe",
-						});
-						output.success("Fast-path changes committed", { taskId });
-					} catch (e) {
-						output.warning("Fast-path commit failed, changes staged", { taskId, error: String(e) });
-					}
-				}
-
-				const durationMs = Date.now() - startTime;
-				output.info(`Fast-path completed in ${durationMs}ms (vs ~60s with LLM)`, { taskId, durationMs });
-				logFastPathComplete({
-					batchId: sessionId,
-					taskId,
-					objective: task,
-					durationMs,
-					modifiedFiles: fastResult.filesChanged,
-					tool: "ast-grep",
-				});
-
+		const typedResult = fastResult as FastPathAttemptResult;
+		if (typedResult.success) {
+			const result = await handleFastPathSuccess(typedResult, config, startTime);
+			if (result.success) {
 				return {
 					status: "complete",
 					task,
 					model: "haiku" as ModelTier,
 					attempts: 0,
-					durationMs,
+					durationMs: result.durationMs!,
 					tokenUsage: { attempts: [], total: 0 },
 				};
 			}
-
-			output.warning("Fast-path changes failed verification, falling back to LLM", { taskId });
-			logFastPathFailed({
-				batchId: sessionId,
-				taskId,
-				objective: task,
-				error: "Verification failed after fast-path changes",
-				tool: "ast-grep",
-			});
-			execSync("git checkout -- .", { cwd: this.workingDirectory, stdio: "pipe" });
 		} else {
-			output.debug(`Fast-path attempted but failed: ${fastResult.error}`, { taskId });
-			logFastPathFailed({
-				batchId: sessionId,
-				taskId,
-				objective: task,
-				error: fastResult.error || "Unknown error",
-				tool: "ast-grep",
-			});
+			handleFastPathFailure(typedResult, config);
 		}
 
 		return null;
@@ -1275,75 +1195,34 @@ export class TaskWorker {
 		output.workerPhase(taskId, "pm-research");
 		sessionLogger.info({ taskId, task }, "Running PM-based research");
 
-		// Extract topic from task (remove [research] prefix)
 		const topic = task.replace(/^\[research\]\s*/i, "").trim();
 
 		try {
-			// Run PM research
 			const result = await pmResearch(topic, this.workingDirectory);
 
-			// Generate filename from topic
-			const slug = topic
-				.toLowerCase()
-				.replace(/[^a-z0-9]+/g, "-")
-				.replace(/^-|-$/g, "")
-				.slice(0, 50);
-			const timestamp = new Date().toISOString().split("T")[0];
-			const outputPath = join(this.workingDirectory, ".undercity", "research", `${timestamp}-${slug}.md`);
-
-			// Ensure research directory exists
-			const researchDir = join(this.workingDirectory, ".undercity", "research");
-			if (!existsSync(researchDir)) {
-				mkdirSync(researchDir, { recursive: true });
-			}
-
-			// Write structured design doc
+			// Write design doc
 			const designDoc = this.formatPMResearchAsDesignDoc(topic, result);
-			writeFileSync(outputPath, designDoc);
-			sessionLogger.info({ taskId, outputPath }, "PM research design doc written");
+			const outputPath = writePMResearchOutput(topic, designDoc, {
+				taskId,
+				task,
+				workingDirectory: this.workingDirectory,
+				autoCommit: this.autoCommit,
+			});
 
 			// Add generated task proposals to board
-			const addedTasks: string[] = [];
-			for (const proposal of result.taskProposals) {
-				try {
-					const newTask = addTask(proposal.objective, {
-						priority: proposal.suggestedPriority || 5,
-						tags: proposal.tags,
-					});
-					addedTasks.push(newTask.id);
-					sessionLogger.info(
-						{ taskId: newTask.id, objective: proposal.objective },
-						"Added follow-up task from PM research",
-					);
-				} catch (error) {
-					sessionLogger.warn({ error: String(error), proposal }, "Failed to add task proposal");
-				}
-			}
+			const addedTasks = this.addResearchTaskProposals(result.taskProposals);
 
 			output.info(`PM research complete: ${result.findings.length} findings, ${addedTasks.length} tasks added`, {
 				taskId,
 			});
 
-			// Commit the research output
-			let commitSha: string | undefined;
-			if (this.autoCommit) {
-				try {
-					execFileSync("git", ["add", outputPath], { cwd: this.workingDirectory });
-					const commitMsg = `[research] ${topic.slice(0, 50)}`;
-					execFileSync("git", ["commit", "-m", commitMsg], { cwd: this.workingDirectory });
-					commitSha = execFileSync("git", ["rev-parse", "HEAD"], {
-						cwd: this.workingDirectory,
-						encoding: "utf-8",
-					}).trim();
-				} catch {
-					// Commit may fail if no changes - that's ok
-				}
-			}
+			// Commit if enabled
+			const commitSha = this.autoCommit ? commitResearchOutput(outputPath, topic, this.workingDirectory) : undefined;
 
 			return {
 				task,
 				status: "complete",
-				model: "sonnet", // PM research uses sonnet
+				model: "sonnet",
 				attempts: 1,
 				durationMs: Date.now() - startTime,
 				commitSha,
@@ -1369,6 +1248,29 @@ export class TaskWorker {
 				durationMs: Date.now() - startTime,
 			};
 		}
+	}
+
+	/**
+	 * Add task proposals from PM research to the board
+	 */
+	private addResearchTaskProposals(proposals: PMResearchResult["taskProposals"]): string[] {
+		const addedTasks: string[] = [];
+		for (const proposal of proposals) {
+			try {
+				const newTask = addTask(proposal.objective, {
+					priority: proposal.suggestedPriority || 5,
+					tags: proposal.tags,
+				});
+				addedTasks.push(newTask.id);
+				sessionLogger.info(
+					{ taskId: newTask.id, objective: proposal.objective },
+					"Added follow-up task from PM research",
+				);
+			} catch (error) {
+				sessionLogger.warn({ error: String(error), proposal }, "Failed to add task proposal");
+			}
+		}
+		return addedTasks;
 	}
 
 	/**

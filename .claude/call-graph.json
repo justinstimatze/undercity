@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-21T04:23:28.471Z",
+  "generatedAt": "2026-01-21T04:30:35.931Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -23,7 +23,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 2537,
+          "line": 2437,
           "context": "if"
         },
         {
@@ -75,12 +75,12 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1789,
+          "line": 1689,
           "context": "if"
         },
         {
           "file": "worker.ts",
-          "line": 2111,
+          "line": 2011,
           "context": "if"
         },
         {
@@ -137,7 +137,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 2574,
+          "line": 2474,
           "context": "if"
         }
       ]
@@ -153,12 +153,12 @@
         },
         {
           "file": "worker.ts",
-          "line": 1969,
+          "line": 1869,
           "context": "if"
         },
         {
           "file": "worker.ts",
-          "line": 2585,
+          "line": 2485,
           "context": "if"
         }
       ]
@@ -169,12 +169,12 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1800,
+          "line": 1700,
           "context": "if"
         },
         {
           "file": "worker.ts",
-          "line": 2173,
+          "line": 2073,
           "context": "unknown"
         }
       ]
@@ -201,7 +201,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1544,
+          "line": 1444,
           "context": "if"
         }
       ]
@@ -212,7 +212,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1906,
+          "line": 1806,
           "context": "debug"
         }
       ]
@@ -223,7 +223,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1642,
+          "line": 1542,
           "context": "if"
         }
       ]
@@ -234,7 +234,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2120,
+          "line": 2020,
           "context": "if"
         }
       ]
@@ -250,7 +250,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 2553,
+          "line": 2453,
           "context": "if"
         }
       ]
@@ -261,7 +261,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1784,
+          "line": 1684,
           "context": "recordSuccessLearnings"
         },
         {
@@ -293,7 +293,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2800,
+          "line": 2700,
           "context": "for"
         }
       ]
@@ -378,7 +378,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1283,
+          "line": 1199,
           "context": "info"
         },
         {
@@ -426,7 +426,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 972,
+          "line": 890,
           "context": "info"
         }
       ]
