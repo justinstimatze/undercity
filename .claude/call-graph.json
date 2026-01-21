@@ -1,11 +1,16 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-21T03:31:30.707Z",
+  "generatedAt": "2026-01-21T03:49:23.217Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
       "definedIn": "knowledge.ts",
       "calledFrom": [
+        {
+          "file": "worker/prompt-builder.ts",
+          "line": 211,
+          "context": "if"
+        },
         {
           "file": "automated-pm.ts",
           "line": 92,
@@ -18,7 +23,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 2635,
+          "line": 2537,
           "context": "if"
         },
         {
@@ -70,12 +75,12 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1787,
+          "line": 1789,
           "context": "if"
         },
         {
           "file": "worker.ts",
-          "line": 2109,
+          "line": 2111,
           "context": "if"
         },
         {
@@ -126,8 +131,13 @@
       "definedIn": "task-file-patterns.ts",
       "calledFrom": [
         {
+          "file": "worker/prompt-builder.ts",
+          "line": 231,
+          "context": "if"
+        },
+        {
           "file": "worker.ts",
-          "line": 2672,
+          "line": 2574,
           "context": "if"
         }
       ]
@@ -137,13 +147,18 @@
       "definedIn": "task-file-patterns.ts",
       "calledFrom": [
         {
-          "file": "worker.ts",
-          "line": 1967,
+          "file": "worker/prompt-builder.ts",
+          "line": 238,
           "context": "if"
         },
         {
           "file": "worker.ts",
-          "line": 2683,
+          "line": 1969,
+          "context": "if"
+        },
+        {
+          "file": "worker.ts",
+          "line": 2585,
           "context": "if"
         }
       ]
@@ -154,12 +169,12 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1798,
+          "line": 1800,
           "context": "if"
         },
         {
           "file": "worker.ts",
-          "line": 2171,
+          "line": 2173,
           "context": "unknown"
         }
       ]
@@ -186,7 +201,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1542,
+          "line": 1544,
           "context": "if"
         }
       ]
@@ -197,7 +212,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1904,
+          "line": 1906,
           "context": "debug"
         }
       ]
@@ -208,7 +223,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1640,
+          "line": 1642,
           "context": "if"
         }
       ]
@@ -219,7 +234,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2118,
+          "line": 2120,
           "context": "if"
         }
       ]
@@ -229,8 +244,13 @@
       "definedIn": "error-fix-patterns.ts",
       "calledFrom": [
         {
+          "file": "worker/prompt-builder.ts",
+          "line": 219,
+          "context": "if"
+        },
+        {
           "file": "worker.ts",
-          "line": 2651,
+          "line": 2553,
           "context": "if"
         }
       ]
@@ -241,7 +261,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1782,
+          "line": 1784,
           "context": "recordSuccessLearnings"
         },
         {
@@ -273,7 +293,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 2976,
+          "line": 2800,
           "context": "for"
         }
       ]
@@ -358,7 +378,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1281,
+          "line": 1283,
           "context": "info"
         },
         {
@@ -406,7 +426,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 970,
+          "line": 972,
           "context": "info"
         }
       ]

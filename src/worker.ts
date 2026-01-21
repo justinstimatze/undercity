@@ -78,6 +78,12 @@ import {
 	type TokenUsage,
 } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
+import {
+	buildMetaTaskPrompt,
+	buildResearchPrompt,
+	buildResumePrompt,
+} from "./worker/prompt-builder.js";
+import { createStandardStopHooks, getMaxTurnsForModel } from "./worker/stop-hooks.js";
 
 /**
  * Get a few-shot example for common task patterns to help the agent succeed.
@@ -2480,120 +2486,31 @@ Be concise and specific. Focus on actionable insights.`;
 		let prompt: string;
 		let resumePrompt: string | undefined;
 
-		if (canResume) {
-			// Build a continuation prompt with verification feedback
-			// The agent keeps its full context from the previous attempt
-			resumePrompt = `VERIFICATION FAILED. Here's what needs to be fixed:
-
-${this.lastFeedback}
-
-Please fix these specific issues. You have all the context from your previous work - focus on addressing these errors.`;
+		if (canResume && this.lastFeedback) {
+			// Resume with verification feedback
+			resumePrompt = buildResumePrompt(this.lastFeedback);
 			prompt = ""; // Not used when resuming
 			sessionLogger.info(
 				{ sessionId: this.currentAgentSessionId, attempt: this.attempts },
 				"Resuming agent session with verification feedback",
 			);
 		} else if (this.isCurrentTaskMeta && metaType) {
-			// Meta-task: use the meta-task template
-			const metaPrompt = getMetaTaskPrompt(metaType);
-			const objectiveWithoutPrefix = task.replace(/^\[(?:meta:\w+|plan)\]\s*/i, "");
-
-			let retryContext = "";
-			if (this.attempts > 1 && this.lastFeedback) {
-				retryContext = `
-
-PREVIOUS ATTEMPT FAILED:
-${this.lastFeedback}
-
-Please fix these issues and return valid JSON.`;
-			}
-
-			prompt = `${metaPrompt}
-
-OBJECTIVE: ${objectiveWithoutPrefix}${retryContext}
-
-Working directory: ${this.workingDirectory}
-Read the task board from .undercity/tasks.json to analyze.
-Return your analysis as JSON in the format specified above.`;
+			// Meta-task prompt
+			prompt = buildMetaTaskPrompt(
+				metaType,
+				task,
+				this.workingDirectory,
+				this.attempts,
+				this.lastFeedback,
+			);
 		} else if (this.isCurrentTaskResearch) {
-			// Research task: gather information, write findings to markdown file
-			const objectiveWithoutPrefix = task.replace(/^\[research\]\s*/i, "");
-
-			// Generate a filename from the objective
-			const slug = objectiveWithoutPrefix
-				.toLowerCase()
-				.replace(/[^a-z0-9]+/g, "-")
-				.replace(/^-|-$/g, "")
-				.slice(0, 50);
-			const timestamp = new Date().toISOString().split("T")[0];
-			const outputPath = `.undercity/research/${timestamp}-${slug}.md`;
-
-			let retryContext = "";
-			if (this.attempts > 1 && this.lastFeedback) {
-				// Check if agent was using Edit on non-existent file
-				const editOnNewFile =
-					this.consecutiveNoWriteAttempts >= 1 ||
-					this.lastFeedback.includes("Edit") ||
-					this.lastFeedback.includes("does not exist");
-
-				if (editOnNewFile) {
-					retryContext = `
-
-PREVIOUS ATTEMPT FAILED - WRONG TOOL USED:
-${this.lastFeedback}
-
-CRITICAL FIX: The Edit tool CANNOT create new files. For new files, you MUST use the Write tool.
-Steps:
-1. Run: mkdir -p .undercity/research
-2. Use Write tool (not Edit) to create ${outputPath} with your findings`;
-				} else {
-					retryContext = `
-
-PREVIOUS ATTEMPT FEEDBACK:
-${this.lastFeedback}
-
-Please provide more detailed findings and ensure the markdown file is written.`;
-				}
-			}
-
-			prompt = `You are a research assistant. Your task is to gather information and document findings.
-
-RESEARCH OBJECTIVE:
-${objectiveWithoutPrefix}${retryContext}
-
-INSTRUCTIONS:
-1. Use web search, documentation, and any available resources to research this topic
-2. Focus on gathering accurate, relevant information
-3. Cite sources when possible
-4. Provide actionable insights
-
-OUTPUT FILE: ${outputPath}
-
-CRITICAL - Follow these steps to write the output file:
-1. First, run: mkdir -p .undercity/research (to ensure directory exists)
-2. Check if ${outputPath} already exists using Read tool
-3. If the file exists, read it first, then use Edit or Write to update it
-4. If the file does NOT exist, you can create it with Write
-
-Use this markdown structure:
-\`\`\`markdown
-# Research: ${objectiveWithoutPrefix}
-
-## Summary
-Brief summary of key findings.
-
-## Findings
-- **Finding 1**: Description (Source: URL)
-- **Finding 2**: Description (Source: URL)
-
-## Recommendations
-- Actionable next steps based on research
-
-## Sources
-- [Source Name](URL)
-\`\`\`
-
-The file MUST be created at ${outputPath} for this task to succeed.`;
+			// Research task prompt
+			prompt = buildResearchPrompt(
+				task,
+				this.attempts,
+				this.lastFeedback,
+				this.consecutiveNoWriteAttempts,
+			);
 		} else {
 			// Standard implementation task: build prompt with context
 			let contextSection = "";
@@ -2751,89 +2668,11 @@ RULES:
 		this.invalidTargetReason = null;
 		this.needsDecompositionReason = null;
 
-		// Build hooks - meta-tasks don't need the "must write files" check
-		// Research tasks now write to .undercity/research/*.md so they use the normal hook
-		const stopHooks = this.isCurrentTaskMeta
-			? [] // Meta-tasks return recommendations, not file changes
-			: [
-					{
-						hooks: [
-							async () => {
-								// Allow stopping if agent reported task is already complete
-								if (this.taskAlreadyCompleteReason) {
-									sessionLogger.info(
-										{ reason: this.taskAlreadyCompleteReason },
-										"Stop hook accepted: task already complete",
-									);
-									return { continue: true };
-								}
-								// Allow stopping if we detected no-op edits (content was already correct)
-								if (this.noOpEditCount > 0 && this.writeCountThisExecution === 0) {
-									sessionLogger.info(
-										{ noOpEdits: this.noOpEditCount },
-										"Stop hook accepted: no-op edits detected (content already correct)",
-									);
-									return { continue: true };
-								}
-								if (this.writeCountThisExecution === 0) {
-									this.consecutiveNoWriteAttempts++;
-									sessionLogger.info(
-										{
-											model: this.currentModel,
-											writes: 0,
-											consecutiveNoWrites: this.consecutiveNoWriteAttempts,
-										},
-										"Stop hook rejected: agent tried to finish with 0 writes",
-									);
-
-									// Provide escalating feedback based on consecutive no-write attempts
-									// FAIL FAST: After 3 no-write attempts, terminate immediately
-									// Data shows escalating vague tasks wastes tokens - 68% of failures are task quality issues
-									if (this.consecutiveNoWriteAttempts >= 3) {
-										sessionLogger.warn(
-											{
-												consecutiveNoWrites: this.consecutiveNoWriteAttempts,
-												model: this.currentModel,
-											},
-											"FAIL FAST: 3+ consecutive no-write attempts - terminating to save tokens",
-										);
-										// Throw to break out of agent loop immediately
-										throw new Error(
-											`VAGUE_TASK: Agent attempted to finish ${this.consecutiveNoWriteAttempts} times without making changes. ` +
-												"Task likely needs decomposition into more specific subtasks.",
-										);
-									}
-
-									let reason: string;
-									if (this.consecutiveNoWriteAttempts === 2) {
-										// Second attempt: mention task might be unclear
-										reason =
-											"You still haven't made any code changes. If you're unsure what to modify:\n" +
-											"- Re-read the task to identify the specific file and change needed\n" +
-											"- If the task is unclear, output: NEEDS_DECOMPOSITION: <what clarification or subtasks are needed>\n" +
-											"- If already complete: TASK_ALREADY_COMPLETE: <reason>";
-									} else {
-										// First attempt: standard message
-										reason =
-											"You haven't made any code changes yet. If the task is already complete, output: TASK_ALREADY_COMPLETE: <reason>. Otherwise, implement the required changes.";
-									}
-
-									return { continue: false, reason };
-								}
-								return { continue: true };
-							},
-						],
-					},
-				];
+		// Build stop hooks (prevents agent from finishing without making changes)
+		const stopHooks = this.buildExecutionStopHooks();
 
 		// Set maxTurns based on model tier - prevents runaway exploration
-		// Simple tasks (haiku): 10 turns, Standard (sonnet): 15, Complex (opus): 25
-		const maxTurnsPerModel: Record<ModelTier, number> = {
-			haiku: 10,
-			sonnet: 15,
-			opus: 25,
-		};
-		const maxTurns = maxTurnsPerModel[this.currentModel];
+		const maxTurns = getMaxTurnsForModel(this.currentModel);
 		sessionLogger.debug({ model: this.currentModel, maxTurns }, `Agent maxTurns: ${maxTurns}`);
 
 		// Build query parameters - use resume if we have a session to continue
@@ -2984,6 +2823,86 @@ RULES:
 		}
 
 		return result;
+	}
+
+	/**
+	 * Build stop hooks for agent execution
+	 *
+	 * These hooks prevent the agent from finishing without making changes,
+	 * while allowing legitimate completion scenarios.
+	 */
+	private buildExecutionStopHooks(): Array<{ hooks: Array<() => Promise<{ continue: boolean; reason?: string }>> }> {
+		// Meta-tasks don't need the "must write files" check
+		if (this.isCurrentTaskMeta) {
+			return [];
+		}
+
+		return [
+			{
+				hooks: [
+					async () => {
+						// Allow stopping if agent reported task is already complete
+						if (this.taskAlreadyCompleteReason) {
+							sessionLogger.info(
+								{ reason: this.taskAlreadyCompleteReason },
+								"Stop hook accepted: task already complete",
+							);
+							return { continue: true };
+						}
+
+						// Allow stopping if we detected no-op edits (content was already correct)
+						if (this.noOpEditCount > 0 && this.writeCountThisExecution === 0) {
+							sessionLogger.info(
+								{ noOpEdits: this.noOpEditCount },
+								"Stop hook accepted: no-op edits detected (content already correct)",
+							);
+							return { continue: true };
+						}
+
+						// No writes made - provide feedback
+						if (this.writeCountThisExecution === 0) {
+							this.consecutiveNoWriteAttempts++;
+							sessionLogger.info(
+								{
+									model: this.currentModel,
+									writes: 0,
+									consecutiveNoWrites: this.consecutiveNoWriteAttempts,
+								},
+								"Stop hook rejected: agent tried to finish with 0 writes",
+							);
+
+							// FAIL FAST: After 3 no-write attempts, terminate immediately
+							if (this.consecutiveNoWriteAttempts >= 3) {
+								sessionLogger.warn(
+									{
+										consecutiveNoWrites: this.consecutiveNoWriteAttempts,
+										model: this.currentModel,
+									},
+									"FAIL FAST: 3+ consecutive no-write attempts - terminating to save tokens",
+								);
+								throw new Error(
+									`VAGUE_TASK: Agent attempted to finish ${this.consecutiveNoWriteAttempts} times without making changes. ` +
+										"Task likely needs decomposition into more specific subtasks.",
+								);
+							}
+
+							// Provide escalating feedback
+							const reason =
+								this.consecutiveNoWriteAttempts === 2
+									? "You still haven't made any code changes. If you're unsure what to modify:\n" +
+										"- Re-read the task to identify the specific file and change needed\n" +
+										"- If the task is unclear, output: NEEDS_DECOMPOSITION: <what clarification or subtasks are needed>\n" +
+										"- If already complete: TASK_ALREADY_COMPLETE: <reason>"
+									: "You haven't made any code changes yet. If the task is already complete, output: TASK_ALREADY_COMPLETE: <reason>. Otherwise, implement the required changes.";
+
+							return { continue: false, reason };
+						}
+
+						return { continue: true };
+					},
+				],
+			},
+		];
 	}
 
 	/**
