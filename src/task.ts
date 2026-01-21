@@ -14,10 +14,6 @@
 
 import { randomBytes } from "node:crypto";
 import {
-	type HandoffContext as StorageHandoffContext,
-	type LastAttemptContext as StorageLastAttemptContext,
-	type TaskRecord,
-	type TaskStatus,
 	clearCompletedTasksDB,
 	getAllTasksDB,
 	getReadyTasksDB,
@@ -28,7 +24,9 @@ import {
 	markTaskDecomposedDB,
 	removeTaskDB,
 	removeTasksDB,
-	updateTask as updateTaskDB,
+	type HandoffContext as StorageHandoffContext,
+	type TaskRecord,
+	type TaskStatus,
 	updateTaskAnalysisDB,
 	updateTaskFieldsDB,
 	updateTaskStatusDB,
@@ -47,7 +45,7 @@ function getStateDirFromPath(pathParam?: string): string {
 	// Path could be like "/tmp/test/.undercity/tasks.json" or "/tmp/test/.undercity"
 	// Extract the .undercity directory
 	const parts = pathParam.split("/");
-	const undercityIndex = parts.findIndex((p) => p === ".undercity");
+	const undercityIndex = parts.indexOf(".undercity");
 	if (undercityIndex !== -1) {
 		return parts.slice(0, undercityIndex + 1).join("/");
 	}
@@ -475,7 +473,6 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
  * Returns the duplicate task if found, undefined otherwise
  */
 export function findDuplicateTask(objective: string, stateDir: string = DEFAULT_STATE_DIR): Task | undefined {
-
 	const normalized = normalizeObjective(objective);
 	const keywords = extractKeywords(objective);
 
@@ -517,11 +514,7 @@ export function findDuplicateTask(objective: string, stateDir: string = DEFAULT_
  * Add a task to the board
  * Returns existing task if duplicate is detected (unless skipDuplicateCheck is set)
  */
-export function addTask(
-	objective: string,
-	priorityOrOptions?: number | AddTaskOptions,
-	pathParam?: string,
-): Task {
+export function addTask(objective: string, priorityOrOptions?: number | AddTaskOptions, pathParam?: string): Task {
 	// Support both old signature (priority, path) and new signature (options)
 	let priority: number | undefined;
 	let handoffContext: HandoffContext | undefined;
@@ -542,7 +535,6 @@ export function addTask(
 	}
 
 	const stateDir = getStateDirFromPath(pathArg);
-
 
 	// Check for duplicate task unless skipped
 	if (!skipDuplicateCheck) {
@@ -664,14 +656,10 @@ export function getNextTask(path?: string): Task | undefined {
 
 	// Apply priority scoring
 	const allTasks = getAllTasksDB(stateDir).map(recordToTask);
-	const pendingTasks = allTasks.filter(
-		(task) => task.status === "pending" && !task.isDecomposed,
-	);
+	const pendingTasks = allTasks.filter((task) => task.status === "pending" && !task.isDecomposed);
 
 	// Filter for tasks with satisfied dependencies
-	const completedIds = new Set(
-		allTasks.filter((t) => t.status === "complete").map((t) => t.id),
-	);
+	const completedIds = new Set(allTasks.filter((t) => t.status === "complete").map((t) => t.id));
 
 	const eligibleTasks = pendingTasks.filter((task) => {
 		if (!task.dependsOn || task.dependsOn.length === 0) return true;
@@ -749,10 +737,15 @@ export function markTaskInProgress(
 		actualSessionId = sessionId!;
 	}
 
-	updateTaskStatusDB(id, "in_progress", {
-		startedAt: new Date().toISOString(),
-		sessionId: actualSessionId,
-	}, stateDir);
+	updateTaskStatusDB(
+		id,
+		"in_progress",
+		{
+			startedAt: new Date().toISOString(),
+			sessionId: actualSessionId,
+		},
+		stateDir,
+	);
 }
 
 /**
@@ -766,9 +759,14 @@ export function markTaskComplete(paramsOrId: MarkTaskCompleteParams | string, pa
 
 	const id = typeof paramsOrId === "object" ? paramsOrId.id : paramsOrId;
 
-	updateTaskStatusDB(id, "complete", {
-		completedAt: new Date().toISOString(),
-	}, stateDir);
+	updateTaskStatusDB(
+		id,
+		"complete",
+		{
+			completedAt: new Date().toISOString(),
+		},
+		stateDir,
+	);
 }
 
 /**
@@ -791,14 +789,21 @@ export function markTaskFailed(paramsOrId: MarkTaskFailedParams | string, error?
 		actualError = error!;
 	}
 
-	updateTaskStatusDB(id, "failed", {
-		completedAt: new Date().toISOString(),
-		error: actualError,
-		lastAttempt: lastAttempt ? {
-			...lastAttempt,
-			attemptedAt: lastAttempt.attemptedAt.toISOString(),
-		} : undefined,
-	}, stateDir);
+	updateTaskStatusDB(
+		id,
+		"failed",
+		{
+			completedAt: new Date().toISOString(),
+			error: actualError,
+			lastAttempt: lastAttempt
+				? {
+						...lastAttempt,
+						attemptedAt: lastAttempt.attemptedAt.toISOString(),
+					}
+				: undefined,
+		},
+		stateDir,
+	);
 }
 
 /**
@@ -827,11 +832,16 @@ export function markTaskDuplicate(
 		actualResolution = resolution!;
 	}
 
-	updateTaskStatusDB(id, "duplicate", {
-		completedAt: new Date().toISOString(),
-		duplicateOfCommit: actualCommitSha,
-		resolution: actualResolution,
-	}, stateDir);
+	updateTaskStatusDB(
+		id,
+		"duplicate",
+		{
+			completedAt: new Date().toISOString(),
+			duplicateOfCommit: actualCommitSha,
+			resolution: actualResolution,
+		},
+		stateDir,
+	);
 }
 
 /**
@@ -839,7 +849,11 @@ export function markTaskDuplicate(
  */
 export function markTaskCanceled(params: MarkTaskCanceledParams): void;
 export function markTaskCanceled(id: string, reason: string, path?: string): void;
-export function markTaskCanceled(paramsOrId: MarkTaskCanceledParams | string, reason?: string, pathParam?: string): void {
+export function markTaskCanceled(
+	paramsOrId: MarkTaskCanceledParams | string,
+	reason?: string,
+	pathParam?: string,
+): void {
 	const pathArg = typeof paramsOrId === "object" ? paramsOrId.path : pathParam;
 	const stateDir = getStateDirFromPath(pathArg);
 
@@ -853,10 +867,15 @@ export function markTaskCanceled(paramsOrId: MarkTaskCanceledParams | string, re
 		actualReason = reason!;
 	}
 
-	updateTaskStatusDB(id, "canceled", {
-		completedAt: new Date().toISOString(),
-		resolution: actualReason,
-	}, stateDir);
+	updateTaskStatusDB(
+		id,
+		"canceled",
+		{
+			completedAt: new Date().toISOString(),
+			resolution: actualReason,
+		},
+		stateDir,
+	);
 }
 
 /**
@@ -864,7 +883,11 @@ export function markTaskCanceled(paramsOrId: MarkTaskCanceledParams | string, re
  */
 export function markTaskObsolete(params: MarkTaskObsoleteParams): void;
 export function markTaskObsolete(id: string, reason: string, path?: string): void;
-export function markTaskObsolete(paramsOrId: MarkTaskObsoleteParams | string, reason?: string, pathParam?: string): void {
+export function markTaskObsolete(
+	paramsOrId: MarkTaskObsoleteParams | string,
+	reason?: string,
+	pathParam?: string,
+): void {
 	const pathArg = typeof paramsOrId === "object" ? paramsOrId.path : pathParam;
 	const stateDir = getStateDirFromPath(pathArg);
 
@@ -878,10 +901,15 @@ export function markTaskObsolete(paramsOrId: MarkTaskObsoleteParams | string, re
 		actualReason = reason!;
 	}
 
-	updateTaskStatusDB(id, "obsolete", {
-		completedAt: new Date().toISOString(),
-		resolution: actualReason,
-	}, stateDir);
+	updateTaskStatusDB(
+		id,
+		"obsolete",
+		{
+			completedAt: new Date().toISOString(),
+			resolution: actualReason,
+		},
+		stateDir,
+	);
 }
 
 /**
@@ -908,9 +936,14 @@ export function markTaskBlocked(paramsOrId: MarkTaskBlockedParams | string, reas
 		actualReason = reason!;
 	}
 
-	updateTaskStatusDB(id, "blocked", {
-		error: actualReason,
-	}, stateDir);
+	updateTaskStatusDB(
+		id,
+		"blocked",
+		{
+			error: actualReason,
+		},
+		stateDir,
+	);
 }
 
 /**
@@ -1060,17 +1093,25 @@ export function markTaskSetInProgress(
 	for (let i = 0; i < taskIds.length; i++) {
 		const taskId = taskIds[i];
 		const sessionId = actualSessionIds[i];
-		updateTaskStatusDB(taskId, "in_progress", {
-			startedAt: new Date().toISOString(),
-			sessionId,
-		}, stateDir);
+		updateTaskStatusDB(
+			taskId,
+			"in_progress",
+			{
+				startedAt: new Date().toISOString(),
+				sessionId,
+			},
+			stateDir,
+		);
 	}
 }
 
 /**
  * Get status of a set of tasks
  */
-export function getTaskSetStatus(taskIds: string[], pathParam?: string): {
+export function getTaskSetStatus(
+	taskIds: string[],
+	pathParam?: string,
+): {
 	pending: number;
 	inProgress: number;
 	complete: number;
@@ -1269,7 +1310,8 @@ export function areAllSubtasksComplete(paramsOrParentTaskId: SubtaskCheckParams 
 	const pathArg = typeof paramsOrParentTaskId === "object" ? paramsOrParentTaskId.path : pathParam;
 	const stateDir = getStateDirFromPath(pathArg);
 
-	const parentTaskId = typeof paramsOrParentTaskId === "object" ? paramsOrParentTaskId.parentTaskId : paramsOrParentTaskId;
+	const parentTaskId =
+		typeof paramsOrParentTaskId === "object" ? paramsOrParentTaskId.parentTaskId : paramsOrParentTaskId;
 	const parentTask = getTaskByIdDB(parentTaskId, stateDir);
 
 	if (!parentTask || !parentTask.subtaskIds || parentTask.subtaskIds.length === 0) {
@@ -1292,7 +1334,8 @@ export function completeParentIfAllSubtasksDone(
 	pathParam?: string,
 ): boolean {
 	const pathArg = typeof paramsOrParentTaskId === "object" ? paramsOrParentTaskId.path : pathParam;
-	const parentTaskId = typeof paramsOrParentTaskId === "object" ? paramsOrParentTaskId.parentTaskId : paramsOrParentTaskId;
+	const parentTaskId =
+		typeof paramsOrParentTaskId === "object" ? paramsOrParentTaskId.parentTaskId : paramsOrParentTaskId;
 
 	if (areAllSubtasksComplete(parentTaskId, pathArg)) {
 		markTaskComplete(parentTaskId, pathArg);
@@ -1349,12 +1392,56 @@ export function findSimilarInProgressTask(
 	}
 
 	const stopWords = new Set([
-		"the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-		"have", "has", "had", "do", "does", "did", "will", "would", "could",
-		"should", "may", "might", "must", "shall", "can", "to", "of", "in",
-		"for", "on", "with", "at", "by", "from", "as", "into", "through",
-		"and", "or", "but", "if", "then", "than", "so", "that", "this",
-		"these", "those", "it", "its",
+		"the",
+		"a",
+		"an",
+		"is",
+		"are",
+		"was",
+		"were",
+		"be",
+		"been",
+		"being",
+		"have",
+		"has",
+		"had",
+		"do",
+		"does",
+		"did",
+		"will",
+		"would",
+		"could",
+		"should",
+		"may",
+		"might",
+		"must",
+		"shall",
+		"can",
+		"to",
+		"of",
+		"in",
+		"for",
+		"on",
+		"with",
+		"at",
+		"by",
+		"from",
+		"as",
+		"into",
+		"through",
+		"and",
+		"or",
+		"but",
+		"if",
+		"then",
+		"than",
+		"so",
+		"that",
+		"this",
+		"these",
+		"those",
+		"it",
+		"its",
 	]);
 
 	const extractKeywords = (text: string): Set<string> => {
@@ -1469,4 +1556,3 @@ export async function reconcileTasks(options: { lookbackCommits?: number; dryRun
 		tasksMarked,
 	};
 }
-

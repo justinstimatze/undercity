@@ -118,9 +118,10 @@ export async function runEscalatingReview(
 
 	for (const tier of tiers) {
 		// At opus tier, optionally use annealing review (advisory mode)
+		// Annealing uses Sonnet for cost efficiency - 3 passes for ~60% cost of 1 Opus pass
 		if (tier === "opus" && useAnnealing) {
-			console.log(chalk.magenta("  [opus] Annealing review (advisory mode)"));
-			const insights = await runAnnealingReview(task, workingDirectory, log);
+			console.log(chalk.magenta("  [opus] Annealing review (3x sonnet passes)"));
+			const insights = await runAnnealingReview(task, workingDirectory, log, "sonnet", 3);
 			annealingInsights.push(...insights);
 
 			// Still do a final convergence check with standard review
@@ -328,20 +329,32 @@ function generateTicketsFromIssues(
 
 /**
  * Run annealing review - multi-angle advisory review using tarot cards
+ *
+ * Uses Sonnet by default for cost efficiency - 3 Sonnet passes cost ~60% of 1 Opus pass
+ * while providing more diverse perspectives. Multiple viewpoints often catch more issues
+ * than a single deeper review.
+ *
+ * @param task - The task being reviewed
+ * @param workingDirectory - Working directory for git operations
+ * @param log - Logging function
+ * @param annealingModel - Model to use for annealing (default: sonnet)
+ * @param maxPasses - Maximum number of annealing passes (default: 3)
  */
 async function runAnnealingReview(
 	task: string,
 	workingDirectory: string,
 	log: (message: string, data?: Record<string, unknown>) => void,
+	annealingModel: ModelTier = "sonnet",
+	maxPasses: number = 3,
 ): Promise<string[]> {
 	const annealing = new AnnealingReview({
 		passesPerTemperature: 1,
 		coolingRate: 0.4,
 	});
 
-	// Limit to 1 annealing pass - each is an expensive Opus call providing diminishing returns
-	// The standard review after this will catch remaining issues more cost-effectively
-	const schedule = annealing.generateSchedule().slice(0, 1);
+	// Use multiple passes with Sonnet (cheaper) for diverse perspectives
+	// 3 Sonnet passes cost ~60% of 1 Opus pass but provide more angles
+	const schedule = annealing.generateSchedule().slice(0, maxPasses);
 	const insights: string[] = [];
 
 	let diffOutput = "";
@@ -380,7 +393,7 @@ Provide ONE key insight (1-2 sentences). If nothing notable, say "Nothing notabl
 				prompt: annealingPrompt,
 				options: {
 					maxTurns: 1,
-					model: MODEL_NAMES.opus,
+					model: MODEL_NAMES[annealingModel],
 					permissionMode: "bypassPermissions",
 					allowDangerouslySkipPermissions: true,
 					settingSources: ["project"], // Load disallowedTools from settings

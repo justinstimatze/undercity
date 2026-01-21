@@ -19,7 +19,7 @@
  * - human_overrides: Human corrections to PM/auto decisions
  */
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import type { ConfidenceLevel, DecisionCategory } from "./decision-tracker.js";
@@ -2535,4 +2535,3 @@ export function updateTaskFieldsDB(
 	const result = db.prepare(`UPDATE tasks SET ${setClauses.join(", ")} WHERE id = ?`).run(...params);
 	return result.changes > 0;
 }
-

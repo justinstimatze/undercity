@@ -19,7 +19,7 @@
  * - Manual refresh available for consistency checks
  */
 
-import { type Task, type TaskBoard, getAllTasks } from "./task.js";
+import { getAllTasks, type Task, type TaskBoard } from "./task.js";
 
 /**
  * Pre-computed priority score for fast task selection

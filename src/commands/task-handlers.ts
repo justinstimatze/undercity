@@ -1275,7 +1275,7 @@ export function handlePrune(options: PruneOptions): void {
 /**
  * Handle the complete command - mark a task as complete
  */
-export function handleComplete(taskId: string, options: CompleteOptions): void {
+export function handleComplete(taskId: string, _options: CompleteOptions): void {
 	const task = getTaskById(taskId);
 
 	if (!task) {
