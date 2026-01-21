@@ -30,6 +30,16 @@ import { quickDecision } from "./automated-pm.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { findRelevantLearnings, formatLearningsCompact } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
+import {
+	buildAlreadyCompleteResult,
+	buildDecompositionResult,
+	buildFinalPlanResult,
+	buildParseFailureReview,
+	parsePlanReview,
+	shouldContinueReviewLoop,
+	shouldEscalatePlanner,
+	validatePlanSpecificity,
+} from "./task-planner/index.js";
 import { findRelevantFiles } from "./task-file-patterns.js";
 import { MODEL_NAMES, type ModelTier } from "./types.js";
 
@@ -522,64 +532,6 @@ RULES:
 	}
 }
 
-/**
- * Non-specific plan patterns that indicate retry is needed
- */
-const NON_SPECIFIC_STEP_PATTERNS = [
-	/^execute the task/i,
-	/^do the task/i,
-	/^complete the task/i,
-	/^implement as described/i,
-	/^follow the instructions/i,
-	/^proceed with/i,
-];
-
-/**
- * Check if a plan is too non-specific to execute
- * Returns issues if plan needs improvement
- */
-function validatePlanSpecificity(plan: ExecutionPlan): {
-	isSpecific: boolean;
-	issues: string[];
-} {
-	const issues: string[] = [];
-
-	// Check for non-specific steps
-	const hasNonSpecificSteps = plan.steps.some((step) =>
-		NON_SPECIFIC_STEP_PATTERNS.some((pattern) => pattern.test(step)),
-	);
-	if (hasNonSpecificSteps) {
-		issues.push("Plan contains non-specific steps like 'Execute the task as described'");
-	}
-
-	// Check for missing file targets (unless it's a research task)
-	const isResearchTask =
-		plan.objective.toLowerCase().includes("[research]") ||
-		plan.objective.toLowerCase().includes("research") ||
-		plan.objective.toLowerCase().includes("analyze") ||
-		plan.objective.toLowerCase().includes("review");
-
-	if (!isResearchTask && plan.filesToModify.length === 0 && plan.filesToCreate.length === 0) {
-		issues.push("No files to modify or create - plan needs specific targets");
-	}
-
-	// Check for overly short steps
-	const tooShortSteps = plan.steps.filter((s) => s.length < 15);
-	if (tooShortSteps.length > plan.steps.length / 2) {
-		issues.push("Most steps are too short to be actionable");
-	}
-
-	// Check for steps that are just file names
-	const fileOnlySteps = plan.steps.filter((s) => /^\s*[\w/.-]+\.(ts|js|tsx|jsx|json|md)\s*$/i.test(s));
-	if (fileOnlySteps.length > 0) {
-		issues.push("Steps should describe actions, not just list files");
-	}
-
-	return {
-		isSpecific: issues.length === 0,
-		issues,
-	};
-}
 
 /**
  * Detect if a task is test-related (needs special handling)
@@ -861,99 +813,44 @@ IMPORTANT: You MUST output a JSON response. Do not output an empty response.`;
 		}
 	}
 
-	// Log diagnostic info if we got an empty response
-	if (!reviewJson || reviewJson.trim() === "") {
-		logger.warn({ model, retryCount, messageCount, lastError }, "Plan review returned empty - diagnostic info");
+	// Parse the review response using extracted pure function
+	const parseResult = parsePlanReview(reviewJson);
+
+	if (parseResult.success) {
+		return parseResult.review;
 	}
 
-	// Check for empty response and retry if we haven't exceeded retries
-	if (!reviewJson || reviewJson.trim() === "") {
-		if (retryCount < MAX_RETRIES) {
-			logger.warn({ model, retryCount }, "Empty review response, retrying...");
-			// Small delay before retry
-			await new Promise((resolve) => setTimeout(resolve, 1000));
-			return reviewExecutionPlan(task, plan, model, cwd, retryCount + 1);
-		}
-		logger.warn({ model, retryCount }, "Empty review response after retries, rejecting plan");
-		return {
-			approved: false,
-			issues: ["Review returned empty response after retries - rejecting for safety"],
-			suggestions: [],
-		};
+	// Handle parse failure based on reason
+	switch (parseResult.reason) {
+		case "empty":
+			// Log diagnostic info for empty response
+			logger.warn({ model, retryCount, messageCount, lastError }, "Plan review returned empty - diagnostic info");
+
+			// Retry if we haven't exceeded retries
+			if (retryCount < MAX_RETRIES) {
+				logger.warn({ model, retryCount }, "Empty review response, retrying...");
+				await new Promise((resolve) => setTimeout(resolve, 1000));
+				return reviewExecutionPlan(task, plan, model, cwd, retryCount + 1);
+			}
+			logger.warn({ model, retryCount }, "Empty review response after retries, rejecting plan");
+			return buildParseFailureReview("Review returned empty response after retries - rejecting for safety");
+
+		case "rejection_signal":
+			logger.info("Detected rejection signal in unparseable response, treating as rejection");
+			return buildParseFailureReview("Review parsing failed - detected rejection signals in response");
+
+		default:
+			// Log full response for debugging
+			logger.warn(
+				{
+					responseLength: reviewJson.length,
+					responsePreview: reviewJson.substring(0, 500),
+					responseEnd: reviewJson.length > 500 ? reviewJson.substring(reviewJson.length - 200) : undefined,
+				},
+				"Review parsing failed after all attempts",
+			);
+			return buildParseFailureReview("Review parsing failed - rejecting for safety");
 	}
-
-	// Try multiple parsing strategies
-	const parseAttempts: Array<() => PlanReview | null> = [
-		// 1. Extract JSON from markdown code block
-		() => {
-			const jsonMatch = reviewJson.match(/```json\s*([\s\S]*?)\s*```/);
-			if (jsonMatch) {
-				return JSON.parse(jsonMatch[1]) as PlanReview;
-			}
-			return null;
-		},
-		// 2. Extract JSON from generic code block
-		() => {
-			const codeMatch = reviewJson.match(/```\s*([\s\S]*?)\s*```/);
-			if (codeMatch?.[1].trim().startsWith("{")) {
-				return JSON.parse(codeMatch[1]) as PlanReview;
-			}
-			return null;
-		},
-		// 3. Find JSON object anywhere in response
-		() => {
-			const jsonObjMatch = reviewJson.match(/\{[\s\S]*"approved"[\s\S]*\}/);
-			if (jsonObjMatch) {
-				return JSON.parse(jsonObjMatch[0]) as PlanReview;
-			}
-			return null;
-		},
-		// 4. Parse entire response as JSON
-		() => JSON.parse(reviewJson) as PlanReview,
-	];
-
-	for (const attempt of parseAttempts) {
-		try {
-			const result = attempt();
-			if (result && typeof result.approved === "boolean") {
-				return result;
-			}
-		} catch {
-			// Continue to next attempt
-		}
-	}
-
-	// All parsing failed - log full response for debugging
-	logger.warn(
-		{
-			responseLength: reviewJson.length,
-			responsePreview: reviewJson.substring(0, 500),
-			responseEnd: reviewJson.length > 500 ? reviewJson.substring(reviewJson.length - 200) : undefined,
-		},
-		"Review parsing failed after all attempts",
-	);
-
-	// Try to extract rejection signals from text as last resort
-	const lowerResponse = reviewJson.toLowerCase();
-	if (
-		lowerResponse.includes("reject") ||
-		lowerResponse.includes("not approved") ||
-		lowerResponse.includes("cannot approve")
-	) {
-		logger.info("Detected rejection signal in unparseable response, treating as rejection");
-		return {
-			approved: false,
-			issues: ["Review parsing failed - detected rejection signals in response"],
-			suggestions: [],
-		};
-	}
-
-	// Default to rejection for safety
-	return {
-		approved: false,
-		issues: ["Review parsing failed - rejecting for safety"],
-		suggestions: [],
-	};
 }
 
 /**
@@ -1052,7 +949,7 @@ export async function planTaskWithReview(
 	const specificity = validatePlanSpecificity(currentPlan);
 	const planWithMeta = currentPlan as ExecutionPlan & { _parsingFailed?: boolean };
 
-	if (!specificity.isSpecific || planWithMeta._parsingFailed) {
+	if (shouldEscalatePlanner(specificity, !!planWithMeta._parsingFailed)) {
 		logger.warn(
 			{
 				issues: specificity.issues,
@@ -1088,20 +985,7 @@ export async function planTaskWithReview(
 
 	// Early exit: already complete
 	if (currentPlan.alreadyComplete?.likely) {
-		return {
-			success: true,
-			plan: currentPlan,
-			review: {
-				approved: true,
-				issues: [],
-				suggestions: [],
-				skipExecution: { skip: true, reason: currentPlan.alreadyComplete.reason },
-			},
-			plannerModel: actualPlannerModel,
-			reviewerModel: actualReviewerModel,
-			proceedWithExecution: false,
-			skipReason: `Task already complete: ${currentPlan.alreadyComplete.reason}`,
-		};
+		return buildAlreadyCompleteResult(currentPlan, actualPlannerModel, actualReviewerModel);
 	}
 
 	// Early exit: needs decomposition
@@ -1126,22 +1010,7 @@ export async function planTaskWithReview(
 			}
 		}
 
-		return {
-			success: true,
-			plan: {
-				...currentPlan,
-				needsDecomposition: { ...currentPlan.needsDecomposition, suggestedSubtasks: subtasks },
-			},
-			review: {
-				approved: false,
-				issues: ["Task requires decomposition"],
-				suggestions: subtasks,
-			},
-			plannerModel: actualPlannerModel,
-			reviewerModel: actualReviewerModel,
-			proceedWithExecution: false,
-			skipReason: "Task needs decomposition into smaller subtasks",
-		};
+		return buildDecompositionResult(currentPlan, subtasks, actualPlannerModel, actualReviewerModel);
 	}
 
 	// Phase 2: Review loop - iterate until approved or max iterations
@@ -1163,23 +1032,14 @@ export async function planTaskWithReview(
 		// Get review from higher-tier model
 		review = await reviewExecutionPlan(task, currentPlan, actualReviewerModel, cwd);
 
-		// If approved or should skip, we're done
-		if (review.approved || review.skipExecution?.skip) {
-			break;
-		}
-
-		// Not approved - check if we have feedback to act on
-		const hasFeedback = review.issues.length > 0 || review.suggestions.length > 0;
-
-		if (!hasFeedback) {
-			// Rejected without feedback - can't improve, exit loop
-			logger.warn({ iteration }, "Plan rejected without actionable feedback");
-			break;
-		}
-
-		// Check if this is the last iteration
-		if (iteration >= MAX_PLAN_ITERATIONS) {
-			logger.info({ iteration }, "Max plan iterations reached, using current plan");
+		// Check if we should continue the loop
+		const loopCheck = shouldContinueReviewLoop(review, iteration, MAX_PLAN_ITERATIONS);
+		if (!loopCheck.continue) {
+			if (loopCheck.reason === "no_feedback") {
+				logger.warn({ iteration }, "Plan rejected without actionable feedback");
+			} else if (loopCheck.reason === "max_iterations") {
+				logger.info({ iteration }, "Max plan iterations reached, using current plan");
+			}
 			break;
 		}
 
@@ -1214,52 +1074,25 @@ export async function planTaskWithReview(
 				}
 			}
 
-			return {
-				success: true,
-				plan: {
-					...currentPlan,
-					needsDecomposition: { ...currentPlan.needsDecomposition, suggestedSubtasks: subtasks },
-				},
-				review: {
-					approved: false,
-					issues: ["Task requires decomposition after revision"],
-					suggestions: subtasks,
-				},
-				plannerModel: actualPlannerModel,
-				reviewerModel: actualReviewerModel,
-				proceedWithExecution: false,
-				skipReason: "Task needs decomposition into smaller subtasks",
-			};
+			return buildDecompositionResult(currentPlan, subtasks, actualPlannerModel, actualReviewerModel, reason);
 		}
 	}
 
-	// Apply any direct revisions from reviewer
-	const finalPlan: ExecutionPlan = review!.revisedPlan ? { ...currentPlan, ...review!.revisedPlan } : currentPlan;
-
-	const shouldSkip = review!.skipExecution?.skip || false;
-	const proceedWithExecution = review!.approved && !shouldSkip;
+	// Build final result using helper
+	const result = buildFinalPlanResult(currentPlan, review!, actualPlannerModel, actualReviewerModel, iteration);
 
 	logger.info(
 		{
 			task: task.substring(0, 50),
 			approved: review!.approved,
-			proceedWithExecution,
+			proceedWithExecution: result.proceedWithExecution,
 			iterations: iteration,
-			skipReason: review!.skipExecution?.reason,
+			skipReason: result.skipReason,
 		},
 		"Tiered planning complete",
 	);
 
-	return {
-		success: true,
-		plan: finalPlan,
-		review: review!,
-		plannerModel: actualPlannerModel,
-		reviewerModel: actualReviewerModel,
-		proceedWithExecution,
-		skipReason: shouldSkip ? review!.skipExecution?.reason : undefined,
-		iterations: iteration,
-	};
+	return result;
 }
 
 /**

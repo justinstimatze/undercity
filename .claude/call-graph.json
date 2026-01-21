@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-21T07:07:17.482Z",
+  "generatedAt": "2026-01-21T07:26:58.035Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -43,7 +43,7 @@
         },
         {
           "file": "task-planner.ts",
-          "line": 374,
+          "line": 384,
           "context": "gatherPlanningContext"
         }
       ]
@@ -116,7 +116,7 @@
         },
         {
           "file": "task-planner.ts",
-          "line": 370,
+          "line": 380,
           "context": "gatherPlanningContext"
         },
         {
@@ -346,7 +346,7 @@
       "calledFrom": [
         {
           "file": "task-planner.ts",
-          "line": 982,
+          "line": 878,
           "context": "join"
         }
       ]
