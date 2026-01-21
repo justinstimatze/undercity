@@ -18,6 +18,11 @@ undercity grind -n 5               # Process up to 5 tasks total
 undercity grind --parallel 3 -n 10 # 3 parallel agents, 10 tasks max
 undercity drain                    # Graceful stop: finish current, start no more
 
+# Plan Handoff (single command)
+undercity dispatch plan.md         # Import plan + start grind (3 parallel)
+undercity dispatch plan.md --parallel 5  # Custom parallelism
+undercity dispatch plan.md --dry-run     # Preview without executing
+
 # Monitoring
 undercity watch                    # Live TUI dashboard
 undercity pulse                    # Quick JSON status
@@ -61,6 +66,28 @@ Tasks live in `.undercity/tasks.json`. Each task has:
 - `refactor`: Restructure without changing behavior
 - `critical`: High priority, run first
 - `deletion`: Remove code/files (be explicit: "Delete `src/old/` directory using git rm")
+
+## Plan Handoff
+
+When you have a Claude Code plan with multiple independent steps, use `dispatch` for seamless handoff to undercity:
+
+```bash
+# Single command replaces: import-plan + grind
+undercity dispatch ~/.claude/plans/my-plan.md --parallel 3
+
+# Preview what would be dispatched
+undercity dispatch my-plan.md --dry-run
+
+# Limit to first N tasks
+undercity dispatch my-plan.md -n 5 --parallel 3
+```
+
+**Workflow:**
+1. Create/approve plan in Claude Code (generates `~/.claude/plans/my-plan.md`)
+2. Dispatch to undercity: `undercity dispatch ~/.claude/plans/my-plan.md`
+3. Monitor progress: `undercity watch`
+
+This replaces manual multi-tab parallel work with automated orchestration.
 
 ## How Grind Works
 

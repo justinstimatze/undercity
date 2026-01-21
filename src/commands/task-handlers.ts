@@ -59,6 +59,12 @@ export interface ImportPlanOptions {
 	byPriority?: boolean;
 }
 
+export interface DispatchOptions {
+	parallel?: string;
+	count?: string;
+	dryRun?: boolean;
+}
+
 export interface PlanOptions {
 	stream?: boolean;
 	continuous?: boolean;
@@ -406,6 +412,82 @@ export function handleImportPlan(file: string, options: ImportPlanOptions): void
 		}
 	} catch (error) {
 		console.error(chalk.red(`Error parsing plan: ${error instanceof Error ? error.message : error}`));
+		process.exit(1);
+	}
+}
+
+/**
+ * Handle the dispatch command - import plan and immediately start grind
+ *
+ * Single-command handoff from Claude Code plan to undercity execution.
+ * Combines import-plan + grind for seamless workflow.
+ */
+export async function handleDispatch(file: string, options: DispatchOptions): Promise<void> {
+	const { handleGrind } = await import("./mixed-handlers.js");
+
+	// Step 1: Import the plan
+	console.log(chalk.cyan("Step 1: Importing plan..."));
+	console.log();
+
+	try {
+		const content = readFileSync(file, "utf-8");
+		const plan = parsePlanFile(content, file);
+		const progress = getPlanProgress(plan);
+
+		console.log(chalk.dim(`  File: ${file}`));
+		if (plan.title) {
+			console.log(chalk.dim(`  Title: ${plan.title}`));
+		}
+		console.log(chalk.dim(`  Sections: ${plan.sections.length}`));
+		console.log(
+			chalk.dim(`  Tasks: ${progress.total} (${progress.pending} pending, ${progress.completed} marked complete)`),
+		);
+		console.log();
+
+		// Get steps to import
+		const tasks = planToTasks(plan);
+
+		if (tasks.length === 0) {
+			console.log(chalk.yellow("No pending steps found in plan"));
+			return;
+		}
+
+		if (options.dryRun) {
+			console.log(chalk.cyan(`Would import ${tasks.length} steps:`));
+			for (let i = 0; i < Math.min(tasks.length, 10); i++) {
+				const task = tasks[i];
+				const sectionTag = task.section ? chalk.dim(` [${task.section}]`) : "";
+				console.log(
+					`  ${i + 1}. ${task.objective.substring(0, 60)}${task.objective.length > 60 ? "..." : ""}${sectionTag}`,
+				);
+			}
+			if (tasks.length > 10) {
+				console.log(chalk.dim(`  ... and ${tasks.length - 10} more`));
+			}
+			console.log();
+			console.log(chalk.dim("(Dry run - no tasks imported, grind not started)"));
+			return;
+		}
+
+		// Import as tasks
+		const objectives = tasks.map((q) => q.objective);
+		const imported = addTasks(objectives);
+		console.log(chalk.green(`✓ Imported ${imported.length} steps as tasks`));
+		if (imported.length < tasks.length) {
+			console.log(chalk.yellow(`  (${tasks.length - imported.length} duplicates skipped)`));
+		}
+		console.log();
+
+		// Step 2: Start grind with imported tasks
+		console.log(chalk.cyan("Step 2: Starting grind..."));
+		console.log();
+
+		await handleGrind({
+			parallel: options.parallel ?? "3",
+			count: options.count ?? "0", // 0 = process all
+		});
+	} catch (error) {
+		console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
 		process.exit(1);
 	}
 }

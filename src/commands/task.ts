@@ -10,6 +10,7 @@
  * | remove       | Permanently delete a task                    |
  * | load         | Bulk load goals from file                    |
  * | import-plan  | Parse plan file into discrete tasks          |
+ * | dispatch     | Import plan + grind (one-command handoff)    |
  * | plan         | Execute plan file with judgment              |
  * | plans        | Manage plan-task linkage (frontmatter)       |
  * | work         | Process backlog continuously                 |
@@ -25,8 +26,10 @@ import { handlePlan as handlePlanLinkage, type PlanOptions as PlanLinkageOptions
 import {
 	type AddOptions,
 	type CompleteOptions,
+	type DispatchOptions,
 	handleAdd,
 	handleComplete,
+	handleDispatch,
 	handleImportPlan,
 	handleLoad,
 	handlePlan,
@@ -88,6 +91,15 @@ export const taskCommands: CommandModule = {
 			.option("--dry-run", "Show what would be imported without adding to task board")
 			.option("--by-priority", "Sort steps by section priority (default: by file order)")
 			.action((file: string, options: ImportPlanOptions) => handleImportPlan(file, options));
+
+		// Dispatch command - import plan and immediately start grind (single-command handoff)
+		program
+			.command("dispatch <file>")
+			.description("Import a plan and immediately start grind (one-command handoff)")
+			.option("--parallel <n>", "Number of parallel workers", "3")
+			.option("-n, --count <n>", "Max tasks to process (0 = all)", "0")
+			.option("--dry-run", "Show what would be dispatched without executing")
+			.action((file: string, options: DispatchOptions) => handleDispatch(file, options));
 
 		// Plan command - execute a plan file intelligently
 		program
