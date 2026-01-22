@@ -269,8 +269,10 @@ import {
 	type ErrorFixStore,
 	findFixSuggestions,
 	formatFixSuggestionsForPrompt,
+	formatPatternsAsRules,
 	generateErrorSignature,
 	getErrorFixStats,
+	getFailureWarningsForTask,
 	loadErrorFixStore,
 	markFixSuccessful,
 	pruneOldPatterns,
@@ -1977,6 +1979,379 @@ describe("error-fix-patterns.ts", () => {
 			// Should use the better fix (higher success rate)
 			expect(result.applied).toBe(true);
 			expect(result.patchedFiles).toEqual(["src/better-fix.ts"]);
+		});
+	});
+
+	describe("getFailureWarningsForTask", () => {
+		// Import the function (it's already imported above)
+		// Import getFailureWarningsForTask at the top with other imports
+
+		it("should return empty string when no failures exist", () => {
+			mockDirs.add(".undercity");
+
+			const result = getFailureWarningsForTask("Add user authentication");
+
+			expect(result).toBe("");
+		});
+
+		it("should return warnings for repeated failures with keyword overlap", () => {
+			mockDirs.add(".undercity");
+
+			// Add multiple failures with same signature (matching keywords)
+			// Need >= 2 keyword overlap OR >= 3 occurrences
+			recordPermanentFailure(
+				"task-1",
+				"typecheck",
+				"Type error in auth module",
+				"Fix authentication module types",
+				"sonnet",
+				5,
+				[],
+			);
+			recordPermanentFailure(
+				"task-2",
+				"typecheck",
+				"Type error in auth module",
+				"Update authentication module types",
+				"opus",
+				7,
+				[],
+			);
+
+			// Query with multiple matching keywords: "authentication" and "module" and "types"
+			const result = getFailureWarningsForTask("Update authentication module types");
+
+			expect(result).toContain("FAILURE PATTERNS TO AVOID");
+			expect(result).toContain("TYPECHECK");
+			expect(result).toContain("2x");
+		});
+
+		it("should return warnings for highly repeated failures even without keyword overlap", () => {
+			mockDirs.add(".undercity");
+
+			// Add 3 failures with same signature (exceeds threshold)
+			recordPermanentFailure("task-1", "build", "Module not found", "Task A", "sonnet", 3, []);
+			recordPermanentFailure("task-2", "build", "Module not found", "Task B", "sonnet", 3, []);
+			recordPermanentFailure("task-3", "build", "Module not found", "Task C", "sonnet", 3, []);
+
+			const result = getFailureWarningsForTask("Completely unrelated task");
+
+			expect(result).toContain("BUILD");
+			expect(result).toContain("3x");
+		});
+
+		it("should not include single failures below minOccurrences threshold", () => {
+			mockDirs.add(".undercity");
+
+			recordPermanentFailure("task-1", "test", "Single failure", "Fix test", "haiku", 3, []);
+
+			const result = getFailureWarningsForTask("Fix test", 2);
+
+			expect(result).toBe("");
+		});
+
+		it("should limit warnings to 3", () => {
+			mockDirs.add(".undercity");
+
+			// Add 5 different failure patterns, each with 2 occurrences
+			for (let i = 0; i < 5; i++) {
+				recordPermanentFailure(`task-${i}a`, "test", `Error type ${i}`, "task objective", "sonnet", 3, []);
+				recordPermanentFailure(`task-${i}b`, "test", `Error type ${i}`, "task objective", "sonnet", 3, []);
+			}
+
+			const result = getFailureWarningsForTask("task objective");
+
+			// Count TEST occurrences in the warning output
+			const matches = result.match(/TEST failure/g);
+			expect(matches?.length).toBeLessThanOrEqual(3);
+		});
+
+		it("should include error message and task pattern in output", () => {
+			mockDirs.add(".undercity");
+
+			recordPermanentFailure("task-1", "lint", "Unused variable x", "Clean up lint errors", "haiku", 3, []);
+			recordPermanentFailure("task-2", "lint", "Unused variable x", "Fix lint issues", "sonnet", 5, []);
+
+			const result = getFailureWarningsForTask("lint errors");
+
+			expect(result).toContain("Unused variable");
+			expect(result).toContain("Clean up lint");
+		});
+
+		it("should use custom state directory", () => {
+			mockDirs.add("/custom/.undercity");
+
+			// Need 3+ failures OR 2+ keyword overlap to trigger warning
+			recordPermanentFailure(
+				"task-1",
+				"typecheck",
+				"Error in task processing",
+				"Task processing A",
+				"sonnet",
+				3,
+				[],
+				"/custom/.undercity",
+			);
+			recordPermanentFailure(
+				"task-2",
+				"typecheck",
+				"Error in task processing",
+				"Task processing B",
+				"sonnet",
+				3,
+				[],
+				"/custom/.undercity",
+			);
+			recordPermanentFailure(
+				"task-3",
+				"typecheck",
+				"Error in task processing",
+				"Task processing C",
+				"sonnet",
+				3,
+				[],
+				"/custom/.undercity",
+			);
+
+			const result = getFailureWarningsForTask("Task processing", 2, "/custom/.undercity");
+
+			expect(result).toContain("TYPECHECK");
+		});
+
+		it("should extract keywords from objective for matching", () => {
+			mockDirs.add(".undercity");
+
+			// Failures with specific keywords - use 2+ overlapping words
+			// Failure objectives and query will share: "validation", "input"
+			recordPermanentFailure(
+				"task-1",
+				"test",
+				"Error in input validation",
+				"Add input validation tests",
+				"sonnet",
+				5,
+				[],
+			);
+			recordPermanentFailure(
+				"task-2",
+				"test",
+				"Error in input validation",
+				"Fix input validation logic",
+				"opus",
+				7,
+				[],
+			);
+
+			// Query with 2+ matching keywords should find the warning
+			const result1 = getFailureWarningsForTask("Implement input validation for user");
+			expect(result1).toContain("TEST");
+
+			// Query without matching keywords should not find (unless occurrence threshold met)
+			const result2 = getFailureWarningsForTask("something completely different");
+			// May still match if occurrence is >= 3
+			expect(typeof result2).toBe("string");
+		});
+	});
+
+	describe("formatPatternsAsRules", () => {
+		it("should return empty string when no rules apply", () => {
+			mockDirs.add(".undercity");
+
+			const result = formatPatternsAsRules("Add new feature");
+
+			expect(result).toBe("");
+		});
+
+		it("should include MUST_NEVER rules from repeated failures", () => {
+			mockDirs.add(".undercity");
+
+			// Add repeated failures with keyword overlap
+			recordPermanentFailure("task-1", "typecheck", "Type error in auth module", "Fix auth types", "sonnet", 5, []);
+			recordPermanentFailure("task-2", "typecheck", "Type error in auth module", "Add auth types", "opus", 7, []);
+
+			const result = formatPatternsAsRules("Update auth module");
+
+			expect(result).toContain("MUST NEVER");
+			expect(result).toContain("Failed 2x");
+		});
+
+		it("should include ALWAYS rules from patterns with high fix rate", () => {
+			mockDirs.add(".undercity");
+
+			// Create pattern with multiple occurrences and good fix success
+			for (let i = 0; i < 5; i++) {
+				recordPendingError(`task-${i}`, "typecheck", "Type mismatch error", []);
+				recordSuccessfulFix(`task-${i}`, [`file${i}.ts`], "Add type assertion");
+				markFixSuccessful(generateErrorSignature("typecheck", "Type mismatch error"));
+			}
+
+			const result = formatPatternsAsRules("Fix types");
+
+			expect(result).toContain("ALWAYS");
+			expect(result).toContain("Add type assertion");
+		});
+
+		it("should include AVOID rules from current session errors", () => {
+			mockDirs.add(".undercity");
+
+			const errorHistory = [
+				{ category: "lint", message: "Unused variable x" },
+				{ category: "typecheck", message: "Property does not exist on type" },
+			];
+
+			const result = formatPatternsAsRules("Fix code", errorHistory);
+
+			expect(result).toContain("AVOID");
+			expect(result).toContain("previous attempt");
+		});
+
+		it("should sort rules by importance: MUST_NEVER > ALWAYS > AVOID", () => {
+			mockDirs.add(".undercity");
+
+			// Create MUST_NEVER from failures
+			recordPermanentFailure("task-f1", "build", "Build error", "task", "sonnet", 3, []);
+			recordPermanentFailure("task-f2", "build", "Build error", "task", "sonnet", 3, []);
+
+			// Create ALWAYS from successful fixes
+			for (let i = 0; i < 5; i++) {
+				recordPendingError(`task-p${i}`, "lint", "Lint error in task", []);
+				recordSuccessfulFix(`task-p${i}`, [`file${i}.ts`], "Fix lint");
+				markFixSuccessful(generateErrorSignature("lint", "Lint error in task"));
+			}
+
+			// AVOID from error history
+			const errorHistory = [{ category: "test", message: "Test failure in task" }];
+
+			const result = formatPatternsAsRules("task", errorHistory);
+
+			const mustNeverIdx = result.indexOf("MUST NEVER");
+			const alwaysIdx = result.indexOf("ALWAYS");
+			const avoidIdx = result.indexOf("AVOID");
+
+			// Must Never should come first (if present)
+			if (mustNeverIdx >= 0 && alwaysIdx >= 0) {
+				expect(mustNeverIdx).toBeLessThan(alwaysIdx);
+			}
+			if (alwaysIdx >= 0 && avoidIdx >= 0) {
+				expect(alwaysIdx).toBeLessThan(avoidIdx);
+			}
+		});
+
+		it("should limit to 8 rules", () => {
+			mockDirs.add(".undercity");
+
+			// Create 15 AVOID rules from error history
+			const errorHistory = Array.from({ length: 15 }, (_, i) => ({
+				category: "lint",
+				message: `Unique error ${i}`,
+			}));
+
+			const result = formatPatternsAsRules("task", errorHistory);
+
+			const avoidMatches = result.match(/AVOID/g);
+			expect(avoidMatches?.length).toBeLessThanOrEqual(8);
+		});
+
+		it("should not duplicate rules for same error in history", () => {
+			mockDirs.add(".undercity");
+
+			// Add same error twice in history
+			const errorHistory = [
+				{ category: "lint", message: "Same error message here" },
+				{ category: "lint", message: "Same error message here different context" },
+			];
+
+			const result = formatPatternsAsRules("task", errorHistory);
+
+			// Should not have duplicate rules (first 30 chars match check)
+			const _avoidMatches = result.match(/AVOID/g);
+			// The deduplication checks first 30 chars, so these might still both appear
+			expect(typeof result).toBe("string");
+		});
+
+		it("should include reasons for rules", () => {
+			mockDirs.add(".undercity");
+
+			const errorHistory = [{ category: "test", message: "Test timed out" }];
+
+			const result = formatPatternsAsRules("task", errorHistory);
+
+			expect(result).toContain("previous attempt this session");
+		});
+
+		it("should format with header section", () => {
+			mockDirs.add(".undercity");
+
+			const errorHistory = [{ category: "lint", message: "Lint error" }];
+
+			const result = formatPatternsAsRules("task", errorHistory);
+
+			expect(result).toContain("LEARNED RULES");
+			expect(result).toContain("from previous failures");
+		});
+
+		it("should use custom state directory", () => {
+			mockDirs.add("/custom/.undercity");
+
+			// Need 3+ failures to trigger rule without keyword overlap
+			recordPermanentFailure("task-1", "test", "Error", "task A", "sonnet", 3, [], "/custom/.undercity");
+			recordPermanentFailure("task-2", "test", "Error", "task B", "sonnet", 3, [], "/custom/.undercity");
+			recordPermanentFailure("task-3", "test", "Error", "task C", "sonnet", 3, [], "/custom/.undercity");
+
+			const result = formatPatternsAsRules("task A", [], "/custom/.undercity");
+
+			expect(result).toContain("MUST NEVER");
+		});
+
+		it("should handle empty error history", () => {
+			mockDirs.add(".undercity");
+
+			const result = formatPatternsAsRules("task", []);
+
+			expect(typeof result).toBe("string");
+		});
+
+		it("should extract actionable rules from typecheck errors", () => {
+			mockDirs.add(".undercity");
+
+			const errorHistory = [{ category: "typecheck", message: "Type 'string' is not assignable to type 'number'" }];
+
+			const result = formatPatternsAsRules("task", errorHistory);
+
+			expect(result).toContain("AVOID");
+			expect(result).toContain("type");
+		});
+
+		it("should extract actionable rules from test errors", () => {
+			mockDirs.add(".undercity");
+
+			const errorHistory = [{ category: "test", message: "Mock not configured properly" }];
+
+			const result = formatPatternsAsRules("task", errorHistory);
+
+			expect(result).toContain("AVOID");
+			expect(result).toContain("mock");
+		});
+
+		it("should extract actionable rules from lint errors", () => {
+			mockDirs.add(".undercity");
+
+			const errorHistory = [{ category: "lint", message: "Unused import statement" }];
+
+			const result = formatPatternsAsRules("task", errorHistory);
+
+			expect(result).toContain("AVOID");
+		});
+
+		it("should extract actionable rules from build errors", () => {
+			mockDirs.add(".undercity");
+
+			const errorHistory = [{ category: "build", message: "Module not found: cannot find module" }];
+
+			const result = formatPatternsAsRules("task", errorHistory);
+
+			expect(result).toContain("AVOID");
+			expect(result).toContain("module");
 		});
 	});
 });

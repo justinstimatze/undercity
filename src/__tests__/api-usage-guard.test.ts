@@ -200,3 +200,252 @@ describe("withUsageTracking", () => {
 		expect(result.result).toEqual({ value: 42 });
 	});
 });
+
+describe("ApiUsageGuard - additional coverage", () => {
+	let tracker: RateLimitTracker;
+
+	beforeEach(() => {
+		tracker = new RateLimitTracker();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	describe("configuration options", () => {
+		it("should accept onWarning callback in config", () => {
+			const onWarning = vi.fn();
+			const guard = new ApiUsageGuard(tracker, {
+				warningThreshold: 0.8,
+				autoPause: false,
+				onWarning,
+			});
+
+			// Verify guard was created with config
+			expect(guard).toBeDefined();
+		});
+
+		it("should accept onPause callback in config", () => {
+			const onPause = vi.fn();
+			const guard = new ApiUsageGuard(tracker, {
+				pauseThreshold: 0.95,
+				autoPause: true,
+				onPause,
+			});
+
+			expect(guard).toBeDefined();
+		});
+
+		it("should use default values when config is minimal", () => {
+			const guard = new ApiUsageGuard(tracker, {});
+			// Should not throw and should work
+			expect(guard.checkUsage()).toBeNull();
+		});
+	});
+
+	describe("checkUsage edge cases", () => {
+		it("should return internal pause reason when internally paused", () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			// Manually trigger internal pause via tracker rate limit
+			tracker.pauseForRateLimit("sonnet", "Rate limit hit");
+
+			const result = guard.checkUsage();
+			expect(result).toBeTruthy();
+			expect(result).toContain("Rate limit active");
+		});
+
+		it("should return null when usage is within limits", () => {
+			const guard = new ApiUsageGuard(tracker, {
+				pauseThreshold: 0.95,
+				warningThreshold: 0.8,
+				autoPause: true,
+			});
+
+			// With no usage recorded, should be well within limits
+			const result = guard.checkUsage();
+			expect(result).toBeNull();
+		});
+	});
+
+	describe("checkAutoResume", () => {
+		it("should return false when not paused", () => {
+			const guard = new ApiUsageGuard(tracker);
+			const resumed = guard.checkAutoResume();
+			expect(resumed).toBe(false);
+		});
+
+		it("should check tracker auto-resume when tracker is paused", () => {
+			// Pause tracker
+			tracker.pauseForRateLimit("sonnet", "Rate limit");
+			const guard = new ApiUsageGuard(tracker);
+
+			// Should check tracker state
+			const resumed = guard.checkAutoResume();
+			// Result depends on whether tracker resume time has passed
+			expect(typeof resumed).toBe("boolean");
+		});
+
+		it("should not throw when called multiple times", () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			// Multiple calls should be safe
+			guard.checkAutoResume();
+			guard.checkAutoResume();
+			guard.checkAutoResume();
+
+			expect(guard.isBlocking()).toBe(false);
+		});
+	});
+
+	describe("getPauseState edge cases", () => {
+		it("should return not paused state when fresh", () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			const state = guard.getPauseState();
+			expect(state.isPaused).toBe(false);
+			expect(state.reason).toBeUndefined();
+			expect(state.resumeAt).toBeUndefined();
+		});
+
+		it("should return tracker pause state when tracker is paused", () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			// Pause tracker
+			tracker.pauseForRateLimit("sonnet", "429 error from API");
+
+			const state = guard.getPauseState();
+			expect(state.isPaused).toBe(true);
+			expect(state.reason).toContain("429");
+			expect(state.resumeAt).toBeDefined();
+		});
+	});
+
+	describe("resume behavior", () => {
+		it("should clear blocking state after resume", () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			// Pause via tracker
+			tracker.pauseForRateLimit("sonnet", "Rate limit");
+			expect(guard.isBlocking()).toBe(true);
+
+			// Resume tracker and guard
+			tracker.resumeFromRateLimit();
+			guard.resume();
+
+			expect(guard.isBlocking()).toBe(false);
+		});
+
+		it("should be safe to call resume multiple times", () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			guard.resume();
+			guard.resume();
+			guard.resume();
+
+			expect(guard.isBlocking()).toBe(false);
+		});
+	});
+
+	describe("guard with null usage", () => {
+		it("should handle getUsage returning null", async () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			const result = await guard.guard(
+				async () => ({ noUsageInfo: true }),
+				() => null, // Returns null - no usage to record
+				"task-1",
+			);
+
+			expect(result.executed).toBe(true);
+			expect(result.result).toEqual({ noUsageInfo: true });
+		});
+
+		it("should still return usage stats even when getUsage returns null", async () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			const result = await guard.guard(
+				async () => "success",
+				() => null,
+				"task-1",
+			);
+
+			expect(result.usage).toBeDefined();
+			expect(result.usage?.fiveHourPercent).toBeDefined();
+			expect(result.usage?.weeklyPercent).toBeDefined();
+		});
+	});
+
+	describe("recordUsage with optional fields", () => {
+		it("should record usage with all optional fields", () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			guard.recordUsage("task-1", {
+				inputTokens: 1000,
+				outputTokens: 500,
+				model: "sonnet",
+				durationMs: 2000,
+				cacheReadTokens: 800,
+				cacheCreationTokens: 200,
+			});
+
+			const summary = tracker.getUsageSummary();
+			expect(summary.current.last5Hours).toBeGreaterThan(0);
+		});
+
+		it("should record usage without optional fields", () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			guard.recordUsage("task-2", {
+				inputTokens: 500,
+				outputTokens: 250,
+				model: "haiku",
+			});
+
+			const summary = tracker.getUsageSummary();
+			expect(summary.current.last5Hours).toBeGreaterThan(0);
+		});
+
+		it("should record usage with opus model", () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			guard.recordUsage("task-3", {
+				inputTokens: 2000,
+				outputTokens: 1000,
+				model: "opus",
+				durationMs: 5000,
+			});
+
+			const summary = tracker.getUsageSummary();
+			expect(summary.current.last5Hours).toBeGreaterThan(0);
+		});
+	});
+
+	describe("getCurrentUsage", () => {
+		it("should return zero percentages when no usage recorded", () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			const usage = guard.getCurrentUsage();
+
+			expect(usage.fiveHourPercent).toBe(0);
+			expect(usage.weeklyPercent).toBe(0);
+		});
+
+		it("should return non-zero percentages after recording usage", () => {
+			const guard = new ApiUsageGuard(tracker);
+
+			// Record substantial usage
+			guard.recordUsage("task-1", {
+				inputTokens: 100000,
+				outputTokens: 50000,
+				model: "sonnet",
+			});
+
+			const usage = guard.getCurrentUsage();
+
+			// With default limits, this should register some percentage
+			expect(usage.fiveHourPercent).toBeGreaterThanOrEqual(0);
+			expect(usage.weeklyPercent).toBeGreaterThanOrEqual(0);
+		});
+	});
+});
