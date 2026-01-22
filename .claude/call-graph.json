@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-21T22:35:42.915Z",
+  "generatedAt": "2026-01-22T00:41:36.715Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -18,12 +18,12 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 92,
+          "line": 96,
           "context": "map"
         },
         {
           "file": "automated-pm.ts",
-          "line": 483,
+          "line": 526,
           "context": "info"
         },
         {
@@ -116,7 +116,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 105,
+          "line": 109,
           "context": "if"
         },
         {
@@ -319,7 +319,7 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 228,
+          "line": 232,
           "context": "if"
         },
         {
@@ -372,12 +372,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 222,
+          "line": 226,
           "context": "for"
         },
         {
           "file": "automated-pm.ts",
-          "line": 271,
+          "line": 275,
           "context": "now"
         }
       ]
@@ -388,7 +388,7 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 626,
+          "line": 677,
           "context": "info"
         },
         {
@@ -409,8 +409,8 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 631,
-          "context": "pmPropose"
+          "line": 683,
+          "context": "info"
         },
         {
           "file": "commands/mixed-handlers.ts",

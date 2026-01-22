@@ -336,10 +336,20 @@ export class UndercityServer {
 		}
 
 		const priority = typeof body.priority === "number" ? body.priority : undefined;
-		const task = addTask(body.objective, priority);
-		serverLogger.info({ taskId: task.id, objective: task.objective }, "Task added via API");
 
-		this.sendJson(res, 201, { success: true, task: { id: task.id, objective: task.objective } });
+		try {
+			const task = addTask(body.objective, priority);
+			serverLogger.info({ taskId: task.id, objective: task.objective }, "Task added via API");
+			this.sendJson(res, 201, { success: true, task: { id: task.id, objective: task.objective } });
+		} catch (error) {
+			// Security validation failure
+			const message = error instanceof Error ? error.message : String(error);
+			serverLogger.warn(
+				{ objective: body.objective.substring(0, 100), error: message },
+				"Task rejected by security validation",
+			);
+			this.sendJson(res, 400, { error: message });
+		}
 	}
 
 	private async handleMetrics(res: ServerResponse): Promise<void> {

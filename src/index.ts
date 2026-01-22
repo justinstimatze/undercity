@@ -28,6 +28,14 @@ export {
 	type PatternStats,
 	updateLedger,
 } from "./capability-ledger.js";
+// Content sanitizer (prompt injection protection)
+export {
+	detectInjectionPatterns,
+	isContentSafe,
+	type SanitizationResult,
+	sanitizeContent,
+	wrapUntrustedContent,
+} from "./content-sanitizer.js";
 // Vector Embeddings
 export {
 	calculateVector,
@@ -177,6 +185,16 @@ export {
 	taskStart,
 	warning,
 } from "./output.js";
+// Package validator (typosquatting protection)
+export {
+	arePackagesSafe,
+	extractPackageInstalls,
+	getPackageWarnings,
+	getTrustedPackages,
+	type PackageValidationResult,
+	validatePackageLocal,
+	validatePackagesInObjective,
+} from "./package-validator.js";
 // Persistence layer
 export {
 	deleteTaskAssignment,
@@ -186,6 +204,25 @@ export {
 	updateTaskCheckpoint,
 	writeTaskAssignment,
 } from "./persistence.js";
+// PM Schemas (validation for PM results)
+export {
+	constrainResearchResult,
+	constrainTaskProposal,
+	PM_SCHEMA_LIMITS,
+	type PMIdeationResult,
+	PMIdeationResultSchema,
+	type PMResearchResult,
+	PMResearchResultSchema,
+	parsePMResearchResult,
+	parseTaskProposal,
+	parseTaskProposals,
+	safeParsePMResearchResult,
+	safeParseTaskProposal,
+	safeParseTaskProposals,
+	type TaskProposal,
+	TaskProposalSchema,
+	TaskProposalSourceSchema,
+} from "./pm-schemas.js";
 // DSPy-inspired prompt variants
 export {
 	ATOMICITY_PROMPT_VARIANTS,
@@ -246,6 +283,16 @@ export {
 	upsertErrorPattern,
 	upsertLearning,
 } from "./storage.js";
+// Task security (objective validation)
+export {
+	filterSafeProposals,
+	getSecurityPatterns,
+	isSensitiveFile,
+	isTaskObjectiveSafe,
+	type TaskSecurityResult,
+	validateTaskObjective,
+	validateTaskProposals,
+} from "./task-security.js";
 // Core types
 export type {
 	ActiveTaskState,
@@ -273,4 +320,12 @@ export type {
 	UndercityConfig,
 	VariantMetrics,
 } from "./types.js";
+// URL validator (domain safety checks)
+export {
+	extractAndValidateURLs,
+	isURLSafe,
+	logURLsForAudit,
+	type URLValidationResult,
+	validateURL,
+} from "./url-validator.js";
 export { TaskWorker } from "./worker.js";

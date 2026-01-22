@@ -5,6 +5,7 @@
  */
 
 import chalk from "chalk";
+import { validateTaskObjective } from "../task-security.js";
 
 /**
  * Task proposal structure
@@ -89,19 +90,38 @@ export function displayProposals(proposals: TaskProposal[]): void {
 
 /**
  * Add proposals to the task board
+ * Validates proposals for security before adding
  */
 export async function addProposalsToBoard(
 	proposals: TaskProposal[],
 	isHuman: boolean,
-): Promise<{ added: number; taskIds: string[] }> {
+): Promise<{ added: number; taskIds: string[]; rejected: number }> {
 	const { addTask } = await import("../task.js");
 	const taskIds: string[] = [];
+	let rejected = 0;
 
 	if (isHuman) {
 		console.log(chalk.yellow("\n⚠️  Adding proposals to task board...\n"));
 	}
 
 	for (const p of proposals) {
+		// Validate proposal objective before adding
+		const validation = validateTaskObjective(p.objective);
+		if (!validation.isSafe) {
+			rejected++;
+			if (isHuman) {
+				console.log(chalk.red(`  ✗ Rejected: ${p.objective.substring(0, 50)}...`));
+				console.log(chalk.dim(`    Reason: ${validation.rejectionReasons.join(", ")}`));
+			}
+			continue;
+		}
+
+		// Log warnings for suspicious but allowed proposals
+		if (validation.warnings.length > 0 && isHuman) {
+			console.log(chalk.yellow(`  ⚠ Warning for: ${p.objective.substring(0, 50)}...`));
+			console.log(chalk.dim(`    ${validation.warnings.join("; ")}`));
+		}
+
 		const task = addTask(p.objective, p.suggestedPriority);
 		taskIds.push(task.id);
 		if (isHuman) {
@@ -110,10 +130,12 @@ export async function addProposalsToBoard(
 	}
 
 	if (!isHuman) {
-		console.log(JSON.stringify({ added: proposals.length, taskIds }));
+		console.log(JSON.stringify({ added: taskIds.length, taskIds, rejected }));
+	} else if (rejected > 0) {
+		console.log(chalk.yellow(`\n${rejected} proposal(s) rejected for security reasons.`));
 	}
 
-	return { added: proposals.length, taskIds };
+	return { added: taskIds.length, taskIds, rejected };
 }
 
 /**

@@ -13,6 +13,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { sessionLogger } from "./logger.js";
 import {
 	clearCompletedTasksDB,
 	getAllTasksDB,
@@ -31,6 +32,7 @@ import {
 	updateTaskFieldsDB,
 	updateTaskStatusDB,
 } from "./storage.js";
+import { isTaskObjectiveSafe, validateTaskObjective } from "./task-security.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
 
@@ -544,6 +546,30 @@ export function addTask(objective: string, priorityOrOptions?: number | AddTaskO
 		}
 	}
 
+	// Security validation: reject unsafe task objectives
+	const securityValidation = validateTaskObjective(objective);
+	if (!securityValidation.isSafe) {
+		sessionLogger.warn(
+			{
+				objective: objective.slice(0, 100),
+				rejectionReasons: securityValidation.rejectionReasons,
+			},
+			"Rejected unsafe task objective",
+		);
+		throw new Error(`Task objective rejected for security reasons: ${securityValidation.rejectionReasons.join(", ")}`);
+	}
+
+	// Log warnings for suspicious but allowed objectives
+	if (securityValidation.warnings.length > 0) {
+		sessionLogger.info(
+			{
+				objective: objective.slice(0, 100),
+				warnings: securityValidation.warnings,
+			},
+			"Task objective has security warnings",
+		);
+	}
+
 	// Get current task count for default priority
 	const allTasks = getAllTasksDB(stateDir);
 
@@ -578,6 +604,12 @@ export function addTasks(objectives: string[], pathParam?: string): Task[] {
 		const duplicate = findDuplicateTask(objective, stateDir);
 		if (duplicate) {
 			results.push(duplicate);
+			continue;
+		}
+
+		// Security validation: skip unsafe task objectives
+		if (!isTaskObjectiveSafe(objective)) {
+			sessionLogger.warn({ objective: objective.slice(0, 100) }, "Skipping unsafe task objective in batch add");
 			continue;
 		}
 
