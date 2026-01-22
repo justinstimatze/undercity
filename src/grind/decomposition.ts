@@ -45,7 +45,10 @@ export async function checkAndDecomposeTasks(
 			continue;
 		}
 
-		const result = await checkAndDecompose(task.objective);
+		// Build ticket content string for decomposer context
+		const ticketContent = task.ticket?.description;
+
+		const result = await checkAndDecompose(task.objective, { ticketContent });
 
 		if (result.action === "decomposed") {
 			if (result.subtasks && result.subtasks.length > 0) {

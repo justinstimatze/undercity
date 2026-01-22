@@ -1307,6 +1307,32 @@ export interface ResearchROIAssessment {
 	rationale: string;
 }
 
+// ============== Task Ticket Types ==============
+
+/**
+ * Rich ticket content attached to a task.
+ * Provides additional context beyond the single-line objective.
+ *
+ * This is a sub-part of a Task - the "ticket" is the detailed specification
+ * while the "task" is the work item record (ID, status, priority, etc.).
+ */
+export interface TicketContent {
+	/** Full description (markdown, separate from title/objective) */
+	description?: string;
+	/** Definition of done - conditions for completion */
+	acceptanceCriteria?: string[];
+	/** How to verify task was completed correctly */
+	testPlan?: string;
+	/** Implementation hints and approach suggestions */
+	implementationNotes?: string;
+	/** Source of this task */
+	source?: "pm" | "user" | "research" | "codebase_gap" | "pattern_analysis";
+	/** Research findings that informed this task */
+	researchFindings?: string[];
+	/** Rationale for why this task matters */
+	rationale?: string;
+}
+
 /**
  * Check if a task objective indicates a meta-task
  * Meta-tasks are prefixed with [meta:type]

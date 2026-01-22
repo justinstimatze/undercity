@@ -477,6 +477,15 @@ describe("task.ts", () => {
 			expect(areAllSubtasksComplete(parent.id, tasksPath)).toBe(false);
 		});
 
+		it("getNextTask ignores relatedTo (non-blocking)", () => {
+			const related = addTask("Related task", 50, tasksPath);
+			const main = addTask("Main task", { priority: 1, relatedTo: [related.id], path: tasksPath });
+
+			// Should return main task immediately since relatedTo is non-blocking
+			const next = getNextTask(tasksPath);
+			expect(next?.id).toBe(main.id);
+		});
+
 		it("handles nested subtasks", () => {
 			// Parent → Subtask → Sub-subtask
 			const parent = addTask("Parent", undefined, tasksPath);
@@ -646,6 +655,166 @@ describe("task.ts", () => {
 			updated = getTaskById(task.id, tasksPath);
 			expect(updated?.status).toBe("complete");
 			expect(updated?.completedAt).toBeDefined();
+		});
+	});
+
+	// =========================================================================
+	// Ticket Support Tests
+	// =========================================================================
+
+	describe("ticket support", () => {
+		it("should add task with ticket content", () => {
+			const ticket = {
+				description: "Full task description",
+				acceptanceCriteria: ["AC 1", "AC 2"],
+				rationale: "Why this matters",
+			};
+
+			const task = addTask("Task with ticket", { ticket, path: tasksPath });
+
+			expect(task.ticket).toBeDefined();
+			expect(task.ticket?.description).toBe("Full task description");
+			expect(task.ticket?.acceptanceCriteria).toEqual(["AC 1", "AC 2"]);
+			expect(task.ticket?.rationale).toBe("Why this matters");
+		});
+
+		it("should persist ticket to database", () => {
+			const ticket = {
+				description: "Persisted description",
+				source: "pm" as const,
+			};
+
+			const task = addTask("Task with ticket", { ticket, path: tasksPath });
+			const retrieved = getTaskById(task.id, tasksPath);
+
+			expect(retrieved?.ticket).toBeDefined();
+			expect(retrieved?.ticket?.description).toBe("Persisted description");
+			expect(retrieved?.ticket?.source).toBe("pm");
+		});
+
+		it("should handle task with priority, tags, and ticket", () => {
+			const task = addTask("Full task", {
+				priority: 100,
+				tags: ["tag1", "tag2"],
+				ticket: {
+					description: "Task description",
+					testPlan: "Test plan here",
+				},
+				path: tasksPath,
+			});
+
+			expect(task.priority).toBe(100);
+			expect(task.tags).toEqual(["tag1", "tag2"]);
+			expect(task.ticket?.description).toBe("Task description");
+			expect(task.ticket?.testPlan).toBe("Test plan here");
+		});
+
+		it("should handle task without ticket", () => {
+			const task = addTask("Simple task", undefined, tasksPath);
+
+			expect(task.ticket).toBeUndefined();
+		});
+
+		it("should handle empty ticket object", () => {
+			const task = addTask("Task with empty ticket", { ticket: {}, path: tasksPath });
+
+			// Empty ticket should be stored as empty object
+			expect(task.ticket).toEqual({});
+		});
+
+		it("should preserve ticket through status changes", () => {
+			const task = addTask("Task with ticket", {
+				ticket: { description: "Description" },
+				path: tasksPath,
+			});
+
+			markTaskInProgress(task.id, "session-1", tasksPath);
+			let updated = getTaskById(task.id, tasksPath);
+			expect(updated?.ticket?.description).toBe("Description");
+
+			markTaskComplete(task.id, tasksPath);
+			updated = getTaskById(task.id, tasksPath);
+			expect(updated?.ticket?.description).toBe("Description");
+		});
+
+		it("should handle ticket with all TicketContent fields", () => {
+			const fullTicket = {
+				description: "Full description",
+				acceptanceCriteria: ["AC1", "AC2"],
+				testPlan: "Test plan",
+				implementationNotes: "Implementation notes",
+				source: "research" as const,
+				researchFindings: ["Finding 1", "Finding 2"],
+				rationale: "Rationale here",
+			};
+
+			const task = addTask("Task with full ticket", { ticket: fullTicket, path: tasksPath });
+			const retrieved = getTaskById(task.id, tasksPath);
+
+			expect(retrieved?.ticket).toEqual(fullTicket);
+		});
+	});
+
+	// =========================================================================
+	// RelatedTo (Non-blocking Relationships) Tests
+	// =========================================================================
+
+	describe("relatedTo non-blocking relationships", () => {
+		it("should add task with relatedTo field", () => {
+			const related1 = addTask("Related task 1", undefined, tasksPath);
+			const related2 = addTask("Related task 2", undefined, tasksPath);
+
+			const task = addTask("Main task", {
+				relatedTo: [related1.id, related2.id],
+				path: tasksPath,
+			});
+
+			expect(task.relatedTo).toEqual([related1.id, related2.id]);
+		});
+
+		it("should persist relatedTo to database", () => {
+			const related = addTask("Related task", undefined, tasksPath);
+			const task = addTask("Main task", { relatedTo: [related.id], path: tasksPath });
+
+			const retrieved = getTaskById(task.id, tasksPath);
+
+			expect(retrieved?.relatedTo).toEqual([related.id]);
+		});
+
+		it("should handle task with both dependsOn and relatedTo", () => {
+			const blocker = addTask("Blocking dependency", undefined, tasksPath);
+			const related = addTask("Related context", undefined, tasksPath);
+
+			const task = addTask("Main task", {
+				dependsOn: [blocker.id],
+				relatedTo: [related.id],
+				path: tasksPath,
+			});
+
+			expect(task.dependsOn).toEqual([blocker.id]);
+			expect(task.relatedTo).toEqual([related.id]);
+		});
+
+		it("should distinguish dependsOn (blocking) from relatedTo (non-blocking)", () => {
+			const blocker = addTask("Blocker", 50, tasksPath);
+			const related = addTask("Related", 50, tasksPath);
+			addTask("Dependent task", {
+				priority: 1,
+				dependsOn: [blocker.id],
+				relatedTo: [related.id],
+				path: tasksPath,
+			});
+
+			// Should return blocker since dependent task is blocked
+			const next = getNextTask(tasksPath);
+			expect(next?.id).toBe(blocker.id);
+
+			// Complete blocker
+			markTaskComplete(blocker.id, tasksPath);
+
+			// Now dependent task should be available (relatedTo doesn't block)
+			const nextAfter = getNextTask(tasksPath);
+			expect(nextAfter?.objective).toBe("Dependent task");
 		});
 	});
 });

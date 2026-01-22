@@ -38,12 +38,15 @@ import {
 	updateTaskFields,
 } from "../task.js";
 import { TaskBoardAnalyzer } from "../task-board-analyzer.js";
+import { loadTicketFromFile } from "../ticket-loader.js";
 
 // Type definitions for command options
 export interface AddOptions {
 	priority?: string;
 	/** Path to JSON file containing handoff context */
 	context?: string;
+	/** Path to YAML/JSON file with full ticket definition */
+	fromFile?: string;
 	/** Files the caller already read (comma-separated) */
 	filesRead?: string;
 	/** Notes to pass to the worker */
@@ -244,6 +247,30 @@ async function promptIntentConfirmation(prediction: IntentPredictionResult): Pro
  */
 export async function handleAdd(goal: string, options: AddOptions = {}): Promise<void> {
 	let priority: number | undefined;
+	let ticket: import("../types.js").TicketContent | undefined;
+	let tags: string[] | undefined;
+	let dependsOn: string[] | undefined;
+	let relatedTo: string[] | undefined;
+	let objectiveFromFile: string | undefined;
+
+	// Load ticket from file if provided (takes precedence over CLI options)
+	if (options.fromFile) {
+		try {
+			const ticketData = loadTicketFromFile(options.fromFile);
+			objectiveFromFile = ticketData.objective;
+			ticket = ticketData.ticket;
+			// File priority can be overridden by CLI priority
+			if (ticketData.priority !== undefined && !options.priority) {
+				priority = ticketData.priority;
+			}
+			tags = ticketData.tags;
+			dependsOn = ticketData.dependsOn;
+			relatedTo = ticketData.relatedTo;
+		} catch (error) {
+			console.error(chalk.red(`Error loading ticket file: ${error instanceof Error ? error.message : error}`));
+			process.exit(1);
+		}
+	}
 
 	if (options.priority) {
 		const parsedPriority = Number.parseInt(options.priority, 10);
@@ -283,22 +310,31 @@ export async function handleAdd(goal: string, options: AddOptions = {}): Promise
 		}
 	}
 
-	// Intent completion: predict full intent for ambiguous objectives
-	let finalObjective = goal;
-	const shouldSkip = options.skipIntentCompletion || shouldSkipIntentCompletion(goal);
+	// Parse CLI dependsOn and merge with file dependsOn
+	if (options.dependsOn) {
+		const cliDependsOn = options.dependsOn.split(",").map((id) => id.trim());
+		dependsOn = dependsOn ? [...new Set([...dependsOn, ...cliDependsOn])] : cliDependsOn;
+	}
 
-	if (!shouldSkip && isAmbiguous(goal)) {
-		const prediction = predictFullIntent(goal);
+	// Use objective from ticket file if provided, otherwise use CLI goal
+	const baseObjective = objectiveFromFile || goal;
+
+	// Intent completion: predict full intent for ambiguous objectives
+	let finalObjective = baseObjective;
+	const shouldSkip = options.skipIntentCompletion || shouldSkipIntentCompletion(baseObjective);
+
+	if (!shouldSkip && isAmbiguous(baseObjective)) {
+		const prediction = predictFullIntent(baseObjective);
 
 		// Only prompt if prediction differs from original
-		if (prediction.predictedObjective !== goal) {
+		if (prediction.predictedObjective !== baseObjective) {
 			// Check if running in TTY (interactive mode)
 			if (process.stdin.isTTY) {
 				finalObjective = await promptIntentConfirmation(prediction);
 			} else {
 				// Non-interactive mode: show warning and use original
 				console.log(chalk.yellow("Intent completion suggestion (non-interactive mode):"));
-				console.log(`  Original: "${goal}"`);
+				console.log(`  Original: "${baseObjective}"`);
 				console.log(`  Suggested: "${prediction.predictedObjective}"`);
 				console.log(chalk.gray("  Use --skip-intent-completion to suppress this warning"));
 				console.log();
@@ -306,17 +342,30 @@ export async function handleAdd(goal: string, options: AddOptions = {}): Promise
 		}
 	}
 
-	const item = addTask(finalObjective, { priority, handoffContext });
+	const item = addTask(finalObjective, { priority, handoffContext, dependsOn, relatedTo, tags, ticket });
 	console.log(chalk.green(`Added: ${finalObjective}`));
 	console.log(chalk.gray(`  ID: ${item.id}`));
 	if (priority !== undefined) {
 		console.log(chalk.gray(`  Priority: ${priority}`));
 	}
+	if (tags?.length) {
+		console.log(chalk.gray(`  Tags: ${tags.join(", ")}`));
+	}
+	if (dependsOn?.length) {
+		console.log(chalk.gray(`  Depends on: ${dependsOn.join(", ")}`));
+	}
+	if (relatedTo?.length) {
+		console.log(chalk.gray(`  Related to: ${relatedTo.join(", ")}`));
+	}
+	if (ticket) {
+		const ticketFields = Object.keys(ticket).filter((k) => ticket[k as keyof typeof ticket] !== undefined);
+		console.log(chalk.gray(`  Ticket: ${ticketFields.join(", ")}`));
+	}
 	if (handoffContext) {
 		console.log(chalk.gray(`  Handoff context: ${Object.keys(handoffContext).join(", ")}`));
 	}
-	if (finalObjective !== goal) {
-		console.log(chalk.cyan(`  Intent completed from: "${goal}"`));
+	if (finalObjective !== baseObjective) {
+		console.log(chalk.cyan(`  Intent completed from: "${baseObjective}"`));
 	}
 }
 

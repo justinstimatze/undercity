@@ -25,7 +25,7 @@ import { sessionLogger } from "../logger.js";
 import type { HandoffContext } from "../task.js";
 import type { TieredPlanResult } from "../task-planner.js";
 import { extractMetaTaskType } from "../task-schema.js";
-import type { ModelTier, TokenUsage } from "../types.js";
+import type { ModelTier, TicketContent, TokenUsage } from "../types.js";
 import { MODEL_NAMES } from "../types.js";
 import {
 	buildQueryOptions,
@@ -121,6 +121,8 @@ export interface AgentLoopContext {
 	executionPlan: TieredPlanResult | null;
 	handoffContext: HandoffContext | undefined;
 	errorHistory: Array<{ category: string; message: string; attempt: number }>;
+	/** Rich ticket content for task context */
+	ticket?: TicketContent;
 }
 
 // =============================================================================
@@ -450,6 +452,7 @@ function buildPrompt(
 		executionPlan: context.executionPlan,
 		lastPostMortem: state.lastPostMortem,
 		errorHistory: context.errorHistory,
+		ticket: context.ticket,
 	});
 
 	return {

@@ -10,7 +10,8 @@ import { formatPatternsAsRules, getFailureWarningsForTask } from "../error-fix-p
 import { findRelevantLearnings, formatLearningsCompact } from "../knowledge.js";
 import { findRelevantFiles, formatCoModificationHints, formatFileSuggestionsForPrompt } from "../task-file-patterns.js";
 import { formatExecutionPlanAsContext, type TieredPlanResult } from "../task-planner.js";
-import { checkTaskMayBeComplete } from "./prompt-builder.js";
+import type { TicketContent } from "../types.js";
+import { checkTaskMayBeComplete, formatTicketContext } from "./prompt-builder.js";
 import { getFewShotExample } from "./task-helpers.js";
 
 /**
@@ -26,6 +27,8 @@ export interface ContextBuildConfig {
 	executionPlan?: TieredPlanResult | null;
 	lastPostMortem?: string;
 	errorHistory: Array<{ category: string; message: string; attempt?: number }>;
+	/** Rich ticket content for task context */
+	ticket?: TicketContent;
 }
 
 /**
@@ -51,6 +54,7 @@ export function buildImplementationContext(config: ContextBuildConfig): ContextB
 		errorHistory,
 		assignmentContext,
 		handoffContextSection,
+		ticket,
 	} = config;
 
 	const sections: string[] = [];
@@ -60,6 +64,14 @@ export function buildImplementationContext(config: ContextBuildConfig): ContextB
 	// Add assignment context for worker identity and recovery
 	if (assignmentContext) {
 		sections.push(assignmentContext);
+	}
+
+	// Add ticket context early (high-value structured context from task definition)
+	if (ticket) {
+		const ticketContext = formatTicketContext(ticket);
+		if (ticketContext) {
+			sections.push(`# Task Ticket\n\n${ticketContext}`);
+		}
 	}
 
 	// Add handoff context from calling Claude Code session

@@ -33,7 +33,7 @@ import {
 	updateTaskStatusDB,
 } from "./storage.js";
 import { isTaskObjectiveSafe, validateTaskObjective } from "./task-security.js";
-import type { ResearchConclusion } from "./types.js";
+import type { ResearchConclusion, TicketContent } from "./types.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
 
@@ -82,7 +82,8 @@ export interface Task {
 
 	// NEW: Task Matchmaking Fields
 	packageHints?: string[]; // Manual package hints
-	dependsOn?: string[]; // Task IDs this task depends on
+	dependsOn?: string[]; // Task IDs this task depends on (blocking)
+	relatedTo?: string[]; // Task IDs this task is related to (non-blocking, for context)
 	conflicts?: string[]; // Task IDs that conflict with this one
 	estimatedFiles?: string[]; // Expected files to be modified
 	tags?: string[]; // Categorization tags (feature, bugfix, refactor)
@@ -105,6 +106,9 @@ export interface Task {
 
 	// Research conclusion (for research tasks)
 	researchConclusion?: ResearchConclusion;
+
+	// Rich ticket content (description, acceptance criteria, test plan, etc.)
+	ticket?: TicketContent;
 }
 
 /**
@@ -183,6 +187,7 @@ function recordToTask(record: TaskRecord): Task {
 		duplicateOfCommit: record.duplicateOfCommit,
 		packageHints: record.packageHints,
 		dependsOn: record.dependsOn,
+		relatedTo: record.relatedTo,
 		conflicts: record.conflicts,
 		estimatedFiles: record.estimatedFiles,
 		tags: record.tags,
@@ -200,6 +205,7 @@ function recordToTask(record: TaskRecord): Task {
 				}
 			: undefined,
 		researchConclusion: record.researchConclusion,
+		ticket: record.ticket,
 	};
 }
 
@@ -221,6 +227,7 @@ function taskToRecord(task: Task): TaskRecord {
 		duplicateOfCommit: task.duplicateOfCommit,
 		packageHints: task.packageHints,
 		dependsOn: task.dependsOn,
+		relatedTo: task.relatedTo,
 		conflicts: task.conflicts,
 		estimatedFiles: task.estimatedFiles,
 		tags: task.tags,
@@ -238,6 +245,7 @@ function taskToRecord(task: Task): TaskRecord {
 				}
 			: undefined,
 		researchConclusion: task.researchConclusion,
+		ticket: task.ticket,
 	};
 }
 
@@ -250,10 +258,14 @@ export interface AddTaskOptions {
 	path?: string;
 	/** If true, skip duplicate detection (for internal use, e.g., decomposition) */
 	skipDuplicateCheck?: boolean;
-	/** Task IDs this task depends on */
+	/** Task IDs this task depends on (blocking) */
 	dependsOn?: string[];
+	/** Task IDs this task is related to (non-blocking, for context) */
+	relatedTo?: string[];
 	/** Tags for categorization */
 	tags?: string[];
+	/** Rich ticket content (description, acceptance criteria, etc.) */
+	ticket?: TicketContent;
 }
 
 /**
@@ -528,7 +540,9 @@ export function addTask(objective: string, priorityOrOptions?: number | AddTaskO
 	let handoffContext: HandoffContext | undefined;
 	let skipDuplicateCheck = false;
 	let dependsOn: string[] | undefined;
+	let relatedTo: string[] | undefined;
 	let tags: string[] | undefined;
+	let ticket: TicketContent | undefined;
 	let pathArg = pathParam;
 
 	if (typeof priorityOrOptions === "number") {
@@ -538,7 +552,9 @@ export function addTask(objective: string, priorityOrOptions?: number | AddTaskO
 		handoffContext = priorityOrOptions.handoffContext;
 		skipDuplicateCheck = priorityOrOptions.skipDuplicateCheck ?? false;
 		dependsOn = priorityOrOptions.dependsOn;
+		relatedTo = priorityOrOptions.relatedTo;
 		tags = priorityOrOptions.tags;
+		ticket = priorityOrOptions.ticket;
 		pathArg = priorityOrOptions.path ?? pathArg;
 	}
 
@@ -587,7 +603,9 @@ export function addTask(objective: string, priorityOrOptions?: number | AddTaskO
 		createdAt: new Date(),
 		handoffContext,
 		dependsOn,
+		relatedTo,
 		tags,
+		ticket,
 	};
 
 	insertTask(taskToRecord(task), stateDir);

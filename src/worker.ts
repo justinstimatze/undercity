@@ -48,6 +48,7 @@ import {
 	MODEL_NAMES,
 	type ModelTier,
 	type TaskCheckpoint,
+	type TicketContent,
 	type TokenUsage,
 } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
@@ -411,6 +412,9 @@ export class TaskWorker {
 	/** Handoff context from calling Claude Code session */
 	private currentHandoffContext?: HandoffContext;
 
+	/** Rich ticket content for task context */
+	private currentTicket?: TicketContent;
+
 	/** Current agent session ID for resume on retry (preserves agent's exploration work) */
 	private currentAgentSessionId?: string;
 
@@ -748,6 +752,7 @@ export class TaskWorker {
 			executionPlan: this.executionPlan,
 			handoffContext: this.currentHandoffContext,
 			errorHistory: this.errorHistory,
+			ticket: this.currentTicket,
 		};
 	}
 
@@ -956,8 +961,9 @@ export class TaskWorker {
 	 * @param task The task objective string
 	 * @param handoffContext Optional context from calling Claude Code session
 	 */
-	async runTask(task: string, handoffContext?: HandoffContext): Promise<TaskResult> {
+	async runTask(task: string, handoffContext?: HandoffContext, ticket?: TicketContent): Promise<TaskResult> {
 		const startTime = Date.now();
+		this.currentTicket = ticket;
 		const context = this.initializeTaskContext(task, handoffContext);
 		const { taskId, sessionId, metaType, baseCommit } = context;
 

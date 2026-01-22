@@ -73,6 +73,7 @@ import type {
 	ParallelTaskState,
 	TaskAssignment,
 	TaskCheckpoint,
+	TicketContent,
 } from "./types.js";
 import { type TaskResult, TaskWorker } from "./worker.js";
 import { WorktreeManager } from "./worktree-manager.js";
@@ -202,6 +203,8 @@ export class Orchestrator {
 	private recoveredCheckpoints: Map<string, TaskCheckpoint> = new Map();
 	/** Handoff context from calling Claude Code session (task objective → context) */
 	private handoffContexts: Map<string, HandoffContext> = new Map();
+	/** Rich ticket content from task board (task objective → ticket) */
+	private tickets: Map<string, TicketContent> = new Map();
 	/** Original task IDs from the board (task objective → board task ID) */
 	private originalTaskIds: Map<string, string> = new Map();
 	// Worker health monitoring (delegated to health-monitoring module)
@@ -444,9 +447,10 @@ export class Orchestrator {
 	 * It runs TaskWorker directly in the current directory.
 	 */
 	async runSingle(taskOrObj: string | Task): Promise<ParallelBatchResult> {
-		// Extract objective and handoff context
+		// Extract objective, handoff context, and ticket
 		const task = typeof taskOrObj === "string" ? taskOrObj : taskOrObj.objective;
 		const handoffContext = typeof taskOrObj === "string" ? undefined : taskOrObj.handoffContext;
+		const ticket = typeof taskOrObj === "string" ? undefined : taskOrObj.ticket;
 
 		// Check for [plan] prefix - route to planner instead of worker
 		if (isPlanTask(task)) {
@@ -500,7 +504,7 @@ export class Orchestrator {
 				// No workingDirectory - runs in current directory
 			});
 
-			const result = await worker.runTask(task, handoffContext);
+			const result = await worker.runTask(task, handoffContext, ticket);
 
 			// Record token usage
 			if (result.tokenUsage) {
@@ -664,6 +668,10 @@ export class Orchestrator {
 				}
 				if (Object.keys(handoffContext).length > 0) {
 					this.handoffContexts.set(t.objective, handoffContext);
+				}
+				// Store ticket content for rich task context
+				if (t.ticket) {
+					this.tickets.set(t.objective, t.ticket);
 				}
 				// Store the original task ID from the board for decomposition
 				if (t.id) {
@@ -1031,7 +1039,8 @@ export class Orchestrator {
 			this.recoveredCheckpoints.delete(task);
 
 			const handoffContext = this.handoffContexts.get(task);
-			const result = await worker.runTask(task, handoffContext);
+			const ticket = this.tickets.get(task);
+			const result = await worker.runTask(task, handoffContext, ticket);
 
 			return this.processWorkerResult(task, taskId, worktreePath, branch, result, mainBranch, variant);
 		} catch (err) {

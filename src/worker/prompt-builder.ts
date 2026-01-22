@@ -12,7 +12,7 @@ import { findRelevantLearnings, formatLearningsCompact } from "../knowledge.js";
 import { getMetaTaskPrompt } from "../meta-tasks.js";
 import { findRelevantFiles, formatCoModificationHints, formatFileSuggestionsForPrompt } from "../task-file-patterns.js";
 import { formatExecutionPlanAsContext, type TieredPlanResult } from "../task-planner.js";
-import type { MetaTaskType } from "../types.js";
+import type { MetaTaskType, TicketContent } from "../types.js";
 
 /**
  * Context required for building prompts
@@ -33,6 +33,8 @@ export interface PromptBuildContext {
 	assignmentContext?: string;
 	errorHistory: Array<{ category: string; message: string }>;
 	consecutiveNoWriteAttempts: number;
+	/** Rich ticket content for task context */
+	ticket?: TicketContent;
 }
 
 /**
@@ -179,6 +181,35 @@ The file MUST be created at ${outputPath} for this task to succeed.`;
 }
 
 /**
+ * Format ticket content as context for the agent prompt.
+ * Converts the structured ticket into readable markdown sections.
+ */
+export function formatTicketContext(ticket: TicketContent): string {
+	const parts: string[] = [];
+
+	if (ticket.description) {
+		parts.push(`## Task Description\n${ticket.description}`);
+	}
+	if (ticket.acceptanceCriteria?.length) {
+		parts.push(`## Acceptance Criteria\n${ticket.acceptanceCriteria.map((c) => `- [ ] ${c}`).join("\n")}`);
+	}
+	if (ticket.testPlan) {
+		parts.push(`## Test Plan\n${ticket.testPlan}`);
+	}
+	if (ticket.implementationNotes) {
+		parts.push(`## Implementation Notes\n${ticket.implementationNotes}`);
+	}
+	if (ticket.rationale) {
+		parts.push(`## Why This Matters\n${ticket.rationale}`);
+	}
+	if (ticket.researchFindings?.length) {
+		parts.push(`## Research Findings\n${ticket.researchFindings.map((f) => `- ${f}`).join("\n")}`);
+	}
+
+	return parts.join("\n\n");
+}
+
+/**
  * Build all context sections for standard implementation tasks
  */
 export function buildContextSections(ctx: PromptBuildContext): {
@@ -193,6 +224,14 @@ export function buildContextSections(ctx: PromptBuildContext): {
 	// Add assignment context for worker identity and recovery
 	if (ctx.assignmentContext) {
 		contextSection += `${ctx.assignmentContext}\n---\n\n`;
+	}
+
+	// Add ticket context early (high-value structured context from task definition)
+	if (ctx.ticket) {
+		const ticketContext = formatTicketContext(ctx.ticket);
+		if (ticketContext) {
+			contextSection += `# Task Ticket\n\n${ticketContext}\n\n---\n\n`;
+		}
 	}
 
 	// Add handoff context from calling Claude Code session

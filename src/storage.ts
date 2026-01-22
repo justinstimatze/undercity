@@ -25,13 +25,13 @@ import Database from "better-sqlite3";
 import type { ConfidenceLevel, DecisionCategory } from "./decision-tracker.js";
 import type { Learning, LearningCategory } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
-import type { ResearchConclusion } from "./types.js";
+import type { ResearchConclusion, TicketContent } from "./types.js";
 
 const logger = sessionLogger.child({ module: "storage" });
 
 const DEFAULT_STATE_DIR = ".undercity";
 const DB_FILENAME = "undercity.db";
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 5;
 
 // =============================================================================
 // Database Instance Management
@@ -262,6 +262,7 @@ function initializeSchema(db: Database.Database): void {
 			duplicate_of_commit TEXT,
 			package_hints TEXT,  -- JSON array
 			depends_on TEXT,  -- JSON array
+			related_to TEXT,  -- JSON array (non-blocking relationships)
 			conflicts TEXT,  -- JSON array
 			estimated_files TEXT,  -- JSON array
 			tags TEXT,  -- JSON array
@@ -273,7 +274,8 @@ function initializeSchema(db: Database.Database): void {
 			decomposition_depth INTEGER DEFAULT 0,
 			handoff_context TEXT,  -- JSON object
 			last_attempt TEXT,  -- JSON object
-			research_conclusion TEXT  -- JSON object (ResearchConclusion)
+			research_conclusion TEXT,  -- JSON object (ResearchConclusion)
+			ticket TEXT  -- JSON object (TicketContent)
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
@@ -289,6 +291,26 @@ function initializeSchema(db: Database.Database): void {
 		try {
 			db.exec(`ALTER TABLE tasks ADD COLUMN research_conclusion TEXT`);
 			logger.info("Migrated tasks table: added research_conclusion column");
+		} catch {
+			// Column might already exist from a partial migration
+		}
+	}
+
+	// Migration from version 3 to 4: add ticket column
+	if (version === 3) {
+		try {
+			db.exec(`ALTER TABLE tasks ADD COLUMN ticket TEXT`);
+			logger.info("Migrated tasks table: added ticket column");
+		} catch {
+			// Column might already exist from a partial migration
+		}
+	}
+
+	// Migration from version 4 to 5: add related_to column
+	if (version === 4) {
+		try {
+			db.exec(`ALTER TABLE tasks ADD COLUMN related_to TEXT`);
+			logger.info("Migrated tasks table: added related_to column");
 		} catch {
 			// Column might already exist from a partial migration
 		}
@@ -2101,6 +2123,7 @@ export interface TaskRecord {
 	duplicateOfCommit?: string;
 	packageHints?: string[];
 	dependsOn?: string[];
+	relatedTo?: string[];
 	conflicts?: string[];
 	estimatedFiles?: string[];
 	tags?: string[];
@@ -2113,6 +2136,7 @@ export interface TaskRecord {
 	handoffContext?: HandoffContext;
 	lastAttempt?: LastAttemptContext;
 	researchConclusion?: ResearchConclusion;
+	ticket?: TicketContent;
 }
 
 interface TaskRow {
@@ -2129,6 +2153,7 @@ interface TaskRow {
 	duplicate_of_commit: string | null;
 	package_hints: string | null;
 	depends_on: string | null;
+	related_to: string | null;
 	conflicts: string | null;
 	estimated_files: string | null;
 	tags: string | null;
@@ -2141,6 +2166,7 @@ interface TaskRow {
 	handoff_context: string | null;
 	last_attempt: string | null;
 	research_conclusion: string | null;
+	ticket: string | null;
 }
 
 function rowToTask(row: TaskRow): TaskRecord {
@@ -2158,6 +2184,7 @@ function rowToTask(row: TaskRow): TaskRecord {
 		duplicateOfCommit: row.duplicate_of_commit ?? undefined,
 		packageHints: row.package_hints ? (JSON.parse(row.package_hints) as string[]) : undefined,
 		dependsOn: row.depends_on ? (JSON.parse(row.depends_on) as string[]) : undefined,
+		relatedTo: row.related_to ? (JSON.parse(row.related_to) as string[]) : undefined,
 		conflicts: row.conflicts ? (JSON.parse(row.conflicts) as string[]) : undefined,
 		estimatedFiles: row.estimated_files ? (JSON.parse(row.estimated_files) as string[]) : undefined,
 		tags: row.tags ? (JSON.parse(row.tags) as string[]) : undefined,
@@ -2172,6 +2199,7 @@ function rowToTask(row: TaskRow): TaskRecord {
 		researchConclusion: row.research_conclusion
 			? (JSON.parse(row.research_conclusion) as ResearchConclusion)
 			: undefined,
+		ticket: row.ticket ? (JSON.parse(row.ticket) as TicketContent) : undefined,
 	};
 }
 
@@ -2185,11 +2213,11 @@ export function insertTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DI
 		INSERT INTO tasks (
 			id, objective, status, priority, created_at, started_at, completed_at,
 			session_id, error, resolution, duplicate_of_commit, package_hints,
-			depends_on, conflicts, estimated_files, tags, computed_packages,
+			depends_on, related_to, conflicts, estimated_files, tags, computed_packages,
 			risk_score, parent_id, subtask_ids, is_decomposed, decomposition_depth,
-			handoff_context, last_attempt, research_conclusion
+			handoff_context, last_attempt, research_conclusion, ticket
 		) VALUES (
-			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 	`);
 
@@ -2207,6 +2235,7 @@ export function insertTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DI
 		task.duplicateOfCommit ?? null,
 		task.packageHints ? JSON.stringify(task.packageHints) : null,
 		task.dependsOn ? JSON.stringify(task.dependsOn) : null,
+		task.relatedTo ? JSON.stringify(task.relatedTo) : null,
 		task.conflicts ? JSON.stringify(task.conflicts) : null,
 		task.estimatedFiles ? JSON.stringify(task.estimatedFiles) : null,
 		task.tags ? JSON.stringify(task.tags) : null,
@@ -2219,6 +2248,7 @@ export function insertTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DI
 		task.handoffContext ? JSON.stringify(task.handoffContext) : null,
 		task.lastAttempt ? JSON.stringify(task.lastAttempt) : null,
 		task.researchConclusion ? JSON.stringify(task.researchConclusion) : null,
+		task.ticket ? JSON.stringify(task.ticket) : null,
 	);
 }
 
@@ -2232,7 +2262,7 @@ export function updateTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DI
 		UPDATE tasks SET
 			objective = ?, status = ?, priority = ?, started_at = ?, completed_at = ?,
 			session_id = ?, error = ?, resolution = ?, duplicate_of_commit = ?,
-			package_hints = ?, depends_on = ?, conflicts = ?, estimated_files = ?,
+			package_hints = ?, depends_on = ?, related_to = ?, conflicts = ?, estimated_files = ?,
 			tags = ?, computed_packages = ?, risk_score = ?, parent_id = ?,
 			subtask_ids = ?, is_decomposed = ?, decomposition_depth = ?,
 			handoff_context = ?, last_attempt = ?
@@ -2251,6 +2281,7 @@ export function updateTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DI
 		task.duplicateOfCommit ?? null,
 		task.packageHints ? JSON.stringify(task.packageHints) : null,
 		task.dependsOn ? JSON.stringify(task.dependsOn) : null,
+		task.relatedTo ? JSON.stringify(task.relatedTo) : null,
 		task.conflicts ? JSON.stringify(task.conflicts) : null,
 		task.estimatedFiles ? JSON.stringify(task.estimatedFiles) : null,
 		task.tags ? JSON.stringify(task.tags) : null,

@@ -190,11 +190,16 @@ export async function checkAtomicity(task: string): Promise<AtomicityCheckResult
  *
  * @param task The task to decompose
  * @param cwd Working directory for project detection (default: process.cwd())
+ * @param ticketContent Optional rich ticket content (description, plan, etc.)
  */
-export async function decomposeTask(task: string, cwd: string = process.cwd()): Promise<DecompositionResult> {
-	logger.debug({ task: task.substring(0, 50) }, "Running Ax decomposition");
+export async function decomposeTask(
+	task: string,
+	cwd: string = process.cwd(),
+	ticketContent?: string,
+): Promise<DecompositionResult> {
+	logger.debug({ task: task.substring(0, 50), hasTicketContent: !!ticketContent }, "Running Ax decomposition");
 
-	const result = await decomposeTaskAx(task, ".undercity", cwd);
+	const result = await decomposeTaskAx(task, ".undercity", cwd, ticketContent);
 
 	if (result.subtasks.length === 0) {
 		return {
@@ -283,6 +288,8 @@ export async function checkAndDecompose(
 		minConfidence?: number;
 		/** Working directory for project detection (default: process.cwd()) */
 		cwd?: string;
+		/** Optional rich ticket content (description, plan, etc.) for better decomposition */
+		ticketContent?: string;
 	} = {},
 ): Promise<{
 	action: "proceed" | "decomposed" | "skip";
@@ -291,11 +298,11 @@ export async function checkAndDecompose(
 	/** Recommended model for task execution */
 	recommendedModel?: "haiku" | "sonnet" | "opus";
 }> {
-	const { forceDecompose = false, minConfidence = 0.6, cwd = process.cwd() } = options;
+	const { forceDecompose = false, minConfidence = 0.6, cwd = process.cwd(), ticketContent } = options;
 
 	// Force decomposition if requested
 	if (forceDecompose) {
-		const decomposition = await decomposeTask(task, cwd);
+		const decomposition = await decomposeTask(task, cwd, ticketContent);
 		if (decomposition.wasDecomposed && decomposition.subtasks.length > 0) {
 			return {
 				action: "decomposed",
@@ -333,7 +340,7 @@ export async function checkAndDecompose(
 
 	// If not atomic or low confidence, decompose
 	if (!atomicity.isAtomic || atomicity.confidence < minConfidence) {
-		const decomposition = await decomposeTask(task, cwd);
+		const decomposition = await decomposeTask(task, cwd, ticketContent);
 
 		if (decomposition.wasDecomposed && decomposition.subtasks.length > 0) {
 			logger.info(

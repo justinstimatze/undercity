@@ -54,6 +54,8 @@ Multi-agent orchestrator with learning. Processes tasks from board with verifica
 # Task board (ALWAYS use CLI, never edit database directly)
 undercity add "task description"           # Add task
 undercity add "task" --priority 5          # Add with priority
+undercity add "x" --from-file ticket.yaml  # Add from ticket file (YAML/JSON/MD)
+undercity add "x" --from-file plan.md      # Add Claude Code plan as task
 undercity tasks                            # List pending tasks
 undercity tasks --status complete          # Show completed
 undercity complete <task-id>               # Mark task complete manually
@@ -543,7 +545,7 @@ undercity:
 - Want to track plan completion via task status
 - Need to see which plan a task belongs to
 
-**Example workflow:**
+**Example workflow (manual task creation):**
 ```bash
 # Create plan in Claude Code (generates ~/.claude/plans/my-feature.md)
 
@@ -561,6 +563,24 @@ undercity plans my-feature.md --status
 # After tasks complete via grind
 undercity plans my-feature.md --complete
 ```
+
+**Example workflow (auto-decomposition):**
+```bash
+# Create plan in Claude Code plan mode
+# Plan saved to ~/.claude/plans/my-feature.md
+
+# Dispatch entire plan to undercity (auto-decomposes into subtasks)
+undercity add "x" --from-file ~/.claude/plans/my-feature.md
+
+# Grind picks up the plan, decomposes into atomic subtasks, executes
+undercity grind
+```
+
+The `--from-file` workflow:
+1. Loads the plan file (markdown body becomes ticket description)
+2. During grind, decomposer sees the full plan context (not just objective)
+3. Intelligently breaks into atomic subtasks based on phases/sections
+4. Subtasks execute in parallel with verification
 
 ## When NOT to Use Undercity
 

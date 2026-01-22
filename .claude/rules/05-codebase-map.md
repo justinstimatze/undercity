@@ -50,12 +50,13 @@
 | **task-decomposer.ts** | Break multi-step tasks into atomic subtasks | checkAndDecompose |
 | **plan-parser.ts** | Parse markdown plans into tasks | parsePlanFile, planToTasks |
 | **plan-link.ts** | Plan-task linkage (frontmatter metadata) | linkTasksToPlan, findLinkedPlans, getPlanStatus |
+| **ticket-loader.ts** | Load rich tickets from YAML/JSON/MD files | loadTicketFromFile, isTicketFile, TicketFileSchema |
 | **complexity.ts** | Assess task complexity | assessComplexityFast |
 | **persistence.ts** | State management, file I/O for `.undercity/*` | Persistence |
 | **dashboard.ts** | TUI (blessed-based) | launchDashboard |
 | **server.ts** | HTTP daemon for external control | UndercityServer, queryDaemon |
 | **config.ts** | Config loading (.undercityrc hierarchy) | loadConfig, mergeWithConfig |
-| **types.ts** | Core type definitions | SessionStatus, AgentType, Task, MergeQueueItem |
+| **types.ts** | Core type definitions | SessionStatus, AgentType, Task, TicketContent, MergeQueueItem |
 | **output.ts** | Structured output (human/agent modes) | info, success, error, header, metrics |
 | **oracle.ts** | Oblique strategy cards | UndercityOracle |
 | **context.ts** | Codebase context extraction (git grep, briefing, AST index) | prepareContext, summarizeContextForAgent |
@@ -110,6 +111,7 @@
 - Track task metrics → `metrics.ts` (MetricsTracker)
 - Track live token usage → `live-metrics.ts`
 - Parse markdown plans → `plan-parser.ts`
+- Load rich tickets from files → `ticket-loader.ts` (YAML/JSON/MD with frontmatter)
 - Link tasks to Claude Code plans → `plan-link.ts` (frontmatter metadata)
 - Find plans for a task → `plan-link.ts` (findPlanForTask)
 - Create pre-execution plans with review → `task-planner.ts` (planTaskWithReview)

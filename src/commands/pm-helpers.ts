@@ -5,17 +5,11 @@
  */
 
 import chalk from "chalk";
+import type { TaskProposal } from "../automated-pm.js";
 import { validateTaskObjective } from "../task-security.js";
 
-/**
- * Task proposal structure
- */
-export interface TaskProposal {
-	objective: string;
-	rationale: string;
-	suggestedPriority: number;
-	source: string;
-}
+// Re-export TaskProposal for backwards compatibility
+export type { TaskProposal };
 
 /**
  * Research result structure
@@ -97,6 +91,7 @@ export async function addProposalsToBoard(
 	isHuman: boolean,
 ): Promise<{ added: number; taskIds: string[]; rejected: number }> {
 	const { addTask } = await import("../task.js");
+	const { proposalToTaskOptions } = await import("../automated-pm.js");
 	const taskIds: string[] = [];
 	let rejected = 0;
 
@@ -122,7 +117,8 @@ export async function addProposalsToBoard(
 			console.log(chalk.dim(`    ${validation.warnings.join("; ")}`));
 		}
 
-		const task = addTask(p.objective, p.suggestedPriority);
+		// Use proposalToTaskOptions to preserve rich context as ticket content
+		const task = addTask(p.objective, proposalToTaskOptions(p));
 		taskIds.push(task.id);
 		if (isHuman) {
 			console.log(chalk.green(`  ✓ Added: ${task.id} - ${p.objective.substring(0, 50)}...`));

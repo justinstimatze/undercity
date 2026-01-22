@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-22T07:31:49.135Z",
+  "generatedAt": "2026-01-22T09:03:03.097Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -8,12 +8,12 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 82,
+          "line": 94,
           "context": "if"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 215,
+          "line": 254,
           "context": "if"
         },
         {
@@ -23,7 +23,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 569,
+          "line": 593,
           "context": "info"
         },
         {
@@ -106,17 +106,17 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 103,
+          "line": 115,
           "context": "if"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 236,
+          "line": 275,
           "context": "if"
         },
         {
           "file": "orchestrator.ts",
-          "line": 1501,
+          "line": 1510,
           "context": "for"
         },
         {
@@ -157,12 +157,12 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 105,
+          "line": 117,
           "context": "if"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 238,
+          "line": 277,
           "context": "if"
         }
       ]
@@ -173,7 +173,7 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 112,
+          "line": 124,
           "context": "if"
         },
         {
@@ -183,7 +183,7 @@
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 245,
+          "line": 284,
           "context": "if"
         }
       ]
@@ -226,7 +226,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1524,
+          "line": 1530,
           "context": "if"
         }
       ]
@@ -270,12 +270,12 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 90,
+          "line": 102,
           "context": "if"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 223,
+          "line": 262,
           "context": "if"
         }
       ]
@@ -302,7 +302,7 @@
       "calledFrom": [
         {
           "file": "orchestrator.ts",
-          "line": 1101,
+          "line": 1110,
           "context": "if"
         }
       ]
@@ -413,7 +413,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 796,
+          "line": 820,
           "context": "info"
         },
         {
@@ -429,12 +429,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 785,
+          "line": 809,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 802,
+          "line": 826,
           "context": "info"
         },
         {
@@ -466,7 +466,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1230,
+          "line": 1236,
           "context": "info"
         }
       ]

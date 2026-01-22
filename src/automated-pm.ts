@@ -351,6 +351,30 @@ export interface TaskProposal {
 }
 
 /**
+ * Convert a TaskProposal to AddTaskOptions, preserving rich context as ticket content.
+ * This prevents context loss when proposals are added to the task board.
+ */
+export function proposalToTaskOptions(proposal: TaskProposal): import("./task.js").AddTaskOptions {
+	// Map proposal source to ticket source type
+	const sourceMap: Record<TaskProposal["source"], import("./types.js").TicketContent["source"]> = {
+		research: "research",
+		pattern_analysis: "pattern_analysis",
+		codebase_gap: "codebase_gap",
+		user_request: "user",
+	};
+
+	return {
+		priority: proposal.suggestedPriority,
+		tags: proposal.tags,
+		ticket: {
+			source: sourceMap[proposal.source],
+			rationale: proposal.rationale,
+			researchFindings: proposal.researchFindings,
+		},
+	};
+}
+
+/**
  * Result of PM research session
  */
 export interface PMResearchResult {

@@ -72,6 +72,7 @@ export const taskCommands: CommandModule = {
 			.description("Add a goal to the backlog")
 			.option("-p, --priority <number>", "Task priority (lower = higher priority)")
 			.option("-c, --context <file>", "JSON file with handoff context for worker")
+			.option("-f, --from-file <file>", "YAML/JSON file with full ticket definition")
 			.option("--files-read <files>", "Comma-separated list of files already analyzed")
 			.option("--notes <notes>", "Notes to pass to the worker")
 			.option("--depends-on <taskIds>", "Comma-separated task IDs this task depends on")

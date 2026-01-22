@@ -655,14 +655,16 @@ export async function checkAtomicityAx(
 /**
  * Run task decomposition using Ax program
  * Loads successful examples as few-shot demos for self-improvement
- * @param task The task to decompose
+ * @param task The task objective to decompose
  * @param stateDir State directory (default: .undercity)
  * @param cwd Working directory for project detection (default: process.cwd())
+ * @param ticketContent Optional rich ticket content (description, plan, etc.)
  */
 export async function decomposeTaskAx(
 	task: string,
 	stateDir: string = ".undercity",
 	cwd: string = process.cwd(),
+	ticketContent?: string,
 ): Promise<{
 	subtasks: string[];
 	reasoning: string;
@@ -676,9 +678,18 @@ export async function decomposeTaskAx(
 		const projectCtx = detectProjectLanguage(cwd);
 		const projectContext = formatProjectContext(projectCtx);
 
-		logger.debug({ task: task.slice(0, 50), projectContext }, "Running decomposition with project context");
+		// Include ticket content in task if provided (e.g., Claude Code plan)
+		let fullTask = task;
+		if (ticketContent) {
+			fullTask = `OBJECTIVE: ${task}\n\nPLAN/CONTEXT:\n${ticketContent}`;
+		}
 
-		const result = await decomposer.forward(ai, { task, projectContext });
+		logger.debug(
+			{ task: task.slice(0, 50), hasTicketContent: !!ticketContent, projectContext },
+			"Running decomposition with project context",
+		);
+
+		const result = await decomposer.forward(ai, { task: fullTask, projectContext });
 
 		// Filter out question-like subtasks (these should be PM decisions, not subtasks)
 		const rawSubtasks = Array.isArray(result.subtasks) ? result.subtasks.map(String) : [];
