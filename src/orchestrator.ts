@@ -1268,11 +1268,13 @@ export class Orchestrator {
 
 	/**
 	 * Cleanup worktrees after execution
-	 * Preserves worktrees with uncommitted work or failed merges
+	 * Preserves worktrees with uncommitted work, failed merges, or failed tasks (for investigation)
 	 */
 	private async cleanupWorktrees(results: ParallelTaskResult[]): Promise<void> {
 		output.progress("Cleaning up worktrees...");
 		const preserved: string[] = [];
+		const preservedForInvestigation: string[] = [];
+		const worktreesToDelete: string[] = [];
 
 		for (const r of results) {
 			if (r.taskId && r.worktreePath) {
@@ -1280,12 +1282,38 @@ export class Orchestrator {
 					// Check if worktree has uncommitted work worth preserving
 					const hasUncommittedWork = this.checkWorktreeHasWork(r.worktreePath);
 					const mergeFailed = r.result?.status === "complete" && !r.merged;
+					const taskFailed = r.result?.status === "failed";
 
 					if (hasUncommittedWork || mergeFailed) {
 						preserved.push(r.worktreePath);
 						sessionLogger.info(
 							{ taskId: r.taskId, worktreePath: r.worktreePath, hasUncommittedWork, mergeFailed },
 							"Preserving worktree with unsaved work",
+						);
+						continue; // Don't remove
+					}
+
+					// Preserve failed worktrees for investigation (last N)
+					if (taskFailed && r.worktreePath !== process.cwd()) {
+						const failedInfo: import("./types.js").FailedWorktreeInfo = {
+							taskId: r.taskId,
+							task: r.task,
+							worktreePath: r.worktreePath,
+							branch: r.branch,
+							failedAt: new Date().toISOString(),
+							error: r.result?.error || "Unknown error",
+							model: r.result?.model || "unknown",
+							attempts: r.result?.attempts || 0,
+						};
+
+						// Add to preserved list, get back list of old worktrees to delete
+						const toDelete = this.persistence.addFailedWorktree(failedInfo);
+						worktreesToDelete.push(...toDelete);
+						preservedForInvestigation.push(r.worktreePath);
+
+						sessionLogger.info(
+							{ taskId: r.taskId, worktreePath: r.worktreePath },
+							"Preserving failed worktree for investigation",
 						);
 						continue; // Don't remove
 					}
@@ -1299,12 +1327,34 @@ export class Orchestrator {
 			}
 		}
 
+		// Delete old failed worktrees that got bumped from the preservation list
+		for (const oldPath of worktreesToDelete) {
+			try {
+				// Find the taskId from the path
+				const match = oldPath.match(/task-([a-z0-9-]+)/i);
+				if (match) {
+					this.worktreeManager.removeWorktree(match[0], true);
+					sessionLogger.debug({ worktreePath: oldPath }, "Removed old failed worktree");
+				}
+			} catch {
+				// Ignore cleanup errors for old worktrees
+			}
+		}
+
 		if (preserved.length > 0) {
 			output.warning(`Preserved ${preserved.length} worktree(s) with unsaved work:`);
 			for (const path of preserved) {
 				output.info(`  ${path}`);
 			}
 			output.info("To recover: cd <path> && git status");
+		}
+
+		if (preservedForInvestigation.length > 0) {
+			output.info(`Preserved ${preservedForInvestigation.length} failed worktree(s) for investigation:`);
+			for (const path of preservedForInvestigation) {
+				output.info(`  ${path}`);
+			}
+			output.info("Use 'undercity cleanup --failed-worktrees' to remove them");
 		}
 	}
 

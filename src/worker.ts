@@ -1590,7 +1590,19 @@ export class TaskWorker {
 				attemptStart,
 				deps,
 			);
-			this.lastFeedback = feedback;
+
+			// If agent claimed task was already complete but verification failed,
+			// clear the flag and enhance feedback so agent knows to fix the issues
+			let enhancedFeedback = feedback;
+			if (this.taskAlreadyCompleteReason) {
+				enhancedFeedback =
+					`You previously claimed this task was already complete ("${this.taskAlreadyCompleteReason.slice(0, 100)}..."), ` +
+					`but verification FAILED. The task is NOT complete - you must fix the following issues:\n\n${feedback}`;
+				this.taskAlreadyCompleteReason = null;
+				sessionLogger.info({ taskId }, "Cleared taskAlreadyCompleteReason after verification failure");
+			}
+
+			this.lastFeedback = enhancedFeedback;
 			this.pendingErrorSignature = errorSignature;
 			// Sync state changes back from handler
 			this.lastErrorCategory = state.lastErrorCategory;

@@ -746,6 +746,40 @@ export interface WorktreeState {
 	lastUpdated: Date;
 }
 
+/**
+ * Information about a preserved failed worktree for investigation
+ */
+export interface FailedWorktreeInfo {
+	/** Task ID */
+	taskId: string;
+	/** Task description */
+	task: string;
+	/** Absolute path to the worktree directory */
+	worktreePath: string;
+	/** Branch name */
+	branch: string;
+	/** When the task failed */
+	failedAt: string;
+	/** Error message or reason for failure */
+	error: string;
+	/** Model used */
+	model: string;
+	/** Number of attempts made */
+	attempts: number;
+}
+
+/**
+ * State tracking for preserved failed worktrees
+ */
+export interface FailedWorktreeState {
+	/** Preserved failed worktrees (most recent first) */
+	worktrees: FailedWorktreeInfo[];
+	/** Maximum number of worktrees to preserve */
+	maxPreserved: number;
+	/** Last updated timestamp */
+	lastUpdated: string;
+}
+
 // ============== Parallel Recovery Types ==============
 
 /**

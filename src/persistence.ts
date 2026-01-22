@@ -18,6 +18,8 @@ import type {
 	AgentType,
 	BatchMetadata,
 	CompletedTaskState,
+	FailedWorktreeInfo,
+	FailedWorktreeState,
 	FileTrackingState,
 	Inventory,
 	Loadout,
@@ -397,6 +399,94 @@ export class Persistence {
 			worktrees: {},
 			lastUpdated: new Date(),
 		});
+	}
+
+	// ============== Failed Worktree Tracking ==============
+
+	/** Default max preserved failed worktrees */
+	private static readonly DEFAULT_MAX_FAILED_WORKTREES = 5;
+
+	/**
+	 * Get the state of preserved failed worktrees
+	 */
+	getFailedWorktreeState(): FailedWorktreeState {
+		return this.readJson<FailedWorktreeState>("failed-worktrees.json", {
+			worktrees: [],
+			maxPreserved: Persistence.DEFAULT_MAX_FAILED_WORKTREES,
+			lastUpdated: new Date().toISOString(),
+		});
+	}
+
+	/**
+	 * Save failed worktree state
+	 */
+	saveFailedWorktreeState(state: FailedWorktreeState): void {
+		state.lastUpdated = new Date().toISOString();
+		this.writeJson("failed-worktrees.json", state);
+	}
+
+	/**
+	 * Add a failed worktree to preservation list.
+	 * Automatically removes oldest entries beyond max limit.
+	 * Returns paths of worktrees that should be deleted.
+	 */
+	addFailedWorktree(info: FailedWorktreeInfo): string[] {
+		const state = this.getFailedWorktreeState();
+
+		// Add new failed worktree at the start (most recent first)
+		state.worktrees.unshift(info);
+
+		// Collect paths to delete (beyond max limit)
+		const toDelete: string[] = [];
+		while (state.worktrees.length > state.maxPreserved) {
+			const removed = state.worktrees.pop();
+			if (removed) {
+				toDelete.push(removed.worktreePath);
+			}
+		}
+
+		this.saveFailedWorktreeState(state);
+		persistenceLogger.info(
+			{ taskId: info.taskId, preserved: state.worktrees.length, toDelete: toDelete.length },
+			"Added failed worktree to preservation list",
+		);
+
+		return toDelete;
+	}
+
+	/**
+	 * Check if a worktree path is in the preserved failed list
+	 */
+	isPreservedFailedWorktree(worktreePath: string): boolean {
+		const state = this.getFailedWorktreeState();
+		return state.worktrees.some((w) => w.worktreePath === worktreePath);
+	}
+
+	/**
+	 * Remove a worktree from the preserved failed list (after manual cleanup)
+	 */
+	removeFromFailedWorktrees(worktreePath: string): void {
+		const state = this.getFailedWorktreeState();
+		state.worktrees = state.worktrees.filter((w) => w.worktreePath !== worktreePath);
+		this.saveFailedWorktreeState(state);
+	}
+
+	/**
+	 * Get all preserved failed worktrees
+	 */
+	getFailedWorktrees(): FailedWorktreeInfo[] {
+		return this.getFailedWorktreeState().worktrees;
+	}
+
+	/**
+	 * Clear all preserved failed worktrees
+	 */
+	clearFailedWorktrees(): string[] {
+		const state = this.getFailedWorktreeState();
+		const paths = state.worktrees.map((w) => w.worktreePath);
+		state.worktrees = [];
+		this.saveFailedWorktreeState(state);
+		return paths;
 	}
 
 	// ============== Utilities ==============
