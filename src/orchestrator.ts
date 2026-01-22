@@ -15,9 +15,6 @@
 
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import { updateLedger } from "./capability-ledger.js";
 import {
 	getEmergencyModeStatus,
@@ -33,26 +30,37 @@ import { getTasksNeedingInput } from "./human-input-tracking.js";
 import { sessionLogger } from "./logger.js";
 import { nameFromId } from "./names.js";
 import {
+	aggregateTaskResults,
 	applyRecommendation,
+	attemptMergeVerificationFix,
 	buildPredictedConflicts,
+	buildSummaryItems,
+	canUseOpusBudget,
 	cleanWorktreeDirectory,
+	createHealthMonitorState,
 	detectFileConflicts,
 	execGitInDir,
 	extractCheckpointsAndCleanup,
 	fetchMainIntoWorktree,
 	formatResumeMessage,
+	type HealthMonitorConfig,
+	type HealthMonitorDependencies,
+	type HealthMonitorState,
 	handleTaskDecomposition,
 	mergeIntoLocalMain,
 	type PredictedConflict,
 	type RecoveryTask,
+	rebaseOntoMain,
 	reportTaskOutcome,
 	runPostRebaseVerification,
+	startHealthMonitoring,
+	stopHealthMonitoring,
 	validateGitRef,
 	validateRecommendation,
 	validateWorktreePath,
 } from "./orchestrator/index.js";
 import * as output from "./output.js";
-import { Persistence, readTaskAssignment, writeTaskAssignment } from "./persistence.js";
+import { Persistence, writeTaskAssignment } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
 import { addTask, findSimilarInProgressTask, getAllTasks, type HandoffContext, type Task } from "./task.js";
 import { findRelevantFiles } from "./task-file-patterns.js";
@@ -196,16 +204,9 @@ export class Orchestrator {
 	private handoffContexts: Map<string, HandoffContext> = new Map();
 	/** Original task IDs from the board (task objective → board task ID) */
 	private originalTaskIds: Map<string, string> = new Map();
-	// Worker health monitoring
-	private healthCheckEnabled: boolean;
-	private healthCheckIntervalMs: number;
-	private stuckThresholdMs: number;
-	private attemptRecovery: boolean;
-	private maxRecoveryAttempts: number;
-	/** Track recovery attempts per task (taskId → attempts) */
-	private recoveryAttempts: Map<string, number> = new Map();
-	/** Active health check interval handle */
-	private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+	// Worker health monitoring (delegated to health-monitoring module)
+	private healthMonitorConfig: HealthMonitorConfig;
+	private healthMonitorState: HealthMonitorState = createHealthMonitorState();
 	/** Draining flag - when true, finish current tasks but start no more */
 	private draining = false;
 	/** Callback to invoke when drain completes */
@@ -239,11 +240,13 @@ export class Orchestrator {
 		this.maxTier = options.maxTier;
 		// Health monitoring with defaults
 		const healthConfig = options.healthCheck ?? {};
-		this.healthCheckEnabled = healthConfig.enabled ?? true;
-		this.healthCheckIntervalMs = healthConfig.checkIntervalMs ?? 60_000; // 1 minute
-		this.stuckThresholdMs = healthConfig.stuckThresholdMs ?? 300_000; // 5 minutes
-		this.attemptRecovery = healthConfig.attemptRecovery ?? true;
-		this.maxRecoveryAttempts = healthConfig.maxRecoveryAttempts ?? 2;
+		this.healthMonitorConfig = {
+			enabled: healthConfig.enabled ?? true,
+			checkIntervalMs: healthConfig.checkIntervalMs ?? 60_000, // 1 minute
+			stuckThresholdMs: healthConfig.stuckThresholdMs ?? 300_000, // 5 minutes
+			attemptRecovery: healthConfig.attemptRecovery ?? true,
+			maxRecoveryAttempts: healthConfig.maxRecoveryAttempts ?? 2,
+		};
 
 		// CRITICAL: Capture repo root at CLI invocation time to avoid wrong repo issues
 		// When undercity is installed globally and run from another project, process.cwd()
@@ -639,7 +642,7 @@ export class Orchestrator {
 		const durationMs = Date.now() - startTime;
 		this.displaySummary(results, durationMs);
 		await this.finalizeExecution();
-		this.stopHealthMonitoring();
+		stopHealthMonitoring(this.healthMonitorState);
 
 		return this.buildBatchResult(results, durationMs);
 	}
@@ -820,7 +823,7 @@ export class Orchestrator {
 		const results: ParallelTaskResult[] = [];
 		const totalBatches = Math.ceil(tasks.length / this.maxConcurrent);
 
-		this.startHealthMonitoring();
+		startHealthMonitoring(this.healthMonitorState, this.healthMonitorConfig, this.buildHealthMonitorDeps());
 
 		for (let batchStart = 0; batchStart < tasks.length; batchStart += this.maxConcurrent) {
 			// Refresh actual usage from claude.ai at start of each batch
@@ -1323,29 +1326,29 @@ export class Orchestrator {
 
 	/**
 	 * Display execution summary
+	 * Uses aggregateTaskResults and buildSummaryItems from budget-and-aggregation module.
 	 */
 	private displaySummary(results: ParallelTaskResult[], durationMs: number): void {
-		// Decomposed tasks are tracked separately from executed tasks
-		const decomposed = results.filter((r) => r.decomposed).length;
-		const executed = results.filter((r) => r.result?.status === "complete" && !r.decomposed);
-		const successful = executed.length;
-		// Failed excludes decomposed tasks (they're not real failures)
-		const failed = results.filter((r) => (r.result?.status === "failed" || r.result === null) && !r.decomposed).length;
-		const merged = results.filter((r) => r.merged).length;
-		const mergeFailed = executed.filter((r) => r.branch).length - merged;
-
-		const summaryItems: Array<{ label: string; value: string | number; status?: "good" | "bad" | "neutral" }> = [
-			{ label: "Executed", value: successful, status: successful > 0 ? "good" : "neutral" },
-			{ label: "Failed", value: failed, status: failed > 0 ? "bad" : "neutral" },
-			{ label: "Merged", value: merged },
-			{ label: "Duration", value: `${Math.round(durationMs / 1000)}s` },
-		];
-		if (decomposed > 0) {
-			summaryItems.push({ label: "Decomposed", value: decomposed, status: "neutral" });
-		}
-		if (mergeFailed > 0) {
-			summaryItems.push({ label: "Merge failed", value: mergeFailed, status: "bad" });
-		}
+		// Use extracted aggregation logic
+		const aggregates = aggregateTaskResults(
+			results.map((r) => ({
+				task: r.task,
+				taskId: r.taskId,
+				result: r.result
+					? {
+							task: r.task,
+							status: r.result.status as "complete" | "failed" | "escalated",
+							model: r.result.model,
+							attempts: r.result.attempts,
+							durationMs: r.result.durationMs,
+						}
+					: null,
+				branch: r.branch,
+				merged: r.merged,
+				decomposed: r.decomposed,
+			})),
+		);
+		const summaryItems = buildSummaryItems(aggregates, durationMs);
 
 		output.summary("Parallel Execution Summary", summaryItems);
 
@@ -1400,25 +1403,36 @@ export class Orchestrator {
 
 	/**
 	 * Build the final batch result object
+	 * Uses aggregateTaskResults from budget-and-aggregation module.
 	 */
 	private buildBatchResult(results: ParallelTaskResult[], durationMs: number): ParallelBatchResult {
-		// Decomposed tasks are tracked separately (they weren't actually executed)
-		const decomposed = results.filter((r) => r.decomposed).length;
-		// Successful = executed and completed (excludes decomposed)
-		const successful = results.filter((r) => r.result?.status === "complete" && !r.decomposed).length;
-		// Failed = failed or null result (excludes decomposed - they're not real failures)
-		const failed = results.filter((r) => (r.result?.status === "failed" || r.result === null) && !r.decomposed).length;
-		const merged = results.filter((r) => r.merged).length;
-		const successfulTasks = results.filter((r) => r.result?.status === "complete" && r.branch && !r.decomposed);
-		const mergeFailed = successfulTasks.length - merged;
+		// Use extracted aggregation logic
+		const aggregates = aggregateTaskResults(
+			results.map((r) => ({
+				task: r.task,
+				taskId: r.taskId,
+				result: r.result
+					? {
+							task: r.task,
+							status: r.result.status as "complete" | "failed" | "escalated",
+							model: r.result.model,
+							attempts: r.result.attempts,
+							durationMs: r.result.durationMs,
+						}
+					: null,
+				branch: r.branch,
+				merged: r.merged,
+				decomposed: r.decomposed,
+			})),
+		);
 
 		return {
 			results,
-			successful,
-			failed,
-			merged,
-			mergeFailed,
-			decomposed,
+			successful: aggregates.successful,
+			failed: aggregates.failed,
+			merged: aggregates.merged,
+			mergeFailed: aggregates.mergeFailed,
+			decomposed: aggregates.decomposed,
 			durationMs,
 		};
 	}
@@ -1482,175 +1496,13 @@ export class Orchestrator {
 		fetchMainIntoWorktree(taskId, worktreePath, mainRepo, mainBranch);
 
 		// Rebase onto local main (via FETCH_HEAD from the fetch above)
-		await this.rebaseOntoMain(taskId, worktreePath);
+		await rebaseOntoMain(taskId, worktreePath);
 
 		// Run verification after rebase with fix loop
-		await runPostRebaseVerification(taskId, worktreePath, this.attemptMergeVerificationFix.bind(this));
+		await runPostRebaseVerification(taskId, worktreePath, attemptMergeVerificationFix);
 
 		// Merge worktree changes into local main
 		mergeIntoLocalMain(taskId, worktreePath, mainRepo, mainBranch);
-	}
-
-	/**
-	 * Rebase worktree onto local main with conflict resolution
-	 */
-	private async rebaseOntoMain(taskId: string, worktreePath: string): Promise<void> {
-		try {
-			execGitInDir(["rebase", "FETCH_HEAD"], worktreePath);
-		} catch (error) {
-			const errorStr = String(error);
-
-			// Check if this is a merge conflict that we can try to resolve
-			if (errorStr.includes("conflict") || errorStr.includes("could not apply")) {
-				output.warning(`Rebase conflict for ${taskId}, attempting to resolve...`);
-
-				try {
-					const resolved = await this.attemptRebaseConflictResolution(taskId, worktreePath);
-					if (!resolved) {
-						this.abortRebase(worktreePath);
-						throw new Error(`Rebase failed for ${taskId}: Unable to resolve conflicts`);
-					}
-					output.success(`Resolved rebase conflict for ${taskId}`);
-				} catch (resolveError) {
-					this.abortRebase(worktreePath);
-					throw new Error(`Rebase failed for ${taskId}: ${resolveError}`);
-				}
-			} else {
-				this.abortRebase(worktreePath);
-				throw new Error(`Rebase failed for ${taskId}: ${error}`);
-			}
-		}
-	}
-
-	/**
-	 * Safely abort a rebase operation
-	 */
-	private abortRebase(worktreePath: string): void {
-		try {
-			execGitInDir(["rebase", "--abort"], worktreePath);
-		} catch {
-			// Ignore abort errors
-		}
-	}
-
-	/**
-	 * Attempt to resolve rebase conflicts by spawning an agent
-	 * Returns true if conflicts were resolved and rebase continued successfully
-	 */
-	private async attemptRebaseConflictResolution(taskId: string, worktreePath: string): Promise<boolean> {
-		// Get list of conflicted files
-		const statusOutput = execGitInDir(["status", "--porcelain"], worktreePath);
-		const conflictedFiles = statusOutput
-			.split("\n")
-			.filter(
-				(line) => line.startsWith("UU") || line.startsWith("AA") || line.startsWith("DU") || line.startsWith("UD"),
-			)
-			.map((line) => line.slice(3).trim());
-
-		if (conflictedFiles.length === 0) {
-			output.warning(`No conflicted files found for ${taskId}, rebase may have failed for another reason`);
-			return false;
-		}
-
-		output.info(`Found ${conflictedFiles.length} conflicted file(s) for ${taskId}: ${conflictedFiles.join(", ")}`);
-
-		// Read the conflicted file contents
-		const conflictDetails: string[] = [];
-		for (const file of conflictedFiles.slice(0, 3)) {
-			// Limit to first 3 files
-			try {
-				const content = readFileSync(join(worktreePath, file), "utf-8");
-				// Only include if it has conflict markers
-				if (content.includes("<<<<<<<") && content.includes(">>>>>>>")) {
-					conflictDetails.push(`\n--- ${file} ---\n${content.slice(0, 3000)}`); // Limit content size
-				}
-			} catch {
-				// File might not be readable, skip
-			}
-		}
-
-		const resolvePrompt = `REBASE CONFLICT - You need to resolve merge conflicts in these files:
-
-Conflicted files: ${conflictedFiles.join(", ")}
-
-${conflictDetails.length > 0 ? `Conflict details:${conflictDetails.join("\n")}` : ""}
-
-INSTRUCTIONS:
-1. Read each conflicted file
-2. Understand both the incoming changes (HEAD) and the current changes
-3. Edit the files to integrate both sets of changes, removing ALL conflict markers (<<<<<<<, =======, >>>>>>>)
-4. After resolving all conflicts, run: git add <resolved-files>
-5. Then run: git rebase --continue
-
-Focus ONLY on resolving the conflicts. Integrate changes logically - do not just pick one side.
-
-Working directory: ${worktreePath}`;
-
-		output.info(`Spawning conflict resolution agent for ${taskId}...`);
-
-		try {
-			for await (const message of query({
-				prompt: resolvePrompt,
-				options: {
-					model: "claude-opus-4-5-20251101", // Use Opus for complex conflict resolution
-					permissionMode: "bypassPermissions",
-					allowDangerouslySkipPermissions: true,
-					maxTurns: 10, // Allow more turns for complex resolutions
-					settingSources: ["project"],
-					cwd: worktreePath,
-				},
-			})) {
-				if (message.type === "result" && message.subtype === "success") {
-					output.info(`Conflict resolution agent completed for ${taskId}`);
-				}
-			}
-
-			// Check if rebase is still in progress (failed to continue)
-			try {
-				execGitInDir(["rev-parse", "--verify", "REBASE_HEAD"], worktreePath);
-				// REBASE_HEAD exists, rebase still in progress - agent didn't complete it
-				output.warning(`Rebase still in progress for ${taskId}, agent may not have completed resolution`);
-				return false;
-			} catch {
-				// REBASE_HEAD doesn't exist, rebase completed successfully
-				return true;
-			}
-		} catch (agentError) {
-			output.warning(`Conflict resolution agent failed for ${taskId}: ${agentError}`);
-			return false;
-		}
-	}
-
-	/**
-	 * Attempt to fix verification errors after rebase by spawning a lightweight agent
-	 */
-	private async attemptMergeVerificationFix(taskId: string, worktreePath: string, errorOutput: string): Promise<void> {
-		const fixPrompt = `VERIFICATION FAILED after rebasing onto main. Fix these errors:
-
-${errorOutput}
-
-Focus ONLY on fixing the specific errors shown above. Do not refactor or change anything else.
-The errors are likely caused by changes in main that conflict with this branch's changes.
-
-Working directory: ${worktreePath}`;
-
-		output.info(`Spawning fix agent for ${taskId}...`);
-
-		for await (const message of query({
-			prompt: fixPrompt,
-			options: {
-				model: "claude-sonnet-4-20250514",
-				permissionMode: "bypassPermissions",
-				allowDangerouslySkipPermissions: true,
-				maxTurns: 5, // Limited turns for focused fix
-				settingSources: ["project"],
-				cwd: worktreePath,
-			},
-		})) {
-			if (message.type === "result" && message.subtype === "success") {
-				output.info(`Fix agent completed for ${taskId}`);
-			}
-		}
 	}
 
 	// ============== Recovery Methods ==============
@@ -1886,18 +1738,10 @@ Working directory: ${worktreePath}`;
 
 	/**
 	 * Ralph-style: Check if opus budget allows another opus task
-	 * Maintains target ratio of ~10% opus usage for optimal Max plan efficiency
+	 * Delegates to budget-and-aggregation module.
 	 */
 	private canUseOpus(): boolean {
-		// Always allow at least one opus task
-		if (this.opusTasksUsed === 0) {
-			return true;
-		}
-
-		// Allow more opus if under budget
-		// Formula: allow opus if current opus% < target budget%
-		const currentOpusPercent = (this.opusTasksUsed / Math.max(1, this.totalTasksProcessed)) * 100;
-		return currentOpusPercent < this.opusBudgetPercent;
+		return canUseOpusBudget(this.opusTasksUsed, this.totalTasksProcessed, this.opusBudgetPercent);
 	}
 
 	/**
@@ -1914,125 +1758,14 @@ Working directory: ${worktreePath}`;
 		}
 	}
 
-	// ============== Worker Health Monitoring ==============
+	// ============== Worker Health Monitoring (delegated to health-monitoring module) ==============
 
 	/**
-	 * Start periodic health checks for active workers
+	 * Build dependencies for health monitoring
 	 */
-	private startHealthMonitoring(): void {
-		if (!this.healthCheckEnabled) {
-			return;
-		}
-
-		// Clear any existing interval
-		this.stopHealthMonitoring();
-
-		output.debug(
-			`Health monitoring started (check every ${this.healthCheckIntervalMs / 1000}s, stuck after ${this.stuckThresholdMs / 1000}s)`,
-		);
-
-		this.healthCheckInterval = setInterval(() => {
-			this.checkWorkerHealth();
-		}, this.healthCheckIntervalMs);
-	}
-
-	/**
-	 * Stop health monitoring
-	 */
-	private stopHealthMonitoring(): void {
-		if (this.healthCheckInterval) {
-			clearInterval(this.healthCheckInterval);
-			this.healthCheckInterval = null;
-		}
-		// Clear recovery attempts tracking
-		this.recoveryAttempts.clear();
-	}
-
-	/**
-	 * Check health of all active workers
-	 * Detects stuck workers via stale checkpoints
-	 */
-	private checkWorkerHealth(): void {
-		const activeTasks = this.persistence.scanActiveTasks();
-		const now = Date.now();
-
-		for (const task of activeTasks) {
-			// Only check running tasks (not pending)
-			if (task.status !== "running") {
-				continue;
-			}
-
-			// Read the assignment to get checkpoint timestamp
-			const assignment = readTaskAssignment(task.worktreePath);
-			if (!assignment?.checkpoint?.savedAt) {
-				// No checkpoint yet - check if task has been running too long without one
-				if (task.startedAt) {
-					const startedAtMs = new Date(task.startedAt).getTime();
-					const elapsedMs = now - startedAtMs;
-					if (elapsedMs > this.stuckThresholdMs) {
-						const workerName = nameFromId(task.taskId);
-						output.warning(`Worker [${workerName}] has no checkpoint after ${Math.round(elapsedMs / 1000)}s`);
-						this.handleStuckWorker(task.taskId, task.worktreePath, "no_checkpoint");
-					}
-				}
-				continue;
-			}
-
-			// Check checkpoint staleness
-			const checkpointMs = new Date(assignment.checkpoint.savedAt).getTime();
-			const staleDurationMs = now - checkpointMs;
-
-			if (staleDurationMs > this.stuckThresholdMs) {
-				const phase = assignment.checkpoint.phase;
-				const workerName = nameFromId(task.taskId);
-				output.warning(`Worker [${workerName}] stuck in '${phase}' phase for ${Math.round(staleDurationMs / 1000)}s`);
-				this.handleStuckWorker(task.taskId, task.worktreePath, phase);
-			}
-		}
-	}
-
-	/**
-	 * Handle a stuck worker - attempt recovery or terminate
-	 */
-	private handleStuckWorker(taskId: string, worktreePath: string, stuckPhase: string): void {
-		const attempts = this.recoveryAttempts.get(taskId) ?? 0;
-		const workerName = nameFromId(taskId);
-
-		if (this.attemptRecovery && attempts < this.maxRecoveryAttempts) {
-			// Attempt recovery intervention
-			this.recoveryAttempts.set(taskId, attempts + 1);
-			output.info(`Nudging [${workerName}] (recovery attempt ${attempts + 1}/${this.maxRecoveryAttempts})`);
-
-			// Write a nudge file to the worktree that the worker can detect
-			try {
-				const nudgePath = `${worktreePath}/.undercity-nudge`;
-				const nudgeContent = JSON.stringify(
-					{
-						timestamp: new Date().toISOString(),
-						reason: `Stuck in ${stuckPhase} phase`,
-						attempt: attempts + 1,
-						message: "Health check detected inactivity. Please continue or report status.",
-					},
-					null,
-					2,
-				);
-				writeFileSync(nudgePath, nudgeContent, "utf-8");
-				output.debug(`Wrote nudge file to ${nudgePath}`);
-			} catch (err) {
-				output.debug(`Failed to write nudge file: ${err}`);
-			}
-		} else {
-			// Max recovery attempts exceeded - log for manual intervention
-			// Note: We don't actually kill the process here because we don't have
-			// direct control over the worker process. The worker will eventually
-			// timeout or complete. This is just alerting.
-			output.error(
-				`Worker [${workerName}] unresponsive after ${this.maxRecoveryAttempts} recovery attempts. ` +
-					`Consider manual intervention or wait for worker timeout.`,
-			);
-
-			// Clear recovery attempts since we've given up
-			this.recoveryAttempts.delete(taskId);
-		}
+	private buildHealthMonitorDeps(): HealthMonitorDependencies {
+		return {
+			scanActiveTasks: () => this.persistence.scanActiveTasks(),
+		};
 	}
 }

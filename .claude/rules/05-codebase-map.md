@@ -13,6 +13,30 @@
 | **commands/experiment.ts** | A/B testing CLI (create, activate, results, recommend) | experimentCommands |
 | **orchestrator.ts** | Main production orchestrator, parallel execution | Orchestrator |
 | **worker.ts** | Single-task executor, runs in worktree | TaskWorker |
+| **worker/index.ts** | Worker module barrel export | (re-exports all worker modules) |
+| **worker/state.ts** | Worker state types and initialization | TaskIdentity, TaskExecutionState, createInitialState |
+| **worker/agent-loop.ts** | Agent SDK query loop execution | runAgentLoop, buildStopHooks, AgentLoopConfig |
+| **worker/verification-handler.ts** | Verification result handling | handleAlreadyComplete, recordVerificationFailure, buildEnhancedFeedback |
+| **worker/meta-task-handler.ts** | Meta-task and research task handling | handleMetaTaskResult, handleResearchTaskResult |
+| **worker/context-builder.ts** | Build context sections for agent prompts | buildContextSection |
+| **worker/prompt-builder.ts** | Build agent prompts | buildPrompt |
+| **worker/escalation-logic.ts** | Model escalation decisions | shouldEscalate, getNextModel |
+| **worker/stop-hooks.ts** | Agent stop hook configuration | buildStopHooks |
+| **worker/success-recording.ts** | Record successful task completion | recordSuccess |
+| **worker/failure-recording.ts** | Record task failures | recordFailure |
+| **worker/task-helpers.ts** | Task utility functions | isMetaTask, isResearchTask |
+| **worker/task-results.ts** | Task result type construction | buildTaskResult |
+| **worker/message-tracker.ts** | Track agent messages during execution | MessageTracker |
+| **worker/agent-execution.ts** | Agent execution utilities | executeWithRetry |
+| **orchestrator/index.ts** | Orchestrator module barrel export | (re-exports all orchestrator modules) |
+| **orchestrator/health-monitoring.ts** | Worker health monitoring, stuck detection | startHealthMonitoring, checkWorkerHealth, handleStuckWorker |
+| **orchestrator/budget-and-aggregation.ts** | Opus budget tracking, result aggregation | canUseOpusBudget, aggregateTaskResults, buildSummaryItems |
+| **orchestrator/conflict-detection.ts** | File conflict detection for parallel tasks | detectConflicts |
+| **orchestrator/git-utils.ts** | Git utilities for orchestrator | getMainBranch, getCurrentCommit |
+| **orchestrator/merge-helpers.ts** | Merge queue helpers | processMerge, queueForMerge |
+| **orchestrator/recommendation-handlers.ts** | Recommendation output handlers | handleRecommendations |
+| **orchestrator/recovery-helpers.ts** | Crash recovery helpers | saveRecoveryState, loadRecoveryState |
+| **orchestrator/result-handlers.ts** | Task result processing | handleTaskResult, recordTaskCompletion |
 | **task.ts** | Task board CRUD (add, get, mark status) | addGoal, getAllItems, markComplete, etc. |
 | **worktree-manager.ts** | Git worktree isolation per task | WorktreeManager |
 | **git.ts** | Git operations, branch management, fingerprinting | getCurrentBranch, rebase, merge, execGit |
@@ -111,15 +135,40 @@
 - Manage A/B experiments → `commands/experiment.ts` (create, activate, results, recommend)
 - Analyze learning effectiveness → `effectiveness-analysis.ts` (analyzeEffectiveness)
 - Find relevant files via AST → `ast-index.ts` (findRelevantFiles)
+- Understand worker state types → `worker/state.ts` (TaskIdentity, TaskExecutionState)
+- Run agent execution loop → `worker/agent-loop.ts` (runAgentLoop)
+- Handle verification results → `worker/verification-handler.ts`
+- Handle meta/research tasks → `worker/meta-task-handler.ts`
+- Monitor worker health → `orchestrator/health-monitoring.ts` (checkWorkerHealth, handleStuckWorker)
+- Track opus budget → `orchestrator/budget-and-aggregation.ts` (canUseOpusBudget)
+- Aggregate task results → `orchestrator/budget-and-aggregation.ts` (aggregateTaskResults)
 
 ## Orchestrators
 
 | Class | File | Use | Parallel | Infrastructure |
 |-------|------|-----|----------|----------------|
 | Orchestrator | orchestrator.ts | **Main production** (grind) | Yes (1-5) | Worktree, MergeQueue, RateLimit, FileTracker, Recovery |
-| TaskWorker | worker.ts | Single task executor | No | Runs in worktree |
+| TaskWorker | worker.ts | Single task executor | No | Runs in worktree, delegates to worker/* modules |
 
 **Decision:** Use Orchestrator for everything (even single tasks with maxConcurrent=1).
+
+## Worker Module Architecture
+
+TaskWorker delegates to focused modules in `worker/*` for maintainability:
+
+```
+TaskWorker (worker.ts)
+├── state.ts              # TaskIdentity, TaskExecutionState types
+├── agent-loop.ts         # SDK query loop (runAgentLoop, buildStopHooks)
+├── verification-handler.ts # Handle verification results
+├── meta-task-handler.ts  # Meta-task and research task handling
+├── context-builder.ts    # Build context for agent prompts
+├── prompt-builder.ts     # Build agent prompts
+├── escalation-logic.ts   # Model escalation decisions
+└── ...                   # Additional helpers
+```
+
+**Pattern:** Focused delegates with dependency injection. State passed by reference, dependencies injected as functions.
 
 ## grind Flow
 
@@ -148,51 +197,52 @@ Shows which learning systems are invoked at each phase of task execution.
 │ PLANNING PHASE (worker.ts:runPlanningPhase)                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  findRelevantLearnings()        ← knowledge.ts:373                          │
-│  findRelevantFiles()            ← task-file-patterns.ts:370                 │
-│  planTaskWithReview()           ← task-planner.ts:911                       │
+│  findRelevantLearnings()        ← knowledge.ts                              │
+│  findRelevantFiles()            ← task-file-patterns.ts                     │
+│  planTaskWithReview()           ← task-planner.ts                           │
 │    └─ quickDecision()           ← automated-pm.ts (resolves open questions) │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ CONTEXT BUILDING (worker.ts:buildContextSection ~line 2480)                 │
+│ CONTEXT BUILDING (worker/context-builder.ts)                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  findRelevantLearnings()        ← knowledge.ts:2483                         │
-│  formatLearningsForPrompt()     ← knowledge.ts:2485                         │
-│  formatFileSuggestionsForPrompt() ← task-file-patterns.ts:2509              │
-│  formatCoModificationHints()    ← task-file-patterns.ts:2520                │
-│  getFailureWarningsForTask()    ← error-fix-patterns.ts:2496                │
+│  findRelevantLearnings()          ← knowledge.ts                            │
+│  formatLearningsForPrompt()       ← knowledge.ts                            │
+│  formatFileSuggestionsForPrompt() ← task-file-patterns.ts                   │
+│  formatCoModificationHints()      ← task-file-patterns.ts                   │
+│  getFailureWarningsForTask()      ← error-fix-patterns.ts                   │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ EXECUTION PHASE (worker.ts:runAgentLoop)                                    │
+│ EXECUTION PHASE (worker/agent-loop.ts:runAgentLoop)                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  Agent executes with injected context                                       │
 │  captureDecision()              ← decision-tracker.ts (if decisions made)   │
+│  buildStopHooks()               ← worker/agent-loop.ts                      │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ VERIFICATION PHASE (worker.ts:verifyAndCommit)                              │
+│ VERIFICATION PHASE (worker/verification-handler.ts)                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  verifyWork()                   ← verification.ts                           │
+│  runVerification()              ← verification.ts                           │
 │    │                                                                        │
 │    ├─ On FAILURE:                                                           │
-│    │   recordPendingError()     ← error-fix-patterns.ts:1815                │
-│    │   tryAutoRemediate()       ← error-fix-patterns.ts:1483                │
-│    │   formatCoModificationHints() ← task-file-patterns.ts:1881             │
+│    │   recordVerificationFailure() ← worker/verification-handler.ts        │
+│    │   recordPendingError()     ← error-fix-patterns.ts                     │
+│    │   buildEnhancedFeedback()  ← worker/verification-handler.ts           │
 │    │                                                                        │
 │    └─ On SUCCESS:                                                           │
-│        recordSuccessfulFix()    ← error-fix-patterns.ts:1757                │
-│        clearPendingError()      ← error-fix-patterns.ts                     │
+│        handleAlreadyComplete()  ← worker/verification-handler.ts           │
+│        recordSuccessfulFix()    ← error-fix-patterns.ts                     │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -201,13 +251,17 @@ Shows which learning systems are invoked at each phase of task execution.
 │ COMPLETION PHASE (worker.ts + orchestrator.ts)                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  extractAndStoreLearnings()     ← knowledge-extractor.ts:1716               │
-│  markLearningsUsed()            ← knowledge.ts:1720                         │
-│  recordTaskFiles()              ← task-file-patterns.ts:1732                │
-│  updateLedger()                 ← capability-ledger.ts (orchestrator:1241)  │
+│  extractAndStoreLearnings()     ← knowledge-extractor.ts                    │
+│  markLearningsUsed()            ← knowledge.ts                              │
+│  recordTaskFiles()              ← task-file-patterns.ts                     │
+│  updateLedger()                 ← capability-ledger.ts (orchestrator)       │
 │                                                                             │
 │  On FAILURE:                                                                │
-│    recordPermanentFailure()     ← error-fix-patterns.ts:2021                │
+│    recordPermanentFailure()     ← error-fix-patterns.ts                     │
+│                                                                             │
+│  Meta/Research tasks:                                                       │
+│    handleMetaTaskResult()       ← worker/meta-task-handler.ts              │
+│    handleResearchTaskResult()   ← worker/meta-task-handler.ts              │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -218,24 +272,31 @@ Quick reference for where each learning function is called:
 
 | Function | File | Called From |
 |----------|------|-------------|
-| `findRelevantLearnings` | knowledge.ts | worker.ts:2483, task-planner.ts:373, automated-pm.ts:92 |
-| `formatLearningsForPrompt` | knowledge.ts | worker.ts:2485, task-planner.ts:386 |
-| `addLearning` | knowledge.ts | knowledge-extractor.ts:142 |
-| `markLearningsUsed` | knowledge.ts | worker.ts:1720 |
-| `findRelevantFiles` | task-file-patterns.ts | worker.ts:2509, task-planner.ts:370, orchestrator.ts:1604, automated-pm.ts:105 |
-| `formatFileSuggestionsForPrompt` | task-file-patterns.ts | worker.ts:2509 |
-| `formatCoModificationHints` | task-file-patterns.ts | worker.ts:1881, worker.ts:2520 |
-| `recordTaskFiles` | task-file-patterns.ts | worker.ts:1732 |
-| `tryAutoRemediate` | error-fix-patterns.ts | worker.ts:1483 |
-| `recordPendingError` | error-fix-patterns.ts | worker.ts:1815 |
-| `recordSuccessfulFix` | error-fix-patterns.ts | worker.ts:1757 |
-| `recordPermanentFailure` | error-fix-patterns.ts | worker.ts:2021 |
-| `getFailureWarningsForTask` | error-fix-patterns.ts | worker.ts:2496 |
-| `extractAndStoreLearnings` | knowledge-extractor.ts | worker.ts:1716 |
-| `updateLedger` | capability-ledger.ts | orchestrator.ts:1241 |
-| `captureDecision` | decision-tracker.ts | worker.ts (during execution) |
-| `quickDecision` | automated-pm.ts | task-planner.ts:903 |
-| `planTaskWithReview` | task-planner.ts | worker.ts:911 |
+| `findRelevantLearnings` | knowledge.ts | worker.ts, task-planner.ts, automated-pm.ts |
+| `formatLearningsForPrompt` | knowledge.ts | worker.ts, task-planner.ts |
+| `addLearning` | knowledge.ts | knowledge-extractor.ts |
+| `markLearningsUsed` | knowledge.ts | worker.ts |
+| `findRelevantFiles` | task-file-patterns.ts | worker.ts, task-planner.ts, orchestrator.ts, automated-pm.ts |
+| `formatFileSuggestionsForPrompt` | task-file-patterns.ts | worker.ts |
+| `formatCoModificationHints` | task-file-patterns.ts | worker.ts, worker/verification-handler.ts |
+| `recordTaskFiles` | task-file-patterns.ts | worker.ts |
+| `tryAutoRemediate` | error-fix-patterns.ts | worker.ts |
+| `recordPendingError` | error-fix-patterns.ts | worker/verification-handler.ts |
+| `recordSuccessfulFix` | error-fix-patterns.ts | worker.ts |
+| `recordPermanentFailure` | error-fix-patterns.ts | worker.ts |
+| `getFailureWarningsForTask` | error-fix-patterns.ts | worker.ts |
+| `extractAndStoreLearnings` | knowledge-extractor.ts | worker.ts |
+| `updateLedger` | capability-ledger.ts | orchestrator.ts |
+| `captureDecision` | decision-tracker.ts | worker/agent-loop.ts |
+| `quickDecision` | automated-pm.ts | task-planner.ts |
+| `planTaskWithReview` | task-planner.ts | worker.ts |
+| `runAgentLoop` | worker/agent-loop.ts | worker.ts |
+| `buildStopHooks` | worker/agent-loop.ts | worker/agent-loop.ts (internal) |
+| `handleAlreadyComplete` | worker/verification-handler.ts | worker.ts |
+| `recordVerificationFailure` | worker/verification-handler.ts | worker.ts |
+| `buildEnhancedFeedback` | worker/verification-handler.ts | worker.ts |
+| `handleMetaTaskResult` | worker/meta-task-handler.ts | worker.ts |
+| `handleResearchTaskResult` | worker/meta-task-handler.ts | worker.ts |
 
 ## State Files
 
