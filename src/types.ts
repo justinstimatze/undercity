@@ -1207,6 +1207,72 @@ export interface ProjectProfile {
 	updatedAt: Date;
 }
 
+// ============== Research ROI Types ==============
+
+/**
+ * Outcome of a research task
+ *
+ * - implement: Research yielded actionable proposals
+ * - no_go: Research indicates feature/direction not worth implementing
+ * - insufficient: More research needed, gaps identified
+ * - absorbed: Topic already well-covered in existing knowledge
+ */
+export type ResearchOutcomeType = "implement" | "no_go" | "insufficient" | "absorbed";
+
+/**
+ * Conclusion from a research task
+ * Stored on tasks with research prefixes
+ */
+export interface ResearchConclusion {
+	/** The outcome of the research */
+	outcome: ResearchOutcomeType;
+	/** Explanation of why this conclusion was reached */
+	rationale: string;
+	/** How novel the findings were (0 = all duplicates, 1 = all new) */
+	noveltyScore: number;
+	/** Number of actionable proposals generated */
+	proposalsGenerated: number;
+	/** ID of the decision record (for no_go decisions) */
+	linkedDecisionId?: string;
+	/** IDs of implementation tasks spawned (for implement outcome) */
+	linkedTaskIds?: string[];
+	/** When the conclusion was recorded */
+	concludedAt: string;
+}
+
+/**
+ * ROI signals gathered for research assessment
+ */
+export interface ResearchROISignals {
+	/** Are findings getting less novel? (0-1, lower = diminishing returns) */
+	noveltyTrend: number;
+	/** Actionable proposals per research cycle */
+	proposalYield: number;
+	/** How often are we making same decisions? (0-1, higher = repetitive) */
+	decisionRepetition: number;
+	/** What % of new learnings are duplicates? (0-1, higher = saturated) */
+	knowledgeSaturation: number;
+}
+
+/**
+ * Recommendation from ROI assessment
+ */
+export type ResearchROIRecommendation = "continue_research" | "start_implementing" | "conclude_no_go" | "mark_absorbed";
+
+/**
+ * Result of assessing research ROI
+ */
+export interface ResearchROIAssessment {
+	/** The recommended action */
+	recommendation: ResearchROIRecommendation;
+	/** Confidence in the recommendation (0-1) */
+	confidence: number;
+	/** The signals that informed this assessment */
+	signals: ResearchROISignals;
+	/** Human-readable explanation */
+	rationale: string;
+}
+
 /**
  * Check if a task objective indicates a meta-task
  * Meta-tasks are prefixed with [meta:type]

@@ -187,7 +187,7 @@ export class MCPProtocolHandler {
 			}
 		}
 
-		const learning = addLearning(
+		const result = addLearning(
 			{
 				taskId,
 				category: category as LearningCategory,
@@ -206,14 +206,16 @@ export class MCPProtocolHandler {
 
 		return {
 			success: true,
+			added: result.added,
+			noveltyScore: result.noveltyScore,
 			learning: {
-				id: learning.id,
-				taskId: learning.taskId,
-				category: learning.category,
-				content: learning.content,
-				keywords: learning.keywords,
-				confidence: learning.confidence,
-				createdAt: learning.createdAt,
+				id: result.learning.id,
+				taskId: result.learning.taskId,
+				category: result.learning.category,
+				content: result.learning.content,
+				keywords: result.learning.keywords,
+				confidence: result.learning.confidence,
+				createdAt: result.learning.createdAt,
 			},
 		};
 	}

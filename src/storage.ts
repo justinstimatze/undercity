@@ -25,12 +25,13 @@ import Database from "better-sqlite3";
 import type { ConfidenceLevel, DecisionCategory } from "./decision-tracker.js";
 import type { Learning, LearningCategory } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
+import type { ResearchConclusion } from "./types.js";
 
 const logger = sessionLogger.child({ module: "storage" });
 
 const DEFAULT_STATE_DIR = ".undercity";
 const DB_FILENAME = "undercity.db";
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 // =============================================================================
 // Database Instance Management
@@ -271,7 +272,8 @@ function initializeSchema(db: Database.Database): void {
 			is_decomposed INTEGER DEFAULT 0,
 			decomposition_depth INTEGER DEFAULT 0,
 			handoff_context TEXT,  -- JSON object
-			last_attempt TEXT  -- JSON object
+			last_attempt TEXT,  -- JSON object
+			research_conclusion TEXT  -- JSON object (ResearchConclusion)
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
@@ -281,6 +283,16 @@ function initializeSchema(db: Database.Database): void {
 		-- Schema version
 		PRAGMA user_version = ${SCHEMA_VERSION};
 	`);
+
+	// Migration from version 2 to 3: add research_conclusion column
+	if (version === 2) {
+		try {
+			db.exec(`ALTER TABLE tasks ADD COLUMN research_conclusion TEXT`);
+			logger.info("Migrated tasks table: added research_conclusion column");
+		} catch {
+			// Column might already exist from a partial migration
+		}
+	}
 }
 
 // =============================================================================
@@ -2100,6 +2112,7 @@ export interface TaskRecord {
 	decompositionDepth?: number;
 	handoffContext?: HandoffContext;
 	lastAttempt?: LastAttemptContext;
+	researchConclusion?: ResearchConclusion;
 }
 
 interface TaskRow {
@@ -2127,6 +2140,7 @@ interface TaskRow {
 	decomposition_depth: number;
 	handoff_context: string | null;
 	last_attempt: string | null;
+	research_conclusion: string | null;
 }
 
 function rowToTask(row: TaskRow): TaskRecord {
@@ -2155,6 +2169,9 @@ function rowToTask(row: TaskRow): TaskRecord {
 		decompositionDepth: row.decomposition_depth,
 		handoffContext: row.handoff_context ? (JSON.parse(row.handoff_context) as HandoffContext) : undefined,
 		lastAttempt: row.last_attempt ? (JSON.parse(row.last_attempt) as LastAttemptContext) : undefined,
+		researchConclusion: row.research_conclusion
+			? (JSON.parse(row.research_conclusion) as ResearchConclusion)
+			: undefined,
 	};
 }
 
@@ -2170,9 +2187,9 @@ export function insertTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DI
 			session_id, error, resolution, duplicate_of_commit, package_hints,
 			depends_on, conflicts, estimated_files, tags, computed_packages,
 			risk_score, parent_id, subtask_ids, is_decomposed, decomposition_depth,
-			handoff_context, last_attempt
+			handoff_context, last_attempt, research_conclusion
 		) VALUES (
-			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 	`);
 
@@ -2201,6 +2218,7 @@ export function insertTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DI
 		task.decompositionDepth ?? 0,
 		task.handoffContext ? JSON.stringify(task.handoffContext) : null,
 		task.lastAttempt ? JSON.stringify(task.lastAttempt) : null,
+		task.researchConclusion ? JSON.stringify(task.researchConclusion) : null,
 	);
 }
 

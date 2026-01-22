@@ -15,13 +15,16 @@ import {
 	type DecisionPoint,
 	findSimilarDecisions,
 	loadDecisionStore,
+	recordResearchConclusion,
 	resolveDecision,
 } from "./decision-tracker.js";
 import { findRelevantLearnings } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
 import { constrainResearchResult } from "./pm-schemas.js";
+import { assessResearchROI, createResearchConclusion, gatherResearchROIContext } from "./research-roi.js";
 import { findRelevantFiles, getTaskFileStats } from "./task-file-patterns.js";
 import { filterSafeProposals } from "./task-security.js";
+import type { ResearchConclusion } from "./types.js";
 import { extractAndValidateURLs, logURLsForAudit } from "./url-validator.js";
 
 /**
@@ -661,19 +664,95 @@ Generate 3-5 high-value proposals. Each must be executable by an AI agent withou
 }
 
 /**
+ * Result of PM ideation including research conclusion
+ */
+export interface IdeationResult {
+	research: PMResearchResult;
+	proposals: TaskProposal[];
+	researchConclusion?: ResearchConclusion;
+}
+
+/**
  * Run a full PM ideation session: research + propose
  *
  * Combines external research with codebase analysis to generate
  * well-informed task proposals for product improvement.
+ *
+ * NEW: Checks research ROI before proceeding to prevent infinite research loops.
+ * If research is saturated or repetitive, may skip directly to implementation
+ * or conclude with a no-go decision.
  */
 export async function pmIdeate(
 	topic: string,
 	cwd: string = process.cwd(),
 	stateDir: string = ".undercity",
-): Promise<{ research: PMResearchResult; proposals: TaskProposal[] }> {
+	taskId?: string,
+): Promise<IdeationResult> {
 	sessionLogger.info({ topic }, "PM starting ideation session");
 
-	// Phase 1: Research the topic externally
+	// NEW: Check if we should even do more research
+	const roiContext = await gatherResearchROIContext(taskId || `ideate-${Date.now()}`, topic, stateDir);
+	const assessment = await assessResearchROI(roiContext, stateDir, cwd);
+
+	// Handle different ROI recommendations
+	if (assessment.recommendation === "conclude_no_go") {
+		sessionLogger.info({ topic, rationale: assessment.rationale }, "PM concluding no-go based on ROI assessment");
+
+		// Document the decision
+		const decision = recordResearchConclusion({
+			topic,
+			taskId: taskId || `ideate-${Date.now()}`,
+			outcome: "no_go",
+			rationale: assessment.rationale,
+			signals: assessment.signals,
+			stateDir,
+		});
+
+		const conclusion = createResearchConclusion(assessment, 0, decision.id);
+
+		return {
+			research: { topic, findings: [], recommendations: [], sources: [], taskProposals: [] },
+			proposals: [],
+			researchConclusion: conclusion,
+		};
+	}
+
+	if (assessment.recommendation === "mark_absorbed") {
+		sessionLogger.info({ topic, rationale: assessment.rationale }, "PM marking topic as absorbed");
+
+		const decision = recordResearchConclusion({
+			topic,
+			taskId: taskId || `ideate-${Date.now()}`,
+			outcome: "absorbed",
+			rationale: assessment.rationale,
+			signals: assessment.signals,
+			stateDir,
+		});
+
+		const conclusion = createResearchConclusion(assessment, 0, decision.id);
+
+		return {
+			research: { topic, findings: [], recommendations: [], sources: [], taskProposals: [] },
+			proposals: [],
+			researchConclusion: conclusion,
+		};
+	}
+
+	if (assessment.recommendation === "start_implementing") {
+		sessionLogger.info({ topic, rationale: assessment.rationale }, "PM skipping research, going to proposals");
+
+		// Skip research phase, go straight to proposal generation
+		const proposals = await pmPropose(topic, cwd, stateDir);
+		const conclusion = createResearchConclusion(assessment, proposals.length);
+
+		return {
+			research: { topic, findings: [], recommendations: [], sources: [], taskProposals: [] },
+			proposals,
+			researchConclusion: conclusion,
+		};
+	}
+
+	// Phase 1: Research the topic externally (continue_research path)
 	const research = await pmResearch(topic, cwd, stateDir);
 
 	// Phase 2: Generate proposals informed by research
@@ -709,14 +788,23 @@ export async function pmIdeate(
 		);
 	});
 
+	// Create research conclusion
+	const conclusion = createResearchConclusion(
+		assessment,
+		uniqueProposals.length,
+		undefined,
+		uniqueProposals.length > 0 ? undefined : undefined, // Task IDs added when tasks are actually created
+	);
+
 	sessionLogger.info(
 		{
 			topic,
 			researchFindings: research.findings.length,
 			totalProposals: uniqueProposals.length,
+			roiRecommendation: assessment.recommendation,
 		},
 		"PM ideation complete",
 	);
 
-	return { research, proposals: uniqueProposals };
+	return { research, proposals: uniqueProposals, researchConclusion: conclusion };
 }

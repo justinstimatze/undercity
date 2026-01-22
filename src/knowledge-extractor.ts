@@ -500,7 +500,8 @@ export async function extractAndStoreLearnings(
 			},
 			stateDir,
 		);
-		stored.push(result);
+		// addLearning returns AddLearningResult, access the learning property
+		stored.push(result.learning);
 	}
 
 	if (stored.length > 0) {

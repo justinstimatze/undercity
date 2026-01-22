@@ -116,6 +116,7 @@ export {
 } from "./intent-completion.js";
 // Knowledge System
 export {
+	type AddLearningResult,
 	addLearning,
 	findRelevantLearnings,
 	formatLearningsForPrompt,
@@ -236,6 +237,15 @@ export {
 	type PromptVariantId,
 	REVIEW_PROMPT_VARIANTS,
 } from "./prompt-variants.js";
+// Research ROI (research task evaluation)
+export {
+	assessResearchROI,
+	createResearchConclusion,
+	gatherResearchROIContext,
+	getResearchROIStats,
+	isResearchTask,
+	type ResearchROIContext,
+} from "./research-roi.js";
 // HTTP Server
 export {
 	clearDaemonState,
@@ -310,6 +320,11 @@ export type {
 	Loadout,
 	MergeQueueItem,
 	MergeStatus,
+	ResearchConclusion,
+	ResearchOutcomeType,
+	ResearchROIAssessment,
+	ResearchROIRecommendation,
+	ResearchROISignals,
 	SafePocket,
 	SessionRecovery,
 	SessionStatus,

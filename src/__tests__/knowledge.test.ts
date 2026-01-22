@@ -61,7 +61,7 @@ describe("knowledge.ts", () => {
 
 		it("should load knowledge base from file", () => {
 			// Add a learning first
-			const learning1 = addLearning(
+			const { learning: learning1 } = addLearning(
 				{
 					taskId: "task-1",
 					category: "pattern",
@@ -158,7 +158,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should preserve all learning fields when loading", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-1",
 					category: "gotcha",
@@ -193,7 +193,7 @@ describe("knowledge.ts", () => {
 
 	describe("addLearning", () => {
 		it("should add a new learning to the knowledge base", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-1",
 					category: "pattern",
@@ -212,7 +212,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should generate unique IDs for each learning", () => {
-			const learning1 = addLearning(
+			const { learning: learning1 } = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -222,7 +222,7 @@ describe("knowledge.ts", () => {
 				tempDir,
 			);
 
-			const learning2 = addLearning(
+			const { learning: learning2 } = addLearning(
 				{
 					taskId: "task-2",
 					category: "fact",
@@ -236,7 +236,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should reject duplicate learnings (>80% similarity)", () => {
-			const learning1 = addLearning(
+			const { learning: learning1 } = addLearning(
 				{
 					taskId: "task-1",
 					category: "pattern",
@@ -293,7 +293,7 @@ describe("knowledge.ts", () => {
 			const categories: LearningCategory[] = ["pattern", "gotcha", "preference", "fact"];
 
 			for (const category of categories) {
-				const learning = addLearning(
+				const { learning } = addLearning(
 					{
 						taskId: `task-${category}`,
 						category,
@@ -311,7 +311,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should support optional structured data", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-1",
 					category: "pattern",
@@ -334,7 +334,7 @@ describe("knowledge.ts", () => {
 		it("should set createdAt timestamp", () => {
 			const beforeTime = Date.now();
 
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -406,7 +406,7 @@ describe("knowledge.ts", () => {
 
 		it("should calculate score using exact 70/30 weighting formula", () => {
 			// Create a learning with exactly one matching keyword and known confidence
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-score-test",
 					category: "fact",
@@ -441,7 +441,7 @@ describe("knowledge.ts", () => {
 
 		it("should filter out learnings with score exactly at 0.1 threshold", () => {
 			// Create a learning that would score exactly 0.1 or just below
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-boundary",
 					category: "fact",
@@ -470,7 +470,7 @@ describe("knowledge.ts", () => {
 
 		it("should include learnings with score just above 0.1 threshold", () => {
 			// Create a learning that scores just above 0.1
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-above-threshold",
 					category: "fact",
@@ -507,7 +507,7 @@ describe("knowledge.ts", () => {
 		// ========================================================================
 
 		it("should handle query with punctuation and special characters", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-special",
 					category: "fact",
@@ -526,7 +526,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should handle query with unicode and emoji characters", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-unicode",
 					category: "fact",
@@ -545,7 +545,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should extract keywords properly when stripping special characters", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-stripped",
 					category: "fact",
@@ -568,7 +568,7 @@ describe("knowledge.ts", () => {
 		// ========================================================================
 
 		it("should handle very long queries efficiently", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-long-query",
 					category: "fact",
@@ -596,7 +596,7 @@ describe("knowledge.ts", () => {
 		it("should return empty results when all learnings score below threshold", () => {
 			// Create learnings with low confidence and no matching keywords
 			for (let i = 0; i < 3; i++) {
-				const learning = addLearning(
+				const { learning } = addLearning(
 					{
 						taskId: `task-low-${i}`,
 						category: "fact",
@@ -673,7 +673,7 @@ describe("knowledge.ts", () => {
 		// ========================================================================
 
 		it("should rank learnings higher in search results after successful use updates confidence", () => {
-			const learning1 = addLearning(
+			const { learning: learning1 } = addLearning(
 				{
 					taskId: "task-seq-1",
 					category: "fact",
@@ -683,7 +683,7 @@ describe("knowledge.ts", () => {
 				tempDir,
 			);
 
-			const learning2 = addLearning(
+			const { learning: learning2 } = addLearning(
 				{
 					taskId: "task-seq-2",
 					category: "fact",
@@ -731,7 +731,7 @@ describe("knowledge.ts", () => {
 
 		it("should include confidence in scoring", () => {
 			// Add two learnings with same keywords but different confidence
-			const learning1 = addLearning(
+			const { learning: learning1 } = addLearning(
 				{
 					taskId: "task-conf-1",
 					category: "fact",
@@ -815,7 +815,7 @@ describe("knowledge.ts", () => {
 		let learningId: string;
 
 		beforeEach(() => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-1",
 					category: "pattern",
@@ -910,7 +910,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should handle multiple learning IDs", () => {
-			const learning2 = addLearning(
+			const { learning: learning2 } = addLearning(
 				{
 					taskId: "task-2",
 					category: "fact",
@@ -1146,7 +1146,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should calculate average confidence", () => {
-			const learning1 = addLearning(
+			const { learning: learning1 } = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -1167,7 +1167,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should list most used learnings", () => {
-			const learning1 = addLearning(
+			const { learning: learning1 } = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -1176,7 +1176,7 @@ describe("knowledge.ts", () => {
 				},
 				tempDir,
 			);
-			const learning2 = addLearning(
+			const { learning: learning2 } = addLearning(
 				{
 					taskId: "task-2",
 					category: "fact",
@@ -1243,7 +1243,7 @@ describe("knowledge.ts", () => {
 
 	describe("pruneUnusedLearnings", () => {
 		it("should return 0 when no learnings pruned", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-1",
 					category: "pattern",
@@ -1282,7 +1282,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should keep learnings with usedCount > 0", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -1302,7 +1302,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should keep high-confidence learnings", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -1391,7 +1391,7 @@ describe("knowledge.ts", () => {
 	describe("Integration: Worker lifecycle", () => {
 		it("should support complete worker workflow", () => {
 			// 1. Add learnings from previous tasks
-			const learning1 = addLearning(
+			const { learning: learning1 } = addLearning(
 				{
 					taskId: "previous-task-1",
 					category: "pattern",
@@ -1401,7 +1401,7 @@ describe("knowledge.ts", () => {
 				tempDir,
 			);
 
-			const _learning2 = addLearning(
+			addLearning(
 				{
 					taskId: "previous-task-2",
 					category: "gotcha",
@@ -1433,7 +1433,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should update confidence based on success/failure pattern", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-1",
 					category: "pattern",
@@ -1473,7 +1473,7 @@ describe("knowledge.ts", () => {
 
 	describe("Edge cases", () => {
 		it("should handle learning with no keywords", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -1525,7 +1525,7 @@ describe("knowledge.ts", () => {
 
 		it("should handle many keywords", () => {
 			const keywords = Array.from({ length: 50 }, (_, i) => `keyword${i}`);
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -1539,7 +1539,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should handle Unicode characters in keywords", () => {
-			const learning = addLearning(
+			const { learning } = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -1554,7 +1554,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should handle concurrent-like usage patterns", () => {
-			const learning1 = addLearning(
+			const { learning: learning1 } = addLearning(
 				{
 					taskId: "task-1",
 					category: "fact",
@@ -1563,7 +1563,7 @@ describe("knowledge.ts", () => {
 				},
 				tempDir,
 			);
-			const learning2 = addLearning(
+			const { learning: learning2 } = addLearning(
 				{
 					taskId: "task-2",
 					category: "fact",
@@ -1678,7 +1678,7 @@ describe("knowledge.ts", () => {
 
 		it("should support module import gotcha workflow", () => {
 			// Scenario: Learning about ESM import requirements
-			const gotcha = addLearning(
+			const { learning: gotcha } = addLearning(
 				{
 					taskId: "task-esm-refactor",
 					category: "gotcha",
@@ -1712,7 +1712,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should support caching strategy learning", () => {
-			const pattern = addLearning(
+			const result = addLearning(
 				{
 					taskId: "task-cache-implementation",
 					category: "pattern",
@@ -1728,7 +1728,7 @@ describe("knowledge.ts", () => {
 
 			// Search for cache-related tasks
 			const results = findRelevantLearnings("Implement query result caching", 5, tempDir);
-			expect(results.some((l) => l.id === pattern.id)).toBe(true);
+			expect(results.some((l) => l.id === result.learning.id)).toBe(true);
 		});
 	});
 });

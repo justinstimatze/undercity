@@ -186,6 +186,7 @@ import {
 	classifyDecision,
 	getPendingDecisions,
 	loadDecisionStore,
+	recordResearchConclusion,
 	resolveDecision,
 	updateDecisionOutcome,
 } from "../decision-tracker.js";
@@ -827,6 +828,155 @@ describe("decision-tracker.ts", () => {
 
 			const store = loadDecisionStore();
 			expect(store.resolved[0].resolution.outcome).toBe("pending");
+		});
+	});
+
+	// ==========================================================================
+	// recordResearchConclusion Tests
+	// ==========================================================================
+
+	describe("recordResearchConclusion", () => {
+		it("should record an implement conclusion", () => {
+			const decision = recordResearchConclusion({
+				topic: "Authentication strategies",
+				taskId: "research-task-1",
+				outcome: "implement",
+				rationale: "Found good patterns to implement",
+			});
+
+			expect(decision.id).toMatch(/^dec-/);
+			expect(decision.taskId).toBe("research-task-1");
+			expect(decision.question).toContain("Authentication strategies");
+
+			// Should be auto-resolved
+			const store = loadDecisionStore();
+			expect(store.pending).toHaveLength(0);
+			expect(store.resolved).toHaveLength(1);
+			expect(store.resolved[0].resolution.decision).toContain("Yes - proceed with implementation");
+		});
+
+		it("should record a no_go conclusion", () => {
+			const _decision = recordResearchConclusion({
+				topic: "Legacy migration",
+				taskId: "research-task-2",
+				outcome: "no_go",
+				rationale: "Not worth the effort based on analysis",
+			});
+
+			const store = loadDecisionStore();
+			expect(store.resolved[0].resolution.decision).toContain("No - research indicates not worth implementing");
+			expect(store.resolved[0].resolution.reasoning).toBe("Not worth the effort based on analysis");
+		});
+
+		it("should record an insufficient conclusion", () => {
+			const _decision = recordResearchConclusion({
+				topic: "Performance optimization",
+				taskId: "research-task-3",
+				outcome: "insufficient",
+				rationale: "Need more data to make decision",
+			});
+
+			const store = loadDecisionStore();
+			expect(store.resolved[0].resolution.decision).toContain("More research needed");
+		});
+
+		it("should record an absorbed conclusion", () => {
+			const _decision = recordResearchConclusion({
+				topic: "Caching patterns",
+				taskId: "research-task-4",
+				outcome: "absorbed",
+				rationale: "Topic already well documented",
+			});
+
+			const store = loadDecisionStore();
+			expect(store.resolved[0].resolution.decision).toContain("already covered in knowledge base");
+		});
+
+		it("should include signals in context when provided", () => {
+			const signals = {
+				noveltyTrend: 0.3,
+				proposalYield: 0.5,
+				decisionRepetition: 0.7,
+				knowledgeSaturation: 0.8,
+			};
+
+			const decision = recordResearchConclusion({
+				topic: "API design",
+				taskId: "research-task-5",
+				outcome: "no_go",
+				rationale: "Diminishing returns",
+				signals,
+			});
+
+			// Context should contain signals as JSON
+			expect(decision.context).toContain("noveltyTrend");
+			expect(decision.context).toContain("0.3");
+		});
+
+		it("should set confidence based on novelty trend", () => {
+			// High novelty -> high confidence
+			recordResearchConclusion({
+				topic: "Topic A",
+				taskId: "task-a",
+				outcome: "implement",
+				rationale: "Good findings",
+				signals: {
+					noveltyTrend: 0.8,
+					proposalYield: 0.5,
+					decisionRepetition: 0.2,
+					knowledgeSaturation: 0.3,
+				},
+			});
+
+			let store = loadDecisionStore();
+			expect(store.resolved[0].resolution.confidence).toBe("high");
+
+			// Reset for next test
+			resetMockStorage();
+			mockRandomSeed = 0.654321;
+
+			// Low novelty -> medium confidence
+			recordResearchConclusion({
+				topic: "Topic B",
+				taskId: "task-b",
+				outcome: "no_go",
+				rationale: "Low novelty",
+				signals: {
+					noveltyTrend: 0.3,
+					proposalYield: 0.2,
+					decisionRepetition: 0.8,
+					knowledgeSaturation: 0.9,
+				},
+			});
+
+			store = loadDecisionStore();
+			expect(store.resolved[0].resolution.confidence).toBe("medium");
+		});
+
+		it("should include standard options for research decisions", () => {
+			const decision = recordResearchConclusion({
+				topic: "Testing",
+				taskId: "task-1",
+				outcome: "implement",
+				rationale: "Ready to implement",
+			});
+
+			expect(decision.options).toContain("Yes - implement");
+			expect(decision.options).toContain("No - don't implement");
+			expect(decision.options).toContain("Need more research");
+			expect(decision.options).toContain("Already covered");
+		});
+
+		it("should use custom state directory", () => {
+			const decision = recordResearchConclusion({
+				topic: "Custom path test",
+				taskId: "task-1",
+				outcome: "implement",
+				rationale: "Test",
+				stateDir: "/custom/.undercity",
+			});
+
+			expect(decision).toBeDefined();
 		});
 	});
 });

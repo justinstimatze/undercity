@@ -307,12 +307,27 @@ function extractKeywords(text: string): string[] {
 }
 
 /**
+ * Result of adding a learning to the knowledge base
+ */
+export interface AddLearningResult {
+	/** The learning that was added (or the existing similar one) */
+	learning: Learning;
+	/** Whether a new learning was actually added */
+	added: boolean;
+	/** Novelty score (0 = duplicate, 1 = completely new) */
+	noveltyScore: number;
+	/** IDs of similar existing learnings if not added */
+	similarTo?: string[];
+}
+
+/**
  * Add a new learning to the knowledge base
+ * Returns novelty information for ROI assessment
  */
 export function addLearning(
 	learning: Omit<Learning, "id" | "createdAt" | "usedCount" | "successCount" | "confidence">,
 	stateDir: string = DEFAULT_STATE_DIR,
-): Learning {
+): AddLearningResult {
 	const kb = loadKnowledge(stateDir);
 
 	const newLearning: Learning = {
@@ -324,18 +339,46 @@ export function addLearning(
 		createdAt: new Date().toISOString(),
 	};
 
-	// Check for duplicates (similar content)
-	const isDuplicate = kb.learnings.some((existing) => {
+	// Check for duplicates (similar content) and calculate novelty
+	const similarities: { id: string; score: number }[] = [];
+	for (const existing of kb.learnings) {
 		const similarity = calculateSimilarity(existing.content, newLearning.content);
-		return similarity > 0.8; // 80% similarity threshold
-	});
-
-	if (!isDuplicate) {
-		kb.learnings.push(newLearning);
-		saveKnowledge(kb, stateDir);
+		if (similarity > 0.5) {
+			// Track moderately similar learnings
+			similarities.push({ id: existing.id, score: similarity });
+		}
 	}
 
-	return newLearning;
+	// Sort by similarity descending
+	similarities.sort((a, b) => b.score - a.score);
+
+	// Check if there's a high-similarity match (duplicate)
+	const highSimilarity = similarities.filter((s) => s.score > 0.8);
+	if (highSimilarity.length > 0) {
+		// This is a duplicate - don't add
+		const maxSimilarity = highSimilarity[0].score;
+		const existingLearning = kb.learnings.find((l) => l.id === highSimilarity[0].id);
+		return {
+			learning: existingLearning || newLearning,
+			added: false,
+			noveltyScore: 1 - maxSimilarity,
+			similarTo: highSimilarity.map((s) => s.id),
+		};
+	}
+
+	// Calculate novelty score based on how different this is from existing learnings
+	const noveltyScore = similarities.length > 0 ? 1 - similarities[0].score : 1.0;
+
+	// Add the new learning
+	kb.learnings.push(newLearning);
+	saveKnowledge(kb, stateDir);
+
+	return {
+		learning: newLearning,
+		added: true,
+		noveltyScore,
+		similarTo: similarities.length > 0 ? similarities.slice(0, 3).map((s) => s.id) : undefined,
+	};
 }
 
 /**

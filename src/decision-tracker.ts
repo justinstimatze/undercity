@@ -30,7 +30,8 @@ const DECISIONS_FILE = "decisions.json";
 export type DecisionCategory =
 	| "auto_handle" // Retries, lint fixes, rebases - just do it
 	| "pm_decidable" // Scope, approach, priority - PM can decide
-	| "human_required"; // Security, breaking changes, novel - needs human
+	| "human_required" // Security, breaking changes, novel - needs human
+	| "research_conclusion"; // Research task outcomes (implement, no_go, absorbed)
 
 /**
  * Confidence level for PM decisions
@@ -507,6 +508,7 @@ export function getDecisionStats(stateDir: string = DEFAULT_STATE_DIR): {
 		auto_handle: 0,
 		pm_decidable: 0,
 		human_required: 0,
+		research_conclusion: 0,
 	};
 
 	const byResolver: Record<string, number> = {
@@ -596,4 +598,61 @@ export function parseAgentOutputForDecisions(
 	}
 
 	return decisions;
+}
+
+/**
+ * Record a research conclusion as a decision
+ *
+ * Research conclusions (implement, no_go, absorbed) are stored as decisions
+ * for queryability via `undercity decide --category research_conclusion`
+ */
+export function recordResearchConclusion(params: {
+	topic: string;
+	taskId: string;
+	outcome: "implement" | "no_go" | "insufficient" | "absorbed";
+	rationale: string;
+	signals?: {
+		noveltyTrend: number;
+		proposalYield: number;
+		decisionRepetition: number;
+		knowledgeSaturation: number;
+	};
+	stateDir?: string;
+}): DecisionPoint {
+	const { topic, taskId, outcome, rationale, signals, stateDir = DEFAULT_STATE_DIR } = params;
+
+	// Map outcome to decision text
+	const decisionText: Record<string, string> = {
+		implement: `Yes - proceed with implementation for: ${topic}`,
+		no_go: `No - research indicates not worth implementing: ${topic}`,
+		insufficient: `More research needed for: ${topic}`,
+		absorbed: `Topic already covered in knowledge base: ${topic}`,
+	};
+
+	const decision = captureDecision(
+		taskId,
+		`Should we implement features related to: ${topic}?`,
+		JSON.stringify({
+			outcome,
+			rationale,
+			signals,
+			assessedAt: new Date().toISOString(),
+		}),
+		["Yes - implement", "No - don't implement", "Need more research", "Already covered"],
+		stateDir,
+	);
+
+	// Auto-resolve the decision since we already have the outcome
+	resolveDecision(
+		decision.id,
+		{
+			resolvedBy: "pm",
+			decision: decisionText[outcome] || outcome,
+			reasoning: rationale,
+			confidence: signals ? (signals.noveltyTrend > 0.5 ? "high" : "medium") : "medium",
+		},
+		stateDir,
+	);
+
+	return decision;
 }

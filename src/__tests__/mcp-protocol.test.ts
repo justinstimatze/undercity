@@ -448,7 +448,7 @@ describe("mcp-protocol.ts", () => {
 		let learningId: string;
 
 		beforeEach(async () => {
-			const learning = addLearning(
+			const result = addLearning(
 				{
 					taskId: "task-1",
 					category: "pattern",
@@ -457,7 +457,7 @@ describe("mcp-protocol.ts", () => {
 				},
 				tempDir,
 			);
-			learningId = learning.id;
+			learningId = result.learning.id;
 		});
 
 		it("should mark learning as used successfully", async () => {
@@ -501,7 +501,7 @@ describe("mcp-protocol.ts", () => {
 		});
 
 		it("should handle multiple learning IDs", async () => {
-			const learning2 = addLearning(
+			const result2 = addLearning(
 				{
 					taskId: "task-2",
 					category: "fact",
@@ -512,7 +512,7 @@ describe("mcp-protocol.ts", () => {
 			);
 
 			const result = await handler.handleToolCall("knowledge_mark_used", {
-				learningIds: [learningId, learning2.id],
+				learningIds: [learningId, result2.learning.id],
 				taskSuccess: true,
 			});
 

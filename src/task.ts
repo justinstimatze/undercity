@@ -33,6 +33,7 @@ import {
 	updateTaskStatusDB,
 } from "./storage.js";
 import { isTaskObjectiveSafe, validateTaskObjective } from "./task-security.js";
+import type { ResearchConclusion } from "./types.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
 
@@ -101,6 +102,9 @@ export interface Task {
 
 	// Last attempt context for retry tasks
 	lastAttempt?: LastAttemptContext;
+
+	// Research conclusion (for research tasks)
+	researchConclusion?: ResearchConclusion;
 }
 
 /**
@@ -195,6 +199,7 @@ function recordToTask(record: TaskRecord): Task {
 					attemptedAt: new Date(record.lastAttempt.attemptedAt),
 				}
 			: undefined,
+		researchConclusion: record.researchConclusion,
 	};
 }
 
@@ -232,6 +237,7 @@ function taskToRecord(task: Task): TaskRecord {
 					attemptedAt: task.lastAttempt.attemptedAt.toISOString(),
 				}
 			: undefined,
+		researchConclusion: task.researchConclusion,
 	};
 }
 
