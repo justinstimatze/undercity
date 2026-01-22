@@ -12,6 +12,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { sessionLogger } from "./logger.js";
+import { getRAGEngine } from "./rag/index.js";
 import {
 	hasDecisionData,
 	loadDecisionStoreFromDB,
@@ -381,15 +383,15 @@ export function captureDecision(
 /**
  * Resolve a pending decision
  */
-export function resolveDecision(
+export async function resolveDecision(
 	decisionId: string,
 	resolution: Omit<DecisionResolution, "decisionId" | "resolvedAt">,
 	stateDir: string = DEFAULT_STATE_DIR,
-): boolean {
+): Promise<boolean> {
 	// Check if decision exists in pending
 	const store = loadDecisionStore(stateDir);
-	const pendingIndex = store.pending.findIndex((d) => d.id === decisionId);
-	if (pendingIndex === -1) {
+	const decision = store.pending.find((d) => d.id === decisionId);
+	if (!decision) {
 		return false;
 	}
 
@@ -401,6 +403,38 @@ export function resolveDecision(
 
 	// Write to SQLite
 	saveDecisionResolutionDB(fullResolution, stateDir);
+
+	// Index resolved decision to RAG for semantic search
+	try {
+		const ragEngine = getRAGEngine(stateDir);
+		const content = [
+			`Question: ${decision.question}`,
+			`Context: ${decision.context}`,
+			decision.options ? `Options: ${decision.options.join(", ")}` : "",
+			`Decision: ${resolution.decision}`,
+			resolution.reasoning ? `Reasoning: ${resolution.reasoning}` : "",
+		]
+			.filter(Boolean)
+			.join("\n\n");
+
+		await ragEngine.indexContent({
+			content,
+			source: "decisions",
+			title: `Decision: ${decision.question.slice(0, 50)}...`,
+			metadata: {
+				decisionId: decision.id,
+				taskId: decision.taskId,
+				category: decision.category,
+				resolvedBy: resolution.resolvedBy,
+				confidence: resolution.confidence,
+				keywords: decision.keywords,
+			},
+		});
+		sessionLogger.debug({ decisionId }, "Indexed resolved decision to RAG");
+	} catch (error) {
+		// RAG indexing is optional, don't fail the resolution
+		sessionLogger.debug({ error: String(error) }, "Failed to index decision to RAG");
+	}
 
 	return true;
 }
@@ -606,7 +640,7 @@ export function parseAgentOutputForDecisions(
  * Research conclusions (implement, no_go, absorbed) are stored as decisions
  * for queryability via `undercity decide --category research_conclusion`
  */
-export function recordResearchConclusion(params: {
+export async function recordResearchConclusion(params: {
 	topic: string;
 	taskId: string;
 	outcome: "implement" | "no_go" | "insufficient" | "absorbed";
@@ -618,7 +652,7 @@ export function recordResearchConclusion(params: {
 		knowledgeSaturation: number;
 	};
 	stateDir?: string;
-}): DecisionPoint {
+}): Promise<DecisionPoint> {
 	const { topic, taskId, outcome, rationale, signals, stateDir = DEFAULT_STATE_DIR } = params;
 
 	// Map outcome to decision text
@@ -643,7 +677,7 @@ export function recordResearchConclusion(params: {
 	);
 
 	// Auto-resolve the decision since we already have the outcome
-	resolveDecision(
+	await resolveDecision(
 		decision.id,
 		{
 			resolvedBy: "pm",

@@ -11,6 +11,7 @@
 | **commands/analysis.ts** | Metrics/analysis commands (patterns, decisions, ax, postmortem, effectiveness) | analysisCommands |
 | **commands/analysis-handlers.ts** | Analysis command handlers (postmortem) | handlePostmortem |
 | **commands/experiment.ts** | A/B testing CLI (create, activate, results, recommend) | experimentCommands |
+| **commands/rag.ts** | RAG CLI (index, search, list, stats, remove) | ragCommands |
 | **orchestrator.ts** | Main production orchestrator, parallel execution | Orchestrator |
 | **worker.ts** | Single-task executor, runs in worktree | TaskWorker |
 | **worker/index.ts** | Worker module barrel export | (re-exports all worker modules) |
@@ -87,6 +88,13 @@
 | **error-fix-patterns.ts** | Error→fix patterns for known issues | recordErrorFix, findMatchingFix, getErrorFixStats |
 | **ax-programs.ts** | Ax/DSPy self-improving prompts | getAxProgramStats |
 | **claude-usage.ts** | Fetch live Claude Max usage from claude.ai | fetchClaudeUsage, loginToClaude |
+| **rag/index.ts** | RAG module barrel export | RAGEngine, HybridSearcher, etc. |
+| **rag/types.ts** | RAG type definitions | Document, Chunk, SearchResult, SearchOptions |
+| **rag/database.ts** | SQLite storage with sqlite-vec for vectors | getRAGDatabase, insertDocument, vectorSearch, ftsSearch |
+| **rag/embedder.ts** | Local embeddings via all-MiniLM-L6-v2 | LocalEmbedder, getEmbedder |
+| **rag/chunker.ts** | Paragraph-based chunking with overlap | ParagraphChunker, createChunker |
+| **rag/hybrid-search.ts** | Combines vector + FTS5 via RRF | HybridSearcher |
+| **rag/engine.ts** | Main RAG orchestrator | RAGEngine |
 | **index.ts** | Public API exports | - |
 
 ## Task → File Mapping
@@ -142,6 +150,12 @@
 - Monitor worker health → `orchestrator/health-monitoring.ts` (checkWorkerHealth, handleStuckWorker)
 - Track opus budget → `orchestrator/budget-and-aggregation.ts` (canUseOpusBudget)
 - Aggregate task results → `orchestrator/budget-and-aggregation.ts` (aggregateTaskResults)
+- Index content for semantic search → `rag/engine.ts` (RAGEngine.indexContent, indexFile)
+- Search indexed content → `rag/engine.ts` (RAGEngine.search)
+- Hybrid vector + keyword search → `rag/hybrid-search.ts` (HybridSearcher)
+- Chunk content for indexing → `rag/chunker.ts` (ParagraphChunker)
+- Generate embeddings → `rag/embedder.ts` (LocalEmbedder)
+- Store/query RAG database → `rag/database.ts` (vectorSearch, ftsSearch)
 
 ## Orchestrators
 
@@ -285,9 +299,13 @@ Quick reference for where each learning function is called:
 | `recordSuccessfulFix` | error-fix-patterns.ts | worker.ts |
 | `recordPermanentFailure` | error-fix-patterns.ts | worker.ts |
 | `getFailureWarningsForTask` | error-fix-patterns.ts | worker.ts |
-| `extractAndStoreLearnings` | knowledge-extractor.ts | worker.ts |
+| `extractAndStoreLearnings` | knowledge-extractor.ts | worker.ts (auto-indexes to RAG) |
 | `updateLedger` | capability-ledger.ts | orchestrator.ts |
 | `captureDecision` | decision-tracker.ts | worker/agent-loop.ts |
+| `resolveDecision` | decision-tracker.ts | automated-pm.ts, mixed-handlers.ts (auto-indexes to RAG) |
+| `getRAGEngine` | rag/index.ts | knowledge-extractor.ts, decision-tracker.ts, automated-pm.ts |
+| `ragEngine.search` | rag/engine.ts | automated-pm.ts (PM context gathering) |
+| `ragEngine.indexContent` | rag/engine.ts | knowledge-extractor.ts, decision-tracker.ts |
 | `quickDecision` | automated-pm.ts | task-planner.ts |
 | `planTaskWithReview` | task-planner.ts | worker.ts |
 | `runAgentLoop` | worker/agent-loop.ts | worker.ts |
@@ -319,6 +337,7 @@ Quick reference for where each learning function is called:
 | `.undercity/ax-training.json` | Ax/DSPy examples | `AxTrainingData` |
 | `.undercity/usage-cache.json` | Claude Max usage cache | `{usage, fetchedAt}` |
 | `.undercity/daemon.json` | Daemon PID and port | `{pid, port}` |
+| `.undercity/rag.db` | RAG SQLite database (vectors + FTS5) | SQLite with sqlite-vec |
 
 ## Gotchas
 

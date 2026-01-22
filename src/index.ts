@@ -237,6 +237,30 @@ export {
 	type PromptVariantId,
 	REVIEW_PROMPT_VARIANTS,
 } from "./prompt-variants.js";
+// RAG (Retrieval-Augmented Generation)
+export {
+	type Chunk,
+	type Chunker,
+	type ChunkingOptions,
+	createChunker,
+	createHybridSearcher,
+	type Document,
+	type EmbedderOptions,
+	getEmbedder,
+	getRAGEngine,
+	HybridSearcher,
+	type IndexContentOptions,
+	type IndexFileOptions,
+	type IndexResult,
+	LocalEmbedder,
+	ParagraphChunker,
+	RAGEngine,
+	type RAGStats,
+	resetEmbedder,
+	resetRAGEngine,
+	type SearchOptions,
+	type SearchResult,
+} from "./rag/index.js";
 // Research ROI (research task evaluation)
 export {
 	assessResearchROI,

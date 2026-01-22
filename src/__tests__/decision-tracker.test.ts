@@ -84,6 +84,16 @@ vi.mock("node:fs", () => ({
 	mkdirSync: vi.fn(),
 }));
 
+// Mock RAG engine for semantic search indexing
+const mockRAGIndexContent = vi.fn().mockResolvedValue({ id: "doc-1" });
+vi.mock("../rag/index.js", () => ({
+	getRAGEngine: vi.fn(() => ({
+		indexContent: mockRAGIndexContent,
+		search: vi.fn().mockResolvedValue([]),
+		close: vi.fn(),
+	})),
+}));
+
 // Mock storage module (SQLite)
 vi.mock("../storage.js", () => ({
 	hasDecisionData: vi.fn(() => mockDecisions.size > 0),
@@ -197,6 +207,7 @@ describe("decision-tracker.ts", () => {
 		mockNow = 1704067200000;
 		mockRandomSeed = 0.123456;
 		vi.clearAllMocks();
+		mockRAGIndexContent.mockClear();
 	});
 
 	afterEach(() => {
@@ -436,10 +447,10 @@ describe("decision-tracker.ts", () => {
 	});
 
 	describe("resolveDecision", () => {
-		it("should resolve a pending decision", () => {
+		it("should resolve a pending decision", async () => {
 			const decision = captureDecision("task-1", "Question?", "Context");
 
-			const success = resolveDecision(decision.id, {
+			const success = await resolveDecision(decision.id, {
 				resolvedBy: "pm",
 				decision: "Go ahead with approach A",
 				reasoning: "It's faster",
@@ -458,8 +469,8 @@ describe("decision-tracker.ts", () => {
 			expect(store.resolved[0].resolution.resolvedBy).toBe("pm");
 		});
 
-		it("should return false for non-existent decision", () => {
-			const success = resolveDecision("non-existent-id", {
+		it("should return false for non-existent decision", async () => {
+			const success = await resolveDecision("non-existent-id", {
 				resolvedBy: "auto",
 				decision: "Done",
 			});
@@ -467,14 +478,14 @@ describe("decision-tracker.ts", () => {
 			expect(success).toBe(false);
 		});
 
-		it("should move decision from pending to resolved", () => {
+		it("should move decision from pending to resolved", async () => {
 			const decision = captureDecision("task-1", "Question?", "Context");
 
 			const storeBefore = loadDecisionStore();
 			expect(storeBefore.pending).toHaveLength(1);
 			expect(storeBefore.resolved).toHaveLength(0);
 
-			resolveDecision(decision.id, {
+			await resolveDecision(decision.id, {
 				resolvedBy: "auto",
 				decision: "Fixed",
 			});
@@ -484,11 +495,11 @@ describe("decision-tracker.ts", () => {
 			expect(storeAfter.resolved).toHaveLength(1);
 		});
 
-		it("should set resolvedAt timestamp", () => {
+		it("should set resolvedAt timestamp", async () => {
 			const decision = captureDecision("task-1", "Question?", "Context");
 
 			mockNow = 1704067200000 + 10000; // 10 seconds later
-			resolveDecision(decision.id, {
+			await resolveDecision(decision.id, {
 				resolvedBy: "human",
 				decision: "Approved",
 			});
@@ -497,10 +508,10 @@ describe("decision-tracker.ts", () => {
 			expect(store.resolved[0].resolution.resolvedAt).toBe(new Date(mockNow).toISOString());
 		});
 
-		it("should preserve all decision fields in resolved entry", () => {
+		it("should preserve all decision fields in resolved entry", async () => {
 			const decision = captureDecision("task-1", "Question?", "Context", ["A", "B"]);
 
-			resolveDecision(decision.id, {
+			await resolveDecision(decision.id, {
 				resolvedBy: "pm",
 				decision: "Option A",
 			});
@@ -518,10 +529,10 @@ describe("decision-tracker.ts", () => {
 			expect(resolved.capturedAt).toBe(decision.capturedAt);
 		});
 
-		it("should handle resolution with minimal data", () => {
+		it("should handle resolution with minimal data", async () => {
 			const decision = captureDecision("task-1", "Question?", "Context");
 
-			const success = resolveDecision(decision.id, {
+			const success = await resolveDecision(decision.id, {
 				resolvedBy: "auto",
 				decision: "Done",
 			});
@@ -533,10 +544,10 @@ describe("decision-tracker.ts", () => {
 			expect(store.resolved[0].resolution.confidence).toBeUndefined();
 		});
 
-		it("should use custom state directory", () => {
+		it("should use custom state directory", async () => {
 			const decision = captureDecision("task-1", "Question?", "Context", undefined, "/custom/.undercity");
 
-			const success = resolveDecision(
+			const success = await resolveDecision(
 				decision.id,
 				{
 					resolvedBy: "auto",
@@ -546,6 +557,69 @@ describe("decision-tracker.ts", () => {
 			);
 
 			expect(success).toBe(true);
+		});
+
+		it("should index resolved decision to RAG", async () => {
+			const decision = captureDecision("task-1", "Should we use TypeScript?", "Evaluating options");
+
+			await resolveDecision(decision.id, {
+				resolvedBy: "pm",
+				decision: "Yes, use TypeScript",
+				reasoning: "Better type safety",
+				confidence: "high",
+			});
+
+			expect(mockRAGIndexContent).toHaveBeenCalled();
+			const call = mockRAGIndexContent.mock.calls[0][0];
+			expect(call.source).toBe("decisions");
+			expect(call.content).toContain("Should we use TypeScript?");
+			expect(call.content).toContain("Yes, use TypeScript");
+			expect(call.content).toContain("Better type safety");
+		});
+
+		it("should include decision metadata in RAG index", async () => {
+			const decision = captureDecision("task-123", "Which approach?", "Multiple options available", ["A", "B"]);
+
+			await resolveDecision(decision.id, {
+				resolvedBy: "human",
+				decision: "Approach A",
+				confidence: "medium",
+			});
+
+			expect(mockRAGIndexContent).toHaveBeenCalled();
+			const call = mockRAGIndexContent.mock.calls[0][0];
+			expect(call.metadata.decisionId).toBe(decision.id);
+			expect(call.metadata.taskId).toBe("task-123");
+			expect(call.metadata.resolvedBy).toBe("human");
+			expect(call.metadata.confidence).toBe("medium");
+		});
+
+		it("should continue if RAG indexing fails", async () => {
+			mockRAGIndexContent.mockRejectedValueOnce(new Error("RAG unavailable"));
+
+			const decision = captureDecision("task-1", "Question?", "Context");
+			const success = await resolveDecision(decision.id, {
+				resolvedBy: "auto",
+				decision: "Resolved",
+			});
+
+			// Should still succeed even if RAG fails
+			expect(success).toBe(true);
+			const store = loadDecisionStore();
+			expect(store.resolved).toHaveLength(1);
+		});
+
+		it("should include options in RAG content when present", async () => {
+			const decision = captureDecision("task-1", "Which library?", "Need a library", ["React", "Vue", "Angular"]);
+
+			await resolveDecision(decision.id, {
+				resolvedBy: "pm",
+				decision: "Use React",
+			});
+
+			expect(mockRAGIndexContent).toHaveBeenCalled();
+			const call = mockRAGIndexContent.mock.calls[0][0];
+			expect(call.content).toContain("Options: React, Vue, Angular");
 		});
 	});
 
@@ -590,12 +664,12 @@ describe("decision-tracker.ts", () => {
 			expect(pending).toEqual([]);
 		});
 
-		it("should not include resolved decisions", () => {
+		it("should not include resolved decisions", async () => {
 			const decision1 = captureDecision("task-1", "Question 1?", "Context 1");
 			mockRandomSeed = 0.654321;
 			captureDecision("task-1", "Question 2?", "Context 2");
 
-			resolveDecision(decision1.id, {
+			await resolveDecision(decision1.id, {
 				resolvedBy: "auto",
 				decision: "Done",
 			});
@@ -616,9 +690,9 @@ describe("decision-tracker.ts", () => {
 	});
 
 	describe("updateDecisionOutcome", () => {
-		it("should update outcome of resolved decision", () => {
+		it("should update outcome of resolved decision", async () => {
 			const decision = captureDecision("task-1", "Question?", "Context");
-			resolveDecision(decision.id, {
+			await resolveDecision(decision.id, {
 				resolvedBy: "pm",
 				decision: "Approved",
 			});
@@ -631,9 +705,9 @@ describe("decision-tracker.ts", () => {
 			expect(store.resolved[0].resolution.outcome).toBe("success");
 		});
 
-		it("should update outcome to failure", () => {
+		it("should update outcome to failure", async () => {
 			const decision = captureDecision("task-1", "Question?", "Context");
-			resolveDecision(decision.id, {
+			await resolveDecision(decision.id, {
 				resolvedBy: "auto",
 				decision: "Done",
 			});
@@ -660,14 +734,14 @@ describe("decision-tracker.ts", () => {
 	});
 
 	describe("Storage size limits", () => {
-		it("should keep only last 500 resolved decisions", () => {
+		it("should keep only last 500 resolved decisions", async () => {
 			// Create 501 decisions and resolve them
 			const decisions: DecisionPoint[] = [];
 			for (let i = 0; i < 501; i++) {
 				mockRandomSeed = 0.1 + i * 0.001;
 				const decision = captureDecision(`task-${i}`, `Question ${i}?`, `Context ${i}`);
 				decisions.push(decision);
-				resolveDecision(decision.id, {
+				await resolveDecision(decision.id, {
 					resolvedBy: "auto",
 					decision: "Done",
 				});
@@ -685,14 +759,14 @@ describe("decision-tracker.ts", () => {
 	});
 
 	describe("Integration scenarios", () => {
-		it("should handle capture -> resolve -> outcome flow", () => {
+		it("should handle capture -> resolve -> outcome flow", async () => {
 			// Capture
 			const decision = captureDecision("task-1", "Should I refactor?", "Code is complex", ["Yes", "No"]);
 
 			expect(decision.category).toBe("pm_decidable");
 
 			// Resolve
-			const resolved = resolveDecision(decision.id, {
+			const resolved = await resolveDecision(decision.id, {
 				resolvedBy: "pm",
 				decision: "Yes",
 				reasoning: "Better maintainability",
@@ -713,7 +787,7 @@ describe("decision-tracker.ts", () => {
 			expect(store.resolved[0].resolution.outcome).toBe("success");
 		});
 
-		it("should handle multiple decisions lifecycle", () => {
+		it("should handle multiple decisions lifecycle", async () => {
 			// Create multiple decisions
 			const dec1 = captureDecision("task-1", "Question 1?", "retry now");
 			mockRandomSeed = 0.2;
@@ -727,8 +801,8 @@ describe("decision-tracker.ts", () => {
 			expect(dec3.category).toBe("pm_decidable");
 
 			// Resolve first two
-			resolveDecision(dec1.id, { resolvedBy: "auto", decision: "Retried" });
-			resolveDecision(dec2.id, { resolvedBy: "human", decision: "Escalated" });
+			await resolveDecision(dec1.id, { resolvedBy: "auto", decision: "Retried" });
+			await resolveDecision(dec2.id, { resolvedBy: "human", decision: "Escalated" });
 
 			// Check state
 			const pending = getPendingDecisions();
@@ -739,7 +813,7 @@ describe("decision-tracker.ts", () => {
 			expect(store.resolved).toHaveLength(2);
 		});
 
-		it("should maintain data integrity across multiple operations", () => {
+		it("should maintain data integrity across multiple operations", async () => {
 			// Create decision
 			const decision = captureDecision("task-1", "Important question?", "Critical context", ["A", "B", "C"]);
 
@@ -747,7 +821,7 @@ describe("decision-tracker.ts", () => {
 			const originalKeywords = [...decision.keywords];
 
 			// Resolve
-			resolveDecision(decision.id, {
+			await resolveDecision(decision.id, {
 				resolvedBy: "pm",
 				decision: "Option A",
 				confidence: "medium",
@@ -817,10 +891,10 @@ describe("decision-tracker.ts", () => {
 			expect(decision.keywords).toBeDefined();
 		});
 
-		it("should handle resolution with pending outcome", () => {
+		it("should handle resolution with pending outcome", async () => {
 			const decision = captureDecision("task-1", "Question?", "Context");
 
-			resolveDecision(decision.id, {
+			await resolveDecision(decision.id, {
 				resolvedBy: "pm",
 				decision: "Try it",
 				outcome: "pending",
@@ -836,8 +910,8 @@ describe("decision-tracker.ts", () => {
 	// ==========================================================================
 
 	describe("recordResearchConclusion", () => {
-		it("should record an implement conclusion", () => {
-			const decision = recordResearchConclusion({
+		it("should record an implement conclusion", async () => {
+			const decision = await recordResearchConclusion({
 				topic: "Authentication strategies",
 				taskId: "research-task-1",
 				outcome: "implement",
@@ -855,8 +929,8 @@ describe("decision-tracker.ts", () => {
 			expect(store.resolved[0].resolution.decision).toContain("Yes - proceed with implementation");
 		});
 
-		it("should record a no_go conclusion", () => {
-			const _decision = recordResearchConclusion({
+		it("should record a no_go conclusion", async () => {
+			const _decision = await recordResearchConclusion({
 				topic: "Legacy migration",
 				taskId: "research-task-2",
 				outcome: "no_go",
@@ -868,8 +942,8 @@ describe("decision-tracker.ts", () => {
 			expect(store.resolved[0].resolution.reasoning).toBe("Not worth the effort based on analysis");
 		});
 
-		it("should record an insufficient conclusion", () => {
-			const _decision = recordResearchConclusion({
+		it("should record an insufficient conclusion", async () => {
+			const _decision = await recordResearchConclusion({
 				topic: "Performance optimization",
 				taskId: "research-task-3",
 				outcome: "insufficient",
@@ -880,8 +954,8 @@ describe("decision-tracker.ts", () => {
 			expect(store.resolved[0].resolution.decision).toContain("More research needed");
 		});
 
-		it("should record an absorbed conclusion", () => {
-			const _decision = recordResearchConclusion({
+		it("should record an absorbed conclusion", async () => {
+			const _decision = await recordResearchConclusion({
 				topic: "Caching patterns",
 				taskId: "research-task-4",
 				outcome: "absorbed",
@@ -892,7 +966,7 @@ describe("decision-tracker.ts", () => {
 			expect(store.resolved[0].resolution.decision).toContain("already covered in knowledge base");
 		});
 
-		it("should include signals in context when provided", () => {
+		it("should include signals in context when provided", async () => {
 			const signals = {
 				noveltyTrend: 0.3,
 				proposalYield: 0.5,
@@ -900,7 +974,7 @@ describe("decision-tracker.ts", () => {
 				knowledgeSaturation: 0.8,
 			};
 
-			const decision = recordResearchConclusion({
+			const decision = await recordResearchConclusion({
 				topic: "API design",
 				taskId: "research-task-5",
 				outcome: "no_go",
@@ -913,9 +987,9 @@ describe("decision-tracker.ts", () => {
 			expect(decision.context).toContain("0.3");
 		});
 
-		it("should set confidence based on novelty trend", () => {
+		it("should set confidence based on novelty trend", async () => {
 			// High novelty -> high confidence
-			recordResearchConclusion({
+			await recordResearchConclusion({
 				topic: "Topic A",
 				taskId: "task-a",
 				outcome: "implement",
@@ -936,7 +1010,7 @@ describe("decision-tracker.ts", () => {
 			mockRandomSeed = 0.654321;
 
 			// Low novelty -> medium confidence
-			recordResearchConclusion({
+			await recordResearchConclusion({
 				topic: "Topic B",
 				taskId: "task-b",
 				outcome: "no_go",
@@ -953,8 +1027,8 @@ describe("decision-tracker.ts", () => {
 			expect(store.resolved[0].resolution.confidence).toBe("medium");
 		});
 
-		it("should include standard options for research decisions", () => {
-			const decision = recordResearchConclusion({
+		it("should include standard options for research decisions", async () => {
+			const decision = await recordResearchConclusion({
 				topic: "Testing",
 				taskId: "task-1",
 				outcome: "implement",
@@ -967,8 +1041,8 @@ describe("decision-tracker.ts", () => {
 			expect(decision.options).toContain("Already covered");
 		});
 
-		it("should use custom state directory", () => {
-			const decision = recordResearchConclusion({
+		it("should use custom state directory", async () => {
+			const decision = await recordResearchConclusion({
 				topic: "Custom path test",
 				taskId: "task-1",
 				outcome: "implement",

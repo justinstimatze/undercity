@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-22T05:05:11.261Z",
+  "generatedAt": "2026-01-22T06:52:47.193Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -18,12 +18,12 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 99,
+          "line": 107,
           "context": "map"
         },
         {
           "file": "automated-pm.ts",
-          "line": 529,
+          "line": 569,
           "context": "info"
         },
         {
@@ -69,7 +69,7 @@
       "calledFrom": [
         {
           "file": "knowledge-extractor.ts",
-          "line": 493,
+          "line": 494,
           "context": "for"
         },
         {
@@ -126,7 +126,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 112,
+          "line": 120,
           "context": "if"
         },
         {
@@ -291,7 +291,7 @@
         },
         {
           "file": "knowledge-extractor.ts",
-          "line": 538,
+          "line": 562,
           "context": "push"
         }
       ]
@@ -323,7 +323,7 @@
         },
         {
           "file": "decision-tracker.ts",
-          "line": 632,
+          "line": 666,
           "context": "unknown"
         }
       ]
@@ -334,12 +334,12 @@
       "calledFrom": [
         {
           "file": "decision-tracker.ts",
-          "line": 646,
+          "line": 680,
           "context": "unknown"
         },
         {
           "file": "automated-pm.ts",
-          "line": 235,
+          "line": 275,
           "context": "if"
         },
         {
@@ -392,12 +392,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 229,
+          "line": 269,
           "context": "for"
         },
         {
           "file": "automated-pm.ts",
-          "line": 278,
+          "line": 318,
           "context": "now"
         }
       ]
@@ -413,7 +413,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 756,
+          "line": 796,
           "context": "info"
         },
         {
@@ -429,12 +429,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 745,
+          "line": 785,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 762,
+          "line": 802,
           "context": "info"
         },
         {

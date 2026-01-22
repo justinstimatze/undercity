@@ -1401,7 +1401,7 @@ export async function handleDecide(options: DecideOptions): Promise<void> {
 			return;
 		}
 
-		const success = resolveDecision(options.resolve, {
+		const success = await resolveDecision(options.resolve, {
 			resolvedBy: "human",
 			decision: options.decision,
 			reasoning: options.reasoning,

@@ -12,6 +12,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Learning, LearningCategory } from "./knowledge.js";
 import { addLearning } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
+import { getRAGEngine } from "./rag/index.js";
 import { MODEL_NAMES } from "./types.js";
 
 /**
@@ -506,6 +507,29 @@ export async function extractAndStoreLearnings(
 
 	if (stored.length > 0) {
 		sessionLogger.info({ taskId, count: stored.length }, "Extracted and stored learnings");
+
+		// Index learnings to RAG for semantic search
+		try {
+			const ragEngine = getRAGEngine(stateDir);
+			for (const learning of stored) {
+				await ragEngine.indexContent({
+					content: learning.content,
+					source: "learnings",
+					title: `Learning: ${learning.category} (${taskId})`,
+					metadata: {
+						taskId: learning.taskId,
+						category: learning.category,
+						keywords: learning.keywords,
+						file: learning.structured?.file,
+						learningId: learning.id,
+					},
+				});
+			}
+			sessionLogger.debug({ taskId, count: stored.length }, "Indexed learnings to RAG");
+		} catch (error) {
+			// RAG indexing is optional, don't fail the extraction
+			sessionLogger.debug({ error: String(error) }, "Failed to index learnings to RAG");
+		}
 	}
 
 	return stored;

@@ -110,6 +110,25 @@ undercity patterns                         # View all learning patterns (files, 
 undercity decide                           # View/resolve pending decisions
 ```
 
+**RAG (Retrieval-Augmented Generation)**:
+```bash
+# Index content for semantic search
+undercity rag index <file-or-dir>          # Index file or directory
+undercity rag index <file> --recursive     # Recursive directory indexing
+undercity rag index <file> --source docs   # Tag with source category
+
+# Search indexed content
+undercity rag search "query"               # Hybrid search (vector + keyword)
+undercity rag search "query" --limit 10    # Limit results
+undercity rag search "query" --source code # Filter by source
+
+# Manage indexed documents
+undercity rag list                         # List all indexed documents
+undercity rag list --source docs           # Filter by source
+undercity rag stats                        # Show index statistics
+undercity rag remove <document-id>         # Remove document from index
+```
+
 **Analysis & Post-Mortem** (run after grind or periodically):
 ```bash
 undercity postmortem                       # Analyze last grind: failures, recommendations
@@ -164,6 +183,8 @@ pnpm daemon:logs                           # View logs
 **"How do I improve?"** → `undercity postmortem` → follow recommendations
 **"Are learning systems helping?"** → `undercity effectiveness`
 **"Which model routing works best?"** → `undercity experiment results` or `undercity experiment recommend`
+**"Find similar past work?"** → `undercity rag search "topic"`
+**"Index documentation?"** → `undercity rag index ./docs --recursive`
 
 ## Learning Systems Integration
 
@@ -176,13 +197,15 @@ Undercity has 5 learning systems that compound knowledge across tasks:
 | **Error→Fix Patterns** | `error-fix-patterns.json` | After verification failures | Auto-remediation hints |
 | **Decision Patterns** | `decisions.json` | During planning/execution | PM decision resolution |
 | **Capability Ledger** | `routing-profile.json` | After task completion | Model routing recommendations |
+| **RAG Index** | `rag.db` | Auto-indexed on learning/decision + explicit | Semantic search, PM context |
 
 **How they connect:**
-1. Worker completes task → Records knowledge + patterns + ledger updates
+1. Worker completes task → Records knowledge + patterns + ledger updates + auto-indexes to RAG
 2. New task starts → Injects relevant knowledge + file predictions into context
-3. Planning phase → PM uses knowledge + decisions to resolve questions
-4. Verification fails → Checks error-fix patterns for known solutions
-5. Model routing → Uses ledger to pick optimal model for task type
+3. Planning phase → PM uses knowledge + decisions + RAG semantic search to resolve questions
+4. Decision resolved → Auto-indexes decision context to RAG for future retrieval
+5. Verification fails → Checks error-fix patterns for known solutions
+6. Model routing → Uses ledger to pick optimal model for task type
 
 **MCP Knowledge Tools** (JSON-RPC 2.0 via `POST /mcp`):
 ```bash
@@ -333,6 +356,7 @@ Task marked complete → Record learnings
 | `worktree-state.json` | Active worktrees | No |
 | `ast-index.json` | Symbol index | No |
 | `ax-training.json` | Ax/DSPy examples | No |
+| `rag.db` | RAG SQLite database (vectors + FTS5) | No |
 
 ## Model Routing
 

@@ -44,6 +44,7 @@ import { Command } from "commander";
 import { analysisCommands } from "./commands/analysis.js";
 import { experimentCommands } from "./commands/experiment.js";
 import { mixedCommands } from "./commands/mixed.js";
+import { ragCommands } from "./commands/rag.js";
 import { taskCommands } from "./commands/task.js";
 import { configureOutput, type OutputMode } from "./output.js";
 
@@ -85,6 +86,7 @@ taskCommands.register(program);
 analysisCommands.register(program);
 experimentCommands.register(program);
 mixedCommands.register(program);
+ragCommands.register(program);
 
 // Parse and run
 program.parse();

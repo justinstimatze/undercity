@@ -21,6 +21,7 @@ import {
 import { findRelevantLearnings } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
 import { constrainResearchResult } from "./pm-schemas.js";
+import { getRAGEngine } from "./rag/index.js";
 import { assessResearchROI, createResearchConclusion, gatherResearchROIContext } from "./research-roi.js";
 import { findRelevantFiles, getTaskFileStats } from "./task-file-patterns.js";
 import { filterSafeProposals } from "./task-security.js";
@@ -59,6 +60,12 @@ interface PMContext {
 	relevantFiles: string[];
 	/** Project patterns and preferences */
 	projectPatterns: string[];
+	/** Semantically similar content from RAG index */
+	ragResults: Array<{
+		content: string;
+		source: string;
+		score: number;
+	}>;
 }
 
 /**
@@ -70,6 +77,7 @@ async function gatherPMContext(decision: DecisionPoint, stateDir: string): Promi
 		relevantKnowledge: [],
 		relevantFiles: [],
 		projectPatterns: [],
+		ragResults: [],
 	};
 
 	// Defensive: validate decision point
@@ -134,6 +142,32 @@ async function gatherPMContext(decision: DecisionPoint, stateDir: string): Promi
 		// Continue without patterns
 	}
 
+	// Search RAG index for semantically similar content
+	try {
+		const ragEngine = getRAGEngine(stateDir);
+		const searchResults = await ragEngine.search(decision.question, {
+			limit: 5,
+			sources: ["learnings", "decisions"], // Focus on learnings and decisions
+		});
+		if (Array.isArray(searchResults)) {
+			context.ragResults = searchResults
+				.filter((r) => r?.chunk && typeof r.chunk.content === "string" && r.score > 0.3)
+				.map((r) => ({
+					content: r.chunk.content,
+					source: r.document?.source || "unknown",
+					score: r.score,
+				}));
+		}
+		if (context.ragResults.length > 0) {
+			sessionLogger.debug(
+				{ decisionId: decision.id, ragResultCount: context.ragResults.length },
+				"RAG search found relevant context",
+			);
+		}
+	} catch {
+		// Continue without RAG results - it's optional
+	}
+
 	return context;
 }
 
@@ -168,7 +202,13 @@ export async function pmDecide(decision: DecisionPoint, stateDir: string = ".und
 			.map((d) => `Q: ${d.question}\nDecision: ${d.decision}\nOutcome: ${d.outcome}`)
 			.join("\n\n");
 
-		const relevantKnowledgeStr = context.relevantKnowledge.join("\n");
+		// Combine knowledge base and RAG results for enhanced context
+		const knowledgeParts = [...context.relevantKnowledge];
+		if (context.ragResults.length > 0) {
+			const ragContextStr = context.ragResults.map((r) => `[${r.source}] ${r.content}`).join("\n");
+			knowledgeParts.push(`\n--- Semantically Related ---\n${ragContextStr}`);
+		}
+		const relevantKnowledgeStr = knowledgeParts.join("\n");
 
 		const axResult = await makeDecisionAx(
 			decision.question,
@@ -232,7 +272,7 @@ export async function processPendingDecisions(
 			escalated.push(decision);
 		} else {
 			// Resolve the decision
-			resolveDecision(
+			await resolveDecision(
 				decision.id,
 				{
 					resolvedBy: "pm",
@@ -699,7 +739,7 @@ export async function pmIdeate(
 		sessionLogger.info({ topic, rationale: assessment.rationale }, "PM concluding no-go based on ROI assessment");
 
 		// Document the decision
-		const decision = recordResearchConclusion({
+		const decision = await recordResearchConclusion({
 			topic,
 			taskId: taskId || `ideate-${Date.now()}`,
 			outcome: "no_go",
@@ -720,7 +760,7 @@ export async function pmIdeate(
 	if (assessment.recommendation === "mark_absorbed") {
 		sessionLogger.info({ topic, rationale: assessment.rationale }, "PM marking topic as absorbed");
 
-		const decision = recordResearchConclusion({
+		const decision = await recordResearchConclusion({
 			topic,
 			taskId: taskId || `ideate-${Date.now()}`,
 			outcome: "absorbed",
