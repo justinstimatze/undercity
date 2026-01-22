@@ -23,8 +23,6 @@ import { execFileSync, execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import chalk from "chalk";
-import { type PMResearchResult, pmResearch } from "./automated-pm.js";
 import { recordComplexityOutcome, recordReviewTriageOutcome } from "./ax-programs.js";
 import {
 	adjustModelFromMetrics,
@@ -33,26 +31,16 @@ import {
 	type ComplexityAssessment,
 } from "./complexity.js";
 import { type ContextBriefing, type ContextMode, prepareContext } from "./context.js";
-import { captureDecision, parseAgentOutputForDecisions } from "./decision-tracker.js";
-import { dualLogger } from "./dual-logger.js";
-import {
-	formatFixSuggestionsForPrompt,
-	recordPendingError,
-	recordSuccessfulFix,
-	tryAutoRemediate,
-} from "./error-fix-patterns.js";
+import { tryAutoRemediate } from "./error-fix-patterns.js";
 import { createAndCheckout } from "./git.js";
-import { formatGuidanceForWorker, markGuidanceUsed } from "./human-input-tracking.js";
 import { sessionLogger } from "./logger.js";
-import { parseMetaTaskResult } from "./meta-tasks.js";
 import { MetricsTracker } from "./metrics.js";
 import * as output from "./output.js";
 import { readTaskAssignment, updateTaskCheckpoint } from "./persistence.js";
-import { runEscalatingReview, type UnresolvedTicket } from "./review.js";
-import { addTask, type HandoffContext } from "./task.js";
-import { formatCoModificationHints } from "./task-file-patterns.js";
+import type { UnresolvedTicket } from "./review.js";
+import type { HandoffContext } from "./task.js";
 import { isTestTask, planTaskWithReview, type TieredPlanResult } from "./task-planner.js";
-import { extractMetaTaskType, isMetaTask, isResearchTask, parseResearchResult } from "./task-schema.js";
+import { extractMetaTaskType, isMetaTask, isResearchTask } from "./task-schema.js";
 import {
 	type AttemptRecord,
 	type ErrorCategory,
@@ -64,19 +52,12 @@ import {
 } from "./types.js";
 import { categorizeErrors, type VerificationResult, verifyWork } from "./verification.js";
 import {
-	buildQueryOptions,
-	buildQueryParams,
-	captureDecisionsFromOutput,
-	createMessageTiming,
-	extractResultMessageData,
-	type HookCallbackMatcher,
-	logSlowMessageGap,
-	parseResultMarkers,
-	type ResultMessageData,
-	recordAgentQueryResult,
-	type SDKHookOutput,
-} from "./worker/agent-execution.js";
-import { buildImplementationContext } from "./worker/context-builder.js";
+	type AgentLoopConfig,
+	type AgentLoopContext,
+	type AgentLoopDependencies,
+	type AgentLoopState,
+	runAgentLoop,
+} from "./worker/agent-loop.js";
 import {
 	checkDefaultRetryLimit,
 	checkFileThrashing,
@@ -96,15 +77,13 @@ import {
 	recordPlanFailure,
 	updateDecisionOutcomesToFailure,
 } from "./worker/failure-recording.js";
-import { createPreToolUseHooks, getMaxTurnsForModel } from "./worker/hooks.js";
 import {
-	type PendingWriteTool,
-	processAssistantMessage,
-	processUserMessage,
-	type TaskMarkers,
-	type WriteTrackingState,
-} from "./worker/message-tracker.js";
-import { buildMetaTaskPrompt, buildResearchPrompt, buildResumePrompt } from "./worker/prompt-builder.js";
+	handleMetaTaskResult as handleMetaTaskResultNew,
+	handleResearchTaskResult as handleResearchTaskResultNew,
+	type MetaTaskDependencies,
+	runPMResearchTask as runPMResearchTaskNew,
+} from "./worker/meta-task-handler.js";
+import type { TaskExecutionState, TaskIdentity } from "./worker/state.js";
 import {
 	recordComplexitySuccess,
 	recordKnowledgeLearnings,
@@ -113,22 +92,25 @@ import {
 	updateDecisionOutcomesToSuccess,
 } from "./worker/success-recording.js";
 import {
-	commitResearchOutput,
 	type FastPathAttemptResult,
 	type FastPathConfig,
 	handleFastPathFailure,
 	handleFastPathSuccess,
-	writePMResearchOutput,
 } from "./worker/task-helpers.js";
 import {
 	buildInvalidTargetResult,
 	buildNeedsDecompositionResult,
-	buildTokenUsageSummary,
 	buildValidationFailureResult,
 	type FailureResultContext,
 	isStandardImplementationTask,
 	isTaskAlreadyComplete,
 } from "./worker/task-results.js";
+import {
+	handleAlreadyComplete as handleAlreadyCompleteNew,
+	handleVerificationSuccess as handleVerificationSuccessNew,
+	recordVerificationFailure as recordVerificationFailureNew,
+	type VerificationDependencies,
+} from "./worker/verification-handler.js";
 
 /**
  * Extract explicitly mentioned file names from task description
@@ -534,6 +516,264 @@ export class TaskWorker {
 		this.metricsTracker = new MetricsTracker();
 	}
 
+	// =========================================================================
+	// State Adapters (bridge from this.* to new state interfaces)
+	// =========================================================================
+
+	/**
+	 * Build TaskIdentity from current instance state.
+	 * Used to pass identity to extracted handlers.
+	 */
+	private buildTaskIdentity(taskId: string, baseCommit: string | undefined): TaskIdentity {
+		return {
+			taskId,
+			sessionId: `session_${Date.now()}`,
+			task: this.currentTaskId ? this.currentTaskId : taskId,
+			baseCommit,
+			isMetaTask: this.isCurrentTaskMeta,
+			isResearchTask: this.isCurrentTaskResearch,
+			metaType: this.isCurrentTaskMeta ? extractMetaTaskType(this.currentTaskId) : null,
+		};
+	}
+
+	/**
+	 * Build MetaTaskDependencies adapter from instance methods.
+	 * Enables extracted handlers to use instance functionality.
+	 */
+	private buildMetaTaskDeps(): MetaTaskDependencies {
+		return {
+			commitWork: (task: string) => this.commitWork(task),
+			recordMetricsAttempts: (records) => this.metricsTracker.recordAttempts(records),
+			completeMetricsTask: (success) => this.metricsTracker.completeTask(success),
+		};
+	}
+
+	/**
+	 * Build WorkerConfig from instance properties.
+	 */
+	private buildWorkerConfig() {
+		return {
+			maxAttempts: this.maxAttempts,
+			maxRetriesPerTier: this.maxRetriesPerTier,
+			maxOpusRetries: this.maxOpusRetries,
+			startingModel: this.startingModel,
+			maxTier: this.maxTier,
+			runTypecheck: this.runTypecheck,
+			runTests: this.runTests,
+			skipOptionalVerification: this.skipOptionalVerification,
+			reviewPasses: this.reviewPasses,
+			maxReviewPassesPerTier: this.maxReviewPassesPerTier,
+			maxOpusReviewPasses: this.maxOpusReviewPasses,
+			multiLensAtOpus: this.multiLensAtOpus,
+			autoCommit: this.autoCommit,
+			stream: this.stream,
+			verbose: this.verbose,
+			enablePlanning: this.enablePlanning,
+			auditBash: this.auditBash,
+			useSystemPromptPreset: this.useSystemPromptPreset,
+			workingDirectory: this.workingDirectory,
+			stateDir: this.stateDir,
+			branch: this.branch,
+		} as const;
+	}
+
+	/**
+	 * Build a minimal state view for meta-task handlers.
+	 * Handlers can modify this directly - it references instance arrays.
+	 */
+	private buildMetaTaskState() {
+		return {
+			attempts: this.attempts,
+			currentModel: this.currentModel,
+			sameModelRetries: this.sameModelRetries,
+			attemptRecords: this.attemptRecords, // Reference, not copy
+			tokenUsage: this.tokenUsageThisTask, // Reference, not copy
+			writeCountThisExecution: this.writeCountThisExecution,
+			phase: {
+				phase: "executing" as const,
+				model: this.currentModel,
+				attempt: this.attempts,
+				startedAt: Date.now(),
+			},
+			// Minimal additional fields for type compatibility
+			lastAgentOutput: "",
+			lastAgentTurns: 0,
+			currentAgentSessionId: undefined,
+			lastFeedback: undefined,
+			writesPerFile: new Map<string, number>(),
+			noOpEditCount: 0,
+			consecutiveNoWriteAttempts: 0,
+			errorHistory: [] as Array<{ category: string; message: string; attempt: number }>,
+			lastErrorCategory: null,
+			lastErrorMessage: null,
+			lastDetailedErrors: [] as string[],
+			pendingErrorSignature: null,
+			filesBeforeAttempt: [] as string[],
+			autoRemediationAttempted: false,
+			taskAlreadyCompleteReason: null,
+			invalidTargetReason: null,
+			needsDecompositionReason: null,
+			pendingTickets: [] as UnresolvedTicket[],
+			currentBriefing: undefined,
+			executionPlan: null,
+			injectedLearningIds: [] as string[],
+			currentHandoffContext: undefined,
+			complexityAssessment: null,
+			reviewTriageResult: null,
+		};
+	}
+
+	/**
+	 * Build VerificationDependencies adapter from instance methods.
+	 * Enables verification handlers to use instance functionality.
+	 */
+	private buildVerificationDeps(): VerificationDependencies {
+		return {
+			saveCheckpoint: (phase, data) => this.saveCheckpoint(phase as TaskCheckpoint["phase"], data),
+			commitWork: (task: string) => this.commitWork(task),
+			getModifiedFiles: () => this.getModifiedFiles(),
+			getFilesFromLastCommit: () => this.getFilesFromLastCommit(),
+			recordMetricsAttempts: (records) => this.metricsTracker.recordAttempts(records),
+			completeMetricsTask: (success) => this.metricsTracker.completeTask(success),
+			recordSuccessLearnings: (taskId, task) => this.recordSuccessLearnings(taskId, task),
+		};
+	}
+
+	/**
+	 * Build a state view for verification handlers.
+	 * Handlers can modify this directly - it references instance arrays.
+	 */
+	private buildVerificationState(): TaskExecutionState {
+		return {
+			attempts: this.attempts,
+			currentModel: this.currentModel,
+			sameModelRetries: this.sameModelRetries,
+			attemptRecords: this.attemptRecords, // Reference, not copy
+			tokenUsage: this.tokenUsageThisTask, // Reference, not copy
+			writeCountThisExecution: this.writeCountThisExecution,
+			phase: {
+				phase: "executing" as const,
+				model: this.currentModel,
+				attempt: this.attempts,
+				startedAt: Date.now(),
+			},
+			lastAgentOutput: this.lastAgentOutput,
+			lastAgentTurns: this.lastAgentTurns,
+			currentAgentSessionId: undefined,
+			lastFeedback: this.lastFeedback,
+			writesPerFile: new Map<string, number>(),
+			noOpEditCount: this.noOpEditCount,
+			consecutiveNoWriteAttempts: 0,
+			errorHistory: this.errorHistory, // Reference
+			lastErrorCategory: this.lastErrorCategory,
+			lastErrorMessage: this.lastErrorMessage,
+			lastDetailedErrors: this.lastDetailedErrors, // Reference
+			pendingErrorSignature: this.pendingErrorSignature,
+			filesBeforeAttempt: this.filesBeforeAttempt, // Reference
+			autoRemediationAttempted: this.autoRemediationAttempted,
+			taskAlreadyCompleteReason: this.taskAlreadyCompleteReason,
+			invalidTargetReason: this.invalidTargetReason,
+			needsDecompositionReason: this.needsDecompositionReason,
+			pendingTickets: this.pendingTickets, // Reference
+			currentBriefing: this.currentBriefing,
+			executionPlan: this.executionPlan,
+			injectedLearningIds: this.injectedLearningIds, // Reference
+			currentHandoffContext: this.currentHandoffContext,
+			complexityAssessment: this.complexityAssessment,
+			reviewTriageResult: this.reviewTriageResult,
+		};
+	}
+
+	/**
+	 * Build AgentLoopConfig from instance properties.
+	 */
+	private buildAgentLoopConfig(): AgentLoopConfig {
+		return {
+			workingDirectory: this.workingDirectory,
+			stateDir: this.stateDir,
+			stream: this.stream,
+			auditBash: this.auditBash,
+			useSystemPromptPreset: this.useSystemPromptPreset,
+			maxWritesPerFile: TaskWorker.MAX_WRITES_PER_FILE,
+		};
+	}
+
+	/**
+	 * Build AgentLoopState from instance state.
+	 * State is mutable - changes persist back to the instance via sync method.
+	 */
+	private buildAgentLoopState(): AgentLoopState {
+		return {
+			currentTaskId: this.currentTaskId,
+			currentModel: this.currentModel,
+			attempts: this.attempts,
+			isCurrentTaskMeta: this.isCurrentTaskMeta,
+			isCurrentTaskResearch: this.isCurrentTaskResearch,
+			currentAgentSessionId: this.currentAgentSessionId,
+			lastFeedback: this.lastFeedback,
+			lastPostMortem: this.lastPostMortem,
+			writeCountThisExecution: this.writeCountThisExecution,
+			writesPerFile: this.writesPerFile,
+			noOpEditCount: this.noOpEditCount,
+			consecutiveNoWriteAttempts: this.consecutiveNoWriteAttempts,
+			taskAlreadyCompleteReason: this.taskAlreadyCompleteReason,
+			invalidTargetReason: this.invalidTargetReason,
+			needsDecompositionReason: this.needsDecompositionReason,
+			lastAgentOutput: this.lastAgentOutput,
+			lastAgentTurns: this.lastAgentTurns,
+			tokenUsageThisTask: this.tokenUsageThisTask,
+			injectedLearningIds: this.injectedLearningIds,
+		};
+	}
+
+	/**
+	 * Build AgentLoopDependencies from instance methods.
+	 */
+	private buildAgentLoopDeps(): AgentLoopDependencies {
+		return {
+			extractTokenUsage: (message: unknown) => this.metricsTracker.extractTokenUsage(message) ?? undefined,
+			recordTokenUsage: (message: unknown, model: ModelTier) => this.metricsTracker.recordTokenUsage(message, model),
+			buildAssignmentContext: () => this.buildAssignmentContext(),
+			buildHandoffContextSection: () => this.buildHandoffContextSection(),
+		};
+	}
+
+	/**
+	 * Build AgentLoopContext from task and current execution state.
+	 */
+	private buildAgentLoopContext(task: string): AgentLoopContext {
+		return {
+			task,
+			briefing: this.currentBriefing,
+			executionPlan: this.executionPlan,
+			handoffContext: this.currentHandoffContext,
+			errorHistory: this.errorHistory,
+		};
+	}
+
+	/**
+	 * Sync state changes from agent loop result back to instance.
+	 */
+	private syncAgentLoopState(state: AgentLoopState): void {
+		this.currentAgentSessionId = state.currentAgentSessionId;
+		this.writeCountThisExecution = state.writeCountThisExecution;
+		this.noOpEditCount = state.noOpEditCount;
+		this.consecutiveNoWriteAttempts = state.consecutiveNoWriteAttempts;
+		this.taskAlreadyCompleteReason = state.taskAlreadyCompleteReason;
+		this.invalidTargetReason = state.invalidTargetReason;
+		this.needsDecompositionReason = state.needsDecompositionReason;
+		this.lastAgentOutput = state.lastAgentOutput;
+		this.lastAgentTurns = state.lastAgentTurns;
+		this.injectedLearningIds = state.injectedLearningIds;
+		// Note: writesPerFile and tokenUsageThisTask are references, already synced
+		// lastPostMortem is cleared by agent loop, sync it back
+		this.lastPostMortem = state.lastPostMortem;
+	}
+
+	// =========================================================================
+	// Logging
+	// =========================================================================
+
 	private log(message: string, data?: Record<string, unknown>): void {
 		if (this.verbose) {
 			sessionLogger.info(data ?? {}, message);
@@ -757,7 +997,8 @@ export class TaskWorker {
 		// Route research tasks through automated PM
 		// PM does web research, writes design doc, and generates follow-up tasks
 		if (this.isCurrentTaskResearch) {
-			return this.runPMResearchTask(task, taskId, startTime);
+			const identity = this.buildTaskIdentity(taskId, baseCommit);
+			return runPMResearchTaskNew(identity, this.buildWorkerConfig(), startTime);
 		}
 
 		// Prepare context and assess complexity
@@ -776,20 +1017,53 @@ export class TaskWorker {
 				this.saveCheckpoint("executing");
 				output.workerPhase(taskId, "executing", { model: this.currentModel });
 				const agentStart = Date.now();
-				const agentOutput = await this.executeAgent(task);
+
+				// Build agent loop inputs
+				const agentLoopState = this.buildAgentLoopState();
+				const agentLoopResult = await runAgentLoop(
+					this.buildAgentLoopContext(task),
+					agentLoopState,
+					this.buildAgentLoopConfig(),
+					this.buildAgentLoopDeps(),
+				);
+
+				// Sync state changes back to instance
+				this.syncAgentLoopState(agentLoopState);
+
+				const agentOutput = agentLoopResult.output;
 				phaseTimings.agentExecution = Date.now() - agentStart;
 
 				// Handle meta-tasks
 				if (this.isCurrentTaskMeta && metaType) {
-					const result = this.handleMetaTaskResult(agentOutput, metaType, task, taskId, attemptStart, startTime);
-					if (result) return result;
+					const identity = this.buildTaskIdentity(taskId, baseCommit);
+					const state = this.buildMetaTaskState();
+					const handleResult = handleMetaTaskResultNew(
+						identity,
+						state,
+						agentOutput,
+						metaType,
+						attemptStart,
+						this.buildMetaTaskDeps(),
+					);
+					if (handleResult.done) return handleResult.result;
+					this.lastFeedback = handleResult.feedback;
 					continue;
 				}
 
 				// Handle research tasks
 				if (this.isCurrentTaskResearch) {
-					const result = await this.handleResearchTaskResult(agentOutput, task, taskId, attemptStart, startTime);
-					if (result) return result;
+					const identity = this.buildTaskIdentity(taskId, baseCommit);
+					const state = this.buildMetaTaskState();
+					const handleResult = await handleResearchTaskResultNew(
+						identity,
+						state,
+						this.buildWorkerConfig(),
+						agentOutput,
+						attemptStart,
+						this.buildMetaTaskDeps(),
+					);
+					if (handleResult.done) return handleResult.result;
+					this.lastFeedback = handleResult.feedback;
 					continue;
 				}
 
@@ -1163,251 +1437,6 @@ export class TaskWorker {
 	}
 
 	/**
-	 * Handle meta-task result parsing and return
-	 */
-	private handleMetaTaskResult(
-		agentOutput: string,
-		metaType: MetaTaskType,
-		task: string,
-		taskId: string,
-		attemptStart: number,
-		startTime: number,
-	): TaskResult | null {
-		output.workerPhase(taskId, "parsing");
-		const metaResult = parseMetaTaskResult(agentOutput, metaType);
-
-		if (metaResult) {
-			output.workerVerification(taskId, true);
-			output.info(`Meta-task produced ${metaResult.recommendations.length} recommendations`, { taskId });
-
-			this.attemptRecords.push({
-				model: this.currentModel,
-				durationMs: Date.now() - attemptStart,
-				success: true,
-			});
-
-			this.metricsTracker.recordAttempts(this.attemptRecords);
-			this.metricsTracker.completeTask(true);
-
-			return {
-				task,
-				status: "complete",
-				model: this.currentModel,
-				attempts: this.attempts,
-				durationMs: Date.now() - startTime,
-				tokenUsage: {
-					attempts: this.tokenUsageThisTask,
-					total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
-				},
-				metaTaskResult: metaResult,
-			};
-		}
-
-		output.warning("Failed to parse meta-task result, retrying...", { taskId });
-		this.lastFeedback =
-			"Your response could not be parsed as valid recommendations. Please return a JSON object with a 'recommendations' array.";
-		return null;
-	}
-
-	/**
-	 * Handle research task result and return
-	 */
-	private async handleResearchTaskResult(
-		agentOutput: string,
-		task: string,
-		taskId: string,
-		attemptStart: number,
-		startTime: number,
-	): Promise<TaskResult | null> {
-		const hasWrittenFile = this.writeCountThisExecution > 0;
-
-		if (hasWrittenFile) {
-			output.workerVerification(taskId, true);
-			output.info("Research findings written to .undercity/research/", { taskId });
-
-			this.attemptRecords.push({
-				model: this.currentModel,
-				durationMs: Date.now() - attemptStart,
-				success: true,
-			});
-
-			let commitSha: string | undefined;
-			if (this.autoCommit) {
-				output.workerPhase(taskId, "committing");
-				commitSha = await this.commitWork(task);
-			}
-
-			this.metricsTracker.recordAttempts(this.attemptRecords);
-			this.metricsTracker.completeTask(true);
-
-			const researchResult = parseResearchResult(agentOutput) ?? undefined;
-
-			return {
-				task,
-				status: "complete",
-				model: this.currentModel,
-				attempts: this.attempts,
-				durationMs: Date.now() - startTime,
-				commitSha,
-				tokenUsage: {
-					attempts: this.tokenUsageThisTask,
-					total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
-				},
-				researchResult,
-			};
-		}
-
-		output.warning("Research task did not write findings file, retrying...", { taskId });
-		this.lastFeedback =
-			"You must write your research findings to the specified markdown file. Please create the file with your findings.";
-		return null;
-	}
-
-	/**
-	 * Run PM-based research for research tasks
-	 * Uses automated PM to research topic, write design doc, and generate follow-up tasks
-	 */
-	private async runPMResearchTask(task: string, taskId: string, startTime: number): Promise<TaskResult> {
-		output.workerPhase(taskId, "pm-research");
-		sessionLogger.info({ taskId, task }, "Running PM-based research");
-
-		const topic = task.replace(/^\[research\]\s*/i, "").trim();
-
-		try {
-			const result = await pmResearch(topic, this.workingDirectory);
-
-			// Write design doc
-			const designDoc = this.formatPMResearchAsDesignDoc(topic, result);
-			const outputPath = writePMResearchOutput(topic, designDoc, {
-				taskId,
-				task,
-				workingDirectory: this.workingDirectory,
-				autoCommit: this.autoCommit,
-			});
-
-			// Add generated task proposals to board
-			const addedTasks = this.addResearchTaskProposals(result.taskProposals);
-
-			output.info(`PM research complete: ${result.findings.length} findings, ${addedTasks.length} tasks added`, {
-				taskId,
-			});
-
-			// Commit if enabled
-			const commitSha = this.autoCommit ? commitResearchOutput(outputPath, topic, this.workingDirectory) : undefined;
-
-			return {
-				task,
-				status: "complete",
-				model: "sonnet",
-				attempts: 1,
-				durationMs: Date.now() - startTime,
-				commitSha,
-				researchResult: {
-					summary: `Research on: ${topic}`,
-					findings: result.findings.map((f) => ({
-						finding: f,
-						confidence: 0.8,
-						category: "fact" as const,
-					})),
-					nextSteps: [...result.recommendations, ...addedTasks.map((id) => `Task ${id} added to board`)],
-					sources: result.sources,
-				},
-			};
-		} catch (error) {
-			sessionLogger.error({ error: String(error), taskId }, "PM research failed");
-			return {
-				task,
-				status: "failed",
-				model: "sonnet",
-				attempts: 1,
-				error: `PM research failed: ${String(error)}`,
-				durationMs: Date.now() - startTime,
-			};
-		}
-	}
-
-	/**
-	 * Add task proposals from PM research to the board
-	 */
-	private addResearchTaskProposals(proposals: PMResearchResult["taskProposals"]): string[] {
-		const addedTasks: string[] = [];
-		for (const proposal of proposals) {
-			try {
-				const newTask = addTask(proposal.objective, {
-					priority: proposal.suggestedPriority || 5,
-					tags: proposal.tags,
-				});
-				addedTasks.push(newTask.id);
-				sessionLogger.info(
-					{ taskId: newTask.id, objective: proposal.objective },
-					"Added follow-up task from PM research",
-				);
-			} catch (error) {
-				sessionLogger.warn({ error: String(error), proposal }, "Failed to add task proposal");
-			}
-		}
-		return addedTasks;
-	}
-
-	/**
-	 * Format PM research result as a structured design document
-	 */
-	private formatPMResearchAsDesignDoc(topic: string, result: PMResearchResult): string {
-		const lines: string[] = [
-			`# Research: ${topic}`,
-			"",
-			`_Generated by automated PM on ${new Date().toISOString()}_`,
-			"",
-			"## Summary",
-			"",
-		];
-
-		if (result.findings.length > 0) {
-			lines.push("### Key Findings");
-			lines.push("");
-			for (const finding of result.findings) {
-				lines.push(`- ${finding}`);
-			}
-			lines.push("");
-		}
-
-		if (result.recommendations.length > 0) {
-			lines.push("### Recommendations");
-			lines.push("");
-			for (const rec of result.recommendations) {
-				lines.push(`- ${rec}`);
-			}
-			lines.push("");
-		}
-
-		if (result.sources.length > 0) {
-			lines.push("### Sources");
-			lines.push("");
-			for (const source of result.sources) {
-				lines.push(`- ${source}`);
-			}
-			lines.push("");
-		}
-
-		if (result.taskProposals.length > 0) {
-			lines.push("## Generated Tasks");
-			lines.push("");
-			for (const proposal of result.taskProposals) {
-				lines.push(`### ${proposal.objective}`);
-				lines.push("");
-				lines.push(`**Rationale:** ${proposal.rationale}`);
-				lines.push(`**Priority:** ${proposal.suggestedPriority}`);
-				if (proposal.tags && proposal.tags.length > 0) {
-					lines.push(`**Tags:** ${proposal.tags.join(", ")}`);
-				}
-				lines.push("");
-			}
-		}
-
-		return lines.join("\n");
-	}
-
-	/**
 	 * Handle standard implementation task verification and result
 	 */
 	private async handleImplementationTaskResult(
@@ -1456,21 +1485,35 @@ export class TaskWorker {
 
 		// Check for task already complete (verification must pass to trust agent's claim)
 		if (isTaskAlreadyComplete(verification, this.taskAlreadyCompleteReason, this.noOpEditCount)) {
-			return this.buildAlreadyCompleteResult(task, taskId, verification, startTime);
+			const identity = this.buildTaskIdentity(taskId, baseCommit);
+			const state = this.buildVerificationState();
+			return handleAlreadyCompleteNew(identity, state, verification, startTime);
 		}
 
 		if (verification.passed) {
-			return await this.handleVerificationSuccess(
-				task,
-				taskId,
-				baseCommit,
+			const identity = this.buildTaskIdentity(taskId, baseCommit);
+			const state = this.buildVerificationState();
+			const config = this.buildWorkerConfig();
+			const deps = this.buildVerificationDeps();
+			const handleResult = await handleVerificationSuccessNew(
+				identity,
+				state,
+				config,
 				verification,
 				reviewLevel,
 				errorCategories,
+				baseCommit,
 				attemptStart,
 				startTime,
 				phaseTimings,
+				deps,
 			);
+			if (handleResult.done) {
+				return handleResult.result;
+			}
+			// Review failed - retry needed
+			this.lastFeedback = handleResult.feedback;
+			return null;
 		}
 
 		// Verification failed - try auto-remediation before escalating to AI
@@ -1499,17 +1542,29 @@ export class TaskWorker {
 
 				if (reVerification.passed) {
 					output.success(`Auto-remediation fixed ${primaryCategory} error`, { taskId });
-					return await this.handleVerificationSuccess(
-						task,
-						taskId,
-						baseCommit,
+					const identity = this.buildTaskIdentity(taskId, baseCommit);
+					const state = this.buildVerificationState();
+					const config = this.buildWorkerConfig();
+					const deps = this.buildVerificationDeps();
+					const handleResult = await handleVerificationSuccessNew(
+						identity,
+						state,
+						config,
 						reVerification,
 						reviewLevel,
 						errorCategories,
+						baseCommit,
 						attemptStart,
 						startTime,
 						phaseTimings,
+						deps,
 					);
+					if (handleResult.done) {
+						return handleResult.result;
+					}
+					// Review failed - retry needed
+					this.lastFeedback = handleResult.feedback;
+					return null;
 				}
 				output.debug(`Auto-remediation applied but verification still failed`, { taskId });
 			} else if (remediation.attempted) {
@@ -1521,192 +1576,30 @@ export class TaskWorker {
 		}
 
 		// Verification failed (and auto-remediation didn't help)
-		this.handleVerificationFailure(task, taskId, verification, errorCategories, attemptStart);
+		{
+			const identity = this.buildTaskIdentity(taskId, baseCommit);
+			const state = this.buildVerificationState();
+			const config = this.buildWorkerConfig();
+			const deps = this.buildVerificationDeps();
+			const { feedback, errorSignature } = recordVerificationFailureNew(
+				identity,
+				state,
+				config,
+				verification,
+				errorCategories,
+				attemptStart,
+				deps,
+			);
+			this.lastFeedback = feedback;
+			this.pendingErrorSignature = errorSignature;
+			// Sync state changes back from handler
+			this.lastErrorCategory = state.lastErrorCategory;
+			this.lastErrorMessage = state.lastErrorMessage;
+			// errorHistory and lastDetailedErrors are references, already updated
+			// Handle escalation decision
+			this.handleEscalationDecision(task, taskId, verification, errorCategories);
+		}
 		return null;
-	}
-
-	/**
-	 * Build result for task that was already complete
-	 */
-	private buildAlreadyCompleteResult(
-		task: string,
-		taskId: string,
-		verification: VerificationResult,
-		startTime: number,
-	): TaskResult {
-		const reason = this.taskAlreadyCompleteReason || "no-op edits detected";
-		output.workerVerification(taskId, true);
-		sessionLogger.info({ taskId, reason, noOpEdits: this.noOpEditCount }, "Task already complete");
-
-		return {
-			task,
-			status: "complete",
-			model: this.currentModel,
-			attempts: this.attempts,
-			verification,
-			commitSha: undefined,
-			durationMs: Date.now() - startTime,
-			tokenUsage: buildTokenUsageSummary(this.tokenUsageThisTask),
-			taskAlreadyComplete: true,
-		};
-	}
-
-	/**
-	 * Handle successful verification - run reviews, commit, record learnings
-	 */
-	private async handleVerificationSuccess(
-		task: string,
-		taskId: string,
-		baseCommit: string | undefined,
-		verification: VerificationResult,
-		reviewLevel: { review: boolean; multiLens: boolean; maxReviewTier: ModelTier },
-		errorCategories: ErrorCategory[],
-		attemptStart: number,
-		startTime: number,
-		phaseTimings: Record<string, number>,
-	): Promise<TaskResult | null> {
-		output.workerVerification(taskId, true);
-
-		// Record successful fix if we had a pending error
-		if (this.pendingErrorSignature) {
-			try {
-				const currentFiles = this.getModifiedFiles();
-				const newFiles = currentFiles.filter((f) => !this.filesBeforeAttempt.includes(f));
-				const changedFiles = newFiles.length > 0 ? newFiles : currentFiles;
-				recordSuccessfulFix({
-					taskId: this.currentTaskId,
-					filesChanged: changedFiles,
-					editSummary: `Fixed ${errorCategories.join(", ") || "verification"} error`,
-					workingDirectory: this.workingDirectory,
-					baseCommit,
-					stateDir: this.stateDir,
-				});
-				output.debug(`Recorded fix for error pattern`, { taskId, files: changedFiles.length });
-
-				// Mark human guidance as successful if it was used
-				try {
-					markGuidanceUsed(this.pendingErrorSignature, true, this.stateDir);
-				} catch {
-					// Non-critical
-				}
-			} catch {
-				// Non-critical
-			}
-			this.pendingErrorSignature = null;
-		}
-
-		let finalVerification = verification;
-		if (verification.hasWarnings) {
-			output.debug("Verification passed with warnings (skipping retry)", {
-				taskId,
-				warnings: verification.feedback.slice(0, 200),
-			});
-		}
-
-		// Run review passes if enabled
-		if (reviewLevel.review) {
-			const reviewResult = await this.runReviewPasses(task, taskId, baseCommit, reviewLevel);
-			if (!reviewResult.continue) {
-				return null; // Retry needed
-			}
-			if (reviewResult.verification) {
-				finalVerification = reviewResult.verification;
-			}
-		}
-
-		// Success! Record and commit
-		this.attemptRecords.push({
-			model: this.currentModel,
-			durationMs: Date.now() - attemptStart,
-			success: true,
-		});
-		this.lastFeedback = undefined;
-
-		let commitSha: string | undefined;
-		if (this.autoCommit && finalVerification.filesChanged > 0) {
-			this.saveCheckpoint("committing", { passed: true });
-			output.workerPhase(taskId, "committing");
-			commitSha = await this.commitWork(task);
-		}
-
-		this.metricsTracker.recordAttempts(this.attemptRecords);
-		this.metricsTracker.completeTask(true);
-
-		// Log phase timings
-		const totalMs = Date.now() - startTime;
-		const msPerTurn = this.lastAgentTurns > 0 ? Math.round(phaseTimings.agentExecution / this.lastAgentTurns) : 0;
-		output.info(
-			`Phase timings: context=${phaseTimings.contextPrep}ms, agent=${phaseTimings.agentExecution}ms (${this.lastAgentTurns} turns, ${msPerTurn}ms/turn), verify=${phaseTimings.verification}ms, total=${totalMs}ms`,
-			{ taskId, phaseTimings, totalMs, turns: this.lastAgentTurns, msPerTurn },
-		);
-
-		// Post-success operations (learnings, patterns, decisions)
-		await this.recordSuccessLearnings(taskId, task);
-
-		return {
-			task,
-			status: "complete",
-			model: this.currentModel,
-			attempts: this.attempts,
-			verification: finalVerification,
-			commitSha,
-			durationMs: Date.now() - startTime,
-			tokenUsage: {
-				attempts: this.tokenUsageThisTask,
-				total: this.tokenUsageThisTask.reduce((sum, usage) => sum + usage.totalTokens, 0),
-			},
-		};
-	}
-
-	/**
-	 * Run review passes and return whether to continue or retry
-	 */
-	private async runReviewPasses(
-		task: string,
-		taskId: string,
-		baseCommit: string | undefined,
-		reviewLevel: { review: boolean; multiLens: boolean; maxReviewTier: ModelTier },
-	): Promise<{ continue: boolean; verification?: VerificationResult }> {
-		this.saveCheckpoint("reviewing", { passed: true });
-		output.workerPhase(taskId, "reviewing");
-
-		const reviewResult = await runEscalatingReview(task, {
-			useMultiLens: reviewLevel.multiLens,
-			maxReviewTier: reviewLevel.maxReviewTier,
-			maxReviewPassesPerTier: this.maxReviewPassesPerTier,
-			maxOpusReviewPasses: this.maxOpusReviewPasses,
-			workingDirectory: this.workingDirectory,
-			runTypecheck: this.runTypecheck,
-			runTests: this.runTests,
-			verbose: this.verbose,
-		});
-
-		if (!reviewResult.converged) {
-			if (reviewResult.unresolvedTickets && reviewResult.unresolvedTickets.length > 0) {
-				this.pendingTickets = reviewResult.unresolvedTickets;
-			}
-			output.warning("Review could not fully resolve issues, retrying task...", { taskId });
-			this.lastFeedback = `Review found issues that couldn't be fully resolved: ${reviewResult.issuesFound.join(", ")}`;
-			return { continue: false };
-		}
-
-		if (reviewResult.issuesFound.length > 0) {
-			const finalVerification = await verifyWork({
-				runTypecheck: this.runTypecheck,
-				runTests: this.runTests,
-				workingDirectory: this.workingDirectory,
-				baseCommit,
-				skipOptionalChecks: this.skipOptionalVerification,
-			});
-			if (!finalVerification.passed) {
-				output.warning("Final verification failed after reviews", { taskId });
-				this.lastFeedback = finalVerification.feedback;
-				return { continue: false };
-			}
-			return { continue: true, verification: finalVerification };
-		}
-
-		return { continue: true };
 	}
 
 	/**
@@ -1742,123 +1635,6 @@ export class TaskWorker {
 				// Non-critical
 			}
 		}
-	}
-
-	/**
-	 * Handle verification failure - record errors, prepare feedback, decide escalation
-	 */
-	private handleVerificationFailure(
-		task: string,
-		taskId: string,
-		verification: VerificationResult,
-		errorCategories: ErrorCategory[],
-		attemptStart: number,
-	): void {
-		this.attemptRecords.push({
-			model: this.currentModel,
-			durationMs: Date.now() - attemptStart,
-			success: false,
-			errorCategories,
-		});
-
-		// Record error pattern for learning
-		const primaryCategory = errorCategories[0] || "unknown";
-		const errorMessage = verification.issues[0] || verification.feedback.slice(0, 200);
-		// Store for potential permanent failure recording
-		this.lastErrorCategory = primaryCategory;
-		this.lastErrorMessage = errorMessage;
-
-		// Ralph-style: accumulate errors across attempts for RULES injection
-		this.errorHistory.push({
-			category: primaryCategory,
-			message: errorMessage,
-			attempt: this.attempts,
-		});
-		// Capture detailed errors: all issues plus relevant lines from feedback
-		this.lastDetailedErrors = [
-			...verification.issues,
-			...verification.feedback
-				.split("\n")
-				.filter(
-					(line) => line.includes("error") || line.includes("Error") || line.includes("FAIL") || line.includes("✗"),
-				)
-				.slice(0, 10),
-		];
-		try {
-			this.pendingErrorSignature = recordPendingError(
-				this.currentTaskId,
-				primaryCategory,
-				errorMessage,
-				this.getModifiedFiles(),
-			);
-			this.filesBeforeAttempt = this.getModifiedFiles();
-		} catch {
-			// Non-critical
-		}
-
-		// Build enhanced feedback with fix suggestions
-		this.lastFeedback = this.buildEnhancedFeedback(taskId, verification, primaryCategory, errorMessage);
-
-		this.saveCheckpoint("verifying", {
-			passed: false,
-			errors: verification.issues.slice(0, 5),
-		});
-
-		const errorSummary = errorCategories.length > 0 ? errorCategories.join(", ") : verification.issues.join(", ");
-		output.workerVerification(taskId, false, [errorSummary]);
-
-		// Handle escalation decision
-		this.handleEscalationDecision(task, taskId, verification, errorCategories);
-	}
-
-	/**
-	 * Build enhanced feedback with fix suggestions and co-modification hints
-	 */
-	private buildEnhancedFeedback(
-		taskId: string,
-		verification: VerificationResult,
-		primaryCategory: string,
-		errorMessage: string,
-	): string {
-		let enhancedFeedback = verification.feedback;
-
-		try {
-			const fixSuggestion = formatFixSuggestionsForPrompt(primaryCategory, errorMessage);
-			if (fixSuggestion) {
-				output.debug("Found fix suggestions from previous errors", { taskId });
-				enhancedFeedback += `\n\n${fixSuggestion}`;
-			}
-		} catch {
-			// Non-critical
-		}
-
-		// Inject human guidance if available for this error pattern
-		if (this.pendingErrorSignature) {
-			try {
-				const humanGuidance = formatGuidanceForWorker(this.pendingErrorSignature, this.stateDir);
-				if (humanGuidance) {
-					output.debug("Found human guidance for error pattern", { taskId });
-					enhancedFeedback += `\n\n${humanGuidance}`;
-				}
-			} catch {
-				// Non-critical
-			}
-		}
-
-		try {
-			const modifiedFiles = this.getModifiedFiles();
-			if (modifiedFiles.length > 0) {
-				const coModHints = formatCoModificationHints(modifiedFiles);
-				if (coModHints) {
-					output.debug("Found co-modification hints", { taskId, fileCount: modifiedFiles.length });
-					enhancedFeedback += `\n\n${coModHints}`;
-				}
-			}
-		} catch {
-			// Non-critical
-		}
-
-		return enhancedFeedback;
 	}
 
 	/**
@@ -2259,410 +2035,6 @@ Be concise and specific. Focus on actionable insights.`;
 
 	/** Post-mortem analysis from previous tier (only set on escalation) */
 	private lastPostMortem?: string;
-
-	/**
-	 * Execute the agent on current task
-	 *
-	 * Uses session resume on retry to preserve agent's exploration work.
-	 * Instead of starting fresh, we continue the conversation with feedback.
-	 */
-	private async executeAgent(task: string): Promise<string> {
-		let result = "";
-
-		// Meta-tasks use specialized prompts and don't require file changes
-		const metaType = this.isCurrentTaskMeta ? extractMetaTaskType(task) : null;
-
-		// Check if this is a retry with an existing session to resume
-		const isRetry = this.attempts > 1 && this.lastFeedback;
-		const canResume = isRetry && this.currentAgentSessionId && !this.lastPostMortem;
-		// Note: Don't resume if we have a post-mortem (model escalation = new session needed)
-
-		let prompt: string;
-		let resumePrompt: string | undefined;
-
-		if (canResume && this.lastFeedback) {
-			// Resume with verification feedback
-			resumePrompt = buildResumePrompt(this.lastFeedback);
-			prompt = ""; // Not used when resuming
-			sessionLogger.info(
-				{ sessionId: this.currentAgentSessionId, attempt: this.attempts },
-				"Resuming agent session with verification feedback",
-			);
-		} else if (this.isCurrentTaskMeta && metaType) {
-			// Meta-task prompt
-			prompt = buildMetaTaskPrompt(metaType, task, this.workingDirectory, this.attempts, this.lastFeedback);
-		} else if (this.isCurrentTaskResearch) {
-			// Research task prompt
-			prompt = buildResearchPrompt(task, this.attempts, this.lastFeedback, this.consecutiveNoWriteAttempts);
-		} else {
-			// Standard implementation task: build prompt with context
-			const contextResult = buildImplementationContext({
-				task,
-				stateDir: this.stateDir,
-				workingDirectory: this.workingDirectory,
-				assignmentContext: this.buildAssignmentContext(),
-				handoffContextSection: this.currentHandoffContext ? this.buildHandoffContextSection() : undefined,
-				briefing: this.currentBriefing,
-				executionPlan: this.executionPlan,
-				lastPostMortem: this.lastPostMortem,
-				errorHistory: this.errorHistory,
-			});
-
-			prompt = contextResult.prompt;
-			this.injectedLearningIds = contextResult.injectedLearningIds;
-
-			// Clear post-mortem after use - only applies to first attempt at new tier
-			if (this.lastPostMortem) {
-				this.lastPostMortem = undefined;
-			}
-		}
-
-		// Token usage will be accumulated in this.tokenUsageThisTask
-
-		// Reset counters for this execution
-		this.writeCountThisExecution = 0;
-		this.writesPerFile.clear();
-		this.noOpEditCount = 0;
-		this.taskAlreadyCompleteReason = null;
-		this.invalidTargetReason = null;
-		this.needsDecompositionReason = null;
-
-		// Build stop hooks (prevents agent from finishing without making changes)
-		const stopHooks = this.buildExecutionStopHooks();
-
-		// Set maxTurns based on model tier - prevents runaway exploration
-		const maxTurns = getMaxTurnsForModel(this.currentModel);
-		sessionLogger.debug({ model: this.currentModel, maxTurns }, `Agent maxTurns: ${maxTurns}`);
-
-		// Build PreToolUse hooks for bash auditing (if enabled)
-		const preToolUseHooks = createPreToolUseHooks(this.currentTaskId, this.auditBash);
-
-		// Build task context for system prompt preset (condensed version of task + context)
-		const taskContextForPrompt = this.useSystemPromptPreset
-			? `\n\n## Current Task\n${task}${this.executionPlan ? `\n\n## Plan\n${this.executionPlan.plan}` : ""}`
-			: undefined;
-
-		// Build query options using helper
-		const queryOptions = buildQueryOptions({
-			modelName: MODEL_NAMES[this.currentModel],
-			workingDirectory: this.workingDirectory,
-			maxTurns,
-			stopHooks,
-			isOpus: this.currentModel === "opus",
-			preToolUseHooks,
-			useSystemPromptPreset: this.useSystemPromptPreset,
-			taskContextForPrompt,
-		});
-
-		// Build query params using helper
-		const queryParams = buildQueryParams(!!canResume, this.currentAgentSessionId, resumePrompt, prompt, queryOptions);
-
-		// Log prompt size for performance analysis
-		const promptSize = prompt?.length || resumePrompt?.length || 0;
-		sessionLogger.info({ promptSize, hasContext: !!this.currentBriefing }, `Agent prompt size: ${promptSize} chars`);
-
-		const timing = createMessageTiming();
-
-		for await (const message of query(queryParams)) {
-			timing.msgCount++;
-			const msg = message as Record<string, unknown>;
-
-			// Log slow messages (>5s between messages)
-			logSlowMessageGap(msg, timing);
-			timing.lastMsgTime = Date.now();
-
-			// Track token usage
-			const usage = this.metricsTracker.extractTokenUsage(message);
-			if (usage) {
-				this.metricsTracker.recordTokenUsage(message, this.currentModel);
-				this.tokenUsageThisTask.push(usage);
-			}
-
-			// Track write operations for Stop hook
-			this.trackWriteOperations(message);
-
-			// Stream output if enabled
-			if (this.stream) {
-				this.streamMessage(message);
-			}
-
-			if (message.type === "result") {
-				const resultData = extractResultMessageData(msg);
-
-				// Capture session ID for potential resume on retry
-				if (!this.currentAgentSessionId && resultData.conversationId) {
-					this.currentAgentSessionId = resultData.conversationId;
-					sessionLogger.debug({ sessionId: this.currentAgentSessionId }, "Captured agent session ID for resume");
-				}
-
-				// Capture turn count for performance analysis
-				this.lastAgentTurns = resultData.numTurns;
-
-				// Record SDK metrics to live-metrics.json
-				recordAgentQueryResult(resultData, this.lastAgentTurns, this.currentModel);
-
-				if (resultData.isSuccess) {
-					result = resultData.result;
-				} else {
-					// Handle SDK error subtypes distinctly
-					this.handleAgentErrorSubtype(resultData);
-				}
-			}
-		}
-
-		// Store output for knowledge extraction
-		this.lastAgentOutput = result;
-
-		// Parse task markers from result and update instance state
-		const markers = parseResultMarkers(result);
-		if (markers.taskAlreadyComplete && !this.taskAlreadyCompleteReason) {
-			this.taskAlreadyCompleteReason = markers.taskAlreadyComplete;
-			sessionLogger.info({ reason: markers.taskAlreadyComplete }, "Agent reported task already complete");
-		}
-		if (markers.invalidTarget && !this.invalidTargetReason) {
-			this.invalidTargetReason = markers.invalidTarget;
-			sessionLogger.warn({ reason: markers.invalidTarget }, "Agent reported invalid target");
-		}
-		if (markers.needsDecomposition && !this.needsDecompositionReason) {
-			this.needsDecompositionReason = markers.needsDecomposition;
-			sessionLogger.info({ reason: markers.needsDecomposition }, "Agent reported task needs decomposition");
-		}
-
-		// Parse agent output for decision points and capture them
-		captureDecisionsFromOutput(
-			result,
-			this.currentTaskId,
-			parseAgentOutputForDecisions,
-			captureDecision,
-			this.stateDir,
-		);
-
-		return result;
-	}
-
-	/**
-	 * Build stop hooks for agent execution
-	 *
-	 * These hooks prevent the agent from finishing without making changes,
-	 * while allowing legitimate completion scenarios.
-	 * Returns SDK-compatible HookCallbackMatcher array.
-	 */
-	private buildExecutionStopHooks(): HookCallbackMatcher[] {
-		// Meta-tasks don't need the "must write files" check
-		if (this.isCurrentTaskMeta) {
-			return [];
-		}
-
-		return [
-			{
-				hooks: [
-					async (_input, _toolUseID, _options): Promise<SDKHookOutput> => {
-						// Allow stopping if agent reported task is already complete
-						if (this.taskAlreadyCompleteReason) {
-							sessionLogger.info(
-								{ reason: this.taskAlreadyCompleteReason },
-								"Stop hook accepted: task already complete",
-							);
-							return { continue: true };
-						}
-
-						// Allow stopping if we detected no-op edits (content was already correct)
-						if (this.noOpEditCount > 0 && this.writeCountThisExecution === 0) {
-							sessionLogger.info(
-								{ noOpEdits: this.noOpEditCount },
-								"Stop hook accepted: no-op edits detected (content already correct)",
-							);
-							return { continue: true };
-						}
-
-						// No writes made - provide feedback
-						if (this.writeCountThisExecution === 0) {
-							this.consecutiveNoWriteAttempts++;
-							sessionLogger.info(
-								{
-									model: this.currentModel,
-									writes: 0,
-									consecutiveNoWrites: this.consecutiveNoWriteAttempts,
-								},
-								"Stop hook rejected: agent tried to finish with 0 writes",
-							);
-
-							// FAIL FAST: After 3 no-write attempts, terminate immediately
-							if (this.consecutiveNoWriteAttempts >= 3) {
-								sessionLogger.warn(
-									{
-										consecutiveNoWrites: this.consecutiveNoWriteAttempts,
-										model: this.currentModel,
-									},
-									"FAIL FAST: 3+ consecutive no-write attempts - terminating to save tokens",
-								);
-								throw new Error(
-									`VAGUE_TASK: Agent attempted to finish ${this.consecutiveNoWriteAttempts} times without making changes. ` +
-										"Task likely needs decomposition into more specific subtasks.",
-								);
-							}
-
-							// Provide escalating feedback
-							const reason =
-								this.consecutiveNoWriteAttempts === 2
-									? "You still haven't made any code changes. If you're unsure what to modify:\n" +
-										"- Re-read the task to identify the specific file and change needed\n" +
-										"- If the task is unclear, output: NEEDS_DECOMPOSITION: <what clarification or subtasks are needed>\n" +
-										"- If already complete: TASK_ALREADY_COMPLETE: <reason>"
-									: "You haven't made any code changes yet. If the task is already complete, output: TASK_ALREADY_COMPLETE: <reason>. Otherwise, implement the required changes.";
-
-							return { continue: false, reason };
-						}
-
-						return { continue: true };
-					},
-				],
-			},
-		];
-	}
-
-	/**
-	 * Stream agent messages to console
-	 */
-	private streamMessage(message: unknown): void {
-		const msg = message as Record<string, unknown>;
-		const prefix = chalk.dim(`[${this.currentModel}]`);
-
-		if (msg.type === "content_block_start") {
-			const contentBlock = msg.content_block as { type?: string; name?: string } | undefined;
-			if (contentBlock?.type === "tool_use" && contentBlock.name) {
-				dualLogger.writeLine(`${prefix} ${chalk.yellow(contentBlock.name)}`);
-			}
-		}
-
-		if (msg.type === "result" && msg.subtype === "success") {
-			dualLogger.writeLine(`${prefix} ${chalk.green("✓")} Done`);
-		}
-	}
-
-	/**
-	 * Track write operations from SDK messages for the Stop hook
-	 */
-	/** Pending write tools awaiting result (maps tool_use_id to tool name) */
-	private pendingWriteTools: Map<string, PendingWriteTool> = new Map();
-
-	private trackWriteOperations(message: unknown): void {
-		const msg = message as Record<string, unknown>;
-
-		// Check assistant messages for task markers and write tool requests
-		if (msg.type === "assistant") {
-			const betaMessage = msg.message as { content?: Array<Record<string, unknown>> } | undefined;
-			if (betaMessage?.content) {
-				const currentMarkers: TaskMarkers = {
-					taskAlreadyComplete: this.taskAlreadyCompleteReason ?? undefined,
-					invalidTarget: this.invalidTargetReason ?? undefined,
-					needsDecomposition: this.needsDecompositionReason ?? undefined,
-				};
-				const updatedMarkers = processAssistantMessage(
-					betaMessage.content as unknown as Parameters<typeof processAssistantMessage>[0],
-					currentMarkers,
-					this.pendingWriteTools,
-				);
-				// Update instance state from markers
-				if (updatedMarkers.taskAlreadyComplete && !this.taskAlreadyCompleteReason) {
-					this.taskAlreadyCompleteReason = updatedMarkers.taskAlreadyComplete;
-				}
-				if (updatedMarkers.invalidTarget && !this.invalidTargetReason) {
-					this.invalidTargetReason = updatedMarkers.invalidTarget;
-				}
-				if (updatedMarkers.needsDecomposition && !this.needsDecompositionReason) {
-					this.needsDecompositionReason = updatedMarkers.needsDecomposition;
-				}
-			}
-		}
-
-		// Check for tool results (success or failure)
-		if (msg.type === "user") {
-			const userMessage = msg.message as { content?: Array<Record<string, unknown>> } | undefined;
-			if (userMessage?.content) {
-				const writeState: WriteTrackingState = {
-					writeCount: this.writeCountThisExecution,
-					consecutiveNoWriteAttempts: this.consecutiveNoWriteAttempts,
-					noOpEditCount: this.noOpEditCount,
-					writesPerFile: this.writesPerFile,
-				};
-				processUserMessage(
-					userMessage.content as unknown as Parameters<typeof processUserMessage>[0],
-					this.pendingWriteTools,
-					writeState,
-					TaskWorker.MAX_WRITES_PER_FILE,
-				);
-				// Update instance state from write tracking
-				this.writeCountThisExecution = writeState.writeCount;
-				this.consecutiveNoWriteAttempts = writeState.consecutiveNoWriteAttempts;
-				this.noOpEditCount = writeState.noOpEditCount;
-			}
-		}
-	}
-
-	/**
-	 * Handle SDK error subtypes distinctly
-	 *
-	 * Different error types warrant different handling:
-	 * - error_max_turns: Agent hit turn limit, consider escalation or task decomposition
-	 * - error_max_budget_usd: Budget exhausted (not applicable for Claude Max, but log anyway)
-	 * - error_during_execution: Execution error, log details for debugging
-	 */
-	private handleAgentErrorSubtype(resultData: ResultMessageData): void {
-		const { errorSubtype, errors, numTurns } = resultData;
-
-		switch (errorSubtype) {
-			case "error_max_turns":
-				sessionLogger.warn(
-					{
-						model: this.currentModel,
-						turns: numTurns,
-						taskId: this.currentTaskId,
-					},
-					`Agent hit maxTurns limit (${numTurns} turns) - task may need decomposition or model escalation`,
-				);
-				// Track this as a potential signal for task complexity
-				if (!this.needsDecompositionReason) {
-					this.needsDecompositionReason = `Agent exhausted ${numTurns} turns without completing task`;
-				}
-				break;
-
-			case "error_max_budget_usd":
-				// This shouldn't happen with Claude Max, but log if it does
-				sessionLogger.error(
-					{
-						model: this.currentModel,
-						taskId: this.currentTaskId,
-					},
-					"Agent hit budget limit - unexpected with Claude Max plan",
-				);
-				break;
-
-			case "error_during_execution":
-				sessionLogger.error(
-					{
-						model: this.currentModel,
-						taskId: this.currentTaskId,
-						errors: errors ?? [],
-					},
-					`Agent execution error: ${errors?.join("; ") ?? "unknown error"}`,
-				);
-				break;
-
-			default:
-				// Unknown error subtype
-				if (errorSubtype) {
-					sessionLogger.warn(
-						{
-							subtype: errorSubtype,
-							model: this.currentModel,
-							taskId: this.currentTaskId,
-						},
-						`Unknown SDK error subtype: ${errorSubtype}`,
-					);
-				}
-		}
-	}
 
 	/**
 	 * Decide whether to escalate to a better model

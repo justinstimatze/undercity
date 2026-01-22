@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-22T02:41:02.075Z",
+  "generatedAt": "2026-01-22T04:00:46.814Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -177,13 +177,13 @@
           "context": "if"
         },
         {
-          "file": "worker/prompt-builder.ts",
-          "line": 245,
+          "file": "worker/verification-handler.ts",
+          "line": 293,
           "context": "if"
         },
         {
-          "file": "worker.ts",
-          "line": 1851,
+          "file": "worker/prompt-builder.ts",
+          "line": 245,
           "context": "if"
         }
       ]
@@ -226,7 +226,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1481,
+          "line": 1524,
           "context": "if"
         }
       ]
@@ -236,9 +236,9 @@
       "definedIn": "error-fix-patterns.ts",
       "calledFrom": [
         {
-          "file": "worker.ts",
-          "line": 1788,
-          "context": "recordReviewTriageOutcome"
+          "file": "worker/verification-handler.ts",
+          "line": 352,
+          "context": "require"
         }
       ]
     },
@@ -247,8 +247,8 @@
       "definedIn": "error-fix-patterns.ts",
       "calledFrom": [
         {
-          "file": "worker.ts",
-          "line": 1576,
+          "file": "worker/verification-handler.ts",
+          "line": 165,
           "context": "if"
         }
       ]
@@ -407,13 +407,13 @@
       "definedIn": "automated-pm.ts",
       "calledFrom": [
         {
-          "file": "automated-pm.ts",
-          "line": 756,
+          "file": "worker/meta-task-handler.ts",
+          "line": 176,
           "context": "info"
         },
         {
-          "file": "worker.ts",
-          "line": 1277,
+          "file": "automated-pm.ts",
+          "line": 756,
           "context": "info"
         },
         {
@@ -466,7 +466,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 956,
+          "line": 1230,
           "context": "info"
         }
       ]
