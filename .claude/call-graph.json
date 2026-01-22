@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-22T09:03:03.097Z",
+  "generatedAt": "2026-01-22T17:55:13.078Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -24,6 +24,11 @@
         {
           "file": "automated-pm.ts",
           "line": 593,
+          "context": "info"
+        },
+        {
+          "file": "automated-pm.ts",
+          "line": 910,
           "context": "info"
         },
         {
@@ -128,6 +133,11 @@
           "file": "automated-pm.ts",
           "line": 120,
           "context": "if"
+        },
+        {
+          "file": "automated-pm.ts",
+          "line": 911,
+          "context": "info"
         },
         {
           "file": "task-file-patterns.ts",

@@ -2,7 +2,8 @@
  * Command handlers for task-related commands
  * Extracted from task.ts for maintainability
  */
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import * as readline from "node:readline";
 import chalk from "chalk";
 import {
@@ -21,6 +22,7 @@ import {
 	parsePlanFile,
 	planToTasks,
 } from "../plan-parser.js";
+import { batchUpdateTaskTriageDB } from "../storage.js";
 import {
 	addTask,
 	addTasks,
@@ -39,6 +41,12 @@ import {
 } from "../task.js";
 import { TaskBoardAnalyzer } from "../task-board-analyzer.js";
 import { loadTicketFromFile } from "../ticket-loader.js";
+import type {
+	TriageIssue as SharedTriageIssue,
+	TriageReport as SharedTriageReport,
+	TriageAction,
+	TriageIssueType,
+} from "../types.js";
 
 // Type definitions for command options
 export interface AddOptions {
@@ -93,6 +101,10 @@ export interface ReconcileOptions {
 export interface TasksOptions {
 	status?: "pending" | "in_progress" | "complete" | "failed";
 	tag?: string;
+	/** Show only tasks with triage issues */
+	issues?: boolean;
+	/** Filter by specific triage issue type */
+	issueType?: string;
 	all?: boolean;
 	count?: string;
 }
@@ -127,11 +139,21 @@ export function handleTasks(options: TasksOptions = {}): void {
 		filtered = filtered.filter((i) => i.tags?.includes(options.tag as string));
 	}
 
+	// Filter by triage issues
+	if (options.issues) {
+		filtered = filtered.filter((i) => i.triageIssues && i.triageIssues.length > 0);
+	}
+
+	// Filter by specific issue type
+	if (options.issueType) {
+		filtered = filtered.filter((i) => i.triageIssues?.some((issue) => issue.type === options.issueType));
+	}
+
 	// Determine display limit
 	const limit = options.all ? filtered.length : options.count ? Number.parseInt(options.count, 10) : 10;
 
-	// If status filter specified, show all matching items up to limit
-	if (options.status || options.tag) {
+	// If any filter specified, show filtered view
+	if (options.status || options.tag || options.issues || options.issueType) {
 		const statusEmoji: Record<string, string> = {
 			pending: chalk.gray("○"),
 			in_progress: chalk.cyan("🏃"),
@@ -143,13 +165,24 @@ export function handleTasks(options: TasksOptions = {}): void {
 			obsolete: chalk.gray("~"),
 		};
 
-		const statusLabel = options.status || (options.tag ? `[${options.tag}]` : "Filtered");
+		const statusLabel =
+			options.status ||
+			(options.tag ? `[${options.tag}]` : "") ||
+			(options.issueType ? `Issues: ${options.issueType}` : "") ||
+			(options.issues ? "Tasks with Issues" : "Filtered");
 		console.log(chalk.bold(`${statusLabel} (${filtered.length} total)`));
 
 		for (const item of filtered.slice(0, limit)) {
 			const emoji = statusEmoji[item.status] || chalk.gray("○");
 			const tags = item.tags?.length ? chalk.gray(` [${item.tags.join(", ")}]`) : "";
 			console.log(`  ${emoji} ${item.objective.substring(0, 55)}${item.objective.length > 55 ? "..." : ""}${tags}`);
+
+			// Show triage issues when filtering by issues
+			if ((options.issues || options.issueType) && item.triageIssues?.length) {
+				for (const issue of item.triageIssues) {
+					console.log(chalk.dim(`      → ${issue.type}: ${issue.reason}`));
+				}
+			}
 		}
 
 		if (filtered.length > limit) {
@@ -963,45 +996,69 @@ export interface PruneOptions {
 	force?: boolean;
 }
 
+export interface RefineOptions {
+	count?: string;
+	dryRun?: boolean;
+	all?: boolean;
+	force?: boolean;
+}
+
+export interface MaintainOptions {
+	dryRun?: boolean;
+	/** Target ticket coverage percentage (default: 80) */
+	targetCoverage?: string;
+	/** Max refinement iterations (default: 50) */
+	maxRefinements?: string;
+	/** Skip pruning phase */
+	skipPrune?: boolean;
+	/** Skip refinement phase */
+	skipRefine?: boolean;
+}
+
 export interface CompleteOptions {
 	resolution?: string;
 	reason?: string; // Alias for resolution, useful for marking obsolete/deferred
 }
 
-interface TriageIssue {
-	type:
-		| "test_cruft"
-		| "duplicate"
-		| "stale"
-		| "status_bug"
-		| "overly_granular"
-		| "vague"
-		| "orphaned"
-		| "over_decomposed"
-		| "research_no_output"
-		| "generic_error_handling";
+/**
+ * Local triage issue with task context (for display)
+ * Extends the shared type with task identification
+ */
+interface LocalTriageIssue {
+	type: TriageIssueType;
 	taskId: string;
 	objective: string;
 	reason: string;
-	action: "remove" | "merge" | "fix" | "review";
+	action: TriageAction;
 	relatedTaskIds?: string[];
 }
 
-interface TriageReport {
+interface TicketStats {
+	/** Tasks with no ticket content at all */
+	noTicket: number;
+	/** Tasks with partial ticket (some fields but not all key ones) */
+	partialTicket: number;
+	/** Tasks with complete ticket (description + acceptance criteria) */
+	completeTicket: number;
+}
+
+interface LocalTriageReport {
 	totalTasks: number;
 	pendingTasks: number;
-	issues: TriageIssue[];
+	issues: LocalTriageIssue[];
 	healthScore: number;
 	recommendations: string[];
+	/** Ticket completeness stats for pending tasks */
+	ticketStats: TicketStats;
 }
 
 /**
  * Analyze task board for issues
  */
-function analyzeTaskBoard(): TriageReport {
+function analyzeTaskBoard(): LocalTriageReport {
 	// Import synchronously from task module (already imported at top)
 	const items = getAllTasks();
-	const issues: TriageIssue[] = [];
+	const issues: LocalTriageIssue[] = [];
 
 	// Test task patterns
 	const testPatterns = [
@@ -1153,6 +1210,19 @@ function analyzeTaskBoard(): TriageReport {
 
 	// Check for duplicates (similar objectives)
 	const pendingTasks = items.filter((t: { status: string }) => t.status === "pending");
+
+	// Calculate ticket completeness stats
+	const ticketStats: TicketStats = { noTicket: 0, partialTicket: 0, completeTicket: 0 };
+	for (const task of pendingTasks) {
+		const ticket = task.ticket;
+		if (!ticket || (!ticket.description && !ticket.acceptanceCriteria?.length)) {
+			ticketStats.noTicket++;
+		} else if (ticket.description && ticket.acceptanceCriteria?.length) {
+			ticketStats.completeTicket++;
+		} else {
+			ticketStats.partialTicket++;
+		}
+	}
 	for (let i = 0; i < pendingTasks.length; i++) {
 		for (let j = i + 1; j < pendingTasks.length; j++) {
 			const similarity = calculateSimilarity(pendingTasks[i].objective, pendingTasks[j].objective);
@@ -1247,12 +1317,24 @@ function analyzeTaskBoard(): TriageReport {
 		recommendations.push(`Consider prioritizing - ${pendingTasks.length} pending tasks is a lot`);
 	}
 
+	// Recommend refinement if many tasks lack tickets
+	const needsRefinement = ticketStats.noTicket + ticketStats.partialTicket;
+	if (needsRefinement > 0) {
+		const pct = Math.round((needsRefinement / pendingTasks.length) * 100);
+		if (pct > 50) {
+			recommendations.push(`Refine ${needsRefinement} task(s) lacking rich tickets (${pct}%): undercity refine --all`);
+		} else if (needsRefinement > 10) {
+			recommendations.push(`Refine ${needsRefinement} task(s) lacking rich tickets: undercity refine`);
+		}
+	}
+
 	return {
 		totalTasks: items.length,
 		pendingTasks: pendingTasks.length,
 		issues,
 		healthScore,
 		recommendations,
+		ticketStats,
 	};
 }
 
@@ -1273,6 +1355,55 @@ function calculateSimilarity(a: string, b: string): number {
 export function handleTriage(options: TriageOptions): void {
 	const report = analyzeTaskBoard();
 
+	// Persist issues to tasks
+	const issuesByTask = new Map<string, SharedTriageIssue[]>();
+	for (const issue of report.issues) {
+		if (!issuesByTask.has(issue.taskId)) {
+			issuesByTask.set(issue.taskId, []);
+		}
+		// Convert LocalTriageIssue to SharedTriageIssue (for storage on task)
+		issuesByTask.get(issue.taskId)!.push({
+			type: issue.type,
+			reason: issue.reason,
+			action: issue.action,
+			relatedTaskIds: issue.relatedTaskIds,
+			detectedAt: new Date(),
+		});
+	}
+
+	// Batch update tasks with their triage issues
+	const updates = Array.from(issuesByTask.entries()).map(([id, triageIssues]) => ({
+		id,
+		triageIssues,
+	}));
+	if (updates.length > 0) {
+		batchUpdateTaskTriageDB(updates);
+	}
+
+	// Save summary report to .undercity/triage-report.json
+	const ticketPct =
+		report.pendingTasks > 0 ? Math.round((report.ticketStats.completeTicket / report.pendingTasks) * 100) : 100;
+	const summaryReport: SharedTriageReport = {
+		timestamp: new Date(),
+		healthScore: report.healthScore,
+		ticketCoverage: ticketPct,
+		issueCount: {},
+		pendingTasks: report.pendingTasks,
+		totalTasks: report.totalTasks,
+	};
+
+	// Count issues by type
+	for (const issue of report.issues) {
+		summaryReport.issueCount[issue.type] = (summaryReport.issueCount[issue.type] || 0) + 1;
+	}
+
+	// Write report to file
+	const stateDir = ".undercity";
+	if (!existsSync(stateDir)) {
+		mkdirSync(stateDir, { recursive: true });
+	}
+	writeFileSync(join(stateDir, "triage-report.json"), JSON.stringify(summaryReport, null, 2));
+
 	if (options.json) {
 		console.log(JSON.stringify(report, null, 2));
 		return;
@@ -1285,6 +1416,16 @@ export function handleTriage(options: TriageOptions): void {
 	const healthColor = report.healthScore >= 80 ? chalk.green : report.healthScore >= 50 ? chalk.yellow : chalk.red;
 	console.log(`Health Score: ${healthColor(`${report.healthScore}%`)}`);
 	console.log(`Total Tasks: ${report.totalTasks} (${report.pendingTasks} pending)`);
+
+	// Ticket completeness (ticketPct already calculated above for summary report)
+	const { ticketStats } = report;
+	const ticketColor = ticketPct >= 80 ? chalk.green : ticketPct >= 50 ? chalk.yellow : chalk.red;
+	console.log(
+		`Ticket Coverage: ${ticketColor(`${ticketPct}%`)} ` +
+			chalk.dim(
+				`(${ticketStats.completeTicket} complete, ${ticketStats.partialTicket} partial, ${ticketStats.noTicket} none)`,
+			),
+	);
 	console.log();
 
 	if (report.issues.length === 0) {
@@ -1296,7 +1437,7 @@ export function handleTriage(options: TriageOptions): void {
 	console.log();
 
 	// Group by type
-	const byType = new Map<string, TriageIssue[]>();
+	const byType = new Map<string, LocalTriageIssue[]>();
 	for (const issue of report.issues) {
 		if (!byType.has(issue.type)) {
 			byType.set(issue.type, []);
@@ -1400,6 +1541,130 @@ export function handlePrune(options: PruneOptions): void {
 		if (fixed > 0) {
 			console.log(chalk.green(`Fixed ${fixed} task status(es)`));
 		}
+	}
+}
+
+/**
+ * Handle the refine command - enrich tasks with rich ticket content
+ *
+ * Part of the board maintenance trilogy:
+ * - triage: Analyze board health (find issues)
+ * - prune: Remove stale/duplicate tasks
+ * - refine: Enrich remaining tasks with detailed ticket content
+ *
+ * Refine generates for each task:
+ * - Description: Expanded explanation
+ * - Acceptance criteria: Definition of done
+ * - Test plan: Verification steps
+ * - Implementation notes: Approach hints
+ * - Rationale: Why the task matters
+ */
+export async function handleRefine(taskId: string | undefined, options: RefineOptions): Promise<void> {
+	const { pmRefineTask } = await import("../automated-pm.js");
+	const { updateTaskTicket } = await import("../task.js");
+
+	// Get tasks to refine
+	const allTasks = getAllTasks().filter((t) => t.status === "pending" || t.status === "in_progress");
+
+	let tasksToRefine: typeof allTasks;
+
+	if (taskId) {
+		// Refine specific task
+		const task = allTasks.find((t) => t.id === taskId || t.id.startsWith(taskId));
+		if (!task) {
+			console.error(chalk.red(`Task not found: ${taskId}`));
+			process.exit(1);
+		}
+		tasksToRefine = [task];
+	} else {
+		// Find tasks lacking ticket content
+		tasksToRefine = allTasks.filter((t) => {
+			if (options.force) return true;
+			// Task needs refinement if it has no ticket or sparse content
+			const ticket = t.ticket;
+			if (!ticket) return true;
+			if (!ticket.description && !ticket.acceptanceCriteria?.length) return true;
+			return false;
+		});
+
+		// Apply count limit unless --all
+		if (!options.all) {
+			const count = parseInt(options.count || "10", 10);
+			tasksToRefine = tasksToRefine.slice(0, count);
+		}
+	}
+
+	if (tasksToRefine.length === 0) {
+		console.log(chalk.green("All tasks already have rich ticket content."));
+		console.log(chalk.dim("Use --force to re-refine tasks with existing tickets."));
+		return;
+	}
+
+	console.log(chalk.cyan(`Refining ${tasksToRefine.length} task(s)...`));
+	console.log();
+
+	let refined = 0;
+	let failed = 0;
+	let totalTokens = 0;
+
+	for (const task of tasksToRefine) {
+		console.log(chalk.dim(`[${refined + failed + 1}/${tasksToRefine.length}]`), task.objective.substring(0, 60));
+
+		if (options.dryRun) {
+			console.log(chalk.dim("  Would refine (dry run)"));
+			refined++;
+			continue;
+		}
+
+		try {
+			const result = await pmRefineTask(task.objective);
+			totalTokens += result.tokensUsed;
+
+			if (result.success && result.ticket.description) {
+				// Merge with existing ticket content (don't overwrite existing fields)
+				const existingTicket = task.ticket || {};
+				const mergedTicket = {
+					...existingTicket,
+					description: existingTicket.description || result.ticket.description,
+					acceptanceCriteria: existingTicket.acceptanceCriteria?.length
+						? existingTicket.acceptanceCriteria
+						: result.ticket.acceptanceCriteria,
+					testPlan: existingTicket.testPlan || result.ticket.testPlan,
+					implementationNotes: existingTicket.implementationNotes || result.ticket.implementationNotes,
+					rationale: existingTicket.rationale || result.ticket.rationale,
+					source: existingTicket.source || result.ticket.source,
+				};
+
+				updateTaskTicket(task.id, mergedTicket);
+
+				console.log(chalk.green("  ✓ Refined"));
+				if (result.ticket.acceptanceCriteria?.length) {
+					console.log(chalk.dim(`    ${result.ticket.acceptanceCriteria.length} acceptance criteria`));
+				}
+				refined++;
+			} else {
+				console.log(chalk.yellow("  ⚠ Refinement produced no content"));
+				failed++;
+			}
+		} catch (error) {
+			console.log(chalk.red(`  ✗ Error: ${error instanceof Error ? error.message : error}`));
+			failed++;
+		}
+	}
+
+	console.log();
+	console.log(chalk.bold("Refinement complete:"));
+	console.log(`  Refined: ${chalk.green(refined)}`);
+	if (failed > 0) {
+		console.log(`  Failed: ${chalk.red(failed)}`);
+	}
+	if (totalTokens > 0) {
+		console.log(`  Tokens used: ${chalk.dim(totalTokens.toLocaleString())}`);
+	}
+
+	if (options.dryRun) {
+		console.log();
+		console.log(chalk.dim("(Dry run - no changes made. Run without --dry-run to apply)"));
 	}
 }
 
@@ -1553,5 +1818,251 @@ export function handleRemove(taskId: string): void {
 	} else {
 		console.log(chalk.red(`Failed to remove task: ${taskId}`));
 		process.exit(1);
+	}
+}
+
+/**
+ * Handle the maintain command - autonomous board maintenance
+ *
+ * Runs the maintenance trilogy in sequence:
+ * 1. Triage: Analyze board health, persist issues to tasks
+ * 2. Prune: Remove safe issues (test_cruft, orphaned, status_bug)
+ * 3. Refine: Enrich tasks until ticket coverage reaches target
+ *
+ * Designed for autonomous use - stops when board is healthy or limits reached.
+ */
+export async function handleMaintain(options: MaintainOptions): Promise<void> {
+	const targetCoverage = parseInt(options.targetCoverage || "80", 10);
+	const maxRefinements = parseInt(options.maxRefinements || "50", 10);
+
+	console.log(chalk.bold("Task Board Maintenance"));
+	console.log(chalk.dim(`Target coverage: ${targetCoverage}%, Max refinements: ${maxRefinements}`));
+	if (options.dryRun) {
+		console.log(chalk.yellow("(Dry run - no changes will be made)"));
+	}
+	console.log();
+
+	// Phase 1: Triage
+	console.log(chalk.cyan("Phase 1: Triage"));
+	console.log(chalk.dim("─".repeat(40)));
+
+	const initialReport = analyzeTaskBoard();
+
+	// Persist triage issues to tasks (unless dry run)
+	if (!options.dryRun) {
+		const issuesByTask = new Map<string, SharedTriageIssue[]>();
+		for (const issue of initialReport.issues) {
+			if (!issuesByTask.has(issue.taskId)) {
+				issuesByTask.set(issue.taskId, []);
+			}
+			issuesByTask.get(issue.taskId)!.push({
+				type: issue.type,
+				reason: issue.reason,
+				action: issue.action,
+				relatedTaskIds: issue.relatedTaskIds,
+				detectedAt: new Date(),
+			});
+		}
+
+		const updates = Array.from(issuesByTask.entries()).map(([id, triageIssues]) => ({
+			id,
+			triageIssues,
+		}));
+		if (updates.length > 0) {
+			batchUpdateTaskTriageDB(updates);
+		}
+	}
+
+	// Calculate initial ticket coverage
+	const initialTicketPct =
+		initialReport.pendingTasks > 0
+			? Math.round((initialReport.ticketStats.completeTicket / initialReport.pendingTasks) * 100)
+			: 100;
+
+	const healthColor =
+		initialReport.healthScore >= 80 ? chalk.green : initialReport.healthScore >= 50 ? chalk.yellow : chalk.red;
+	const ticketColor = initialTicketPct >= 80 ? chalk.green : initialTicketPct >= 50 ? chalk.yellow : chalk.red;
+
+	console.log(`Health: ${healthColor(`${initialReport.healthScore}%`)}`);
+	console.log(`Ticket coverage: ${ticketColor(`${initialTicketPct}%`)}`);
+	console.log(`Issues found: ${initialReport.issues.length}`);
+	console.log();
+
+	// Count issue types for summary
+	const safeToPrune = initialReport.issues.filter(
+		(i) => i.type === "test_cruft" || i.type === "orphaned" || i.type === "status_bug",
+	);
+	const needsReview = initialReport.issues.filter(
+		(i) => i.type === "duplicate" || i.type === "vague" || i.type === "research_no_output",
+	);
+
+	console.log(`  Safe to prune: ${safeToPrune.length} (test_cruft, orphaned, status_bug)`);
+	console.log(`  Needs review: ${needsReview.length} (duplicates, vague, research)`);
+	console.log();
+
+	// Phase 2: Prune (unless skipped)
+	if (!options.skipPrune && safeToPrune.length > 0) {
+		console.log(chalk.cyan("Phase 2: Prune"));
+		console.log(chalk.dim("─".repeat(40)));
+
+		const toRemove = safeToPrune.filter((i) => i.action === "remove" || i.type === "test_cruft").map((i) => i.taskId);
+		const toFix = safeToPrune.filter((i) => i.type === "status_bug");
+
+		if (options.dryRun) {
+			console.log(chalk.dim(`Would remove ${toRemove.length} task(s)`));
+			console.log(chalk.dim(`Would fix ${toFix.length} status bug(s)`));
+		} else {
+			if (toRemove.length > 0) {
+				const removed = removeTasks(toRemove);
+				console.log(chalk.green(`Removed ${removed} task(s)`));
+			}
+
+			if (toFix.length > 0) {
+				let fixed = 0;
+				for (const issue of toFix) {
+					const task = getTaskById(issue.taskId);
+					if (task && task.status === "pending" && task.completedAt) {
+						markTaskComplete(issue.taskId);
+						fixed++;
+					}
+				}
+				if (fixed > 0) {
+					console.log(chalk.green(`Fixed ${fixed} status bug(s)`));
+				}
+			}
+		}
+		console.log();
+	} else if (options.skipPrune) {
+		console.log(chalk.dim("Phase 2: Prune (skipped)"));
+		console.log();
+	} else {
+		console.log(chalk.dim("Phase 2: Prune (nothing to prune)"));
+		console.log();
+	}
+
+	// Phase 3: Refine (unless skipped or already at target)
+	if (!options.skipRefine && initialTicketPct < targetCoverage) {
+		console.log(chalk.cyan("Phase 3: Refine"));
+		console.log(chalk.dim("─".repeat(40)));
+
+		// Re-analyze after pruning
+		const postPruneReport = options.dryRun ? initialReport : analyzeTaskBoard();
+		const tasksNeedingRefinement = postPruneReport.ticketStats.noTicket + postPruneReport.ticketStats.partialTicket;
+
+		if (tasksNeedingRefinement === 0) {
+			console.log(chalk.green("All tasks already have rich ticket content."));
+		} else {
+			// Calculate how many to refine to reach target
+			const currentComplete = postPruneReport.ticketStats.completeTicket;
+			const totalPending = postPruneReport.pendingTasks;
+			const targetComplete = Math.ceil((targetCoverage / 100) * totalPending);
+			const needToRefine = Math.min(targetComplete - currentComplete, tasksNeedingRefinement, maxRefinements);
+
+			console.log(`Need to refine: ${needToRefine} task(s) to reach ${targetCoverage}% coverage`);
+
+			if (options.dryRun) {
+				console.log(chalk.dim(`Would refine ${needToRefine} task(s)`));
+			} else if (needToRefine > 0) {
+				// Import refine function dynamically
+				const { pmRefineTask } = await import("../automated-pm.js");
+				const { updateTaskTicket } = await import("../task.js");
+
+				// Get tasks lacking tickets
+				const allTasks = getAllTasks().filter((t) => t.status === "pending" || t.status === "in_progress");
+				const tasksToRefine = allTasks
+					.filter((t) => {
+						const ticket = t.ticket;
+						if (!ticket) return true;
+						if (!ticket.description && !ticket.acceptanceCriteria?.length) return true;
+						return false;
+					})
+					.slice(0, needToRefine);
+
+				let refined = 0;
+				let failed = 0;
+				let totalTokens = 0;
+
+				for (const task of tasksToRefine) {
+					process.stdout.write(chalk.dim(`  [${refined + failed + 1}/${tasksToRefine.length}] `));
+					process.stdout.write(`${task.objective.substring(0, 50)}... `);
+
+					try {
+						const result = await pmRefineTask(task.objective);
+						totalTokens += result.tokensUsed;
+
+						if (result.success && result.ticket.description) {
+							const existingTicket = task.ticket || {};
+							const mergedTicket = {
+								...existingTicket,
+								description: existingTicket.description || result.ticket.description,
+								acceptanceCriteria: existingTicket.acceptanceCriteria?.length
+									? existingTicket.acceptanceCriteria
+									: result.ticket.acceptanceCriteria,
+								testPlan: existingTicket.testPlan || result.ticket.testPlan,
+								implementationNotes: existingTicket.implementationNotes || result.ticket.implementationNotes,
+								rationale: existingTicket.rationale || result.ticket.rationale,
+								source: existingTicket.source || result.ticket.source,
+							};
+
+							updateTaskTicket(task.id, mergedTicket);
+							console.log(chalk.green("✓"));
+							refined++;
+						} else {
+							console.log(chalk.yellow("⚠"));
+							failed++;
+						}
+					} catch (_error) {
+						console.log(chalk.red("✗"));
+						failed++;
+					}
+				}
+
+				console.log();
+				console.log(`Refined: ${chalk.green(refined)}, Failed: ${chalk.red(failed)}`);
+				if (totalTokens > 0) {
+					console.log(`Tokens used: ${chalk.dim(totalTokens.toLocaleString())}`);
+				}
+			}
+		}
+		console.log();
+	} else if (options.skipRefine) {
+		console.log(chalk.dim("Phase 3: Refine (skipped)"));
+		console.log();
+	} else {
+		console.log(chalk.dim(`Phase 3: Refine (already at ${initialTicketPct}% >= ${targetCoverage}% target)`));
+		console.log();
+	}
+
+	// Final summary
+	console.log(chalk.bold("Summary"));
+	console.log(chalk.dim("─".repeat(40)));
+
+	const finalReport = options.dryRun ? initialReport : analyzeTaskBoard();
+	const finalTicketPct =
+		finalReport.pendingTasks > 0
+			? Math.round((finalReport.ticketStats.completeTicket / finalReport.pendingTasks) * 100)
+			: 100;
+
+	const finalHealthColor =
+		finalReport.healthScore >= 80 ? chalk.green : finalReport.healthScore >= 50 ? chalk.yellow : chalk.red;
+	const finalTicketColor = finalTicketPct >= 80 ? chalk.green : finalTicketPct >= 50 ? chalk.yellow : chalk.red;
+
+	console.log(
+		`Health: ${healthColor(`${initialReport.healthScore}%`)} → ${finalHealthColor(`${finalReport.healthScore}%`)}`,
+	);
+	console.log(`Ticket coverage: ${ticketColor(`${initialTicketPct}%`)} → ${finalTicketColor(`${finalTicketPct}%`)}`);
+	console.log(`Pending tasks: ${initialReport.pendingTasks} → ${finalReport.pendingTasks}`);
+
+	if (finalReport.healthScore >= 80 && finalTicketPct >= targetCoverage) {
+		console.log();
+		console.log(chalk.green("✓ Board is healthy and ready for grind!"));
+	} else if (needsReview.length > 0) {
+		console.log();
+		console.log(chalk.yellow(`⚠ ${needsReview.length} issue(s) need manual review (duplicates, vague tasks)`));
+	}
+
+	if (options.dryRun) {
+		console.log();
+		console.log(chalk.dim("(Dry run - no changes made. Run without --dry-run to apply)"));
 	}
 }

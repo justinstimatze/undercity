@@ -155,8 +155,15 @@ undercity experiment recommend             # Get statistical winner recommendati
 **Task board management**:
 ```bash
 undercity reconcile                        # Mark done tasks as complete (syncs with git)
-undercity triage                           # Analyze board for issues
+undercity triage                           # Analyze board for issues (persists to tasks)
 undercity prune                            # Remove stale/duplicate tasks
+undercity refine                           # Enrich tasks with rich ticket content
+undercity refine <taskId>                  # Refine specific task
+undercity refine --all                     # Refine all tasks needing enrichment
+undercity maintain                         # Auto: triage → prune → refine until healthy
+undercity maintain --dry-run               # Preview maintenance actions
+undercity tasks --issues                   # Show tasks with triage issues
+undercity tasks --issue-type duplicate     # Filter by specific issue type
 ```
 
 **Auto-chained** (happens automatically, no command needed):
@@ -187,6 +194,9 @@ pnpm daemon:logs                           # View logs
 **"Which model routing works best?"** → `undercity experiment results` or `undercity experiment recommend`
 **"Find similar past work?"** → `undercity rag search "topic"`
 **"Index documentation?"** → `undercity rag index ./docs --recursive`
+**"Tasks need more context?"** → `undercity refine` or `undercity refine --all`
+**"Board maintenance needed?"** → `undercity maintain` (autonomous triage → prune → refine)
+**"Manual board cleanup?"** → `undercity triage` → `undercity prune` → `undercity refine`
 
 ## Learning Systems Integration
 
@@ -507,6 +517,65 @@ undercity reconcile --lookback 50  # Search last 50 commits
 undercity reconcile --dry-run    # See what would be marked
 undercity reconcile              # Apply the changes
 undercity tasks                  # Verify board state
+```
+
+## Board Maintenance Trilogy
+
+Three commands for maintaining a healthy task board:
+
+| Command | Purpose | What it does |
+|---------|---------|--------------|
+| `triage` | Analyze | Find duplicates, stale tasks, status bugs, ticket coverage |
+| `prune` | Clean | Remove test cruft, fix status inconsistencies |
+| `refine` | Enrich | Add rich ticket content (description, acceptance criteria) |
+
+**When to use each:**
+- **triage first** - always start here to see board health and ticket coverage
+- **prune second** - fix issues triage identified (status bugs, duplicates, cruft)
+- **refine third** - enrich tasks once the board is clean
+
+**Triage output includes:**
+- Health Score (0-100%)
+- Ticket Coverage (% of tasks with rich tickets)
+- Issue breakdown by type
+- Actionable recommendations (including when to refine)
+
+**Typical maintenance workflow:**
+```bash
+# 1. Analyze the board - this tells you what to do next
+undercity triage                 # Shows health, ticket coverage, recommendations
+
+# 2. Clean up cruft (if triage recommends it)
+undercity prune --dry-run        # Preview removals
+undercity prune                  # Apply cleanup
+
+# 3. Enrich remaining tasks (if ticket coverage is low)
+undercity refine --dry-run       # Preview refinements
+undercity refine                 # Apply enrichment (default: 10 tasks)
+undercity refine --all           # Refine all tasks needing content
+```
+
+**When to use `undercity refine`:**
+- After importing tasks from external sources (single-line objectives)
+- Before a major grind session (give workers more context)
+- When success rate is low (tasks may lack sufficient guidance)
+- After `triage` and `prune` to enrich the cleaned board
+
+**What refine generates:**
+- **Description**: Expanded explanation of the task
+- **Acceptance criteria**: Specific conditions for "done"
+- **Test plan**: How to verify completion
+- **Implementation notes**: Approach hints, patterns to follow
+- **Rationale**: Why the task matters
+
+**Options:**
+```bash
+undercity refine                 # Refine up to 10 tasks
+undercity refine -n 20           # Refine up to 20 tasks
+undercity refine <taskId>        # Refine specific task
+undercity refine --all           # Refine all tasks (no limit)
+undercity refine --force         # Re-refine even if already has content
+undercity refine --dry-run       # Preview without saving
 ```
 
 ## Plan-Task Linkage

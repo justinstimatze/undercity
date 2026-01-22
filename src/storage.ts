@@ -25,13 +25,13 @@ import Database from "better-sqlite3";
 import type { ConfidenceLevel, DecisionCategory } from "./decision-tracker.js";
 import type { Learning, LearningCategory } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
-import type { ResearchConclusion, TicketContent } from "./types.js";
+import type { ResearchConclusion, TicketContent, TriageIssue } from "./types.js";
 
 const logger = sessionLogger.child({ module: "storage" });
 
 const DEFAULT_STATE_DIR = ".undercity";
 const DB_FILENAME = "undercity.db";
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 // =============================================================================
 // Database Instance Management
@@ -275,7 +275,9 @@ function initializeSchema(db: Database.Database): void {
 			handoff_context TEXT,  -- JSON object
 			last_attempt TEXT,  -- JSON object
 			research_conclusion TEXT,  -- JSON object (ResearchConclusion)
-			ticket TEXT  -- JSON object (TicketContent)
+			ticket TEXT,  -- JSON object (TicketContent)
+			triage_issues TEXT,  -- JSON array (TriageIssue[])
+			triage_updated_at TEXT
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
@@ -313,6 +315,17 @@ function initializeSchema(db: Database.Database): void {
 			logger.info("Migrated tasks table: added related_to column");
 		} catch {
 			// Column might already exist from a partial migration
+		}
+	}
+
+	// Migration from version 5 to 6: add triage columns
+	if (version === 5) {
+		try {
+			db.exec(`ALTER TABLE tasks ADD COLUMN triage_issues TEXT`);
+			db.exec(`ALTER TABLE tasks ADD COLUMN triage_updated_at TEXT`);
+			logger.info("Migrated tasks table: added triage columns");
+		} catch {
+			// Columns might already exist from a partial migration
 		}
 	}
 }
@@ -2137,6 +2150,8 @@ export interface TaskRecord {
 	lastAttempt?: LastAttemptContext;
 	researchConclusion?: ResearchConclusion;
 	ticket?: TicketContent;
+	triageIssues?: TriageIssue[];
+	triageUpdatedAt?: string;
 }
 
 interface TaskRow {
@@ -2167,6 +2182,8 @@ interface TaskRow {
 	last_attempt: string | null;
 	research_conclusion: string | null;
 	ticket: string | null;
+	triage_issues: string | null;
+	triage_updated_at: string | null;
 }
 
 function rowToTask(row: TaskRow): TaskRecord {
@@ -2200,6 +2217,8 @@ function rowToTask(row: TaskRow): TaskRecord {
 			? (JSON.parse(row.research_conclusion) as ResearchConclusion)
 			: undefined,
 		ticket: row.ticket ? (JSON.parse(row.ticket) as TicketContent) : undefined,
+		triageIssues: row.triage_issues ? (JSON.parse(row.triage_issues) as TriageIssue[]) : undefined,
+		triageUpdatedAt: row.triage_updated_at ?? undefined,
 	};
 }
 
@@ -2215,9 +2234,10 @@ export function insertTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DI
 			session_id, error, resolution, duplicate_of_commit, package_hints,
 			depends_on, related_to, conflicts, estimated_files, tags, computed_packages,
 			risk_score, parent_id, subtask_ids, is_decomposed, decomposition_depth,
-			handoff_context, last_attempt, research_conclusion, ticket
+			handoff_context, last_attempt, research_conclusion, ticket,
+			triage_issues, triage_updated_at
 		) VALUES (
-			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 	`);
 
@@ -2249,6 +2269,8 @@ export function insertTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DI
 		task.lastAttempt ? JSON.stringify(task.lastAttempt) : null,
 		task.researchConclusion ? JSON.stringify(task.researchConclusion) : null,
 		task.ticket ? JSON.stringify(task.ticket) : null,
+		task.triageIssues ? JSON.stringify(task.triageIssues) : null,
+		task.triageUpdatedAt ?? null,
 	);
 }
 
@@ -2265,7 +2287,8 @@ export function updateTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DI
 			package_hints = ?, depends_on = ?, related_to = ?, conflicts = ?, estimated_files = ?,
 			tags = ?, computed_packages = ?, risk_score = ?, parent_id = ?,
 			subtask_ids = ?, is_decomposed = ?, decomposition_depth = ?,
-			handoff_context = ?, last_attempt = ?
+			handoff_context = ?, last_attempt = ?, ticket = ?,
+			triage_issues = ?, triage_updated_at = ?
 		WHERE id = ?
 	`);
 
@@ -2293,6 +2316,9 @@ export function updateTask(task: TaskRecord, stateDir: string = DEFAULT_STATE_DI
 		task.decompositionDepth ?? 0,
 		task.handoffContext ? JSON.stringify(task.handoffContext) : null,
 		task.lastAttempt ? JSON.stringify(task.lastAttempt) : null,
+		task.ticket ? JSON.stringify(task.ticket) : null,
+		task.triageIssues ? JSON.stringify(task.triageIssues) : null,
+		task.triageUpdatedAt ?? null,
 		task.id,
 	);
 }
@@ -2583,4 +2609,66 @@ export function updateTaskFieldsDB(
 	params.push(id);
 	const result = db.prepare(`UPDATE tasks SET ${setClauses.join(", ")} WHERE id = ?`).run(...params);
 	return result.changes > 0;
+}
+
+/**
+ * Update task ticket (rich content)
+ */
+export function updateTaskTicketDB(id: string, ticket: TicketContent, stateDir: string = DEFAULT_STATE_DIR): boolean {
+	const db = getDatabase(stateDir);
+
+	const result = db.prepare("UPDATE tasks SET ticket = ? WHERE id = ?").run(JSON.stringify(ticket), id);
+	return result.changes > 0;
+}
+
+/**
+ * Update triage issues for a task
+ */
+export function updateTaskTriageDB(
+	id: string,
+	triageIssues: TriageIssue[],
+	stateDir: string = DEFAULT_STATE_DIR,
+): boolean {
+	const db = getDatabase(stateDir);
+	const now = new Date().toISOString();
+
+	const result = db
+		.prepare("UPDATE tasks SET triage_issues = ?, triage_updated_at = ? WHERE id = ?")
+		.run(JSON.stringify(triageIssues), now, id);
+	return result.changes > 0;
+}
+
+/**
+ * Clear triage issues for a task (after issue is resolved)
+ */
+export function clearTaskTriageDB(id: string, stateDir: string = DEFAULT_STATE_DIR): boolean {
+	const db = getDatabase(stateDir);
+	const now = new Date().toISOString();
+
+	const result = db.prepare("UPDATE tasks SET triage_issues = NULL, triage_updated_at = ? WHERE id = ?").run(now, id);
+	return result.changes > 0;
+}
+
+/**
+ * Batch update triage issues for multiple tasks (efficient for full triage run)
+ */
+export function batchUpdateTaskTriageDB(
+	updates: Array<{ id: string; triageIssues: TriageIssue[] }>,
+	stateDir: string = DEFAULT_STATE_DIR,
+): number {
+	const db = getDatabase(stateDir);
+	const now = new Date().toISOString();
+
+	const stmt = db.prepare("UPDATE tasks SET triage_issues = ?, triage_updated_at = ? WHERE id = ?");
+	let updated = 0;
+
+	const transaction = db.transaction(() => {
+		for (const { id, triageIssues } of updates) {
+			const result = stmt.run(JSON.stringify(triageIssues), now, id);
+			if (result.changes > 0) updated++;
+		}
+	});
+
+	transaction();
+	return updated;
 }

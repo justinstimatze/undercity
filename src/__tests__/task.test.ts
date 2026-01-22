@@ -796,7 +796,7 @@ describe("task.ts", () => {
 		});
 
 		it("should distinguish dependsOn (blocking) from relatedTo (non-blocking)", () => {
-			const blocker = addTask("Blocker", 50, tasksPath);
+			const blocker = addTask("Blocker", 40, tasksPath); // Higher priority (lower number)
 			const related = addTask("Related", 50, tasksPath);
 			addTask("Dependent task", {
 				priority: 1,
@@ -805,7 +805,7 @@ describe("task.ts", () => {
 				path: tasksPath,
 			});
 
-			// Should return blocker since dependent task is blocked
+			// Should return blocker since it has highest priority among unblocked tasks
 			const next = getNextTask(tasksPath);
 			expect(next?.id).toBe(blocker.id);
 

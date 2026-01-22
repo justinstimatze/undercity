@@ -1334,6 +1334,61 @@ export interface TicketContent {
 }
 
 /**
+ * Types of issues triage can detect on a task
+ */
+export type TriageIssueType =
+	| "test_cruft" // Matches test task patterns
+	| "duplicate" // Similar to another task
+	| "stale" // Old and not progressing
+	| "status_bug" // Status inconsistency (e.g., pending with completedAt)
+	| "overly_granular" // Too many similar tasks
+	| "vague" // Objective lacks specificity
+	| "orphaned" // Parent completed but subtask pending
+	| "over_decomposed" // Too many subtasks
+	| "research_no_output" // Research task unlikely to produce code
+	| "generic_error_handling" // Generic error handling without target
+	| "needs_refinement"; // Lacks rich ticket content
+
+/**
+ * Recommended action for a triage issue
+ */
+export type TriageAction = "remove" | "merge" | "fix" | "review" | "refine";
+
+/**
+ * A triage issue detected on a task
+ */
+export interface TriageIssue {
+	/** Type of issue */
+	type: TriageIssueType;
+	/** Human-readable explanation */
+	reason: string;
+	/** Recommended action */
+	action: TriageAction;
+	/** Related task IDs (for duplicates, etc.) */
+	relatedTaskIds?: string[];
+	/** When this issue was detected */
+	detectedAt: Date;
+}
+
+/**
+ * Summary of triage analysis stored in .undercity/triage-report.json
+ */
+export interface TriageReport {
+	/** When triage was last run */
+	timestamp: Date;
+	/** Overall board health (0-100) */
+	healthScore: number;
+	/** Percentage of tasks with complete tickets */
+	ticketCoverage: number;
+	/** Count of issues by type */
+	issueCount: Partial<Record<TriageIssueType, number>>;
+	/** Total pending tasks at time of triage */
+	pendingTasks: number;
+	/** Total tasks at time of triage */
+	totalTasks: number;
+}
+
+/**
  * Check if a task objective indicates a meta-task
  * Meta-tasks are prefixed with [meta:type]
  */

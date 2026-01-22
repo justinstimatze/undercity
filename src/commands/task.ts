@@ -18,6 +18,8 @@
  * | reconcile    | Sync completed tasks with git history        |
  * | triage       | Analyze board health                         |
  * | prune        | Remove stale/test/duplicate tasks            |
+ * | maintain     | Autonomous triage → prune → refine cycle     |
+ * | refine       | Enrich tasks with rich ticket content        |
  *
  * Handlers: task-handlers.ts (extracted for maintainability)
  */
@@ -32,9 +34,11 @@ import {
 	handleDispatch,
 	handleImportPlan,
 	handleLoad,
+	handleMaintain,
 	handlePlan,
 	handlePrune,
 	handleReconcile,
+	handleRefine,
 	handleRemove,
 	handleTaskAnalyze,
 	handleTaskStatus,
@@ -43,9 +47,11 @@ import {
 	handleUpdate,
 	handleWork,
 	type ImportPlanOptions,
+	type MaintainOptions,
 	type PlanOptions,
 	type PruneOptions,
 	type ReconcileOptions,
+	type RefineOptions,
 	type TaskAnalyzeOptions,
 	type TasksOptions,
 	type TriageOptions,
@@ -62,6 +68,8 @@ export const taskCommands: CommandModule = {
 			.description("Show the task board")
 			.option("-s, --status <status>", "Filter by status: pending, in_progress, complete, failed")
 			.option("-t, --tag <tag>", "Filter by tag")
+			.option("-i, --issues", "Show only tasks with triage issues")
+			.option("--issue-type <type>", "Filter by triage issue type (e.g., status_bug, duplicate)")
 			.option("-a, --all", "Show all tasks (not just first 10)")
 			.option("-c, --count <n>", "Number of tasks to show (default: 10)")
 			.action((options: TasksOptions) => handleTasks(options));
@@ -156,6 +164,27 @@ export const taskCommands: CommandModule = {
 			.option("--dry-run", "Show what would be removed without making changes")
 			.option("--force", "Remove without confirmation")
 			.action((options: PruneOptions) => handlePrune(options));
+
+		// Maintain command - autonomous board maintenance (triage → prune → refine)
+		program
+			.command("maintain")
+			.description("Autonomous board maintenance: triage → prune → refine until healthy")
+			.option("--dry-run", "Preview what would be done without making changes")
+			.option("--target-coverage <percent>", "Target ticket coverage percentage (default: 80)")
+			.option("--max-refinements <n>", "Maximum tasks to refine per run (default: 50)")
+			.option("--skip-prune", "Skip the prune phase")
+			.option("--skip-refine", "Skip the refine phase")
+			.action((options: MaintainOptions) => handleMaintain(options));
+
+		// Refine command - enrich tasks with ticket content
+		program
+			.command("refine [taskId]")
+			.description("Enrich tasks with rich ticket content (description, acceptance criteria, test plan)")
+			.option("-n, --count <number>", "Maximum number of tasks to refine", "10")
+			.option("--dry-run", "Preview refinements without saving")
+			.option("--all", "Refine all tasks lacking tickets (ignores --count)")
+			.option("--force", "Re-refine tasks even if they have ticket content")
+			.action((taskId: string | undefined, options: RefineOptions) => handleRefine(taskId, options));
 
 		// Complete command - mark a task as complete
 		program

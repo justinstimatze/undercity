@@ -31,9 +31,10 @@ import {
 	updateTaskAnalysisDB,
 	updateTaskFieldsDB,
 	updateTaskStatusDB,
+	updateTaskTicketDB,
 } from "./storage.js";
 import { isTaskObjectiveSafe, validateTaskObjective } from "./task-security.js";
-import type { ResearchConclusion, TicketContent } from "./types.js";
+import type { ResearchConclusion, TicketContent, TriageIssue } from "./types.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
 
@@ -109,6 +110,10 @@ export interface Task {
 
 	// Rich ticket content (description, acceptance criteria, test plan, etc.)
 	ticket?: TicketContent;
+
+	// Triage analysis results (persisted by `undercity triage`)
+	triageIssues?: TriageIssue[];
+	triageUpdatedAt?: Date;
 }
 
 /**
@@ -206,6 +211,8 @@ function recordToTask(record: TaskRecord): Task {
 			: undefined,
 		researchConclusion: record.researchConclusion,
 		ticket: record.ticket,
+		triageIssues: record.triageIssues,
+		triageUpdatedAt: record.triageUpdatedAt ? new Date(record.triageUpdatedAt) : undefined,
 	};
 }
 
@@ -697,6 +704,15 @@ export function updateTaskFields(
 
 	const record = getTaskByIdDB(id, stateDir);
 	return record ? recordToTask(record) : undefined;
+}
+
+/**
+ * Update task ticket (rich content)
+ * Used by refine command to enrich tasks with detailed ticket content
+ */
+export function updateTaskTicket(id: string, ticket: TicketContent, path?: string): boolean {
+	const stateDir = getStateDirFromPath(path);
+	return updateTaskTicketDB(id, ticket, stateDir);
 }
 
 /**

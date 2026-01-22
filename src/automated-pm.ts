@@ -872,3 +872,160 @@ export async function pmIdeate(
 
 	return { research, proposals: uniqueProposals, researchConclusion: conclusion };
 }
+
+/**
+ * Result of refining a task with rich ticket content
+ */
+export interface RefineTaskResult {
+	/** Generated ticket content */
+	ticket: import("./types.js").TicketContent;
+	/** Whether refinement was successful */
+	success: boolean;
+	/** Tokens used */
+	tokensUsed: number;
+}
+
+/**
+ * Refine a task objective into rich ticket content
+ *
+ * Takes an existing task objective and generates:
+ * - Expanded description
+ * - Acceptance criteria
+ * - Test plan
+ * - Implementation notes
+ * - Rationale
+ *
+ * Uses codebase context and knowledge base for informed refinement.
+ */
+export async function pmRefineTask(
+	objective: string,
+	_cwd: string = process.cwd(),
+	stateDir: string = ".undercity",
+): Promise<RefineTaskResult> {
+	const { query } = await import("@anthropic-ai/claude-agent-sdk");
+
+	sessionLogger.info({ objective: objective.substring(0, 50) }, "PM refining task");
+
+	// Gather context for better refinement
+	const relevantKnowledge = findRelevantLearnings(objective, 5, stateDir);
+	const relevantFiles = findRelevantFiles(objective, 5, stateDir);
+	const fileStats = getTaskFileStats(stateDir);
+
+	// Search RAG for semantically similar content
+	let ragContext = "";
+	try {
+		const ragEngine = await getRAGEngine(stateDir);
+		const ragResults = await ragEngine.search(objective, { limit: 3 });
+		if (ragResults.length > 0) {
+			ragContext = ragResults.map((r) => `- ${r.chunk.content.substring(0, 200)}...`).join("\n");
+		}
+	} catch {
+		// RAG not available
+	}
+
+	const contextParts: string[] = [];
+
+	if (relevantKnowledge.length > 0) {
+		contextParts.push(`## Relevant Learnings\n${relevantKnowledge.map((k) => `- ${k.content}`).join("\n")}`);
+	}
+
+	if (relevantFiles.length > 0) {
+		contextParts.push(`## Likely Files\n${relevantFiles.slice(0, 5).join("\n")}`);
+	}
+
+	if (ragContext) {
+		contextParts.push(`## Similar Past Work\n${ragContext}`);
+	}
+
+	if (fileStats.totalTasks > 10) {
+		contextParts.push(
+			`## Project Stats\n${fileStats.totalTasks} tasks completed, ${fileStats.uniqueFiles} unique files modified`,
+		);
+	}
+
+	const contextSection = contextParts.length > 0 ? `\n\n${contextParts.join("\n\n")}` : "";
+
+	const prompt = `You are a Product Manager refining a task for an autonomous coding agent.
+
+TASK OBJECTIVE:
+${objective}
+${contextSection}
+
+Generate rich ticket content to help the agent execute this task effectively.
+
+RESPOND WITH VALID JSON ONLY (no markdown, no explanation):
+{
+  "description": "Expanded explanation of what needs to be done (2-4 sentences)",
+  "acceptanceCriteria": ["Specific, testable criterion 1", "Criterion 2", "..."],
+  "testPlan": "How to verify the task was completed correctly",
+  "implementationNotes": "Hints about approach, patterns to follow, gotchas to avoid",
+  "rationale": "Why this task matters and what value it provides"
+}
+
+GUIDELINES:
+- description: Expand the objective into clear, actionable detail
+- acceptanceCriteria: 2-5 specific, measurable conditions for "done"
+- testPlan: Concrete verification steps (what to run, what to check)
+- implementationNotes: Helpful hints based on codebase patterns
+- rationale: The "why" - business value or technical necessity
+
+Be specific to THIS codebase. Avoid generic advice.`;
+
+	const tokensUsed = 0;
+	let resultText = "";
+
+	try {
+		for await (const message of query({
+			prompt,
+			options: {
+				model: MODEL_NAMES.sonnet,
+				permissionMode: "bypassPermissions",
+				allowDangerouslySkipPermissions: true,
+				maxTurns: 1,
+				systemPrompt: "You are a precise JSON generator. Output ONLY valid JSON, no markdown formatting.",
+			},
+		})) {
+			if (message.type === "result" && message.subtype === "success") {
+				resultText = message.result;
+			}
+		}
+
+		// Parse the JSON response
+		const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+		if (!jsonMatch) {
+			sessionLogger.warn({ objective }, "PM refine failed to produce valid JSON");
+			return { ticket: {}, success: false, tokensUsed };
+		}
+
+		const parsed = JSON.parse(jsonMatch[0]) as {
+			description?: string;
+			acceptanceCriteria?: string[];
+			testPlan?: string;
+			implementationNotes?: string;
+			rationale?: string;
+		};
+
+		const ticket: import("./types.js").TicketContent = {
+			description: sanitizeContent(parsed.description || "").content,
+			acceptanceCriteria: parsed.acceptanceCriteria?.map((c) => sanitizeContent(c).content) || [],
+			testPlan: sanitizeContent(parsed.testPlan || "").content,
+			implementationNotes: sanitizeContent(parsed.implementationNotes || "").content,
+			rationale: sanitizeContent(parsed.rationale || "").content,
+			source: "pm",
+		};
+
+		sessionLogger.info(
+			{
+				objective: objective.substring(0, 50),
+				hasDescription: !!ticket.description,
+				criteriaCount: ticket.acceptanceCriteria?.length || 0,
+			},
+			"PM task refinement complete",
+		);
+
+		return { ticket, success: true, tokensUsed };
+	} catch (error) {
+		sessionLogger.error({ error: String(error), objective }, "PM refine failed");
+		return { ticket: {}, success: false, tokensUsed };
+	}
+}

@@ -84,7 +84,7 @@
 | **mcp-tools.ts** | MCP tool definitions for knowledge access | knowledgeTools, knowledgeSearchTool |
 | **mcp-protocol.ts** | MCP JSON-RPC 2.0 handler | MCPProtocolHandler, handleMCPRequest |
 | **decision-tracker.ts** | Capture/resolve agent decisions | captureDecision, resolveDecision, getPendingDecisions |
-| **automated-pm.ts** | Automated PM: decision resolution, task generation, web research | pmDecide, quickDecision, pmResearch, pmPropose, pmIdeate |
+| **automated-pm.ts** | Automated PM: decision resolution, task generation, web research, refinement | pmDecide, quickDecision, pmResearch, pmPropose, pmIdeate, pmRefineTask |
 | **task-file-patterns.ts** | Task→file correlations, co-modification | recordTaskFiles, findRelevantFiles, findCoModifiedFiles |
 | **error-fix-patterns.ts** | Error→fix patterns for known issues | recordErrorFix, findMatchingFix, getErrorFixStats |
 | **ax-programs.ts** | Ax/DSPy self-improving prompts | getAxProgramStats |
@@ -138,6 +138,7 @@
 - Resolve decisions via PM → `automated-pm.ts` (quickDecision, pmDecide)
 - Generate new tasks via PM → `automated-pm.ts` (pmPropose, pmIdeate)
 - Research topics via PM → `automated-pm.ts` (pmResearch)
+- Refine tasks with rich content → `automated-pm.ts` (pmRefineTask)
 - Track task→file patterns → `task-file-patterns.ts`
 - Track error→fix patterns → `error-fix-patterns.ts`
 - Fetch Claude Max usage → `claude-usage.ts`
