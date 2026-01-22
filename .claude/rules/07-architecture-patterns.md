@@ -271,12 +271,12 @@ if (data.version !== INDEX_VERSION) {
 
 | File | Content | Tracked |
 |------|---------|---------|
-| `.undercity/tasks.json` | Task board | Yes |
+| `.undercity/undercity.db` | Task board (SQLite) | No |
 | `.undercity/ast-index.json` | Symbol index | No |
 | `.undercity/rate-limit-state.json` | Rate limits | No |
 | `.undercity/parallel-recovery.json` | Crash recovery | No |
 
-**Rule**: Only `tasks.json` is tracked in git. All other state is local.
+**Rule**: All `.undercity/` state is local and gitignored.
 
 ## Logging Conventions
 

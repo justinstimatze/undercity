@@ -91,13 +91,13 @@ git restore path/to/specific/file.ts
 
 Just write a normal commit message describing the change.
 
-## Use CLI Commands, Not Direct JSON Edits
+## Use CLI Commands, Not Direct Database Edits
 
-**NEVER edit `.undercity/tasks.json` directly.** Use CLI commands instead:
+**NEVER edit `.undercity/undercity.db` directly.** Use CLI commands instead:
 
 ```bash
-# BAD - directly editing JSON
-cat .undercity/tasks.json | jq '...' > tasks.json
+# BAD - directly editing database
+sqlite3 .undercity/undercity.db "UPDATE tasks SET ..."
 
 # GOOD - use CLI commands
 undercity add "task description"    # Add task
@@ -106,7 +106,7 @@ undercity reconcile                 # Clean up duplicates
 undercity tasks --all               # View tasks
 ```
 
-**Why**: Direct JSON edits bypass validation, can corrupt state, and don't trigger proper status updates.
+**Why**: Direct database edits bypass validation, can corrupt state, and don't trigger proper status updates.
 
 ## Never Use `any` Types
 

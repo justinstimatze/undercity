@@ -320,7 +320,7 @@ Quick reference for where each learning function is called:
 
 | File | Purpose | Schema |
 |------|---------|--------|
-| `.undercity/tasks.json` | Task board | `Task[]` |
+| `.undercity/undercity.db` | Task board (SQLite) | `tasks` table |
 | `.undercity/knowledge.json` | Accumulated learnings | `KnowledgeBase` |
 | `.undercity/decisions.json` | Decision history | `DecisionStore` |
 | `.undercity/task-file-patterns.json` | Task→file correlations | `TaskFileStore` |
@@ -385,7 +385,7 @@ Quick reference for where each learning function is called:
 
 ## Critical Paths
 
-**Add task:** CLI → task.ts:addGoal() → `.undercity/tasks.json`
+**Add task:** CLI → task.ts:addGoal() → `.undercity/undercity.db`
 
 **Run task:**
 - `grind "goal"` → Orchestrator.run(["goal"])

@@ -145,7 +145,7 @@ const MODEL_NAMES: Record<ModelTier, string> = {
 
 ```typescript
 const DEFAULT_STATE_DIR = ".undercity";
-const DEFAULT_TASK_BOARD_PATH = ".undercity/tasks.json";
+const DEFAULT_DATABASE_PATH = ".undercity/undercity.db";
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_MAX_RETRIES_PER_TIER = 3;
 const DEFAULT_MAX_OPUS_RETRIES = 7;  // More attempts at final tier

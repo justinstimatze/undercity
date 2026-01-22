@@ -4,10 +4,10 @@ Multi-agent orchestrator with learning. Processes tasks from board with verifica
 
 ## Core Concepts
 
-**Task Board** (`.undercity/tasks.json`):
+**Task Board** (`.undercity/undercity.db` SQLite):
 - Queue of work items with priorities
 - Add via `undercity add "task description"`
-- Persists across runs
+- Persists across runs in SQLite database
 
 **Grind** (main execution mode):
 - Autonomous task processing
@@ -51,7 +51,7 @@ Multi-agent orchestrator with learning. Processes tasks from board with verifica
 
 **Primary commands** (Claude Code should use these):
 ```bash
-# Task board (ALWAYS use CLI, never edit tasks.json directly)
+# Task board (ALWAYS use CLI, never edit database directly)
 undercity add "task description"           # Add task
 undercity add "task" --priority 5          # Add with priority
 undercity tasks                            # List pending tasks
@@ -309,7 +309,7 @@ undercity experiment recommend     # Get statistical recommendation
 ## Task Execution Flow
 
 ```
-Task Board (.undercity/tasks.json)
+Task Board (.undercity/undercity.db)
     ↓
 Grind picks task → Assess complexity
     ↓
@@ -343,7 +343,7 @@ Task marked complete → Record learnings
 
 | File | Purpose | Tracked |
 |------|---------|---------|
-| `tasks.json` | Task board | Yes |
+| `undercity.db` | Task board (SQLite) | No |
 | `knowledge.json` | Accumulated learnings | No |
 | `decisions.json` | Decision history | No |
 | `task-file-patterns.json` | Task→file correlations | No |
