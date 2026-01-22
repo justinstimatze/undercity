@@ -126,6 +126,10 @@ Avoid corporate jargon:
 - Never use "quick wins" — say "small standalone PRs"
 - Avoid buzzwords like "leverage", "synergy", "align"
 
+Avoid overused filler words:
+- Never use "comprehensive" — just describe what it covers
+- Avoid "robust", "streamlined", "seamless" — be specific instead
+
 Avoid excessive validation:
 - Never use "you're absolutely right" or "you're correct"
 - Avoid superlatives like "excellent point", "great question"
