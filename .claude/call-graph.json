@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-22T00:41:36.715Z",
+  "generatedAt": "2026-01-22T01:57:51.208Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -18,18 +18,28 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 96,
+          "line": 99,
           "context": "map"
         },
         {
           "file": "automated-pm.ts",
-          "line": 526,
+          "line": 529,
           "context": "info"
         },
         {
           "file": "commands/mixed-handlers.ts",
           "line": 1538,
           "context": "if"
+        },
+        {
+          "file": "research-roi.ts",
+          "line": 137,
+          "context": "calculateKnowledgeSaturation"
+        },
+        {
+          "file": "research-roi.ts",
+          "line": 200,
+          "context": "filter"
         },
         {
           "file": "mcp-protocol.ts",
@@ -85,7 +95,7 @@
         },
         {
           "file": "mcp-protocol.ts",
-          "line": 249,
+          "line": 251,
           "context": "if"
         }
       ]
@@ -116,7 +126,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 109,
+          "line": 112,
           "context": "if"
         },
         {
@@ -281,7 +291,7 @@
         },
         {
           "file": "knowledge-extractor.ts",
-          "line": 537,
+          "line": 538,
           "context": "push"
         }
       ]
@@ -310,6 +320,11 @@
           "file": "worker/agent-execution.ts",
           "line": 442,
           "context": "for"
+        },
+        {
+          "file": "decision-tracker.ts",
+          "line": 632,
+          "context": "unknown"
         }
       ]
     },
@@ -318,8 +333,13 @@
       "definedIn": "decision-tracker.ts",
       "calledFrom": [
         {
+          "file": "decision-tracker.ts",
+          "line": 646,
+          "context": "unknown"
+        },
+        {
           "file": "automated-pm.ts",
-          "line": 232,
+          "line": 235,
           "context": "if"
         },
         {
@@ -350,7 +370,7 @@
         },
         {
           "file": "commands/analysis.ts",
-          "line": 588,
+          "line": 556,
           "context": "if"
         }
       ]
@@ -372,12 +392,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 226,
+          "line": 229,
           "context": "for"
         },
         {
           "file": "automated-pm.ts",
-          "line": 275,
+          "line": 278,
           "context": "now"
         }
       ]
@@ -388,7 +408,7 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 677,
+          "line": 756,
           "context": "info"
         },
         {
@@ -409,7 +429,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 683,
+          "line": 745,
+          "context": "info"
+        },
+        {
+          "file": "automated-pm.ts",
+          "line": 762,
           "context": "info"
         },
         {

@@ -37,8 +37,6 @@
     "daemon:kill": "pm2 kill",
     "cleanup": "bash ./scripts/cleanup-state.sh",
     "cleanup:deep": "bash ./scripts/cleanup-state.sh --deep",
-    "semantic-check": "node ./bin/undercity.js semantic-check",
-    "semantic-check:fix": "node ./bin/undercity.js semantic-check --fix",
     "lint": "biome lint ./src",
     "lint:fix": "biome lint --write ./src",
     "format": "biome format ./src",

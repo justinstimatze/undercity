@@ -152,15 +152,6 @@ Clears:
 
 Creates timestamped backups before cleaning. Run before starting a fresh grind to prevent stale state interference.
 
-## Semantic Density Analysis
-
-```bash
-pnpm semantic-check        # Analyze semantic density (JSON output)
-pnpm semantic-check:fix    # Auto-fix issues
-```
-
-Measures facts per 1000 tokens across code and docs. See `.claude/rules/06-semantic-density.md` for details.
-
 ## Code Quality Targets
 
 - Cyclomatic complexity: ≤10 per function
