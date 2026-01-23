@@ -371,22 +371,47 @@ export function isSensitiveFile(filePath: string): boolean {
 
 /**
  * Extract potential file paths from task objective
+ *
+ * Uses a split-based approach to avoid ReDoS vulnerabilities from
+ * nested quantifiers in regex patterns.
  */
 function extractFilePaths(objective: string): string[] {
 	const paths: string[] = [];
 
-	// Match typical file paths
-	const pathPatterns = [
-		/(?:^|\s)((?:\.\.\/)*(?:[\w.-]+\/)*[\w.-]+\.[\w]+)(?:\s|$)/g, // relative/paths/file.ext
-		/(?:^|\s)(\/(?:[\w.-]+\/)*[\w.-]+\.?[\w]*)(?:\s|$)/g, // /absolute/paths
-		/(?:^|\s)(~\/(?:[\w.-]+\/)*[\w.-]+\.?[\w]*)(?:\s|$)/g, // ~/home/paths
-	];
+	// Split by whitespace and check each token
+	const tokens = objective.split(/\s+/);
 
-	for (const pattern of pathPatterns) {
-		let match: RegExpExecArray | null = pattern.exec(objective);
-		while (match) {
-			paths.push(match[1]);
-			match = pattern.exec(objective);
+	// Valid path character class (alphanumeric, dots, underscores, hyphens, slashes, tilde)
+	const validPathChars = /^[.\w~/-]+$/;
+
+	for (const token of tokens) {
+		// Skip empty tokens
+		if (!token) continue;
+
+		// Check if token looks like a file path
+		if (!validPathChars.test(token)) continue;
+
+		// Relative path with extension: foo/bar.ts, ../foo.js
+		if (/\.[a-zA-Z0-9]+$/.test(token) && token.includes("/")) {
+			paths.push(token);
+			continue;
+		}
+
+		// Absolute path starting with /
+		if (token.startsWith("/") && token.length > 1) {
+			paths.push(token);
+			continue;
+		}
+
+		// Home path starting with ~/
+		if (token.startsWith("~/") && token.length > 2) {
+			paths.push(token);
+			continue;
+		}
+
+		// Standalone file with extension: file.txt, .env
+		if (/\.[a-zA-Z0-9]+$/.test(token) || token.startsWith(".")) {
+			paths.push(token);
 		}
 	}
 

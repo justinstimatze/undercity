@@ -39,12 +39,17 @@ export function execInDir(command: string, cwd: string): string {
 }
 
 /**
- * Validate a git ref name (branch, tag, etc.) to prevent injection
+ * Validate and sanitize a git ref name (branch, tag, etc.) to prevent injection
+ *
+ * Returns the validated ref if valid, throws if invalid.
+ * This return pattern helps static analyzers track sanitization.
  */
-export function validateGitRef(ref: string): void {
+export function validateGitRef(ref: string): string {
 	// Git ref names cannot contain: space, ~, ^, :, ?, *, [, \, control chars
 	// Also reject shell metacharacters for extra safety
+	// Only allow: word chars (\w = [a-zA-Z0-9_]), dots, slashes, hyphens
 	if (!/^[\w./-]+$/.test(ref)) {
 		throw new Error(`Invalid git ref: ${ref}`);
 	}
+	return ref;
 }

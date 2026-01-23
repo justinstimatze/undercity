@@ -158,10 +158,10 @@ function generateBatchId(): string {
  * Get the list of modified files in a worktree compared to main branch
  */
 function getModifiedFilesInWorktree(worktreePath: string, mainBranch: string): string[] {
-	validateGitRef(mainBranch);
+	const sanitizedBranch = validateGitRef(mainBranch);
 	try {
 		// Get files that differ from main branch
-		const output = execGitInDir(["diff", "--name-only", `origin/${mainBranch}...HEAD`], worktreePath);
+		const output = execGitInDir(["diff", "--name-only", `origin/${sanitizedBranch}...HEAD`], worktreePath);
 		if (!output) return [];
 		return output.split("\n").filter((f) => f.trim().length > 0);
 	} catch {
@@ -1266,9 +1266,9 @@ export class Orchestrator {
 		try {
 			const mainRepo = this.worktreeManager.getMainRepoPath();
 			const mainBranch = this.worktreeManager.getMainBranch();
-			validateGitRef(mainBranch);
-			execGitInDir(["push", "origin", mainBranch], mainRepo);
-			output.success(`Pushed ${mergedCount} merged commit(s) to origin/${mainBranch}`);
+			const sanitizedBranch = validateGitRef(mainBranch);
+			execGitInDir(["push", "origin", sanitizedBranch], mainRepo);
+			output.success(`Pushed ${mergedCount} merged commit(s) to origin/${sanitizedBranch}`);
 		} catch (pushErr) {
 			output.error("Push to remote failed", { error: String(pushErr) });
 			output.info("Changes remain in local main. Push manually when ready.");

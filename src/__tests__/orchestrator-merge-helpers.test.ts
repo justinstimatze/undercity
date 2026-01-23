@@ -38,7 +38,8 @@ vi.mock("../output.js", () => ({
 vi.mock("../orchestrator/git-utils.js", () => ({
 	execGitInDir: vi.fn(),
 	validateCwd: vi.fn(),
-	validateGitRef: vi.fn(),
+	// validateGitRef returns the validated ref for data flow tracking
+	validateGitRef: vi.fn().mockImplementation((ref: string) => ref),
 }));
 
 describe("orchestrator/merge-helpers", () => {
