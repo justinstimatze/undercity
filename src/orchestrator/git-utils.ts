@@ -14,8 +14,15 @@ import { isAbsolute, normalize } from "node:path";
  *
  * Returns the validated path if valid, throws if invalid.
  * This return pattern helps static analyzers track sanitization.
+ *
+ * Security: Rejects paths starting with '-' to prevent command-line
+ * option injection (e.g., --upload-pack attacks in git commands).
  */
 export function validateCwd(cwd: string): string {
+	// Reject paths starting with '-' to prevent option injection
+	if (cwd.startsWith("-")) {
+		throw new Error(`Invalid cwd: cannot start with dash: ${cwd}`);
+	}
 	const normalized = normalize(cwd);
 	if (!isAbsolute(normalized)) {
 		throw new Error(`Invalid cwd: must be absolute path, got ${cwd}`);
@@ -47,8 +54,15 @@ export function execInDir(command: string, cwd: string): string {
  *
  * Returns the validated ref if valid, throws if invalid.
  * This return pattern helps static analyzers track sanitization.
+ *
+ * Security: Rejects refs starting with '-' to prevent command-line
+ * option injection (e.g., --upload-pack attacks in git commands).
  */
 export function validateGitRef(ref: string): string {
+	// Reject refs starting with '-' to prevent option injection
+	if (ref.startsWith("-")) {
+		throw new Error(`Invalid git ref: cannot start with dash: ${ref}`);
+	}
 	// Git ref names cannot contain: space, ~, ^, :, ?, *, [, \, control chars
 	// Also reject shell metacharacters for extra safety
 	// Only allow: word chars (\w = [a-zA-Z0-9_]), dots, slashes, hyphens
