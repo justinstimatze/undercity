@@ -342,13 +342,13 @@ export class UndercityServer {
 			serverLogger.info({ taskId: task.id, objective: task.objective }, "Task added via API");
 			this.sendJson(res, 201, { success: true, task: { id: task.id, objective: task.objective } });
 		} catch (error) {
-			// Security validation failure
-			const message = error instanceof Error ? error.message : String(error);
+			// Security validation failure - log details but return generic message
+			const errorDetail = error instanceof Error ? error.message : String(error);
 			serverLogger.warn(
-				{ objective: body.objective.substring(0, 100), error: message },
+				{ objective: body.objective.substring(0, 100), error: errorDetail },
 				"Task rejected by security validation",
 			);
-			this.sendJson(res, 400, { error: message });
+			this.sendJson(res, 400, { error: "Task rejected by security validation" });
 		}
 	}
 
@@ -422,9 +422,8 @@ export class UndercityServer {
 			res.writeHead(200, { "Content-Type": "application/json" });
 			res.end(JSON.stringify(response, null, 2));
 		} catch (error) {
-			const message = error instanceof Error ? error.message : "MCP request failed";
 			serverLogger.error({ error }, "MCP request error");
-			this.sendJson(res, 500, { error: message });
+			this.sendJson(res, 500, { error: "MCP request failed" });
 		}
 	}
 

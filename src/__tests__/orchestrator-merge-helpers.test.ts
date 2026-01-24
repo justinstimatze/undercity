@@ -37,7 +37,8 @@ vi.mock("../output.js", () => ({
 // Mock git-utils (we're testing merge-helpers, not git-utils)
 vi.mock("../orchestrator/git-utils.js", () => ({
 	execGitInDir: vi.fn(),
-	validateCwd: vi.fn(),
+	// validateCwd returns the validated path for data flow tracking
+	validateCwd: vi.fn().mockImplementation((cwd: string) => cwd),
 	// validateGitRef returns the validated ref for data flow tracking
 	validateGitRef: vi.fn().mockImplementation((ref: string) => ref),
 }));

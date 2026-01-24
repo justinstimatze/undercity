@@ -73,12 +73,12 @@ export function fetchMainIntoWorktree(
 ): void {
 	// Validate both mainRepo (path) and mainBranch (ref) to prevent injection
 	// Using returned values makes sanitization explicit for static analysis
-	validateCwd(mainRepo);
+	const sanitizedRepo = validateCwd(mainRepo);
 	const sanitizedBranch = validateGitRef(mainBranch);
 	try {
 		// execGitInDir uses execFileSync which doesn't invoke a shell,
 		// so arguments are passed directly without shell interpretation
-		execGitInDir(["fetch", mainRepo, sanitizedBranch], worktreePath);
+		execGitInDir(["fetch", sanitizedRepo, sanitizedBranch], worktreePath);
 	} catch (fetchError) {
 		throw new Error(`Git fetch from main repo failed for ${taskId}: ${fetchError}`);
 	}
