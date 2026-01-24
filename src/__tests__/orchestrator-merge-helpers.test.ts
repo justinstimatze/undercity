@@ -140,7 +140,7 @@ describe("orchestrator/merge-helpers", () => {
 
 			expect(validateCwd).toHaveBeenCalledWith("/main/repo");
 			expect(validateGitRef).toHaveBeenCalledWith("main");
-			expect(execGitInDir).toHaveBeenCalledWith(["fetch", "/main/repo", "main"], "/worktree");
+			expect(execGitInDir).toHaveBeenCalledWith(["fetch", "--", "/main/repo", "main"], "/worktree");
 		});
 
 		it("throws descriptive error on fetch failure", async () => {
@@ -226,7 +226,7 @@ describe("orchestrator/merge-helpers", () => {
 
 			expect(execGitInDir).toHaveBeenCalledWith(["rev-parse", "HEAD"], "/worktree");
 			expect(execGitInDir).toHaveBeenCalledWith(["checkout", "--detach"], "/worktree");
-			expect(execGitInDir).toHaveBeenCalledWith(["checkout", "main"], "/main/repo");
+			expect(execGitInDir).toHaveBeenCalledWith(["checkout", "--", "main"], "/main/repo");
 			expect(execGitInDir).toHaveBeenCalledWith(["merge", "--ff-only", "abc1234"], "/main/repo");
 		});
 

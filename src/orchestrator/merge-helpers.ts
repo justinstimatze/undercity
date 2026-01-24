@@ -77,8 +77,10 @@ export function fetchMainIntoWorktree(
 	const sanitizedBranch = validateGitRef(mainBranch);
 	try {
 		// execGitInDir uses execFileSync which doesn't invoke a shell,
-		// so arguments are passed directly without shell interpretation
-		execGitInDir(["fetch", sanitizedRepo, sanitizedBranch], worktreePath);
+		// so arguments are passed directly without shell interpretation.
+		// The "--" separator tells git that everything after it is a positional
+		// argument, not an option. This prevents --upload-pack injection attacks.
+		execGitInDir(["fetch", "--", sanitizedRepo, sanitizedBranch], worktreePath);
 	} catch (fetchError) {
 		throw new Error(`Git fetch from main repo failed for ${taskId}: ${fetchError}`);
 	}
@@ -139,6 +141,8 @@ export async function runPostRebaseVerification(
  * Handles stashing of uncommitted changes in main repo
  */
 export function mergeIntoLocalMain(taskId: string, worktreePath: string, mainRepo: string, mainBranch: string): void {
+	// Validate mainBranch to prevent command-line option injection
+	const sanitizedBranch = validateGitRef(mainBranch);
 	let didStash = false;
 	try {
 		// Get the current commit SHA before detaching
@@ -166,7 +170,8 @@ export function mergeIntoLocalMain(taskId: string, worktreePath: string, mainRep
 		}
 
 		// Checkout main and fast-forward merge the worktree branch
-		execGitInDir(["checkout", mainBranch], mainRepo);
+		// Use "--" separator to prevent option injection attacks
+		execGitInDir(["checkout", "--", sanitizedBranch], mainRepo);
 		execGitInDir(["merge", "--ff-only", commitSha], mainRepo);
 
 		output.debug(`Merged ${taskId} into local main (${commitSha.slice(0, 7)})`);

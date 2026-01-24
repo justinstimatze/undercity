@@ -1267,7 +1267,8 @@ export class Orchestrator {
 			const mainRepo = this.worktreeManager.getMainRepoPath();
 			const mainBranch = this.worktreeManager.getMainBranch();
 			const sanitizedBranch = validateGitRef(mainBranch);
-			execGitInDir(["push", "origin", sanitizedBranch], mainRepo);
+			// Use "--" separator to prevent option injection attacks
+			execGitInDir(["push", "origin", "--", sanitizedBranch], mainRepo);
 			output.success(`Pushed ${mergedCount} merged commit(s) to origin/${sanitizedBranch}`);
 		} catch (pushErr) {
 			output.error("Push to remote failed", { error: String(pushErr) });
