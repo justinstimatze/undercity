@@ -15,6 +15,7 @@
 
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { pmRefineTask } from "./automated-pm.js";
 import { updateLedger } from "./capability-ledger.js";
 import {
 	getEmergencyModeStatus,
@@ -62,7 +63,14 @@ import {
 import * as output from "./output.js";
 import { Persistence, writeTaskAssignment } from "./persistence.js";
 import { RateLimitTracker } from "./rate-limit.js";
-import { addTask, findSimilarInProgressTask, getAllTasks, type HandoffContext, type Task } from "./task.js";
+import {
+	addTask,
+	findSimilarInProgressTask,
+	getAllTasks,
+	type HandoffContext,
+	type Task,
+	updateTaskTicket,
+} from "./task.js";
 import { findRelevantFiles } from "./task-file-patterns.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
 import type {
@@ -575,8 +583,8 @@ export class Orchestrator {
 	 * without worktree overhead.
 	 */
 	async runParallel(tasks: Array<string | Task>): Promise<ParallelBatchResult> {
-		// Extract objectives and store handoff contexts
-		const objectives = this.extractObjectivesAndContexts(tasks);
+		// Extract objectives and store handoff contexts (with auto-refinement)
+		const objectives = await this.extractObjectivesAndContexts(tasks);
 
 		// Separate plan tasks from implementation tasks
 		const planTasks = objectives.filter(isPlanTask);
@@ -656,8 +664,9 @@ export class Orchestrator {
 
 	/**
 	 * Extract task objectives and store handoff contexts and original task IDs
+	 * Auto-refines tasks that lack rich ticket content
 	 */
-	private extractObjectivesAndContexts(tasks: Array<string | Task>): string[] {
+	private async extractObjectivesAndContexts(tasks: Array<string | Task>): Promise<string[]> {
 		const objectives: string[] = [];
 		for (const t of tasks) {
 			if (typeof t === "string") {
@@ -672,10 +681,45 @@ export class Orchestrator {
 				if (Object.keys(handoffContext).length > 0) {
 					this.handoffContexts.set(t.objective, handoffContext);
 				}
-				// Store ticket content for rich task context
-				if (t.ticket) {
-					this.tickets.set(t.objective, t.ticket);
+
+				// Auto-refine if task lacks ticket content
+				let ticket = t.ticket;
+				if (!ticket || !ticket.description) {
+					try {
+						sessionLogger.info(
+							{ taskId: t.id, objective: t.objective.substring(0, 50) },
+							"Task lacks ticket content, auto-refining",
+						);
+						const refineResult = await pmRefineTask(t.objective, this.repoRoot);
+						if (refineResult.success) {
+							ticket = refineResult.ticket;
+							// Persist enriched ticket back to database
+							if (t.id) {
+								updateTaskTicket(t.id, ticket);
+								sessionLogger.info(
+									{
+										taskId: t.id,
+										tokensUsed: refineResult.tokensUsed,
+										hasDescription: !!ticket.description,
+										hasAcceptanceCriteria: !!ticket.acceptanceCriteria,
+									},
+									"Task auto-refined successfully",
+								);
+							}
+						}
+					} catch (error) {
+						sessionLogger.warn(
+							{ error: String(error), taskId: t.id },
+							"Auto-refinement failed, proceeding with minimal context",
+						);
+					}
 				}
+
+				// Store ticket content for rich task context
+				if (ticket) {
+					this.tickets.set(t.objective, ticket);
+				}
+
 				// Store the original task ID from the board for decomposition
 				if (t.id) {
 					this.originalTaskIds.set(t.objective, t.id);

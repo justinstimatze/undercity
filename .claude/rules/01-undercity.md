@@ -11,6 +11,7 @@ Multi-agent orchestrator with learning. Processes tasks from board with verifica
 
 **Grind** (main execution mode):
 - Autonomous task processing
+- Auto-refinement of tasks lacking rich context
 - Parallel execution in isolated git worktrees
 - Model routing by complexity (sonnet → opus)
 - Built-in verification (typecheck, test, lint)
@@ -323,7 +324,9 @@ undercity experiment recommend     # Get statistical recommendation
 ```
 Task Board (.undercity/undercity.db)
     ↓
-Grind picks task → Assess complexity
+Grind picks task → Auto-refine if lacking rich context
+    ↓
+Assess complexity
     ↓
 Pre-execution planning (tiered):
     ├─ Haiku creates plan (files, steps, risks)
@@ -336,7 +339,7 @@ Route to model tier:
     ↓
 Create worktree (.undercity/worktrees/task-{id}/)
     ↓
-Worker executes with validated plan → Verification loop
+Worker executes with validated plan + rich ticket → Verification loop
     ↓
     ├─ typecheck fails? → Fix or escalate
     ├─ tests fail? → Fix or escalate
