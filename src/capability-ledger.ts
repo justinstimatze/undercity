@@ -523,7 +523,7 @@ export function getLedgerStats(stateDir: string = DEFAULT_STATE_DIR): {
 	const topPatterns = patternList
 		.map((p) => ({
 			pattern: p.pattern,
-			attempts: p.byModel.sonnet.attempts + p.byModel.sonnet.attempts + p.byModel.opus.attempts,
+			attempts: p.byModel.sonnet.attempts + p.byModel.opus.attempts,
 		}))
 		.sort((a, b) => b.attempts - a.attempts)
 		.slice(0, 10);

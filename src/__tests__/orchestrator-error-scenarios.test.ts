@@ -799,8 +799,7 @@ describe("Rate Limit Handling", () => {
 			tracker.recordTask("task-3", "opus", 100000, 50000);
 
 			const summary = tracker.getUsageSummary();
-			expect(summary.modelBreakdown.sonnet.totalTasks).toBe(1);
-			expect(summary.modelBreakdown.sonnet.totalTasks).toBe(1);
+			expect(summary.modelBreakdown.sonnet.totalTasks).toBe(2);
 			expect(summary.modelBreakdown.opus.totalTasks).toBe(1);
 		});
 

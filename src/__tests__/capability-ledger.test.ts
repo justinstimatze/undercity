@@ -92,21 +92,13 @@ describe("capability-ledger", () => {
 					fix: {
 						pattern: "fix",
 						byModel: {
-							haiku: {
+							sonnet: {
 								attempts: 5,
 								successes: 4,
 								escalations: 1,
-								totalTokens: 1000,
-								totalDurationMs: 5000,
-								totalRetries: 6,
-							},
-							sonnet: {
-								attempts: 3,
-								successes: 3,
-								escalations: 0,
-								totalTokens: 3000,
-								totalDurationMs: 9000,
-								totalRetries: 3,
+								totalTokens: 4000,
+								totalDurationMs: 14000,
+								totalRetries: 9,
 							},
 							opus: {
 								attempts: 2,
@@ -189,11 +181,10 @@ describe("capability-ledger", () => {
 					fix: {
 						pattern: "fix",
 						byModel: {
-							haiku: { attempts: 3, successes: 2, escalations: 1, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 							sonnet: {
-								attempts: 0,
-								successes: 0,
-								escalations: 0,
+								attempts: 3,
+								successes: 2,
+								escalations: 1,
 								totalTokens: 0,
 								totalDurationMs: 0,
 								totalRetries: 0,
@@ -356,8 +347,7 @@ describe("capability-ledger", () => {
 					fix: {
 						pattern: "fix",
 						byModel: {
-							haiku: { attempts: 3, successes: 2, escalations: 1 },
-							sonnet: { attempts: 0, successes: 0, escalations: 0 },
+							sonnet: { attempts: 3, successes: 2, escalations: 1 },
 							opus: { attempts: 0, successes: 0, escalations: 0 },
 						},
 						lastSeen: new Date("2024-01-01"),
@@ -446,21 +436,13 @@ describe("capability-ledger", () => {
 					fix: {
 						pattern: "fix",
 						byModel: {
-							haiku: {
+							sonnet: {
 								attempts: 10,
 								successes: 9,
 								escalations: 1,
-								totalTokens: 5000,
+								totalTokens: 10000,
 								totalDurationMs: 30000,
 								totalRetries: 11,
-							},
-							sonnet: {
-								attempts: 0,
-								successes: 0,
-								escalations: 0,
-								totalTokens: 0,
-								totalDurationMs: 0,
-								totalRetries: 0,
 							},
 							opus: { attempts: 0, successes: 0, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 						},
@@ -532,21 +514,13 @@ describe("capability-ledger", () => {
 					fix: {
 						pattern: "fix",
 						byModel: {
-							haiku: {
+							sonnet: {
 								attempts: 5,
 								successes: 4,
 								escalations: 0,
-								totalTokens: 2500,
+								totalTokens: 5000,
 								totalDurationMs: 15000,
 								totalRetries: 5,
-							},
-							sonnet: {
-								attempts: 3,
-								successes: 3,
-								escalations: 0,
-								totalTokens: 9000,
-								totalDurationMs: 27000,
-								totalRetries: 3,
 							},
 							opus: { attempts: 0, successes: 0, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 						},
@@ -555,21 +529,13 @@ describe("capability-ledger", () => {
 					add: {
 						pattern: "add",
 						byModel: {
-							haiku: {
+							sonnet: {
 								attempts: 5,
 								successes: 4,
 								escalations: 0,
-								totalTokens: 2500,
+								totalTokens: 5000,
 								totalDurationMs: 15000,
 								totalRetries: 5,
-							},
-							sonnet: {
-								attempts: 2,
-								successes: 2,
-								escalations: 0,
-								totalTokens: 6000,
-								totalDurationMs: 18000,
-								totalRetries: 2,
 							},
 							opus: { attempts: 0, successes: 0, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 						},
@@ -581,7 +547,7 @@ describe("capability-ledger", () => {
 
 			const recommendation = getRecommendedModel("fix and add feature", ".test-state");
 
-			// haiku has 10 attempts, 8 successes across both patterns = 80% success rate
+			// sonnet has 10 attempts, 8 successes across both patterns = 80% success rate
 			expect(recommendation.patternRates?.sonnet.attempts).toBe(10);
 			expect(recommendation.patternRates?.sonnet.successRate).toBeCloseTo(0.8, 2);
 		});
@@ -646,21 +612,13 @@ describe("capability-ledger", () => {
 					test: {
 						pattern: "test",
 						byModel: {
-							haiku: {
+							sonnet: {
 								attempts: 4,
 								successes: 3,
 								escalations: 1,
 								totalTokens: 4000,
 								totalDurationMs: 20000,
 								totalRetries: 8,
-							},
-							sonnet: {
-								attempts: 0,
-								successes: 0,
-								escalations: 0,
-								totalTokens: 0,
-								totalDurationMs: 0,
-								totalRetries: 0,
 							},
 							opus: { attempts: 0, successes: 0, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 						},
@@ -873,10 +831,9 @@ describe("capability-ledger", () => {
 					fix: {
 						pattern: "fix",
 						byModel: {
-							haiku: { attempts: 5, successes: 4, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 							sonnet: {
-								attempts: 3,
-								successes: 3,
+								attempts: 8,
+								successes: 6,
 								escalations: 0,
 								totalTokens: 0,
 								totalDurationMs: 0,
@@ -889,10 +846,9 @@ describe("capability-ledger", () => {
 					add: {
 						pattern: "add",
 						byModel: {
-							haiku: { attempts: 3, successes: 2, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 							sonnet: {
-								attempts: 2,
-								successes: 2,
+								attempts: 5,
+								successes: 4,
 								escalations: 0,
 								totalTokens: 0,
 								totalDurationMs: 0,
@@ -908,8 +864,7 @@ describe("capability-ledger", () => {
 
 			const stats = getLedgerStats(".test-state");
 
-			expect(stats.modelDistribution.sonnet).toBe(8); // 5 + 3
-			expect(stats.modelDistribution.sonnet).toBe(5); // 3 + 2
+			expect(stats.modelDistribution.sonnet).toBe(13); // 8 + 5
 			expect(stats.modelDistribution.opus).toBe(2); // 2 + 0
 		});
 
@@ -920,17 +875,9 @@ describe("capability-ledger", () => {
 					fix: {
 						pattern: "fix",
 						byModel: {
-							haiku: {
-								attempts: 10,
-								successes: 8,
-								escalations: 0,
-								totalTokens: 0,
-								totalDurationMs: 0,
-								totalRetries: 0,
-							},
 							sonnet: {
-								attempts: 5,
-								successes: 5,
+								attempts: 15,
+								successes: 13,
 								escalations: 0,
 								totalTokens: 0,
 								totalDurationMs: 0,
@@ -943,10 +890,9 @@ describe("capability-ledger", () => {
 					add: {
 						pattern: "add",
 						byModel: {
-							haiku: { attempts: 3, successes: 2, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 							sonnet: {
-								attempts: 2,
-								successes: 2,
+								attempts: 5,
+								successes: 4,
 								escalations: 0,
 								totalTokens: 0,
 								totalDurationMs: 0,
@@ -959,11 +905,10 @@ describe("capability-ledger", () => {
 					refactor: {
 						pattern: "refactor",
 						byModel: {
-							haiku: { attempts: 5, successes: 3, escalations: 1, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 							sonnet: {
-								attempts: 3,
-								successes: 3,
-								escalations: 0,
+								attempts: 8,
+								successes: 6,
+								escalations: 1,
 								totalTokens: 0,
 								totalDurationMs: 0,
 								totalRetries: 0,
@@ -979,11 +924,11 @@ describe("capability-ledger", () => {
 			const stats = getLedgerStats(".test-state");
 
 			expect(stats.topPatterns[0].pattern).toBe("fix");
-			expect(stats.topPatterns[0].attempts).toBe(15); // 10 + 5 + 0
+			expect(stats.topPatterns[0].attempts).toBe(15); // 15 + 0
 			expect(stats.topPatterns[1].pattern).toBe("refactor");
-			expect(stats.topPatterns[1].attempts).toBe(10); // 5 + 3 + 2
+			expect(stats.topPatterns[1].attempts).toBe(10); // 8 + 2
 			expect(stats.topPatterns[2].pattern).toBe("add");
-			expect(stats.topPatterns[2].attempts).toBe(5); // 3 + 2 + 0
+			expect(stats.topPatterns[2].attempts).toBe(5); // 5 + 0
 		});
 
 		it("limits top patterns to 10", () => {

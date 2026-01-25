@@ -216,15 +216,15 @@ describe("Network Failure Handling", () => {
 
 		it("should resume individual model", () => {
 			tracker.pauseForRateLimit("sonnet", "Rate limit exceeded");
-			tracker.pauseForRateLimit("sonnet", "Rate limit exceeded");
+			tracker.pauseForRateLimit("opus", "Rate limit exceeded");
 
 			expect(tracker.isModelPaused("sonnet")).toBe(true);
-			expect(tracker.isModelPaused("sonnet")).toBe(true);
+			expect(tracker.isModelPaused("opus")).toBe(true);
 
 			tracker.resumeModel("sonnet");
 
 			expect(tracker.isModelPaused("sonnet")).toBe(false);
-			expect(tracker.isModelPaused("sonnet")).toBe(true);
+			expect(tracker.isModelPaused("opus")).toBe(true);
 			expect(tracker.isPaused()).toBe(true); // Still globally paused
 		});
 
@@ -306,12 +306,12 @@ describe("Network Failure Handling", () => {
 			tracker.resumeFromRateLimit();
 			tracker.recordRateLimitHit("sonnet", "Hit 2");
 			tracker.resumeFromRateLimit();
-			tracker.recordRateLimitHit("sonnet", "Hit 3");
+			tracker.recordRateLimitHit("opus", "Hit 3");
 
 			const summary = tracker.getUsageSummary();
 			expect(summary.totalRateLimitHits).toBe(3);
 			expect(summary.modelBreakdown.sonnet.rateLimitHits).toBe(2);
-			expect(summary.modelBreakdown.sonnet.rateLimitHits).toBe(1);
+			expect(summary.modelBreakdown.opus.rateLimitHits).toBe(1);
 		});
 	});
 
