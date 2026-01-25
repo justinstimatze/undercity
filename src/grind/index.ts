@@ -210,7 +210,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		const allTasks = getAllTasks();
 		let pendingTasks = allTasks
 			.filter((q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed)
-			.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+			.sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500)); // Lower number = higher priority
 
 		// Filter to specific task if requested
 		if (config.taskId) {

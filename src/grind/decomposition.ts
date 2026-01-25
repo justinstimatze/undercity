@@ -140,7 +140,7 @@ export async function refetchTasksAfterDecomposition(maxCount: number, tasksProc
 	const refreshedTasks = getAllTasks();
 	const newPendingTasks = refreshedTasks
 		.filter((q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed)
-		.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+		.sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500)); // Lower number = higher priority
 
 	const newRemainingCount = maxCount > 0 ? maxCount - tasksProcessed : newPendingTasks.length;
 	return maxCount > 0 ? newPendingTasks.slice(0, newRemainingCount) : newPendingTasks;
@@ -191,7 +191,7 @@ export async function applyLedgerRecommendations(tasks: TaskWithModel[]): Promis
 }
 
 /**
- * Group tasks by model tier
+ * Group tasks by model tier, preserving priority order within each tier
  */
 export function groupTasksByModel(tasks: TaskWithModel[]): TasksByModel {
 	const tasksByModel: TasksByModel = {
@@ -204,6 +204,11 @@ export function groupTasksByModel(tasks: TaskWithModel[]): TasksByModel {
 		const model = task.recommendedModel || "sonnet";
 		tasksByModel[model].push(task);
 	}
+
+	// Sort each group by priority (lower = higher priority)
+	tasksByModel.haiku.sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500));
+	tasksByModel.sonnet.sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500));
+	tasksByModel.opus.sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500));
 
 	return tasksByModel;
 }
