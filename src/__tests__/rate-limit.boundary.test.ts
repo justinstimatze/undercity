@@ -14,14 +14,14 @@ import type { RateLimitState } from "../types.js";
 
 describe("RateLimitTracker - Boundary Values", () => {
 	describe("Token Multipliers - Min/Max Boundaries", () => {
-		it("should calculate correct sonnet-equivalent tokens for min multiplier (haiku 0.25)", () => {
+		it("should calculate correct sonnet-equivalent tokens for sonnet multiplier (1.0)", () => {
 			const tracker = new RateLimitTracker();
 
-			// 1000 actual tokens * 0.25 = 250 sonnet-equivalent
+			// 1000 actual tokens * 1.0 = 1000 sonnet-equivalent
 			tracker.recordTask("task-1", "sonnet", 500, 500);
 
 			const usage = tracker.getCurrentUsage();
-			expect(usage.last5HoursSonnet).toBe(250);
+			expect(usage.last5HoursSonnet).toBe(1000);
 		});
 
 		it("should calculate correct sonnet-equivalent tokens for max multiplier (opus 12.0)", () => {
@@ -358,7 +358,7 @@ describe("RateLimitTracker - Boundary Values", () => {
 			const usage = tracker.getModelUsage("sonnet");
 			expect(usage.totalTasks).toBe(2);
 			expect(usage.totalTokens).toBe(600); // 100+100+200+200
-			expect(usage.sonnetEquivalentTokens).toBe(150); // 600 * 0.25
+			expect(usage.sonnetEquivalentTokens).toBe(600); // 600 * 1.0
 		});
 
 		it("should handle 24-hour boundary for last24Hours calculation", () => {

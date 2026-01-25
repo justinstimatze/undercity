@@ -7,9 +7,9 @@ Comprehensive guide for when to use solo vs grind, escalation strategies, model 
 | Task Type | Complexity | Command | Model | Parallelism | Review |
 |-----------|------------|---------|--------|-------------|--------|
 | Trivial (format, lint) | Local Tool | `pnpm format` | None | N/A | No |
-| Single file fix | Simple | `grind "goal"` | haiku/sonnet | 1 | No |
+| Single file fix | Simple | `grind "goal"` | sonnet | 1 | No |
 | Feature implementation | Standard | `grind` | sonnet | 1-3 | Yes |
-| Multi-package refactor | Complex | `grind --parallel 1` | opus | 1 | Yes |
+| Multi-package refactor | Complex | `grind --parallel 1` | sonnet/opus | 1 | Yes |
 | Security/Auth changes | Critical | `grind --parallel 1 --review` | opus | 1 | Yes |
 
 ## Command Selection
@@ -155,7 +155,7 @@ High churn (avg >5 changes) = +1
 **Execution Order (Cost Optimization):**
 ```typescript
 // Process tasks by model tier for cost efficiency
-modelOrder = ["haiku", "sonnet", "opus"]
+modelOrder = ["sonnet", "opus"]
 for (tier of modelOrder) {
   await processTasksWithModel(tier)
 }
@@ -165,9 +165,8 @@ for (tier of modelOrder) {
 1. Load all pending tasks from task board
 2. Run decomposition check on each task
 3. Group tasks by recommended model tier
-4. Execute haiku tasks first (cheapest)
-5. Then sonnet tasks (moderate cost)
-6. Finally opus tasks (most expensive)
+4. Execute sonnet tasks first (cheaper)
+5. Then opus tasks (most expensive)
 
 ## Escalation Strategy
 
@@ -185,7 +184,7 @@ for (tier of modelOrder) {
    - Few-files assessment → task touches 10+ files
 4. **Max Retries Exceeded:** Escalate to next tier
 
-**Escalation path:** `haiku → sonnet → opus → fail`
+**Escalation path:** `sonnet → opus → fail`
 
 ### Retry vs Escalation Configuration
 
@@ -265,7 +264,7 @@ undercity grind --review  # Enable escalating review (default: enabled)
 undercity grind --annealing  # Enable annealing review at opus tier
 ```
 
-**Review chain:** haiku review → sonnet review → opus review
+**Review chain:** sonnet review → opus review
 
 **Team Composition (inspired by Zeroshot):**
 ```typescript
@@ -392,7 +391,7 @@ pnpm cleanup  # Clears stale state, creates backups
 
 ### Cost Optimization Strategy
 
-1. **Model tier ordering:** Process haiku tasks first (cheapest)
+1. **Model tier ordering:** Process sonnet tasks before opus (cost efficiency)
 2. **Task decomposition:** Break expensive tasks into cheaper subtasks
 3. **Early escalation:** Don't waste tokens on wrong model tier
 4. **Local tool detection:** Route formatting/linting to local tools (0 cost)
@@ -542,7 +541,7 @@ Need to run a task?
 undercity grind "fix typo" --model opus  # Waste $15+ on $0.25 task
 
 # GOOD: Let system choose
-undercity grind "fix typo"  # Auto-routes to haiku
+undercity grind "fix typo"  # Auto-routes to sonnet
 ```
 
 **Parallel conflicts:**
@@ -581,8 +580,7 @@ Target Files Known? → Quantitative Assessment
 Decomposition Check (checkAndDecompose)
     ↓
 Route to Model Tier:
-    Score 0-1: haiku
-    Score 2-6: sonnet
+    Score 0-6: sonnet
     Score 7+:  opus
     ↓
 Parallelism Decision:
@@ -591,7 +589,7 @@ Parallelism Decision:
     ↓
 Execute with Verification Pipeline
     ↓
-Escalate on failures (haiku → sonnet → opus)
+Escalate on failures (sonnet → opus)
     ↓
 Review if enabled (--review flag)
     ↓

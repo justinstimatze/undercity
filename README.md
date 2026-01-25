@@ -148,9 +148,8 @@ undercity remove <task-id>    # Clean up test task
 
 | Complexity | Model | Use Cases | Token Cost |
 |------------|-------|-----------|------------|
-| Simple | haiku | Docs, typos | Lowest |
-| Medium | sonnet | Features, refactoring | Medium |
-| Complex | opus | Architecture, critical bugs | Highest |
+| Standard | sonnet | Most tasks: docs, features, refactoring | Medium |
+| Critical | opus | Architecture, security, complex bugs | Highest |
 
 ## Verification Stages
 
@@ -166,7 +165,7 @@ undercity remove <task-id>    # Clean up test task
 | Step | Action |
 |------|--------|
 | 1 | Retry with same model |
-| 2 | Escalate: haiku → sonnet → opus |
+| 2 | Escalate: sonnet → opus |
 | 3 | Human notification |
 
 ## Configuration Precedence

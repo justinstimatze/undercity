@@ -135,7 +135,6 @@ function acquireLock(lockPath: string): boolean {
 
 ```typescript
 const MODEL_NAMES: Record<ModelTier, string> = {
-    haiku: "claude-3-5-haiku-20241022",
     sonnet: "claude-sonnet-4-20250514",
     opus: "claude-opus-4-5-20251101",
 };
@@ -293,13 +292,11 @@ private determineStartingModel(assessment: ComplexityAssessment): ModelTier {
     switch (assessment.level) {
         case "trivial":
         case "simple":
-            return "haiku";      // Fast, cheap
         case "standard":
-            return "sonnet";     // Balanced
         case "complex":
-            return "sonnet";     // Start low, escalate if needed
+            return "sonnet";     // Default for most tasks
         case "critical":
-            return "opus";       // Skip to best model
+            return "opus";       // Premium model for critical work
         default:
             return "sonnet";
     }
@@ -491,7 +488,7 @@ function recordFix(error: StructuredError, before: string, after: string): void 
 Escalate models based on failure patterns:
 
 ```typescript
-const ESCALATION_PATH: ModelTier[] = ["haiku", "sonnet", "opus"];
+const ESCALATION_PATH: ModelTier[] = ["sonnet", "opus"];
 const MAX_RETRIES_PER_TIER = 3;
 const MAX_OPUS_RETRIES = 7;  // More attempts at final tier
 

@@ -194,7 +194,7 @@ Orchestrator.run():
 1. Check recovery (hasActiveRecovery) → resume if needed
 2. Fetch tasks (task.ts:getAllItems) → filter: pending|in_progress, !isDecomposed
 3. Decompose (task-decomposer:checkAndDecompose) → atomic subtasks + model tier
-4. Group by model → execute haiku → sonnet → opus (cheapest first)
+4. Group by model → execute sonnet → opus (cheapest first)
 5. Per task:
    - Spawn worktree (WorktreeManager.createWorktree)
    - Run TaskWorker (AI does work)
@@ -367,9 +367,8 @@ Quick reference for where each learning function is called:
 
 **Model tier routing:**
 - Assessed by task-decomposer.ts
-- haiku: single-file, simple
-- sonnet: multi-file, standard
-- opus: architectural, deep reasoning
+- sonnet: most tasks (single/multi-file, standard complexity)
+- opus: architectural, deep reasoning, critical
 
 **Worktrees:**
 - Location: `<repo>-worktrees/task-<id>`

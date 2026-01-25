@@ -30,7 +30,7 @@ Projects and concepts that shaped undercity's design. Links preserved for refere
 **What it is:** "When in doubt, have the agent review its own work 5 times." Multiple review passes catch errors that single-pass execution misses.
 
 **Concepts borrowed:**
-- Multi-pass review (haiku → sonnet → opus review chain)
+- Multi-pass review (sonnet → opus review chain)
 - Review convergence (each tier reviews until no issues found)
 - 2-3 passes on small tasks, 4-5 on big tasks
 

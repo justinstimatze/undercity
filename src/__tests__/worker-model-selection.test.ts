@@ -244,12 +244,6 @@ describe("worker/model-selection", () => {
 		it("escalates sonnet to opus", () => {
 			const result = getNextModelTier("sonnet", "opus");
 			expect(result.canEscalate).toBe(true);
-			expect(result.nextTier).toBe("sonnet");
-		});
-
-		it("escalates sonnet to opus", () => {
-			const result = getNextModelTier("sonnet", "opus");
-			expect(result.canEscalate).toBe(true);
 			expect(result.nextTier).toBe("opus");
 		});
 
@@ -262,18 +256,6 @@ describe("worker/model-selection", () => {
 		it("cannot escalate past maxTier", () => {
 			const result = getNextModelTier("sonnet", "sonnet");
 			expect(result.canEscalate).toBe(false);
-			expect(result.nextTier).toBe("sonnet");
-		});
-
-		it("cannot escalate haiku past haiku maxTier", () => {
-			const result = getNextModelTier("sonnet", "sonnet");
-			expect(result.canEscalate).toBe(false);
-			expect(result.nextTier).toBe("sonnet");
-		});
-
-		it("can escalate sonnet to opus when maxTier is sonnet", () => {
-			const result = getNextModelTier("sonnet", "sonnet");
-			expect(result.canEscalate).toBe(true);
 			expect(result.nextTier).toBe("sonnet");
 		});
 	});

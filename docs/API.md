@@ -236,7 +236,7 @@ output.error('Task processing failed', {
 - **Purpose**: Record token usage for a specific task
 - **Parameters**:
   - `taskId`: Unique task identifier
-  - `model`: Model used ('haiku', 'sonnet', 'opus')
+  - `model`: Model used ('sonnet', 'opus')
   - `inputTokens`: Number of input tokens
   - `outputTokens`: Number of output tokens
 - **Example Usage**:

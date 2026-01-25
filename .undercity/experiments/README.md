@@ -63,7 +63,7 @@ undercity experiment report <experiment-id> report.md
 
 ### Parameters You Can Test
 
-- **Model choices** (haiku/sonnet/opus) for each agent type
+- **Model choices** (sonnet/opus) for each agent type
 - **Squad composition** (which agents to include)
 - **Context size** (small/medium/large)
 - **Parallelism level** (sequential/limited/maximum)

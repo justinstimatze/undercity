@@ -12,7 +12,7 @@ Multi-agent orchestrator with learning. Processes tasks from board with verifica
 **Grind** (main execution mode):
 - Autonomous task processing
 - Parallel execution in isolated git worktrees
-- Model routing by complexity (haiku → sonnet → opus)
+- Model routing by complexity (sonnet → opus)
 - Built-in verification (typecheck, test, lint)
 - Crash recovery from `.undercity/parallel-recovery.json`
 - Knowledge injection from past tasks
@@ -306,12 +306,12 @@ undercity postmortem            # Analyze separately
 **When to run `undercity experiment`:**
 - Testing new model routing strategies
 - Comparing review vs no-review approaches
-- Validating that haiku can handle certain task types
+- Validating model effectiveness for specific task types
 - A/B testing prompt modifications
 
 **Typical experiment workflow:**
 ```bash
-undercity experiment create "haiku-vs-sonnet" --variants haiku,sonnet
+undercity experiment create "sonnet-vs-opus" --variants sonnet,opus
 undercity experiment activate <exp-id>
 undercity grind -n 30              # Run tasks to collect data
 undercity experiment results       # Check per-variant metrics
@@ -331,9 +331,8 @@ Pre-execution planning (tiered):
     └─ Sonnet/Opus reviews plan
     ↓
 Route to model tier:
-    - Simple (haiku): typos, docs, trivial fixes
-    - Medium (sonnet): features, refactoring, most code
-    - Complex (opus): architecture, critical bugs
+    - Standard (sonnet): most tasks - features, refactoring, fixes, docs
+    - Critical (opus): architecture changes, complex debugging, security-sensitive
     ↓
 Create worktree (.undercity/worktrees/task-{id}/)
     ↓
@@ -374,19 +373,12 @@ Task marked complete → Record learnings
 
 Tasks routed by complexity assessment:
 
-**Haiku** (fast, cheap):
-- Documentation updates
-- Typo fixes
-- Simple refactoring
-- Test additions (non-complex)
+**Sonnet** (default):
+- Most tasks: features, bugs, refactoring, docs
+- Standard complexity work
+- Cost-effective for typical development
 
-**Sonnet** (balanced):
-- Feature implementation
-- Bug fixes
-- Refactoring with logic changes
-- Most standard tasks
-
-**Opus** (expensive, capable):
+**Opus** (premium):
 - Architecture changes
 - Complex debugging
 - Critical path changes
@@ -402,7 +394,7 @@ Every task goes through:
 
 Failures trigger:
 - Immediate fix attempt (same model)
-- Escalation (haiku → sonnet → opus)
+- Escalation (sonnet → opus)
 - User notification (after max retries)
 
 ## Crash Recovery

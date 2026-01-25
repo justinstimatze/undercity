@@ -132,7 +132,7 @@ Write clear, actionable task descriptions:
 1. Tasks execute in isolated git worktrees (no conflicts)
 2. All changes verified (typecheck, test, lint) before commit
 3. Tasks merge to main serially
-4. Failed tasks retry with model escalation (haiku -> sonnet -> opus)
+4. Failed tasks retry with model escalation (sonnet -> opus)
 
 ## Task Board Location
 

@@ -88,13 +88,13 @@ Always use Orchestrator
 
 ```
 assessComplexityFast(task) returns level:
-├── trivial (score ≤1) → haiku
+├── trivial (score ≤1) → sonnet
 │   └── Typos, comments, local-tool tasks (format, lint, test)
 ├── simple (score ≤3) → sonnet
 │   └── Single function, add log, small change
 ├── standard (score ≤6) → sonnet + review
 │   └── Feature, bug fix, add tests
-├── complex (score ≤9) → opus
+├── complex (score ≤9) → sonnet + review
 │   └── Refactor, multi-file, architecture
 └── critical (score >9) → opus + full chain
     └── Security, auth, breaking changes
@@ -117,11 +117,11 @@ canHandleWithLocalTools(task) → LocalToolResult | null
 
 ```
 level → { workerModel, validatorCount, needsPlanning }
-├── trivial → haiku worker, 0 validators, no planning
-├── simple → sonnet worker, 1 haiku validator
+├── trivial → sonnet worker, 0 validators, no planning
+├── simple → sonnet worker, 1 sonnet validator
 ├── standard → sonnet worker, 2 sonnet validators, sonnet planner
 ├── complex → sonnet worker, 3 sonnet validators, opus planner
-└── critical → sonnet worker, 5 sonnet validators, opus planner
+└── critical → opus worker, 5 sonnet validators, opus planner
 ```
 
 ## State Files
@@ -140,7 +140,7 @@ level → { workerModel, validatorCount, needsPlanning }
 | Type | Values | Used For |
 |------|--------|----------|
 | `ComplexityLevel` | `trivial`, `simple`, `standard`, `complex`, `critical` | Model routing |
-| `ModelChoice` | `haiku`, `sonnet`, `opus` | API calls |
+| `ModelChoice` | `sonnet`, `opus` | API calls |
 | `SessionStatus` | `planning`, `executing`, `merging`, `complete`, `failed` | Session state |
 | `MergeStatus` | `pending`, `rebasing`, `testing`, `merging`, `complete`, `conflict` | MergeQueue |
 | `AgentType` | `scout`, `planner`, `builder`, `reviewer` | Agent roles |
@@ -376,7 +376,7 @@ undercity grind [goal]
     ├── hasActiveRecovery? → resumeRecovery()
     ├── decompose tasks → checkAndDecompose()
     │   └── Creates subtasks + assigns model tier
-    ├── group by model tier (haiku → sonnet → opus)
+    ├── group by model tier (sonnet → opus)
     └── per task:
         ├── createWorktree()
         ├── runTask() with assigned model

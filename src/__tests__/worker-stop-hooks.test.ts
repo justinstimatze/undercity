@@ -19,10 +19,6 @@ vi.mock("../logger.js", () => ({
 
 describe("worker/stop-hooks", () => {
 	describe("getMaxTurnsForModel", () => {
-		it("returns 10 for haiku", () => {
-			expect(getMaxTurnsForModel("sonnet")).toBe(10);
-		});
-
 		it("returns 15 for sonnet", () => {
 			expect(getMaxTurnsForModel("sonnet")).toBe(15);
 		});

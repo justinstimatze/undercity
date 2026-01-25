@@ -75,7 +75,7 @@ describe("Self-Tuning Module", () => {
 	describe("getThreshold", () => {
 		it("should return default threshold when no profile", () => {
 			const threshold = getThreshold(null, "sonnet", "simple");
-			expect(threshold.minSuccessRate).toBe(0.7);
+			expect(threshold.minSuccessRate).toBe(0.6);
 			expect(threshold.skip).toBe(false);
 		});
 
@@ -85,15 +85,15 @@ describe("Self-Tuning Module", () => {
 				updatedAt: new Date().toISOString(),
 				taskCount: 20,
 				thresholds: {
-					"haiku:simple": { minSuccessRate: 0.6, minSamples: 5, skip: false },
+					"sonnet:simple": { minSuccessRate: 0.7, minSamples: 3, skip: false },
 				},
-				modelSuccessRates: { haiku: 0.7, sonnet: 0.8, opus: 0.9 },
+				modelSuccessRates: { sonnet: 0.8, opus: 0.9 },
 				recommendations: [],
 			};
 
 			const threshold = getThreshold(profile, "sonnet", "simple");
-			expect(threshold.minSuccessRate).toBe(0.6);
-			expect(threshold.minSamples).toBe(5);
+			expect(threshold.minSuccessRate).toBe(0.7);
+			expect(threshold.minSamples).toBe(3);
 		});
 	});
 
@@ -103,9 +103,9 @@ describe("Self-Tuning Module", () => {
 			expect(shouldSkipModel(null, "opus", "critical")).toBe(false);
 		});
 
-		it("should skip sonnet for complex tasks by default", () => {
-			expect(shouldSkipModel(null, "sonnet", "complex")).toBe(true);
-			expect(shouldSkipModel(null, "sonnet", "critical")).toBe(true);
+		it("should not skip sonnet by default", () => {
+			expect(shouldSkipModel(null, "sonnet", "complex")).toBe(false);
+			expect(shouldSkipModel(null, "sonnet", "critical")).toBe(false);
 		});
 
 		it("should not skip sonnet for simple tasks", () => {

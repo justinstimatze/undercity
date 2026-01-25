@@ -232,7 +232,7 @@ not valid json
 					totalTokens: 750,
 					startedAt: new Date(),
 					completedAt: new Date(),
-					finalModel: "sonnet" as const,
+					finalModel: "opus" as const,
 				},
 			];
 
@@ -240,8 +240,8 @@ not valid json
 			expect(analysis.byModel.sonnet.total).toBe(2);
 			expect(analysis.byModel.sonnet.successful).toBe(1);
 			expect(analysis.byModel.sonnet.rate).toBe(0.5);
-			expect(analysis.byModel.sonnet.total).toBe(1);
-			expect(analysis.byModel.sonnet.rate).toBe(1);
+			expect(analysis.byModel.opus.total).toBe(1);
+			expect(analysis.byModel.opus.rate).toBe(1);
 		});
 
 		it("should group by complexity", () => {
@@ -285,7 +285,7 @@ not valid json
 					completedAt: new Date(),
 					wasEscalated: true,
 					startingModel: "sonnet" as const,
-					finalModel: "sonnet" as const,
+					finalModel: "opus" as const,
 				},
 				{
 					taskId: "t2",
@@ -315,8 +315,8 @@ not valid json
 			expect(analysis.escalation.totalEscalated).toBe(2);
 			expect(analysis.escalation.successAfterEscalation).toBe(1);
 			expect(analysis.escalation.escalationRate).toBeCloseTo(0.667, 2);
-			expect(analysis.escalation.byPath["haiku->sonnet"]).toBeDefined();
-			expect(analysis.escalation.byPath["haiku->sonnet"].count).toBe(1);
+			expect(analysis.escalation.byPath["sonnet->opus"]).toBeDefined();
+			expect(analysis.escalation.byPath["sonnet->opus"].count).toBe(2);
 		});
 
 		it("should generate recommendations for low success rates", () => {
@@ -420,24 +420,23 @@ not valid json
 	});
 
 	describe("suggestModelTier", () => {
-		it("should suggest haiku if it meets threshold", () => {
+		it("should suggest sonnet if it meets threshold", () => {
 			const analysis: MetricsAnalysis = {
 				totalTasks: 20,
 				overallSuccessRate: 0.8,
 				byModel: {
-					haiku: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
-					sonnet: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
+					sonnet: { total: 10, successful: 8, failed: 2, rate: 0.8, avgDurationMs: 1000, avgTokens: 500 },
 					opus: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
 				},
 				byComplexity: {
 					trivial: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
-					simple: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
+					simple: { total: 10, successful: 8, failed: 2, rate: 0.8, avgDurationMs: 1000, avgTokens: 500 },
 					standard: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
 					complex: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
 					critical: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
 				},
 				byModelAndComplexity: {
-					"haiku:simple": { total: 10, successful: 8, failed: 2, rate: 0.8, avgDurationMs: 1000, avgTokens: 500 },
+					"sonnet:simple": { total: 10, successful: 8, failed: 2, rate: 0.8, avgDurationMs: 1000, avgTokens: 500 },
 				},
 				escalation: {
 					totalEscalated: 0,
@@ -464,19 +463,17 @@ not valid json
 				totalTasks: 20,
 				overallSuccessRate: 0.4,
 				byModel: {
-					haiku: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
-					sonnet: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
-					opus: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
+					sonnet: { total: 5, successful: 2, failed: 3, rate: 0.4, avgDurationMs: 1500, avgTokens: 750 },
+					opus: { total: 5, successful: 3, failed: 2, rate: 0.6, avgDurationMs: 2000, avgTokens: 1000 },
 				},
 				byComplexity: {
 					trivial: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
 					simple: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
 					standard: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
-					complex: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
+					complex: { total: 10, successful: 5, failed: 5, rate: 0.5, avgDurationMs: 1750, avgTokens: 875 },
 					critical: { total: 0, successful: 0, failed: 0, rate: 0, avgDurationMs: 0, avgTokens: 0 },
 				},
 				byModelAndComplexity: {
-					"haiku:complex": { total: 5, successful: 1, failed: 4, rate: 0.2, avgDurationMs: 1000, avgTokens: 500 },
 					"sonnet:complex": { total: 5, successful: 2, failed: 3, rate: 0.4, avgDurationMs: 1500, avgTokens: 750 },
 					"opus:complex": { total: 5, successful: 3, failed: 2, rate: 0.6, avgDurationMs: 2000, avgTokens: 1000 },
 				},
