@@ -264,7 +264,7 @@ Undercity improves itself through a continuous feedback loop:
 
 **Postmortem output example:**
 ```
-📊 Grind Post-Mortem
+Grind Post-Mortem
 
 Summary
   Tasks: 50 completed / 6 failed
