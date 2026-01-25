@@ -127,7 +127,7 @@ describe("capability-ledger", () => {
 
 			expect(ledger.totalEntries).toBe(10);
 			expect(ledger.patterns.fix).toBeDefined();
-			expect(ledger.patterns.fix.byModel.haiku.attempts).toBe(5);
+			expect(ledger.patterns.fix.byModel.sonnet.attempts).toBe(5);
 		});
 
 		it("returns default ledger when file contains invalid JSON", () => {
@@ -151,7 +151,7 @@ describe("capability-ledger", () => {
 		it("creates new pattern entries for new keywords", () => {
 			const taskResult = createMockTaskResult({
 				objective: "add new feature",
-				model: "haiku",
+				model: "sonnet",
 				success: true,
 				escalated: false,
 			});
@@ -160,9 +160,9 @@ describe("capability-ledger", () => {
 
 			const ledger = loadLedger(".test-state");
 			expect(ledger.patterns.add).toBeDefined();
-			expect(ledger.patterns.add.byModel.haiku.attempts).toBe(1);
-			expect(ledger.patterns.add.byModel.haiku.successes).toBe(1);
-			expect(ledger.patterns.add.byModel.haiku.escalations).toBe(0);
+			expect(ledger.patterns.add.byModel.sonnet.attempts).toBe(1);
+			expect(ledger.patterns.add.byModel.sonnet.successes).toBe(1);
+			expect(ledger.patterns.add.byModel.sonnet.escalations).toBe(0);
 		});
 
 		it("extracts multiple keywords from a single objective", () => {
@@ -208,7 +208,7 @@ describe("capability-ledger", () => {
 
 			const taskResult = createMockTaskResult({
 				objective: "fix another bug",
-				model: "haiku",
+				model: "sonnet",
 				success: true,
 				escalated: false,
 			});
@@ -216,8 +216,8 @@ describe("capability-ledger", () => {
 			updateLedger(taskResult, ".test-state");
 
 			const ledger = loadLedger(".test-state");
-			expect(ledger.patterns.fix.byModel.haiku.attempts).toBe(4);
-			expect(ledger.patterns.fix.byModel.haiku.successes).toBe(3);
+			expect(ledger.patterns.fix.byModel.sonnet.attempts).toBe(4);
+			expect(ledger.patterns.fix.byModel.sonnet.successes).toBe(3);
 			expect(ledger.totalEntries).toBe(6);
 		});
 
@@ -239,7 +239,7 @@ describe("capability-ledger", () => {
 		it("records escalated tasks correctly", () => {
 			const taskResult = createMockTaskResult({
 				objective: "debug complex issue",
-				model: "haiku",
+				model: "sonnet",
 				success: true,
 				escalated: true,
 			});
@@ -247,8 +247,8 @@ describe("capability-ledger", () => {
 			updateLedger(taskResult, ".test-state");
 
 			const ledger = loadLedger(".test-state");
-			expect(ledger.patterns.debug.byModel.haiku.attempts).toBe(1);
-			expect(ledger.patterns.debug.byModel.haiku.escalations).toBe(1);
+			expect(ledger.patterns.debug.byModel.sonnet.attempts).toBe(1);
+			expect(ledger.patterns.debug.byModel.sonnet.escalations).toBe(1);
 		});
 
 		it("records token cost when provided", () => {
@@ -282,7 +282,7 @@ describe("capability-ledger", () => {
 		it("records retry attempts when provided", () => {
 			const taskResult = createMockTaskResult({
 				objective: "test edge cases",
-				model: "haiku",
+				model: "sonnet",
 				success: true,
 				attempts: 3,
 			});
@@ -290,7 +290,7 @@ describe("capability-ledger", () => {
 			updateLedger(taskResult, ".test-state");
 
 			const ledger = loadLedger(".test-state");
-			expect(ledger.patterns.test.byModel.haiku.totalRetries).toBe(3);
+			expect(ledger.patterns.test.byModel.sonnet.totalRetries).toBe(3);
 		});
 
 		it("deduplicates keywords in objective", () => {
@@ -341,7 +341,7 @@ describe("capability-ledger", () => {
 
 			const taskResult = createMockTaskResult({
 				objective: "add new feature",
-				model: "haiku",
+				model: "sonnet",
 			});
 
 			updateLedger(taskResult, ".new-state-dir");
@@ -371,7 +371,7 @@ describe("capability-ledger", () => {
 
 			const taskResult = createMockTaskResult({
 				objective: "fix bug",
-				model: "haiku",
+				model: "sonnet",
 				success: true,
 				tokenCost: 1000,
 			});
@@ -380,8 +380,8 @@ describe("capability-ledger", () => {
 			updateLedger(taskResult, ".test-state");
 
 			const ledger = loadLedger(".test-state");
-			expect(ledger.patterns.fix.byModel.haiku.totalTokens).toBe(1000);
-			expect(ledger.patterns.fix.byModel.haiku.attempts).toBe(4);
+			expect(ledger.patterns.fix.byModel.sonnet.totalTokens).toBe(1000);
+			expect(ledger.patterns.fix.byModel.sonnet.attempts).toBe(4);
 		});
 	});
 
@@ -439,7 +439,7 @@ describe("capability-ledger", () => {
 			expect(recommendation.reason).toContain("No matching patterns");
 		});
 
-		it("recommends haiku when haiku is viable and not escalating", () => {
+		it("recommends sonnet when sonnet is viable and not escalating", () => {
 			const ledger = createMockLedger({
 				totalEntries: 10,
 				patterns: {
@@ -472,7 +472,7 @@ describe("capability-ledger", () => {
 
 			const recommendation = getRecommendedModel("fix the bug", ".test-state");
 
-			expect(recommendation.model).toBe("haiku");
+			expect(recommendation.model).toBe("sonnet");
 			expect(recommendation.confidence).toBeGreaterThan(0.5);
 			expect(recommendation.patternRates).toBeDefined();
 			expect(recommendation.costMetrics).toBeDefined();
@@ -582,8 +582,8 @@ describe("capability-ledger", () => {
 			const recommendation = getRecommendedModel("fix and add feature", ".test-state");
 
 			// haiku has 10 attempts, 8 successes across both patterns = 80% success rate
-			expect(recommendation.patternRates?.haiku.attempts).toBe(10);
-			expect(recommendation.patternRates?.haiku.successRate).toBeCloseTo(0.8, 2);
+			expect(recommendation.patternRates?.sonnet.attempts).toBe(10);
+			expect(recommendation.patternRates?.sonnet.successRate).toBeCloseTo(0.8, 2);
 		});
 
 		it("calculates expected value correctly for cost-based recommendation", () => {
@@ -635,8 +635,8 @@ describe("capability-ledger", () => {
 			// - sonnet: 0.9 / (10 * 1.2) = 0.075
 			// - opus: 0.95 / (100 * 1.0) = 0.0095 (actually uses success of 1.0 = 5/5)
 			// haiku has best expected value
-			expect(recommendation.model).toBe("haiku");
-			expect(recommendation.costMetrics?.haiku.expectedValue).toBeGreaterThan(0);
+			expect(recommendation.model).toBe("sonnet");
+			expect(recommendation.costMetrics?.sonnet.expectedValue).toBeGreaterThan(0);
 		});
 
 		it("returns cost metrics with average calculations", () => {
@@ -672,9 +672,9 @@ describe("capability-ledger", () => {
 
 			const recommendation = getRecommendedModel("test feature", ".test-state");
 
-			expect(recommendation.costMetrics?.haiku.avgTokens).toBe(1000); // 4000/4
-			expect(recommendation.costMetrics?.haiku.avgDurationMs).toBe(5000); // 20000/4
-			expect(recommendation.costMetrics?.haiku.avgRetries).toBe(2); // 8/4
+			expect(recommendation.costMetrics?.sonnet.avgTokens).toBe(1000); // 4000/4
+			expect(recommendation.costMetrics?.sonnet.avgDurationMs).toBe(5000); // 20000/4
+			expect(recommendation.costMetrics?.sonnet.avgRetries).toBe(2); // 8/4
 		});
 
 		it("uses fallback logic when insufficient data for expected value", () => {
@@ -815,7 +815,7 @@ describe("capability-ledger", () => {
 			expect(stats.totalEntries).toBe(0);
 			expect(stats.patternCount).toBe(0);
 			expect(stats.topPatterns).toHaveLength(0);
-			expect(stats.modelDistribution.haiku).toBe(0);
+			expect(stats.modelDistribution.sonnet).toBe(0);
 			expect(stats.modelDistribution.sonnet).toBe(0);
 			expect(stats.modelDistribution.opus).toBe(0);
 		});
@@ -908,7 +908,7 @@ describe("capability-ledger", () => {
 
 			const stats = getLedgerStats(".test-state");
 
-			expect(stats.modelDistribution.haiku).toBe(8); // 5 + 3
+			expect(stats.modelDistribution.sonnet).toBe(8); // 5 + 3
 			expect(stats.modelDistribution.sonnet).toBe(5); // 3 + 2
 			expect(stats.modelDistribution.opus).toBe(2); // 2 + 0
 		});
@@ -1079,7 +1079,7 @@ describe("capability-ledger", () => {
 			updateLedger(
 				createMockTaskResult({
 					objective: "fix bug one",
-					model: "haiku",
+					model: "sonnet",
 					success: true,
 				}),
 				".test-state",
@@ -1089,7 +1089,7 @@ describe("capability-ledger", () => {
 			updateLedger(
 				createMockTaskResult({
 					objective: "fix bug two",
-					model: "haiku",
+					model: "sonnet",
 					success: false,
 				}),
 				".test-state",
@@ -1108,8 +1108,8 @@ describe("capability-ledger", () => {
 			const ledger = loadLedger(".test-state");
 
 			expect(ledger.totalEntries).toBe(3);
-			expect(ledger.patterns.fix.byModel.haiku.attempts).toBe(2);
-			expect(ledger.patterns.fix.byModel.haiku.successes).toBe(1);
+			expect(ledger.patterns.fix.byModel.sonnet.attempts).toBe(2);
+			expect(ledger.patterns.fix.byModel.sonnet.successes).toBe(1);
 			expect(ledger.patterns.add.byModel.sonnet.attempts).toBe(1);
 		});
 
@@ -1213,7 +1213,7 @@ describe("capability-ledger", () => {
 		});
 
 		it("handles all model tiers", () => {
-			for (const model of ["haiku", "sonnet", "opus"] as const) {
+			for (const model of ["sonnet", "sonnet", "opus"] as const) {
 				mockFiles.clear();
 				const taskResult = createMockTaskResult({
 					objective: "fix bug",

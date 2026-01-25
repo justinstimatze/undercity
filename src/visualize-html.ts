@@ -755,7 +755,7 @@ ${mermaidDag}
             <h2 class="collapsible">Timeline</h2>
             <div class="section-content">
                 <div class="legend">
-                    <div class="legend-item"><div class="legend-color" style="background:${MODEL_COLORS.haiku}"></div> Haiku</div>
+                    <div class="legend-item"><div class="legend-color" style="background:${MODEL_COLORS.sonnet}"></div> Haiku</div>
                     <div class="legend-item"><div class="legend-color" style="background:${MODEL_COLORS.sonnet}"></div> Sonnet</div>
                     <div class="legend-item"><div class="legend-color" style="background:${MODEL_COLORS.opus}"></div> Opus</div>
                 </div>

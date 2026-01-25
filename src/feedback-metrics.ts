@@ -194,7 +194,6 @@ export function analyzeMetrics(records: ParsedMetricsRecord[]): MetricsAnalysis 
 		totalTasks: records.length,
 		overallSuccessRate: 0,
 		byModel: {
-			haiku: emptyStats(),
 			sonnet: emptyStats(),
 			opus: emptyStats(),
 		},
@@ -231,8 +230,8 @@ export function analyzeMetrics(records: ParsedMetricsRecord[]): MetricsAnalysis 
 	}
 
 	// Track data for aggregation
-	const modelDurations: Record<ModelTier, number[]> = { haiku: [], sonnet: [], opus: [] };
-	const modelTokens: Record<ModelTier, number[]> = { haiku: [], sonnet: [], opus: [] };
+	const modelDurations: Record<ModelTier, number[]> = { sonnet: [], opus: [] };
+	const modelTokens: Record<ModelTier, number[]> = { sonnet: [], opus: [] };
 	const complexityDurations: Record<ComplexityLevel, number[]> = {
 		trivial: [],
 		simple: [],
@@ -341,7 +340,7 @@ export function analyzeMetrics(records: ParsedMetricsRecord[]): MetricsAnalysis 
 	// Finalize stats
 	analysis.overallSuccessRate = records.length > 0 ? totalSuccessful / records.length : 0;
 
-	for (const model of ["haiku", "sonnet", "opus"] as ModelTier[]) {
+	for (const model of ["sonnet", "sonnet", "opus"] as ModelTier[]) {
 		finalizeStats(analysis.byModel[model], modelDurations[model], modelTokens[model]);
 	}
 
@@ -385,7 +384,7 @@ function generateRecommendations(analysis: MetricsAnalysis): string[] {
 	const recommendations: string[] = [];
 
 	// Check for model tier issues
-	for (const model of ["haiku", "sonnet", "opus"] as ModelTier[]) {
+	for (const model of ["sonnet", "sonnet", "opus"] as ModelTier[]) {
 		const stats = analysis.byModel[model];
 		if (stats.total >= 5 && stats.rate < 0.5) {
 			recommendations.push(
@@ -457,7 +456,7 @@ export function suggestModelTier(
 	complexity: ComplexityLevel,
 	minSuccessRate = 0.7,
 ): ModelTier {
-	const tiers: ModelTier[] = ["haiku", "sonnet", "opus"];
+	const tiers: ModelTier[] = ["sonnet", "sonnet", "opus"];
 
 	for (const tier of tiers) {
 		const rate = getSuccessRate(analysis, tier, complexity);
@@ -494,7 +493,7 @@ export function formatAnalysisSummary(analysis: MetricsAnalysis): string {
 	lines.push("");
 
 	lines.push("By Model Tier:");
-	for (const model of ["haiku", "sonnet", "opus"] as ModelTier[]) {
+	for (const model of ["sonnet", "sonnet", "opus"] as ModelTier[]) {
 		const stats = analysis.byModel[model];
 		if (stats.total > 0) {
 			lines.push(
@@ -752,7 +751,7 @@ export function analyzeTaskPatterns(options?: LoadMetricsOptions): PatternAnalys
 
 	if (topSuccessful.length > 0) {
 		recommendations.push(
-			`"${topSuccessful[0].keyword}" tasks succeed ${(topSuccessful[0].successRate * 100).toFixed(0)}% of the time - good candidate for haiku tier.`,
+			`"${topSuccessful[0].keyword}" tasks succeed ${(topSuccessful[0].successRate * 100).toFixed(0)}% of the time - high success rate.`,
 		);
 	}
 

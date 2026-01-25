@@ -104,21 +104,21 @@ describe("config.ts", () => {
 		it("should load config from current working directory", () => {
 			const cwdConfig: UndercityRc = {
 				stream: true,
-				worker: "haiku",
+				worker: "sonnet",
 			};
 			mockFiles.set(`${mockCwd}/.undercityrc`, JSON.stringify(cwdConfig));
 
 			const config = loadConfig();
 
 			expect(config.stream).toBe(true);
-			expect(config.worker).toBe("haiku");
+			expect(config.worker).toBe("sonnet");
 			expect(config.model).toBe("sonnet"); // default
 		});
 
 		it("should prefer cwd config over home config (precedence)", () => {
 			const homeConfig: UndercityRc = {
 				verbose: true,
-				model: "haiku",
+				model: "sonnet",
 			};
 			const cwdConfig: UndercityRc = {
 				model: "opus",
@@ -142,7 +142,7 @@ describe("config.ts", () => {
 			};
 			const cwdConfig: UndercityRc = {
 				stream: true,
-				model: "haiku",
+				model: "sonnet",
 			};
 
 			mockFiles.set(`${mockHomedir}/.undercityrc`, JSON.stringify(homeConfig));
@@ -153,7 +153,7 @@ describe("config.ts", () => {
 			expect(config.verbose).toBe(true);
 			expect(config.review).toBe(true);
 			expect(config.stream).toBe(true);
-			expect(config.model).toBe("haiku");
+			expect(config.model).toBe("sonnet");
 		});
 
 		it("should cache config on subsequent calls", () => {
@@ -296,7 +296,7 @@ describe("config.ts", () => {
 		it("should accept valid model tiers", () => {
 			const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-			for (const model of ["haiku", "sonnet", "opus"]) {
+			for (const model of ["sonnet", "sonnet", "opus"]) {
 				clearConfigCache();
 				mockFiles.clear();
 
@@ -329,7 +329,7 @@ describe("config.ts", () => {
 		it("should accept valid worker models", () => {
 			const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-			for (const model of ["haiku", "sonnet"]) {
+			for (const model of ["sonnet", "sonnet"]) {
 				clearConfigCache();
 				mockFiles.clear();
 
@@ -410,7 +410,7 @@ describe("config.ts", () => {
 		it("should merge CLI options with config defaults", () => {
 			const cwdConfig: UndercityRc = {
 				verbose: true,
-				model: "haiku",
+				model: "sonnet",
 			};
 			mockFiles.set(`${mockCwd}/.undercityrc`, JSON.stringify(cwdConfig));
 
@@ -421,13 +421,13 @@ describe("config.ts", () => {
 			const merged = mergeWithConfig(cliOptions);
 
 			expect(merged.verbose).toBe(true); // from config
-			expect(merged.model).toBe("haiku"); // from config
+			expect(merged.model).toBe("sonnet"); // from config
 			expect(merged.stream).toBe(true); // from CLI
 		});
 
 		it("should prefer CLI options over config file values", () => {
 			const cwdConfig: UndercityRc = {
-				model: "haiku",
+				model: "sonnet",
 				verbose: false,
 			};
 			mockFiles.set(`${mockCwd}/.undercityrc`, JSON.stringify(cwdConfig));
@@ -592,14 +592,14 @@ describe("config.ts", () => {
 			// Step 1: Load home config only
 			const homeConfig: UndercityRc = {
 				verbose: true,
-				model: "haiku",
+				model: "sonnet",
 				parallel: 2,
 			};
 			mockFiles.set(`${mockHomedir}/.undercityrc`, JSON.stringify(homeConfig));
 
 			let config = loadConfig();
 			expect(config.verbose).toBe(true);
-			expect(config.model).toBe("haiku");
+			expect(config.model).toBe("sonnet");
 			expect(config.parallel).toBe(2);
 
 			// Step 2: Add cwd config with partial override
@@ -624,7 +624,7 @@ describe("config.ts", () => {
 				parallel: 3,
 			};
 			const cwdConfig: UndercityRc = {
-				model: "haiku",
+				model: "sonnet",
 				stream: true,
 			};
 			const cliOptions = {
@@ -639,7 +639,7 @@ describe("config.ts", () => {
 
 			expect(merged.verbose).toBe(false); // CLI overrides all
 			expect(merged.review).toBe(true); // from home
-			expect(merged.model).toBe("haiku"); // from cwd
+			expect(merged.model).toBe("sonnet"); // from cwd
 			expect(merged.stream).toBe(true); // from cwd
 			expect(merged.parallel).toBe(3); // from home
 			expect(merged.maxAttempts).toBe(5); // from CLI

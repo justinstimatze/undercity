@@ -154,7 +154,6 @@ function createEmptyPatternStats(pattern: string): PatternStats {
 	return {
 		pattern,
 		byModel: {
-			haiku: createEmptyModelStats(),
 			sonnet: createEmptyModelStats(),
 			opus: createEmptyModelStats(),
 		},
@@ -358,7 +357,6 @@ export function getRecommendedModel(objective: string, stateDir: string = DEFAUL
 			totalRetries: number;
 		}
 	> = {
-		haiku: { successes: 0, attempts: 0, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 		sonnet: { successes: 0, attempts: 0, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 		opus: { successes: 0, attempts: 0, escalations: 0, totalTokens: 0, totalDurationMs: 0, totalRetries: 0 },
 	};
@@ -370,7 +368,7 @@ export function getRecommendedModel(objective: string, stateDir: string = DEFAUL
 		if (!patternStats) continue;
 
 		matchedPatterns++;
-		for (const model of ["haiku", "sonnet", "opus"] as ModelChoice[]) {
+		for (const model of ["sonnet", "opus"] as ModelChoice[]) {
 			const modelStats = patternStats.byModel[model];
 			aggregateStats[model].successes += modelStats.successes;
 			aggregateStats[model].attempts += modelStats.attempts;
@@ -391,11 +389,6 @@ export function getRecommendedModel(objective: string, stateDir: string = DEFAUL
 
 	// Calculate rates per model
 	const patternRates: Record<ModelChoice, { successRate: number; escalationRate: number; attempts: number }> = {
-		haiku: {
-			successRate: getSuccessRate(aggregateStats.haiku),
-			escalationRate: getEscalationRate(aggregateStats.haiku),
-			attempts: aggregateStats.haiku.attempts,
-		},
 		sonnet: {
 			successRate: getSuccessRate(aggregateStats.sonnet),
 			escalationRate: getEscalationRate(aggregateStats.sonnet),
@@ -408,16 +401,15 @@ export function getRecommendedModel(objective: string, stateDir: string = DEFAUL
 		},
 	};
 
-	// Relative cost multipliers (haiku = 1, sonnet = 10, opus = 100)
+	// Relative cost multipliers (sonnet = 1, opus = 10)
 	const COST_MULTIPLIER: Record<ModelChoice, number> = {
-		haiku: 1,
-		sonnet: 10,
-		opus: 100,
+		sonnet: 1,
+		opus: 10,
 	};
 
 	// Calculate cost metrics and expected value per model
 	const costMetrics: Record<ModelChoice, ModelCostMetrics> = {} as Record<ModelChoice, ModelCostMetrics>;
-	for (const model of ["haiku", "sonnet", "opus"] as ModelChoice[]) {
+	for (const model of ["sonnet", "opus"] as ModelChoice[]) {
 		const stats = aggregateStats[model];
 		const successRate = getSuccessRate(stats);
 		const escalationRate = getEscalationRate(stats);
@@ -446,7 +438,7 @@ export function getRecommendedModel(objective: string, stateDir: string = DEFAUL
 	let bestValue = -1;
 	let usedExpectedValue = false;
 
-	for (const model of ["haiku", "sonnet", "opus"] as ModelChoice[]) {
+	for (const model of ["sonnet", "opus"] as ModelChoice[]) {
 		const metrics = costMetrics[model];
 		// Require minimum 3 attempts and 60% success rate
 		if (metrics.attempts >= 3 && metrics.successRate >= 0.6 && metrics.expectedValue > bestValue) {
@@ -467,31 +459,21 @@ export function getRecommendedModel(objective: string, stateDir: string = DEFAUL
 		reason = `Best ROI: ${model} (${(metrics.successRate * 100).toFixed(0)}% success, ${metrics.avgRetries.toFixed(1)} avg retries)`;
 		confidence = Math.min(0.9, metrics.successRate);
 	} else {
-		// Original fallback logic
-		const haikuViable =
-			patternRates.haiku.attempts >= 3 &&
-			patternRates.haiku.successRate >= 0.8 &&
-			patternRates.haiku.escalationRate < 0.2;
-
+		// Fallback logic
 		const sonnetViable =
 			patternRates.sonnet.attempts >= 3 &&
 			patternRates.sonnet.successRate >= 0.8 &&
 			patternRates.sonnet.escalationRate < 0.2;
 
-		const haikuEscalationHigh = patternRates.haiku.attempts >= 3 && patternRates.haiku.escalationRate >= 0.3;
 		const sonnetEscalationHigh = patternRates.sonnet.attempts >= 3 && patternRates.sonnet.escalationRate >= 0.3;
 
-		if (haikuViable && !haikuEscalationHigh) {
-			model = "haiku";
-			reason = `Haiku succeeds ${(patternRates.haiku.successRate * 100).toFixed(0)}% for similar patterns`;
-			confidence = Math.min(0.9, patternRates.haiku.successRate);
-		} else if (sonnetViable && !sonnetEscalationHigh) {
+		if (sonnetViable && !sonnetEscalationHigh) {
 			model = "sonnet";
 			reason = `Sonnet succeeds ${(patternRates.sonnet.successRate * 100).toFixed(0)}% for similar patterns`;
 			confidence = Math.min(0.9, patternRates.sonnet.successRate);
-		} else if (haikuEscalationHigh || sonnetEscalationHigh) {
+		} else if (sonnetEscalationHigh) {
 			model = "opus";
-			reason = "High escalation rate from lower tiers for similar patterns";
+			reason = "High escalation rate from sonnet for similar patterns";
 			confidence = 0.7;
 		} else if (patternRates.opus.attempts > 0 && patternRates.opus.successRate > 0.5) {
 			model = "opus";
@@ -526,14 +508,13 @@ export function getLedgerStats(stateDir: string = DEFAULT_STATE_DIR): {
 
 	const patternList = Object.values(ledger.patterns);
 	const modelDistribution: Record<ModelChoice, number> = {
-		haiku: 0,
 		sonnet: 0,
 		opus: 0,
 	};
 
 	// Calculate total attempts per model across all patterns
 	for (const pattern of patternList) {
-		for (const model of ["haiku", "sonnet", "opus"] as ModelChoice[]) {
+		for (const model of ["sonnet", "opus"] as ModelChoice[]) {
 			modelDistribution[model] += pattern.byModel[model].attempts;
 		}
 	}
@@ -542,7 +523,7 @@ export function getLedgerStats(stateDir: string = DEFAULT_STATE_DIR): {
 	const topPatterns = patternList
 		.map((p) => ({
 			pattern: p.pattern,
-			attempts: p.byModel.haiku.attempts + p.byModel.sonnet.attempts + p.byModel.opus.attempts,
+			attempts: p.byModel.sonnet.attempts + p.byModel.sonnet.attempts + p.byModel.opus.attempts,
 		}))
 		.sort((a, b) => b.attempts - a.attempts)
 		.slice(0, 10);

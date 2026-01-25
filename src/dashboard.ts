@@ -332,7 +332,7 @@ export function launchDashboard(): void {
 			// BY MODEL
 			const opus = metrics.byModel.opus;
 			const sonnet = metrics.byModel.sonnet;
-			const haiku = metrics.byModel.haiku;
+			const haiku = metrics.byModel.sonnet;
 
 			modelBox.setContent(
 				`{magenta-fg}OPUS{/}   ${formatTokens(opus.input + opus.output).padStart(6)}  {yellow-fg}$${opus.cost.toFixed(3)}{/}\n` +

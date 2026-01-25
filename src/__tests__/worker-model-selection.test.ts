@@ -26,13 +26,13 @@ const createAssessment = (level: ComplexityAssessment["level"]): ComplexityAsses
 describe("worker/model-selection", () => {
 	describe("MODEL_TIERS", () => {
 		it("has correct order", () => {
-			expect(MODEL_TIERS).toEqual(["haiku", "sonnet", "opus"]);
+			expect(MODEL_TIERS).toEqual(["sonnet", "opus"]);
 		});
 	});
 
 	describe("capAtMaxTier", () => {
 		it("returns tier when below max", () => {
-			expect(capAtMaxTier("haiku", "opus")).toBe("haiku");
+			expect(capAtMaxTier("sonnet", "opus")).toBe("sonnet");
 			expect(capAtMaxTier("sonnet", "opus")).toBe("sonnet");
 		});
 
@@ -43,8 +43,8 @@ describe("worker/model-selection", () => {
 
 		it("caps tier when above max", () => {
 			expect(capAtMaxTier("opus", "sonnet")).toBe("sonnet");
-			expect(capAtMaxTier("opus", "haiku")).toBe("haiku");
-			expect(capAtMaxTier("sonnet", "haiku")).toBe("haiku");
+			expect(capAtMaxTier("opus", "sonnet")).toBe("sonnet");
+			expect(capAtMaxTier("sonnet", "sonnet")).toBe("sonnet");
 		});
 
 		it("handles all tier combinations", () => {
@@ -77,9 +77,9 @@ describe("worker/model-selection", () => {
 			});
 
 			it("uses override haiku when explicitly set", () => {
-				const config = { ...defaultConfig, startingModelOverride: "haiku" as const };
+				const config = { ...defaultConfig, startingModelOverride: "sonnet" as const };
 				const result = determineStartingModel(createAssessment("complex"), config);
-				expect(result).toBe("haiku");
+				expect(result).toBe("sonnet");
 			});
 
 			it("caps override at maxTier", () => {
@@ -185,9 +185,9 @@ describe("worker/model-selection", () => {
 			});
 
 			it("still caps maxReviewTier when reviews disabled", () => {
-				const config = { ...defaultConfig, reviewPassesEnabled: false, maxTier: "haiku" as const };
+				const config = { ...defaultConfig, reviewPassesEnabled: false, maxTier: "sonnet" as const };
 				const result = determineReviewLevel(createAssessment("critical"), config);
-				expect(result.maxReviewTier).toBe("haiku");
+				expect(result.maxReviewTier).toBe("sonnet");
 			});
 		});
 
@@ -241,8 +241,8 @@ describe("worker/model-selection", () => {
 	});
 
 	describe("getNextModelTier", () => {
-		it("escalates haiku to sonnet", () => {
-			const result = getNextModelTier("haiku", "opus");
+		it("escalates sonnet to opus", () => {
+			const result = getNextModelTier("sonnet", "opus");
 			expect(result.canEscalate).toBe(true);
 			expect(result.nextTier).toBe("sonnet");
 		});
@@ -266,13 +266,13 @@ describe("worker/model-selection", () => {
 		});
 
 		it("cannot escalate haiku past haiku maxTier", () => {
-			const result = getNextModelTier("haiku", "haiku");
+			const result = getNextModelTier("sonnet", "sonnet");
 			expect(result.canEscalate).toBe(false);
-			expect(result.nextTier).toBe("haiku");
+			expect(result.nextTier).toBe("sonnet");
 		});
 
-		it("can escalate haiku to sonnet when maxTier is sonnet", () => {
-			const result = getNextModelTier("haiku", "sonnet");
+		it("can escalate sonnet to opus when maxTier is sonnet", () => {
+			const result = getNextModelTier("sonnet", "sonnet");
 			expect(result.canEscalate).toBe(true);
 			expect(result.nextTier).toBe("sonnet");
 		});

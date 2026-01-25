@@ -42,8 +42,8 @@ export interface GrindConfig {
 	maxReviewPassesPerTier?: number;
 	maxOpusReviewPasses?: number;
 	maxDecompositionDepth: number;
-	maxTier?: "haiku" | "sonnet" | "opus";
-	startingModel: "haiku" | "sonnet" | "opus";
+	maxTier?: "sonnet" | "opus";
+	startingModel: "sonnet" | "opus";
 	autoCommit: boolean;
 	stream: boolean;
 	verbose: boolean;
@@ -60,7 +60,7 @@ export interface GrindConfig {
  * Task with recommended model tier
  */
 export interface TaskWithModel extends Task {
-	recommendedModel?: "haiku" | "sonnet" | "opus";
+	recommendedModel?: "sonnet" | "opus";
 }
 
 /**
@@ -140,9 +140,9 @@ export interface TaskValidationResult {
 
 /**
  * Tasks grouped by model tier
+ * DEPRECATED: Use prioritizedTasks from processTasksForExecution instead
  */
 export interface TasksByModel {
-	haiku: TaskWithModel[];
 	sonnet: TaskWithModel[];
 	opus: TaskWithModel[];
 }

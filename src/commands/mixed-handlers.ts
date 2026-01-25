@@ -375,8 +375,8 @@ export async function handleLimits(): Promise<void> {
 
 	// Calculate totals from byModel (more reliable than top-level tokens)
 	const models = metricsData.byModel;
-	const totalInput = models.opus.input + models.sonnet.input + models.haiku.input;
-	const totalOutput = models.opus.output + models.sonnet.output + models.haiku.output;
+	const totalInput = models.opus.input + models.sonnet.input + models.sonnet.input;
+	const totalOutput = models.opus.output + models.sonnet.output + models.sonnet.output;
 	const totalTokens = totalInput + totalOutput;
 
 	// Check if there's any data
@@ -416,7 +416,6 @@ export async function handleLimits(): Promise<void> {
 		byModel: {
 			opus: { tokens: models.opus.input + models.opus.output, cost: models.opus.cost },
 			sonnet: { tokens: models.sonnet.input + models.sonnet.output, cost: models.sonnet.cost },
-			haiku: { tokens: models.haiku.input + models.haiku.output, cost: models.haiku.cost },
 		},
 		totalCost: metricsData.cost.total,
 	});

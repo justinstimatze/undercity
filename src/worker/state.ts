@@ -304,7 +304,7 @@ export function shouldEscalate(state: TaskExecutionState, config: WorkerConfig):
 /** Get next model tier (or current if at max) */
 export function getNextTier(state: TaskExecutionState, config: WorkerConfig): ModelTier {
 	if (state.currentModel === config.maxTier) return state.currentModel;
-	const tiers: ModelTier[] = ["haiku", "sonnet", "opus"];
+	const tiers: ModelTier[] = ["sonnet", "opus"];
 	const currentIdx = tiers.indexOf(state.currentModel);
 	const maxIdx = tiers.indexOf(config.maxTier);
 	const nextIdx = Math.min(currentIdx + 1, maxIdx);

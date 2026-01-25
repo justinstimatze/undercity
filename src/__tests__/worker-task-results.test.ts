@@ -189,7 +189,7 @@ describe("worker/task-results", () => {
 		const createContext = (): FailureResultContext => ({
 			task: "implement entire feature",
 			taskId: "task-456",
-			model: "haiku",
+			model: "sonnet",
 			attempts: 2,
 			startTime: Date.now() - 2000,
 			tokenUsageThisTask: [],
@@ -229,11 +229,11 @@ describe("worker/task-results", () => {
 	describe("buildValidationFailureResult", () => {
 		it("builds minimal failure result for early validation", () => {
 			const startTime = Date.now() - 100;
-			const result = buildValidationFailureResult("invalid task", "haiku", "file not found", startTime);
+			const result = buildValidationFailureResult("invalid task", "sonnet", "file not found", startTime);
 
 			expect(result.status).toBe("failed");
 			expect(result.task).toBe("invalid task");
-			expect(result.model).toBe("haiku");
+			expect(result.model).toBe("sonnet");
 			expect(result.attempts).toBe(0);
 			expect(result.error).toBe("INVALID_TARGET: file not found");
 			expect(result.tokenUsage).toEqual({ attempts: [], total: 0 });

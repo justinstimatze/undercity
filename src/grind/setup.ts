@@ -242,11 +242,11 @@ export function parseGrindOptions(options: GrindOptions): GrindConfig {
 	const maxReviewPassesPerTier = options.maxReviewPasses ? parseInt(options.maxReviewPasses, 10) : undefined;
 	const maxOpusReviewPasses = options.maxOpusReviewPasses ? parseInt(options.maxOpusReviewPasses, 10) : undefined;
 	const maxDecompositionDepth = options.maxDecompositionDepth ? parseInt(options.maxDecompositionDepth, 10) : 1;
-	const maxTier = options.maxTier as "haiku" | "sonnet" | "opus" | undefined;
+	const maxTier = options.maxTier as "sonnet" | "opus" | undefined;
 
 	// Validate maxTier
-	if (maxTier && !["haiku", "sonnet", "opus"].includes(maxTier)) {
-		output.error(`Invalid max-tier: ${maxTier}. Must be haiku, sonnet, or opus`);
+	if (maxTier && !["sonnet", "opus"].includes(maxTier)) {
+		output.error(`Invalid max-tier: ${maxTier}. Must be sonnet or opus`);
 		process.exit(1);
 	}
 
@@ -259,7 +259,7 @@ export function parseGrindOptions(options: GrindOptions): GrindConfig {
 		maxOpusReviewPasses,
 		maxDecompositionDepth,
 		maxTier,
-		startingModel: (options.model || "sonnet") as "haiku" | "sonnet" | "opus",
+		startingModel: (options.model || "sonnet") as "sonnet" | "opus",
 		autoCommit: options.commit !== false,
 		stream: options.stream || false,
 		verbose: options.verbose || false,

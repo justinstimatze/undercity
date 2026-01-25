@@ -689,7 +689,6 @@ export class Persistence {
 					maxTokensPerWeek: 5_000_000,
 					warningThreshold: 0.8,
 					tokenMultipliers: {
-						haiku: 0.25,
 						sonnet: 1.0,
 						opus: 12.0,
 					},

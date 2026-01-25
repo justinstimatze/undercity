@@ -1254,7 +1254,7 @@ describe("error-fix-patterns.ts", () => {
 		it("should increment pattern occurrences when recording failure", () => {
 			mockDirs.add(".undercity");
 
-			recordPermanentFailure("task-1", "lint", "Lint error", "Fix lint", "haiku", 3, []);
+			recordPermanentFailure("task-1", "lint", "Lint error", "Fix lint", "sonnet", 3, []);
 			recordPermanentFailure("task-2", "lint", "Lint error", "Fix more lint", "sonnet", 5, []);
 
 			const store = loadErrorFixStore();
@@ -1313,7 +1313,7 @@ describe("error-fix-patterns.ts", () => {
 
 			const longObjective = `Objective: ${"x".repeat(300)}`;
 
-			recordPermanentFailure("task-1", "lint", "Lint error", longObjective, "haiku", 3, []);
+			recordPermanentFailure("task-1", "lint", "Lint error", longObjective, "sonnet", 3, []);
 
 			const store = loadErrorFixStore();
 			const failure = store.failures[0];
@@ -1341,14 +1341,14 @@ describe("error-fix-patterns.ts", () => {
 		it("should handle failures with different models", () => {
 			mockDirs.add(".undercity");
 
-			recordPermanentFailure("task-1", "test", "Test error", "Task 1", "haiku", 3, []);
+			recordPermanentFailure("task-1", "test", "Test error", "Task 1", "sonnet", 3, []);
 			recordPermanentFailure("task-2", "test", "Test error", "Task 2", "sonnet", 5, []);
 			recordPermanentFailure("task-3", "test", "Test error", "Task 3", "opus", 7, []);
 
 			const store = loadErrorFixStore();
 
 			expect(store.failures).toHaveLength(3);
-			expect(store.failures[0].modelUsed).toBe("haiku");
+			expect(store.failures[0].modelUsed).toBe("sonnet");
 			expect(store.failures[1].modelUsed).toBe("sonnet");
 			expect(store.failures[2].modelUsed).toBe("opus");
 		});
@@ -1356,7 +1356,7 @@ describe("error-fix-patterns.ts", () => {
 		it("should track different attempt counts", () => {
 			mockDirs.add(".undercity");
 
-			recordPermanentFailure("task-1", "lint", "Error 1", "Objective 1", "haiku", 3, []);
+			recordPermanentFailure("task-1", "lint", "Error 1", "Objective 1", "sonnet", 3, []);
 			recordPermanentFailure("task-2", "lint", "Error 2", "Objective 2", "sonnet", 5, []);
 			recordPermanentFailure("task-3", "lint", "Error 3", "Objective 3", "opus", 7, []);
 
@@ -1377,7 +1377,7 @@ describe("error-fix-patterns.ts", () => {
 		});
 
 		it("should use custom state directory", () => {
-			recordPermanentFailure("task-1", "test", "Test error", "Test task", "haiku", 3, [], "/custom/.undercity");
+			recordPermanentFailure("task-1", "test", "Test error", "Test task", "sonnet", 3, [], "/custom/.undercity");
 
 			// Verify data persisted (mock doesn't differentiate directories)
 			const store = loadErrorFixStore("/custom/.undercity");
@@ -1387,7 +1387,7 @@ describe("error-fix-patterns.ts", () => {
 		it("should handle repeated failures for same error pattern", () => {
 			mockDirs.add(".undercity");
 
-			const sig1 = recordPermanentFailure("task-1", "typecheck", "Same error", "Task 1", "haiku", 3, []);
+			const sig1 = recordPermanentFailure("task-1", "typecheck", "Same error", "Task 1", "sonnet", 3, []);
 			const sig2 = recordPermanentFailure("task-2", "typecheck", "Same error", "Task 2", "sonnet", 5, []);
 
 			expect(sig1).toBe(sig2);
@@ -1402,7 +1402,7 @@ describe("error-fix-patterns.ts", () => {
 		it("should update lastSeen timestamp on pattern", () => {
 			mockDirs.add(".undercity");
 
-			recordPermanentFailure("task-1", "lint", "Error", "Task 1", "haiku", 3, []);
+			recordPermanentFailure("task-1", "lint", "Error", "Task 1", "sonnet", 3, []);
 
 			mockNow = 1704067200000 + 60000; // 1 minute later
 
@@ -1463,7 +1463,7 @@ describe("error-fix-patterns.ts", () => {
 				category: "lint",
 				message: "Lint failed",
 				taskObjective: "Fix lint",
-				modelUsed: "haiku",
+				modelUsed: "sonnet",
 				attemptCount: 3,
 				currentFiles: [],
 				detailedErrors: [longError],
@@ -1516,7 +1516,7 @@ describe("error-fix-patterns.ts", () => {
 			expect(store.failures).toEqual([]);
 
 			// Recording should work
-			recordPermanentFailure("task-1", "test", "Error", "Task", "haiku", 3, []);
+			recordPermanentFailure("task-1", "test", "Error", "Task", "sonnet", 3, []);
 
 			const updated = loadErrorFixStore();
 			expect(updated.failures).toHaveLength(1);
@@ -2043,7 +2043,7 @@ describe("error-fix-patterns.ts", () => {
 		it("should not include single failures below minOccurrences threshold", () => {
 			mockDirs.add(".undercity");
 
-			recordPermanentFailure("task-1", "test", "Single failure", "Fix test", "haiku", 3, []);
+			recordPermanentFailure("task-1", "test", "Single failure", "Fix test", "sonnet", 3, []);
 
 			const result = getFailureWarningsForTask("Fix test", 2);
 
@@ -2069,7 +2069,7 @@ describe("error-fix-patterns.ts", () => {
 		it("should include error message and task pattern in output", () => {
 			mockDirs.add(".undercity");
 
-			recordPermanentFailure("task-1", "lint", "Unused variable x", "Clean up lint errors", "haiku", 3, []);
+			recordPermanentFailure("task-1", "lint", "Unused variable x", "Clean up lint errors", "sonnet", 3, []);
 			recordPermanentFailure("task-2", "lint", "Unused variable x", "Fix lint issues", "sonnet", 5, []);
 
 			const result = getFailureWarningsForTask("lint errors");

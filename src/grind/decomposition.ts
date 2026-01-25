@@ -91,11 +91,12 @@ export async function checkAndDecomposeTasks(
 			}
 		} else {
 			// Task is atomic - include with recommended model
+			const model = result.recommendedModel === "haiku" ? "sonnet" : result.recommendedModel || "sonnet";
 			atomicTasks.push({
 				...task,
-				recommendedModel: result.recommendedModel || "sonnet",
+				recommendedModel: model,
 			});
-			output.debug(`Task "${task.objective.substring(0, 40)}..." → ${result.recommendedModel || "sonnet"}`);
+			output.debug(`Task "${task.objective.substring(0, 40)}..." → ${model}`);
 
 			// Store atomicity result for outcome recording
 			atomicityResults.set(task.objective, {
@@ -154,8 +155,9 @@ export async function adjustModelsFromMetrics(tasks: TaskWithModel[]): Promise<v
 
 	for (const task of tasks) {
 		const complexityLevel = (task as { complexity?: string }).complexity || "standard";
+		const currentModel = task.recommendedModel || "sonnet";
 		const adjustedModel = await adjustModelFromMetrics(
-			task.recommendedModel || "sonnet",
+			currentModel,
 			complexityLevel as "trivial" | "simple" | "standard" | "complex" | "critical",
 		);
 		if (adjustedModel !== task.recommendedModel) {
@@ -173,29 +175,30 @@ export async function adjustModelsFromMetrics(tasks: TaskWithModel[]): Promise<v
 export async function applyLedgerRecommendations(tasks: TaskWithModel[]): Promise<void> {
 	const { getRecommendedModel: getLedgerRecommendation } = await import("../capability-ledger.js");
 
-	const modelOrder = ["haiku", "sonnet", "opus"] as const;
+	const modelOrder = ["sonnet", "opus"] as const;
 
 	for (const task of tasks) {
 		const ledgerRec = getLedgerRecommendation(task.objective);
-		const currentIdx = modelOrder.indexOf(task.recommendedModel || "sonnet");
-		const ledgerIdx = modelOrder.indexOf(ledgerRec.model);
+		const currentModel = task.recommendedModel || "sonnet";
+		const currentIdx = modelOrder.indexOf(currentModel);
+		const ledgerIdx = modelOrder.indexOf(ledgerRec.model as "sonnet" | "opus");
 
 		// Only apply if high confidence and suggests a CHEAPER model
-		if (ledgerRec.confidence >= 0.7 && ledgerIdx < currentIdx) {
+		if (ledgerIdx >= 0 && ledgerRec.confidence >= 0.7 && ledgerIdx < currentIdx) {
 			output.debug(
 				`Ledger downgrade: ${task.objective.substring(0, 30)}... ${task.recommendedModel} → ${ledgerRec.model} (${(ledgerRec.confidence * 100).toFixed(0)}% confidence)`,
 			);
-			task.recommendedModel = ledgerRec.model;
+			task.recommendedModel = ledgerRec.model as "sonnet" | "opus";
 		}
 	}
 }
 
 /**
  * Group tasks by model tier, preserving priority order within each tier
+ * DEPRECATED: Use sortTasksByPriority instead for global priority ordering
  */
 export function groupTasksByModel(tasks: TaskWithModel[]): TasksByModel {
 	const tasksByModel: TasksByModel = {
-		haiku: [],
 		sonnet: [],
 		opus: [],
 	};
@@ -206,11 +209,17 @@ export function groupTasksByModel(tasks: TaskWithModel[]): TasksByModel {
 	}
 
 	// Sort each group by priority (lower = higher priority)
-	tasksByModel.haiku.sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500));
 	tasksByModel.sonnet.sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500));
 	tasksByModel.opus.sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500));
 
 	return tasksByModel;
+}
+
+/**
+ * Sort tasks by global priority (lower number = higher priority)
+ */
+export function sortTasksByPriority(tasks: TaskWithModel[]): TaskWithModel[] {
+	return [...tasks].sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500));
 }
 
 /**
@@ -221,6 +230,7 @@ export async function processTasksForExecution(
 	config: GrindConfig,
 ): Promise<{
 	tasksByModel: TasksByModel;
+	prioritizedTasks: TaskWithModel[];
 	atomicityResults: Map<string, AtomicityResult>;
 	decomposedCount: number;
 	blockedCount: number;
@@ -247,7 +257,8 @@ export async function processTasksForExecution(
 
 			if (newTasks.length === 0) {
 				return {
-					tasksByModel: { haiku: [], sonnet: [], opus: [] },
+					tasksByModel: { sonnet: [], opus: [] },
+					prioritizedTasks: [],
 					atomicityResults: allAtomicityResults,
 					decomposedCount: totalDecomposed,
 					blockedCount: totalBlocked,
@@ -276,8 +287,11 @@ export async function processTasksForExecution(
 		await applyLedgerRecommendations(tasksWithModels);
 	}
 
-	// Group by model
+	// Group by model (deprecated, for backward compatibility)
 	const tasksByModel = groupTasksByModel(tasksWithModels);
+
+	// Sort by global priority (new approach)
+	const prioritizedTasks = sortTasksByPriority(tasksWithModels);
 
 	// Log distribution
 	const modelCounts = Object.entries(tasksByModel)
@@ -290,6 +304,7 @@ export async function processTasksForExecution(
 
 	return {
 		tasksByModel,
+		prioritizedTasks,
 		atomicityResults: allAtomicityResults,
 		decomposedCount: totalDecomposed,
 		blockedCount: totalBlocked,

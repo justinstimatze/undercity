@@ -70,21 +70,23 @@ import type {
 	BatchMetadata,
 	MetaTaskRecommendation,
 	MetaTaskResult,
+	ModelTier,
 	ParallelTaskState,
 	TaskAssignment,
 	TaskCheckpoint,
 	TicketContent,
 } from "./types.js";
+import { type HistoricalModelChoice, normalizeModel } from "./types.js";
 import { type TaskResult, TaskWorker } from "./worker.js";
 import { WorktreeManager } from "./worktree-manager.js";
 
 export interface ParallelSoloOptions {
 	maxConcurrent?: number; // Max parallel tasks (default: 3)
-	startingModel?: "haiku" | "sonnet" | "opus";
+	startingModel?: ModelTier;
 	autoCommit?: boolean;
 	stream?: boolean;
 	verbose?: boolean;
-	reviewPasses?: boolean; // Enable escalating review (haiku → sonnet → opus)
+	reviewPasses?: boolean; // Enable escalating review (sonnet → opus)
 	multiLensAtOpus?: boolean; // Enable multi-lens review at opus tier
 	pushOnSuccess?: boolean; // Push to remote after successful merge (default: false)
 	// Verification retry options
@@ -93,7 +95,7 @@ export interface ParallelSoloOptions {
 	maxReviewPassesPerTier?: number; // Maximum review passes per tier before escalating (default: 2)
 	maxOpusReviewPasses?: number; // Maximum review passes at opus tier (default: 6)
 	// Model tier cap (prevents escalation beyond this tier)
-	maxTier?: "haiku" | "sonnet" | "opus";
+	maxTier?: ModelTier;
 	// Worker health monitoring
 	healthCheck?: WorkerHealthConfig;
 	// Repository root directory (default: process.cwd())
@@ -181,7 +183,7 @@ function getModifiedFilesInWorktree(worktreePath: string, mainBranch: string): s
  */
 export class Orchestrator {
 	private maxConcurrent: number;
-	private startingModel: "haiku" | "sonnet" | "opus";
+	private startingModel: ModelTier;
 	private autoCommit: boolean;
 	private stream: boolean;
 	private verbose: boolean;
@@ -193,7 +195,7 @@ export class Orchestrator {
 	private maxRetriesPerTier: number;
 	private maxReviewPassesPerTier: number;
 	private maxOpusReviewPasses: number;
-	private maxTier?: "haiku" | "sonnet" | "opus";
+	private maxTier?: ModelTier;
 	private worktreeManager: WorktreeManager;
 	private persistence: Persistence;
 	private rateLimitTracker: RateLimitTracker;
@@ -509,7 +511,8 @@ export class Orchestrator {
 			// Record token usage
 			if (result.tokenUsage) {
 				for (const attemptUsage of result.tokenUsage.attempts) {
-					const model = (attemptUsage.model as "haiku" | "sonnet" | "opus") || this.startingModel;
+					const rawModel = (attemptUsage.model as HistoricalModelChoice | undefined) ?? this.startingModel;
+					const model = normalizeModel(rawModel);
 					this.rateLimitTracker.recordTask(taskId, model, attemptUsage.inputTokens, attemptUsage.outputTokens, {
 						durationMs: result.durationMs,
 					});
@@ -988,7 +991,8 @@ export class Orchestrator {
 			this.totalTasksProcessed++;
 
 			const variant = this.experimentManager.selectVariant();
-			let effectiveModel = (variant?.model as "haiku" | "sonnet" | "opus" | undefined) ?? this.startingModel;
+			const rawModel = (variant?.model as HistoricalModelChoice | undefined) ?? this.startingModel;
+			let effectiveModel = normalizeModel(rawModel);
 			const effectiveReview = variant?.reviewEnabled ?? this.reviewPasses;
 
 			// Ralph-style: enforce opus budget to maintain optimal model ratios
@@ -1092,11 +1096,11 @@ export class Orchestrator {
 		this.updateTaskStatus(taskId, taskStatus, { modifiedFiles });
 
 		try {
-			const escalated = result.model !== this.startingModel;
+			const escalated = normalizeModel(result.model as HistoricalModelChoice) !== this.startingModel;
 
 			// Track if task escalated to opus (for budget tracking)
 			// This catches cases where task started at haiku/sonnet but escalated to opus
-			if (result.model === "opus" && this.startingModel !== "opus") {
+			if (normalizeModel(result.model as HistoricalModelChoice) === "opus" && this.startingModel !== "opus") {
 				this.opusTasksUsed++;
 				sessionLogger.debug(
 					{
@@ -1109,7 +1113,7 @@ export class Orchestrator {
 
 			updateLedger({
 				objective: task,
-				model: result.model,
+				model: normalizeModel(result.model as HistoricalModelChoice),
 				success: result.status === "complete",
 				escalated,
 				tokenCost: result.tokenUsage?.total,
@@ -1180,7 +1184,8 @@ export class Orchestrator {
 			for (const taskResult of results) {
 				if (taskResult.result?.tokenUsage) {
 					for (const attemptUsage of taskResult.result.tokenUsage.attempts) {
-						const model = (attemptUsage.model as "haiku" | "sonnet" | "opus") || this.startingModel;
+						const rawModel = (attemptUsage.model as HistoricalModelChoice | undefined) ?? this.startingModel;
+						const model = normalizeModel(rawModel);
 						this.rateLimitTracker.recordTask(
 							taskResult.taskId,
 							model,
@@ -1398,7 +1403,7 @@ export class Orchestrator {
 					? {
 							task: r.task,
 							status: r.result.status as "complete" | "failed" | "escalated",
-							model: r.result.model,
+							model: normalizeModel(r.result.model as HistoricalModelChoice),
 							attempts: r.result.attempts,
 							durationMs: r.result.durationMs,
 						}
@@ -1475,7 +1480,7 @@ export class Orchestrator {
 					? {
 							task: r.task,
 							status: r.result.status as "complete" | "failed" | "escalated",
-							model: r.result.model,
+							model: normalizeModel(r.result.model as HistoricalModelChoice),
 							attempts: r.result.attempts,
 							durationMs: r.result.durationMs,
 						}

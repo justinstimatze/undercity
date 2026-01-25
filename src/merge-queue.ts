@@ -177,7 +177,7 @@ async function resolveConflictWithAI(
 		for await (const message of query({
 			prompt,
 			options: {
-				model: MODEL_NAMES.haiku,
+				model: MODEL_NAMES.sonnet,
 				maxTurns: 1,
 				permissionMode: "bypassPermissions",
 			},

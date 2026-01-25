@@ -212,7 +212,7 @@ not valid json
 					totalTokens: 500,
 					startedAt: new Date(),
 					completedAt: new Date(),
-					finalModel: "haiku" as const,
+					finalModel: "sonnet" as const,
 				},
 				{
 					taskId: "t2",
@@ -222,7 +222,7 @@ not valid json
 					totalTokens: 1000,
 					startedAt: new Date(),
 					completedAt: new Date(),
-					finalModel: "haiku" as const,
+					finalModel: "sonnet" as const,
 				},
 				{
 					taskId: "t3",
@@ -237,9 +237,9 @@ not valid json
 			];
 
 			const analysis = analyzeMetrics(records);
-			expect(analysis.byModel.haiku.total).toBe(2);
-			expect(analysis.byModel.haiku.successful).toBe(1);
-			expect(analysis.byModel.haiku.rate).toBe(0.5);
+			expect(analysis.byModel.sonnet.total).toBe(2);
+			expect(analysis.byModel.sonnet.successful).toBe(1);
+			expect(analysis.byModel.sonnet.rate).toBe(0.5);
 			expect(analysis.byModel.sonnet.total).toBe(1);
 			expect(analysis.byModel.sonnet.rate).toBe(1);
 		});
@@ -284,7 +284,7 @@ not valid json
 					startedAt: new Date(),
 					completedAt: new Date(),
 					wasEscalated: true,
-					startingModel: "haiku" as const,
+					startingModel: "sonnet" as const,
 					finalModel: "sonnet" as const,
 				},
 				{
@@ -330,12 +330,12 @@ not valid json
 					totalTokens: 500,
 					startedAt: new Date(),
 					completedAt: new Date(),
-					finalModel: "haiku" as const,
+					finalModel: "sonnet" as const,
 				}));
 
 			const analysis = analyzeMetrics(records);
 			expect(analysis.recommendations.length).toBeGreaterThan(0);
-			expect(analysis.recommendations.some((r) => r.includes("haiku"))).toBe(true);
+			expect(analysis.recommendations.some((r) => r.includes("sonnet"))).toBe(true);
 		});
 	});
 
@@ -414,7 +414,7 @@ not valid json
 				newestRecord: null,
 			};
 
-			const rate = getSuccessRate(analysis, "haiku", "simple", 3); // minSamples=3
+			const rate = getSuccessRate(analysis, "sonnet", "simple", 3); // minSamples=3
 			expect(rate).toBeNull();
 		});
 	});
@@ -456,7 +456,7 @@ not valid json
 			};
 
 			const tier = suggestModelTier(analysis, "simple");
-			expect(tier).toBe("haiku");
+			expect(tier).toBe("sonnet");
 		});
 
 		it("should fall back to opus if no tier meets threshold", () => {
@@ -570,7 +570,7 @@ not valid json
 			vi.mocked(readFileSync).mockReturnValue(
 				`{"taskId":"t1","objective":"Fix authentication bug in login","success":true,"durationMs":1000,"totalTokens":500,"finalModel":"sonnet"}
 {"taskId":"t2","objective":"Add user profile page","success":false,"durationMs":2000,"totalTokens":1000,"finalModel":"opus"}
-{"taskId":"t3","objective":"Fix authentication error handling","success":true,"durationMs":1200,"totalTokens":600,"finalModel":"haiku"}`,
+{"taskId":"t3","objective":"Fix authentication error handling","success":true,"durationMs":1200,"totalTokens":600,"finalModel":"sonnet"}`,
 			);
 
 			const similar = findSimilarTasks("Fix authentication issue");
@@ -644,7 +644,7 @@ not valid json
 
 			expect(summary).toContain("Metrics Analysis (10 tasks)");
 			expect(summary).toContain("80.0%");
-			expect(summary).toContain("haiku");
+			expect(summary).toContain("sonnet");
 			expect(summary).toContain("sonnet");
 			expect(summary).toContain("Escalation");
 			expect(summary).toContain("typecheck");

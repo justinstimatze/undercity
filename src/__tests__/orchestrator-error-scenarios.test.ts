@@ -663,7 +663,7 @@ describe("Rate Limit Handling", () => {
 			tracker.pauseForRateLimit("opus", "Opus rate limit");
 
 			expect(tracker.isModelPaused("opus")).toBe(true);
-			expect(tracker.isModelPaused("haiku")).toBe(false);
+			expect(tracker.isModelPaused("sonnet")).toBe(false);
 		});
 
 		it("should resume after pause duration", () => {
@@ -694,13 +694,13 @@ describe("Rate Limit Handling", () => {
 		});
 
 		it("should clear all pauses on global resume", () => {
-			tracker.pauseForRateLimit("haiku", "Haiku limit");
+			tracker.pauseForRateLimit("sonnet", "Haiku limit");
 			tracker.pauseForRateLimit("sonnet", "Sonnet limit");
 
 			tracker.resumeFromRateLimit();
 
 			expect(tracker.isPaused()).toBe(false);
-			expect(tracker.isModelPaused("haiku")).toBe(false);
+			expect(tracker.isModelPaused("sonnet")).toBe(false);
 			expect(tracker.isModelPaused("sonnet")).toBe(false);
 		});
 	});
@@ -794,12 +794,12 @@ describe("Rate Limit Handling", () => {
 		});
 
 		it("should track model-specific usage", () => {
-			tracker.recordTask("task-1", "haiku", 10000, 5000);
+			tracker.recordTask("task-1", "sonnet", 10000, 5000);
 			tracker.recordTask("task-2", "sonnet", 50000, 25000);
 			tracker.recordTask("task-3", "opus", 100000, 50000);
 
 			const summary = tracker.getUsageSummary();
-			expect(summary.modelBreakdown.haiku.totalTasks).toBe(1);
+			expect(summary.modelBreakdown.sonnet.totalTasks).toBe(1);
 			expect(summary.modelBreakdown.sonnet.totalTasks).toBe(1);
 			expect(summary.modelBreakdown.opus.totalTasks).toBe(1);
 		});
@@ -1024,7 +1024,7 @@ describe("Edge Cases and Error Conditions", () => {
 
 			expect(validBatch.batchId).toBeDefined();
 			expect(validBatch.startedAt).toBeInstanceOf(Date);
-			expect(["haiku", "sonnet", "opus"]).toContain(validBatch.model);
+			expect(["sonnet", "sonnet", "opus"]).toContain(validBatch.model);
 			expect(validBatch.options.maxConcurrent).toBeGreaterThan(0);
 		});
 

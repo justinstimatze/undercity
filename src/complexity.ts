@@ -19,6 +19,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { checkComplexityAx } from "./ax-programs.js";
 import { sessionLogger } from "./logger.js";
+import type { ModelTier } from "./types.js";
 
 /**
  * Complexity levels with associated configurations
@@ -594,10 +595,12 @@ const MODEL_SUCCESS_THRESHOLDS = {
  * Strategy: learned routing profile → fallback to raw metrics + thresholds
  */
 export async function adjustModelFromMetrics(
-	recommendedModel: "haiku" | "sonnet" | "opus",
+	recommendedModel: ModelTier | "haiku",
 	complexityLevel: ComplexityLevel,
 	minSamples: number = 3,
-): Promise<"haiku" | "sonnet" | "opus"> {
+): Promise<ModelTier> {
+	// Map legacy haiku to sonnet
+	const normalizedModel: ModelTier = recommendedModel === "haiku" ? "sonnet" : recommendedModel;
 	try {
 		// First, try using learned routing profile
 		const { loadRoutingProfile, shouldSkipModel, getThreshold } = await import("./self-tuning.js");
@@ -605,11 +608,11 @@ export async function adjustModelFromMetrics(
 
 		if (profile && profile.taskCount >= minSamples) {
 			// Check if we should skip this model entirely
-			if (shouldSkipModel(profile, recommendedModel, complexityLevel)) {
-				const upgraded = upgradeModel(recommendedModel);
+			if (shouldSkipModel(profile, normalizedModel, complexityLevel)) {
+				const upgraded = upgradeModel(normalizedModel);
 				sessionLogger.info(
 					{
-						originalModel: recommendedModel,
+						originalModel: normalizedModel,
 						upgradedModel: upgraded,
 						complexity: complexityLevel,
 						reason: "learned_skip",
@@ -620,14 +623,14 @@ export async function adjustModelFromMetrics(
 			}
 
 			// Check learned threshold
-			const threshold = getThreshold(profile, recommendedModel, complexityLevel);
-			const successRate = profile.modelSuccessRates[recommendedModel];
+			const threshold = getThreshold(profile, normalizedModel, complexityLevel);
+			const successRate = profile.modelSuccessRates[normalizedModel];
 
 			if (successRate < threshold.minSuccessRate && profile.taskCount >= threshold.minSamples) {
-				const upgraded = upgradeModel(recommendedModel);
+				const upgraded = upgradeModel(normalizedModel);
 				sessionLogger.info(
 					{
-						originalModel: recommendedModel,
+						originalModel: normalizedModel,
 						upgradedModel: upgraded,
 						successRate,
 						threshold: threshold.minSuccessRate,
@@ -638,7 +641,7 @@ export async function adjustModelFromMetrics(
 				return upgraded;
 			}
 
-			return recommendedModel;
+			return normalizedModel;
 		}
 
 		// Fall back to raw metrics analysis
@@ -651,27 +654,27 @@ export async function adjustModelFromMetrics(
 				{ totalTasks: analysis.totalTasks, minSamples },
 				"Not enough metrics data for adjustment, using default model",
 			);
-			return recommendedModel;
+			return normalizedModel;
 		}
 
 		// Check success rate for this model + complexity combo
-		const comboKey = `${recommendedModel}:${complexityLevel}`;
+		const comboKey = `${normalizedModel}:${complexityLevel}`;
 		const combo = analysis.byModelAndComplexity[comboKey];
 
 		if (!combo || combo.total < minSamples) {
 			// Not enough specific data, check model-level success rate
-			const modelStats = analysis.byModel[recommendedModel];
+			const modelStats = analysis.byModel[normalizedModel];
 			if (!modelStats || modelStats.total < minSamples) {
-				return recommendedModel;
+				return normalizedModel;
 			}
 
 			// Check if model-level success rate is below threshold
-			const threshold = MODEL_SUCCESS_THRESHOLDS[recommendedModel];
+			const threshold = MODEL_SUCCESS_THRESHOLDS[normalizedModel];
 			if (modelStats.rate < threshold) {
-				const upgraded = upgradeModel(recommendedModel);
+				const upgraded = upgradeModel(normalizedModel);
 				sessionLogger.info(
 					{
-						originalModel: recommendedModel,
+						originalModel: normalizedModel,
 						upgradedModel: upgraded,
 						successRate: modelStats.rate,
 						threshold,
@@ -680,16 +683,16 @@ export async function adjustModelFromMetrics(
 				);
 				return upgraded;
 			}
-			return recommendedModel;
+			return normalizedModel;
 		}
 
 		// Check specific combo success rate
-		const comboThreshold = MODEL_SUCCESS_THRESHOLDS[recommendedModel];
+		const comboThreshold = MODEL_SUCCESS_THRESHOLDS[normalizedModel];
 		if (combo.rate < comboThreshold) {
-			const upgraded = upgradeModel(recommendedModel);
+			const upgraded = upgradeModel(normalizedModel);
 			sessionLogger.info(
 				{
-					originalModel: recommendedModel,
+					originalModel: normalizedModel,
 					upgradedModel: upgraded,
 					complexity: complexityLevel,
 					successRate: combo.rate,
@@ -701,18 +704,18 @@ export async function adjustModelFromMetrics(
 			return upgraded;
 		}
 
-		return recommendedModel;
+		return normalizedModel;
 	} catch (error) {
 		// Metrics unavailable - use default
 		sessionLogger.debug({ error: String(error) }, "Could not load metrics, using default model");
-		return recommendedModel;
+		return normalizedModel;
 	}
 }
 
 /**
  * Upgrade model to next tier
  */
-function upgradeModel(model: "haiku" | "sonnet" | "opus"): "haiku" | "sonnet" | "opus" {
+function upgradeModel(model: ModelTier | "haiku"): ModelTier {
 	switch (model) {
 		case "haiku":
 			return "sonnet";

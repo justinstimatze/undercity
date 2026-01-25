@@ -771,9 +771,9 @@ export async function getTokenUsageTrends(days = 30): Promise<{
 	const recentMetrics = metrics.filter((m) => m.startedAt && new Date(m.startedAt) >= cutoffDate);
 
 	const tokensByModel: Record<"haiku" | "sonnet" | "opus", number> = {
-		haiku: 0,
 		sonnet: 0,
 		opus: 0,
+		haiku: 0,
 	};
 
 	let totalTokens = 0;

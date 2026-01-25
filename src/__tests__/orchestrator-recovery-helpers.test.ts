@@ -160,7 +160,7 @@ describe("orchestrator/recovery-helpers", () => {
 		it("processes multiple running tasks", () => {
 			const checkpoint1: TaskCheckpoint = {
 				phase: "verifying",
-				model: "haiku",
+				model: "sonnet",
 				attempts: 1,
 				savedAt: new Date(),
 			};

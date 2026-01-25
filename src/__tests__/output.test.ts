@@ -301,10 +301,10 @@ describe("output", () => {
 		});
 
 		it("should output worker escalation event", () => {
-			workerEscalation("task-123", "haiku", "sonnet", "complexity");
+			workerEscalation("task-123", "sonnet", "sonnet", "complexity");
 			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
 			expect(output.type).toBe("worker_escalation");
-			expect(output.message).toContain("haiku → sonnet");
+			expect(output.message).toContain("sonnet → opus");
 			expect(output.message).toContain("complexity");
 		});
 

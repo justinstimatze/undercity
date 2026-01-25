@@ -6,14 +6,17 @@
  */
 
 import * as output from "./output.js";
-import type {
-	RateLimitConfig,
-	RateLimitHit,
-	RateLimitPause,
-	RateLimitState,
-	TaskUsage,
-	TimeWindow,
-	TokenUsage,
+import {
+	type HistoricalModelChoice,
+	type ModelChoice,
+	normalizeModel,
+	type RateLimitConfig,
+	type RateLimitHit,
+	type RateLimitPause,
+	type RateLimitState,
+	type TaskUsage,
+	type TimeWindow,
+	type TokenUsage,
 } from "./types.js";
 
 /**
@@ -25,7 +28,6 @@ const DEFAULT_CONFIG: RateLimitConfig = {
 	maxTokensPerWeek: 5_000_000, // 5M Sonnet tokens per week
 	warningThreshold: 0.8, // Warn at 80%
 	tokenMultipliers: {
-		haiku: 0.25, // Haiku is ~1/4 the cost of Sonnet
 		sonnet: 1.0, // Base unit
 		opus: 12.0, // Opus is ~12x the cost of Sonnet
 	},
@@ -88,13 +90,10 @@ export class RateLimitTracker {
 	/**
 	 * Calculate token usage with Sonnet equivalence
 	 */
-	private calculateTokenUsage(
-		inputTokens: number,
-		outputTokens: number,
-		model: "haiku" | "sonnet" | "opus",
-	): TokenUsage {
+	private calculateTokenUsage(inputTokens: number, outputTokens: number, model: HistoricalModelChoice): TokenUsage {
+		const normalizedModel = normalizeModel(model);
 		const totalTokens = inputTokens + outputTokens;
-		const multiplier = this.state.config.tokenMultipliers[model];
+		const multiplier = this.state.config.tokenMultipliers[normalizedModel];
 		const sonnetEquivalentTokens = Math.round(totalTokens * multiplier);
 
 		return {
@@ -110,7 +109,7 @@ export class RateLimitTracker {
 	 */
 	recordTask(
 		taskId: string,
-		model: "haiku" | "sonnet" | "opus",
+		model: HistoricalModelChoice,
 		inputTokens: number,
 		outputTokens: number,
 		options?: {
@@ -120,11 +119,12 @@ export class RateLimitTracker {
 			timestamp?: Date;
 		},
 	): void {
-		const tokens = this.calculateTokenUsage(inputTokens, outputTokens, model);
+		const normalizedModel = normalizeModel(model);
+		const tokens = this.calculateTokenUsage(inputTokens, outputTokens, normalizedModel);
 
 		const taskUsage: TaskUsage = {
 			taskId,
-			model,
+			model: normalizedModel,
 			tokens,
 			timestamp: options?.timestamp || new Date(),
 			durationMs: options?.durationMs,
@@ -146,10 +146,11 @@ export class RateLimitTracker {
 	 * Record a rate limit hit (429 response)
 	 */
 	recordRateLimitHit(
-		model: "haiku" | "sonnet" | "opus",
+		model: HistoricalModelChoice,
 		errorMessage?: string,
 		responseHeaders?: Record<string, string>,
 	): void {
+		const normalizedModel = normalizeModel(model);
 		const currentUsage = this.getCurrentUsage();
 
 		// Log enhanced header information
@@ -157,7 +158,7 @@ export class RateLimitTracker {
 
 		const hit: RateLimitHit = {
 			timestamp: new Date(),
-			model,
+			model: normalizedModel,
 			currentUsage,
 			responseHeaders,
 			errorMessage,
@@ -265,7 +266,7 @@ export class RateLimitTracker {
 			console.warn(
 				`🚨 Proactive rate limit prevention: ${(fiveHourUsage * 100).toFixed(1)}% of 5-hour limit used (${model}, ${source})`,
 			);
-			this.triggerProactivePause(model as "haiku" | "sonnet" | "opus", "5-hour");
+			this.triggerProactivePause(model as HistoricalModelChoice, "5-hour");
 			return;
 		}
 
@@ -274,7 +275,7 @@ export class RateLimitTracker {
 			console.warn(
 				`🚨 Proactive rate limit prevention: ${(weeklyUsage * 100).toFixed(1)}% of weekly limit used (${model}, ${source})`,
 			);
-			this.triggerProactivePause(model as "haiku" | "sonnet" | "opus", "weekly");
+			this.triggerProactivePause(model as HistoricalModelChoice, "weekly");
 			return;
 		}
 
@@ -297,7 +298,8 @@ export class RateLimitTracker {
 	/**
 	 * Trigger proactive pause to prevent hitting rate limits
 	 */
-	private triggerProactivePause(model: "haiku" | "sonnet" | "opus", limitType: "5-hour" | "weekly"): void {
+	private triggerProactivePause(model: HistoricalModelChoice, limitType: "5-hour" | "weekly"): void {
+		const normalizedModel = normalizeModel(model);
 		const now = new Date();
 		let resumeAt: Date;
 
@@ -331,12 +333,17 @@ export class RateLimitTracker {
 			}
 		}
 
-		this.pauseForRateLimit(model, `Proactive pause to prevent hitting ${limitType} rate limit`, undefined, undefined);
+		this.pauseForRateLimit(
+			normalizedModel,
+			`Proactive pause to prevent hitting ${limitType} rate limit`,
+			undefined,
+			undefined,
+		);
 
 		// Override the resume time with calculated proactive time
 		if (this.state.pause.modelPauses) {
-			this.state.pause.modelPauses[model] = {
-				...this.state.pause.modelPauses[model],
+			this.state.pause.modelPauses[normalizedModel] = {
+				...this.state.pause.modelPauses[normalizedModel],
 				resumeAt,
 			};
 		}
@@ -503,11 +510,12 @@ export class RateLimitTracker {
 	 * Pause system due to rate limit hit
 	 */
 	pauseForRateLimit(
-		model: "haiku" | "sonnet" | "opus",
+		model: HistoricalModelChoice,
 		errorMessage?: string,
 		pausedAgentCount?: number,
 		responseHeaders?: Record<string, string>,
 	): void {
+		const normalizedModel = normalizeModel(model);
 		const now = new Date();
 
 		// Try to extract retry-after from headers first
@@ -520,24 +528,23 @@ export class RateLimitTracker {
 			output.info(`Using API retry-after: ${retryAfterMs / 1000} seconds`);
 		} else {
 			// Fallback to intelligent estimation based on usage patterns
-			resumeAt = this.estimateResumeTime(model, now);
+			resumeAt = this.estimateResumeTime(normalizedModel, now);
 		}
 
 		// Initialize modelPauses if not exists
 		if (!this.state.pause.modelPauses) {
 			this.state.pause.modelPauses = {
-				haiku: { isPaused: false },
 				sonnet: { isPaused: false },
 				opus: { isPaused: false },
 			};
 		}
 
 		// Pause the specific model
-		this.state.pause.modelPauses[model] = {
+		this.state.pause.modelPauses[normalizedModel] = {
 			isPaused: true,
 			pausedAt: now,
 			resumeAt,
-			reason: errorMessage || `Rate limit hit for ${model} model`,
+			reason: errorMessage || `Rate limit hit for ${normalizedModel} model`,
 		};
 
 		// Update global pause state (backward compatibility)
@@ -546,9 +553,9 @@ export class RateLimitTracker {
 			isPaused: true,
 			pausedAt: now,
 			resumeAt,
-			limitedModel: model,
+			limitedModel: normalizedModel,
 			pausedAgentCount: pausedAgentCount || 0,
-			reason: errorMessage || `Rate limit hit for ${model} model`,
+			reason: errorMessage || `Rate limit hit for ${normalizedModel} model`,
 		};
 
 		this.state.lastUpdated = now;
@@ -560,7 +567,7 @@ export class RateLimitTracker {
 	/**
 	 * Estimate resume time based on usage patterns when no retry-after header
 	 */
-	private estimateResumeTime(_model: "haiku" | "sonnet" | "opus", now: Date): Date {
+	private estimateResumeTime(_model: HistoricalModelChoice, now: Date): Date {
 		const usage = this.getCurrentUsage();
 		const config = this.state.config;
 
@@ -606,7 +613,7 @@ export class RateLimitTracker {
 		if (this.state.pause.modelPauses) {
 			for (const [model, pause] of Object.entries(this.state.pause.modelPauses)) {
 				if (pause.isPaused && pause.resumeAt && now >= pause.resumeAt) {
-					this.resumeModel(model as "haiku" | "sonnet" | "opus");
+					this.resumeModel(model as HistoricalModelChoice);
 					anyResumed = true;
 				}
 			}
@@ -664,8 +671,9 @@ export class RateLimitTracker {
 	/**
 	 * Resume a specific model from rate limit pause
 	 */
-	resumeModel(model: "haiku" | "sonnet" | "opus"): void {
-		if (!this.state.pause.modelPauses?.[model]?.isPaused) {
+	resumeModel(model: HistoricalModelChoice): void {
+		const normalizedModel = normalizeModel(model);
+		if (!this.state.pause.modelPauses?.[normalizedModel]?.isPaused) {
 			return;
 		}
 
@@ -675,8 +683,8 @@ export class RateLimitTracker {
 		}
 
 		// Resume the specific model
-		this.state.pause.modelPauses[model] = {
-			...this.state.pause.modelPauses[model],
+		this.state.pause.modelPauses[normalizedModel] = {
+			...this.state.pause.modelPauses[normalizedModel],
 			isPaused: false,
 		};
 
@@ -706,7 +714,7 @@ export class RateLimitTracker {
 
 		// Clear all model pauses
 		if (this.state.pause.modelPauses) {
-			for (const model of Object.keys(this.state.pause.modelPauses) as Array<"haiku" | "sonnet" | "opus">) {
+			for (const model of Object.keys(this.state.pause.modelPauses) as ModelChoice[]) {
 				this.state.pause.modelPauses[model] = {
 					...this.state.pause.modelPauses[model],
 					isPaused: false,
@@ -737,15 +745,17 @@ export class RateLimitTracker {
 	/**
 	 * Check if a specific model is currently paused
 	 */
-	isModelPaused(model: "haiku" | "sonnet" | "opus"): boolean {
-		return this.state.pause.modelPauses?.[model]?.isPaused ?? false;
+	isModelPaused(model: HistoricalModelChoice): boolean {
+		const normalizedModel = normalizeModel(model);
+		return this.state.pause.modelPauses?.[normalizedModel]?.isPaused ?? false;
 	}
 
 	/**
 	 * Get pause state for a specific model
 	 */
-	getModelPauseState(model: "haiku" | "sonnet" | "opus") {
-		return this.state.pause.modelPauses?.[model];
+	getModelPauseState(model: HistoricalModelChoice) {
+		const normalizedModel = normalizeModel(model);
+		return this.state.pause.modelPauses?.[normalizedModel];
 	}
 
 	/**

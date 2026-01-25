@@ -50,7 +50,7 @@ function chatPromptToString(chatPrompt: AxChatRequest["chatPrompt"]): string {
  * Resolve model key to actual model name
  */
 function resolveModel(model: string | undefined): string {
-	if (!model) return MODEL_NAMES.haiku;
+	if (!model) return MODEL_NAMES.sonnet;
 
 	// Check if it's a tier key
 	if (model in MODEL_NAMES) {
@@ -63,7 +63,7 @@ function resolveModel(model: string | undefined): string {
 	}
 
 	// Default to haiku
-	return MODEL_NAMES.haiku;
+	return MODEL_NAMES.sonnet;
 }
 
 /**
@@ -113,7 +113,7 @@ export class AxAgentSDK implements AxAIService<string, string, ModelTier> {
 
 	getModelList(): AxAIModelList<ModelTier> {
 		return [
-			{ key: "haiku", description: "Fast, cheap model for simple tasks", model: MODEL_NAMES.haiku },
+			{ key: "sonnet", description: "Fast, cheap model for simple tasks", model: MODEL_NAMES.sonnet },
 			{ key: "sonnet", description: "Balanced model for most tasks", model: MODEL_NAMES.sonnet },
 			{ key: "opus", description: "Most capable model for complex tasks", model: MODEL_NAMES.opus },
 		];

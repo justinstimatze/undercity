@@ -251,12 +251,12 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		// =========================================================================
 
 		const {
-			tasksByModel,
+			prioritizedTasks,
 			atomicityResults: _atomicityResults,
 			decomposedCount,
 		} = await processTasksForExecution(validation.validTasks, config);
 
-		const totalTasks = tasksByModel.haiku.length + tasksByModel.sonnet.length + tasksByModel.opus.length;
+		const totalTasks = prioritizedTasks.length;
 
 		if (totalTasks === 0) {
 			output.info("No tasks ready after decomposition");
@@ -277,14 +277,11 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 
 		// Build objective -> taskId map
 		const objectiveToTaskId = new Map<string, string>();
-		for (const tasks of [tasksByModel.haiku, tasksByModel.sonnet, tasksByModel.opus]) {
-			for (const task of tasks) {
-				objectiveToTaskId.set(task.objective, task.id);
-			}
+		for (const task of prioritizedTasks) {
+			objectiveToTaskId.set(task.objective, task.id);
 		}
 
-		// Run tasks by model tier (cheapest first)
-		const modelOrder: Array<"haiku" | "sonnet" | "opus"> = ["haiku", "sonnet", "opus"];
+		// Run tasks in global priority order
 		let completedCount = tasksProcessed;
 		let totalSuccessful = 0;
 		let totalFailed = 0;
@@ -293,30 +290,28 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		let totalDurationMs = 0;
 		const taskResults: TaskResultSummary[] = [];
 
-		for (const modelTier of modelOrder) {
-			const tierTasks = tasksByModel[modelTier];
-			if (tierTasks.length === 0) continue;
-
+		if (prioritizedTasks.length > 0) {
 			try {
-				output.info(`Running ${tierTasks.length} task(s) with ${modelTier}...`);
+				output.info(`Running ${prioritizedTasks.length} task(s) in priority order...`);
 
 				// Log task starts
-				for (const task of tierTasks) {
+				for (const task of prioritizedTasks) {
+					const model = task.recommendedModel || "sonnet";
 					logTaskStarted({
 						batchId,
 						taskId: task.id,
 						objective: task.objective,
-						model: modelTier,
+						model,
 					});
 				}
 
-				// Create orchestrator for this tier
-				const tierOrchestrator = new Orchestrator({
+				// Create orchestrator (uses each task's recommended model)
+				const orchestrator = new Orchestrator({
 					maxConcurrent: config.parallelism,
 					autoCommit: config.autoCommit,
 					stream: config.stream,
 					verbose: config.verbose,
-					startingModel: modelTier,
+					startingModel: config.startingModel,
 					reviewPasses: config.reviewPasses,
 					pushOnSuccess: config.pushOnSuccess,
 					maxAttempts: config.maxAttempts,
@@ -327,13 +322,17 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 				});
 
 				const batchStartTime = Date.now();
-				const result = await tierOrchestrator.runParallel(tierTasks);
+				const result = await orchestrator.runParallel(prioritizedTasks);
 				const batchDurationMs = Date.now() - batchStartTime;
 
 				// Process results
 				for (const taskResult of result.results) {
 					const taskId = objectiveToTaskId.get(taskResult.task);
 					if (!taskId) continue;
+
+					// Get the task's recommended model for logging
+					const task = prioritizedTasks.find((t) => t.objective === taskResult.task);
+					const taskModel = task?.recommendedModel || "sonnet";
 
 					if (taskResult.decomposed) {
 						completedCount++;
@@ -344,14 +343,14 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 
 					if (taskResult.merged) {
 						markTaskComplete(taskId);
-						output.taskComplete(taskId, `Task merged (${modelTier})`);
+						output.taskComplete(taskId, `Task merged (${taskModel})`);
 						completedCount++;
 						updateGrindProgress(completedCount, totalTasks + tasksProcessed);
 
 						logTaskComplete({
 							batchId,
 							taskId,
-							model: taskResult.result?.model ?? modelTier,
+							model: taskResult.result?.model ?? taskModel,
 							attempts: taskResult.result?.attempts ?? 1,
 							fileCount: taskResult.modifiedFiles?.length ?? 0,
 							tokens: taskResult.result?.tokenUsage?.total ?? 0,
@@ -375,7 +374,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 							batchId,
 							taskId,
 							error: errorMsg,
-							model: taskResult.result?.model ?? modelTier,
+							model: taskResult.result?.model ?? taskModel,
 							attempts: taskResult.result?.attempts ?? 1,
 							tokens: taskResult.result?.tokenUsage?.total ?? 0,
 							durationMs: batchDurationMs,
@@ -390,9 +389,9 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 				totalMerged += result.merged;
 				totalDecomposed += result.decomposed;
 				totalDurationMs += result.durationMs;
-			} catch (tierError) {
-				output.error(`Model tier ${modelTier} failed: ${tierError}`);
-				totalFailed += tierTasks.length;
+			} catch (grindError) {
+				output.error(`Grind execution failed: ${grindError}`);
+				totalFailed += prioritizedTasks.length;
 			}
 		}
 

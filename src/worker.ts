@@ -1203,7 +1203,7 @@ export class TaskWorker {
 				return {
 					status: "complete",
 					task,
-					model: "haiku" as ModelTier,
+					model: "sonnet" as ModelTier,
 					attempts: 0,
 					durationMs: result.durationMs!,
 					tokenUsage: { attempts: [], total: 0 },
@@ -1233,7 +1233,7 @@ export class TaskWorker {
 
 		try {
 			sessionLogger.info({ taskId, task: task.substring(0, 50) }, "Starting planning phase");
-			this.executionPlan = await planTaskWithReview(task, this.workingDirectory, "haiku");
+			this.executionPlan = await planTaskWithReview(task, this.workingDirectory, "sonnet");
 
 			const planDuration = Date.now() - startTime;
 			sessionLogger.info(
@@ -1696,7 +1696,7 @@ export class TaskWorker {
 				}
 
 				const lastAttempt = this.attemptRecords[this.attemptRecords.length - 1];
-				lastAttempt.escalatedFrom = previousModel as "haiku" | "sonnet";
+				lastAttempt.escalatedFrom = previousModel as "sonnet" | "sonnet";
 				lastAttempt.postMortemGenerated = true;
 
 				this.sameModelRetries = 0;
@@ -1889,7 +1889,7 @@ Be concise and specific. Focus on actionable insights.`;
 			for await (const message of query({
 				prompt,
 				options: {
-					model: MODEL_NAMES.haiku,
+					model: MODEL_NAMES.sonnet,
 					permissionMode: "bypassPermissions",
 					allowDangerouslySkipPermissions: true,
 					maxTurns: 1, // Single response, no tool use needed
@@ -1949,7 +1949,7 @@ Be concise and specific. Focus on actionable insights.`;
 	 * Cap a model tier at the configured maxTier
 	 */
 	private capAtMaxTier(tier: ModelTier): ModelTier {
-		const tiers: ModelTier[] = ["haiku", "sonnet", "opus"];
+		const tiers: ModelTier[] = ["sonnet", "sonnet", "opus"];
 		const tierIndex = tiers.indexOf(tier);
 		const maxTierIndex = tiers.indexOf(this.maxTier);
 		return tierIndex > maxTierIndex ? this.maxTier : tier;
@@ -2107,7 +2107,7 @@ Be concise and specific. Focus on actionable insights.`;
 	 * Respects maxTier cap - will not escalate beyond the configured maximum tier
 	 */
 	private escalateModel(): boolean {
-		const tiers: ModelTier[] = ["haiku", "sonnet", "opus"];
+		const tiers: ModelTier[] = ["sonnet", "sonnet", "opus"];
 		const currentIndex = tiers.indexOf(this.currentModel);
 		const maxTierIndex = tiers.indexOf(this.maxTier);
 

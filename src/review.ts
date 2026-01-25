@@ -104,7 +104,7 @@ export async function runEscalatingReview(
 	};
 
 	// Filter tiers based on maxReviewTier cap
-	const allTiers: ModelTier[] = ["haiku", "sonnet", "opus"];
+	const allTiers: ModelTier[] = ["sonnet", "sonnet", "opus"];
 	const maxTierIndex = allTiers.indexOf(maxReviewTier);
 	const tiers = allTiers.slice(0, maxTierIndex + 1);
 

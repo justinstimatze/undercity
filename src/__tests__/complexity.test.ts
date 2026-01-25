@@ -575,7 +575,7 @@ describe("complexity", () => {
 			expect(result).toBe("sonnet");
 		});
 
-		it("should upgrade haiku to sonnet when success rate below threshold", async () => {
+		it("should upgrade sonnet to opus when success rate below threshold", async () => {
 			// Mock self-tuning to return null so we fall through to feedback-metrics
 			vi.doMock("../self-tuning.js", () => ({
 				loadRoutingProfile: () => null,
@@ -593,7 +593,7 @@ describe("complexity", () => {
 			}));
 
 			const { adjustModelFromMetrics: adjustFn } = await import("../complexity.js");
-			const result = await adjustFn("haiku", "simple", 3);
+			const result = await adjustFn("sonnet", "simple", 3);
 			expect(result).toBe("sonnet");
 		});
 
@@ -645,8 +645,8 @@ describe("complexity", () => {
 				}),
 			}));
 
-			const result = await adjustModelFromMetrics("haiku", "simple", 3);
-			expect(result).toBe("haiku");
+			const result = await adjustModelFromMetrics("sonnet", "simple", 3);
+			expect(result).toBe("sonnet");
 		});
 
 		it("should use model+complexity combo stats when available", async () => {
@@ -669,7 +669,7 @@ describe("complexity", () => {
 			}));
 
 			const { adjustModelFromMetrics: adjustFn } = await import("../complexity.js");
-			const result = await adjustFn("haiku", "complex", 3);
+			const result = await adjustFn("sonnet", "complex", 3);
 			expect(result).toBe("sonnet"); // Upgrade based on combo stats
 		});
 	});

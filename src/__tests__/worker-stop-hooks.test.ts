@@ -20,7 +20,7 @@ vi.mock("../logger.js", () => ({
 describe("worker/stop-hooks", () => {
 	describe("getMaxTurnsForModel", () => {
 		it("returns 10 for haiku", () => {
-			expect(getMaxTurnsForModel("haiku")).toBe(10);
+			expect(getMaxTurnsForModel("sonnet")).toBe(10);
 		});
 
 		it("returns 15 for sonnet", () => {
@@ -33,7 +33,7 @@ describe("worker/stop-hooks", () => {
 
 		it("returns 15 as default for unknown model", () => {
 			// Type assertion to test edge case
-			expect(getMaxTurnsForModel("unknown" as "haiku")).toBe(15);
+			expect(getMaxTurnsForModel("unknown" as "sonnet")).toBe(15);
 		});
 	});
 

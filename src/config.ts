@@ -33,7 +33,7 @@ export type { ModelTier };
 /**
  * Worker model options (haiku or sonnet only)
  */
-export type WorkerModel = "haiku" | "sonnet";
+export type WorkerModel = "sonnet" | "sonnet";
 
 /**
  * Configuration interface for .undercityrc
@@ -112,8 +112,8 @@ const DEFAULT_CONFIG: Required<UndercityRc> = {
 /**
  * Valid model tiers for validation
  */
-const VALID_MODEL_TIERS: ModelTier[] = ["haiku", "sonnet", "opus"];
-const VALID_WORKER_MODELS: WorkerModel[] = ["haiku", "sonnet"];
+const VALID_MODEL_TIERS: ModelTier[] = ["sonnet", "sonnet", "opus"];
+const VALID_WORKER_MODELS: WorkerModel[] = ["sonnet", "sonnet"];
 
 /**
  * Cached configuration to avoid repeated file reads

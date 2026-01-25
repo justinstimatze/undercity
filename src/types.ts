@@ -42,19 +42,17 @@ export type AgentType = "scout" | "planner" | "builder" | "reviewer";
 /**
  * Model tier - the capability level for Claude models
  */
-export type ModelTier = "haiku" | "sonnet" | "opus";
+export type ModelTier = "sonnet" | "opus";
 
 /**
  * Canonical model name mapping
  * Single source of truth for model names - update here when new models release
  *
  * Current models (as of Jan 2026):
- * - Haiku 4.5: Fast, cheap, good for simple tasks
  * - Sonnet 4.5: Balanced, excellent for coding
  * - Opus 4.5: Most capable, expensive
  */
 export const MODEL_NAMES: Record<ModelTier, string> = {
-	haiku: "claude-haiku-4-5-20251001",
 	sonnet: "claude-sonnet-4-5-20250929",
 	opus: "claude-opus-4-5-20251101",
 } as const;
@@ -491,7 +489,21 @@ export type TaskType = "feature" | "bugfix" | "refactor" | "docs" | "test" | "ch
 /**
  * Model choice options
  */
-export type ModelChoice = "haiku" | "sonnet" | "opus";
+export type ModelChoice = "sonnet" | "opus";
+
+/**
+ * Historical model choice (includes deprecated haiku for backward compatibility with persisted data)
+ */
+export type HistoricalModelChoice = ModelChoice | "haiku";
+
+/**
+ * Normalize historical model choice to current ModelChoice
+ * Maps deprecated haiku to sonnet
+ */
+export function normalizeModel(model: HistoricalModelChoice | undefined): ModelChoice {
+	if (model === "haiku" || !model) return "sonnet";
+	return model;
+}
 
 /**
  * Token usage tracking

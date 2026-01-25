@@ -41,9 +41,9 @@ interface LineChartData {
 
 // Model pricing per 1K tokens (approximate)
 const MODEL_PRICING = {
-	haiku: { input: 0.00025, output: 0.00125 },
 	sonnet: { input: 0.003, output: 0.015 },
 	opus: { input: 0.015, output: 0.075 },
+	haiku: { input: 0.015, output: 0.075 },
 };
 
 function formatTokens(n: number): string {
@@ -66,13 +66,13 @@ function calculateCosts(metrics: LiveMetrics): {
 	byModel: Record<"haiku" | "sonnet" | "opus", number>;
 } {
 	const byModel = {
-		haiku: metrics.byModel.haiku.cost,
 		sonnet: metrics.byModel.sonnet.cost,
 		opus: metrics.byModel.opus.cost,
+		haiku: metrics.byModel.opus.cost,
 	};
 
 	return {
-		total: byModel.haiku + byModel.sonnet + byModel.opus,
+		total: byModel.sonnet + byModel.sonnet + byModel.opus,
 		byModel,
 	};
 }
@@ -306,7 +306,7 @@ export function launchMetricsDashboard(): void {
 		if (liveMetrics) {
 			const opus = liveMetrics.byModel.opus;
 			const sonnet = liveMetrics.byModel.sonnet;
-			const haiku = liveMetrics.byModel.haiku;
+			const haiku = liveMetrics.byModel.sonnet;
 
 			const totalTokens = liveMetrics.tokens.total;
 			const opusPct = totalTokens > 0 ? ((opus.input + opus.output) / totalTokens) * 100 : 0;
@@ -340,7 +340,7 @@ export function launchMetricsDashboard(): void {
 				`{bold}Total Cost:{/} {yellow-fg}${formatCost(costs.total)}{/}\n\n` +
 					`{magenta-fg}OPUS{/}   ${formatCost(costs.byModel.opus).padStart(8)}\n` +
 					`{cyan-fg}SONNET{/} ${formatCost(costs.byModel.sonnet).padStart(8)}\n` +
-					`{green-fg}HAIKU{/}  ${formatCost(costs.byModel.haiku).padStart(8)}\n\n` +
+					`{green-fg}HAIKU{/}  ${formatCost(costs.byModel.sonnet).padStart(8)}\n\n` +
 					`{dim}Burn Rate:{/}\n` +
 					`  {yellow-fg}${formatCost(burnRateHr)}/hr{/}`,
 			);
@@ -403,12 +403,12 @@ export function launchMetricsDashboard(): void {
 
 		// MODEL DISTRIBUTION BAR
 		if (modelDistribution) {
-			const total = modelDistribution.haiku + modelDistribution.sonnet + modelDistribution.opus;
+			const total = modelDistribution.sonnet + modelDistribution.sonnet + modelDistribution.opus;
 			if (total > 0) {
 				modelBar.setData({
 					titles: ["Haiku", "Sonnet", "Opus"],
 					data: [
-						Math.round((modelDistribution.haiku / total) * 100),
+						Math.round((modelDistribution.sonnet / total) * 100),
 						Math.round((modelDistribution.sonnet / total) * 100),
 						Math.round((modelDistribution.opus / total) * 100),
 					],

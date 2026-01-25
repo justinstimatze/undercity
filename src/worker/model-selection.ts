@@ -11,7 +11,7 @@ import type { ModelTier } from "../types.js";
 /**
  * Model tier order from least to most capable
  */
-export const MODEL_TIERS: ModelTier[] = ["haiku", "sonnet", "opus"];
+export const MODEL_TIERS: ModelTier[] = ["sonnet", "opus"];
 
 /**
  * Cap a model tier at the configured maximum

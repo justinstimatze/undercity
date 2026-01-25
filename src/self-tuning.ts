@@ -53,7 +53,6 @@ export interface RoutingProfile {
  * Default thresholds (used before enough data is collected)
  */
 const DEFAULT_THRESHOLDS: Record<ModelTier, RoutingThreshold> = {
-	haiku: { minSuccessRate: 0.7, minSamples: 3, skip: false },
 	sonnet: { minSuccessRate: 0.6, minSamples: 3, skip: false },
 	opus: { minSuccessRate: 0.0, minSamples: 0, skip: false }, // Always succeed or fail
 };
@@ -62,7 +61,7 @@ const DEFAULT_THRESHOLDS: Record<ModelTier, RoutingThreshold> = {
  * Complexity levels where haiku should never be used (default)
  * These can be overridden by learned profile if haiku succeeds consistently
  */
-const HAIKU_BLOCKED_COMPLEXITY: ComplexityLevel[] = ["complex", "critical"];
+const _HAIKU_BLOCKED_COMPLEXITY: ComplexityLevel[] = ["complex", "critical"];
 
 /**
  * Configuration constants for confidence-based threshold tuning
@@ -166,11 +165,6 @@ export function shouldSkipModel(
 	const threshold = getThreshold(profile, model, complexity);
 	if (threshold.skip) {
 		return true;
-	}
-
-	// Default blocking for haiku on complex tasks
-	if (model === "haiku" && HAIKU_BLOCKED_COMPLEXITY.includes(complexity)) {
-		return !profile; // Block by default, but allow if profile says otherwise
 	}
 
 	return false;
@@ -319,7 +313,6 @@ export function computeOptimalThresholds(basePath: string = process.cwd()): Rout
 
 	// Extract model-level success rates
 	const modelSuccessRates: Record<ModelTier, number> = {
-		haiku: analysis.byModel.haiku.rate,
 		sonnet: analysis.byModel.sonnet.rate,
 		opus: analysis.byModel.opus.rate,
 	};
@@ -440,12 +433,8 @@ export function getRecommendedModel(complexity: ComplexityLevel, basePath: strin
 
 	// Check if we should skip to a higher tier
 	if (shouldSkipModel(profile, recommended, complexity)) {
-		recommended = recommended === "haiku" ? "sonnet" : "opus";
-
-		// Check again if we should skip sonnet
-		if (recommended === "sonnet" && shouldSkipModel(profile, recommended, complexity)) {
-			recommended = "opus";
-		}
+		// Escalate to opus
+		recommended = "opus";
 	}
 
 	// Check learned success rates - if recommended tier has low success, escalate
@@ -458,7 +447,7 @@ export function getRecommendedModel(complexity: ComplexityLevel, basePath: strin
 			const actualRate = profile.modelSuccessRates[recommended];
 			if (actualRate < threshold.minSuccessRate) {
 				// Escalate due to low success rate
-				const escalated = recommended === "haiku" ? "sonnet" : "opus";
+				const escalated = "opus";
 				sessionLogger.debug(
 					{
 						original: recommended,

@@ -399,7 +399,7 @@ describe("ApiUsageGuard - additional coverage", () => {
 			guard.recordUsage("task-2", {
 				inputTokens: 500,
 				outputTokens: 250,
-				model: "haiku",
+				model: "sonnet",
 			});
 
 			const summary = tracker.getUsageSummary();

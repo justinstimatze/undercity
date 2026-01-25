@@ -18,7 +18,7 @@ describe("RateLimitTracker - Boundary Values", () => {
 			const tracker = new RateLimitTracker();
 
 			// 1000 actual tokens * 0.25 = 250 sonnet-equivalent
-			tracker.recordTask("task-1", "haiku", 500, 500);
+			tracker.recordTask("task-1", "sonnet", 500, 500);
 
 			const usage = tracker.getCurrentUsage();
 			expect(usage.last5HoursSonnet).toBe(250);
@@ -47,7 +47,7 @@ describe("RateLimitTracker - Boundary Values", () => {
 		it("should handle zero tokens", () => {
 			const tracker = new RateLimitTracker();
 
-			tracker.recordTask("task-1", "haiku", 0, 0);
+			tracker.recordTask("task-1", "sonnet", 0, 0);
 			const usage = tracker.getCurrentUsage();
 			expect(usage.last5HoursSonnet).toBe(0);
 		});
@@ -343,7 +343,7 @@ describe("RateLimitTracker - Boundary Values", () => {
 		it("should return zero for model with no tasks", () => {
 			const tracker = new RateLimitTracker();
 
-			const usage = tracker.getModelUsage("haiku");
+			const usage = tracker.getModelUsage("sonnet");
 			expect(usage.totalTasks).toBe(0);
 			expect(usage.totalTokens).toBe(0);
 			expect(usage.sonnetEquivalentTokens).toBe(0);
@@ -352,10 +352,10 @@ describe("RateLimitTracker - Boundary Values", () => {
 		it("should correctly sum tokens for model with multiple tasks", () => {
 			const tracker = new RateLimitTracker();
 
-			tracker.recordTask("task-1", "haiku", 100, 100);
-			tracker.recordTask("task-2", "haiku", 200, 200);
+			tracker.recordTask("task-1", "sonnet", 100, 100);
+			tracker.recordTask("task-2", "sonnet", 200, 200);
 
-			const usage = tracker.getModelUsage("haiku");
+			const usage = tracker.getModelUsage("sonnet");
 			expect(usage.totalTasks).toBe(2);
 			expect(usage.totalTokens).toBe(600); // 100+100+200+200
 			expect(usage.sonnetEquivalentTokens).toBe(150); // 600 * 0.25
@@ -403,7 +403,7 @@ describe("RateLimitTracker - Boundary Values", () => {
 
 			tracker.recordRateLimitHit("sonnet", "Hit 1");
 			tracker.recordRateLimitHit("opus", "Hit 2");
-			tracker.recordRateLimitHit("haiku", "Hit 3");
+			tracker.recordRateLimitHit("sonnet", "Hit 3");
 
 			const summary = tracker.getUsageSummary();
 			expect(summary.totalRateLimitHits).toBe(3);

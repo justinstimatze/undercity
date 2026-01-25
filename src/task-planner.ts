@@ -287,8 +287,6 @@ export interface TieredPlanResult {
  */
 function getReviewerTier(plannerTier: ModelTier): ModelTier {
 	switch (plannerTier) {
-		case "haiku":
-			return "sonnet";
 		case "sonnet":
 			return "opus";
 		case "opus":
@@ -915,7 +913,7 @@ async function resolveOpenQuestions(
 export async function planTaskWithReview(
 	task: string,
 	cwd: string,
-	plannerModel: ModelTier = "haiku",
+	plannerModel: ModelTier = "sonnet",
 ): Promise<TieredPlanResult> {
 	const reviewerModel = getReviewerTier(plannerModel);
 

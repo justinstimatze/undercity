@@ -141,7 +141,7 @@ describe("worker/escalation-logic", () => {
 
 	describe("checkFinalTier", () => {
 		it("returns null when not at final tier", () => {
-			const result = checkFinalTier("haiku", "opus", 0, 7);
+			const result = checkFinalTier("sonnet", "opus", 0, 7);
 			expect(result).toBeNull();
 		});
 

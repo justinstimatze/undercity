@@ -125,7 +125,6 @@ export function createStandardStopHooks(
  */
 export function getMaxTurnsForModel(model: "haiku" | "sonnet" | "opus"): number {
 	const maxTurnsPerModel: Record<string, number> = {
-		haiku: 10,
 		sonnet: 15,
 		opus: 25,
 	};

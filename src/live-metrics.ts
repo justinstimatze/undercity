@@ -99,8 +99,8 @@ function createEmptyMetrics(): LiveMetrics {
 		},
 		byModel: {
 			opus: { input: 0, output: 0, cost: 0 },
-			sonnet: { input: 0, output: 0, cost: 0 },
 			haiku: { input: 0, output: 0, cost: 0 },
+			sonnet: { input: 0, output: 0, cost: 0 },
 		},
 		queries: {
 			total: 0,
