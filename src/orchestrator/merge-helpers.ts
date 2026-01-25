@@ -170,8 +170,8 @@ export function mergeIntoLocalMain(taskId: string, worktreePath: string, mainRep
 		}
 
 		// Checkout main and fast-forward merge the worktree branch
-		// Use "--" separator to prevent option injection attacks
-		execGitInDir(["checkout", "--", sanitizedBranch], mainRepo);
+		// sanitizedBranch is already validated by validateGitRef() above
+		execGitInDir(["checkout", sanitizedBranch], mainRepo);
 		execGitInDir(["merge", "--ff-only", commitSha], mainRepo);
 
 		output.debug(`Merged ${taskId} into local main (${commitSha.slice(0, 7)})`);

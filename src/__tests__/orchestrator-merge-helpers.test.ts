@@ -226,7 +226,7 @@ describe("orchestrator/merge-helpers", () => {
 
 			expect(execGitInDir).toHaveBeenCalledWith(["rev-parse", "HEAD"], "/worktree");
 			expect(execGitInDir).toHaveBeenCalledWith(["checkout", "--detach"], "/worktree");
-			expect(execGitInDir).toHaveBeenCalledWith(["checkout", "--", "main"], "/main/repo");
+			expect(execGitInDir).toHaveBeenCalledWith(["checkout", "main"], "/main/repo");
 			expect(execGitInDir).toHaveBeenCalledWith(["merge", "--ff-only", "abc1234"], "/main/repo");
 		});
 
