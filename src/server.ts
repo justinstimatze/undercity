@@ -248,6 +248,12 @@ export class UndercityServer {
 					return this.handleAddTask(req, res);
 				case "GET /metrics":
 					return this.handleMetrics(res);
+				case "GET /evaluation/confusion-matrix":
+					return this.handleEvaluationConfusionMatrix(res);
+				case "GET /evaluation/metrics":
+					return this.handleEvaluationMetrics(res);
+				case "GET /evaluation/samples":
+					return this.handleEvaluationSamples(res);
 				case "POST /pause":
 					return this.handlePause(res);
 				case "POST /resume":
@@ -409,6 +415,48 @@ export class UndercityServer {
 		this.sendJson(res, 200, { success: true, draining: true, message: "Finishing current tasks, starting no more" });
 	}
 
+	private async handleEvaluationConfusionMatrix(res: ServerResponse): Promise<void> {
+		const { getConfusionMatrix } = await import("./api/evaluation.js");
+		const matrix = getConfusionMatrix();
+
+		if (!matrix) {
+			return this.sendJson(res, 404, {
+				error: "No benchmark data available",
+				message: "Run extraction benchmark first to generate evaluation data",
+			});
+		}
+
+		this.sendJson(res, 200, matrix);
+	}
+
+	private async handleEvaluationMetrics(res: ServerResponse): Promise<void> {
+		const { getMetrics } = await import("./api/evaluation.js");
+		const metrics = getMetrics();
+
+		if (!metrics) {
+			return this.sendJson(res, 404, {
+				error: "No benchmark data available",
+				message: "Run extraction benchmark first to generate evaluation data",
+			});
+		}
+
+		this.sendJson(res, 200, metrics);
+	}
+
+	private async handleEvaluationSamples(res: ServerResponse): Promise<void> {
+		const { getPerSampleMetrics } = await import("./api/evaluation.js");
+		const samples = getPerSampleMetrics();
+
+		if (!samples) {
+			return this.sendJson(res, 404, {
+				error: "No benchmark data available",
+				message: "Run extraction benchmark first to generate evaluation data",
+			});
+		}
+
+		this.sendJson(res, 200, samples);
+	}
+
 	private async handleMCP(req: IncomingMessage, res: ServerResponse): Promise<void> {
 		const body = await this.readBody(req);
 		const bodyStr = JSON.stringify(body);
@@ -461,6 +509,9 @@ const ENDPOINTS = {
 	"GET /tasks": "Full task board",
 	"POST /tasks": "Add task { objective: string, priority?: number }",
 	"GET /metrics": "Metrics summary",
+	"GET /evaluation/confusion-matrix": "Confusion matrix data (TP, FP, FN) for extraction methods",
+	"GET /evaluation/metrics": "Quality, latency, and cost metrics for extraction methods",
+	"GET /evaluation/samples": "Per-sample metrics with method comparison",
 	"POST /pause": "Pause grind loop",
 	"POST /resume": "Resume grind loop",
 	"POST /drain": "Finish current tasks, start no more",
