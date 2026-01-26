@@ -303,6 +303,39 @@ export interface FileConflict {
 }
 
 /**
+ * Semantic conflict detection result for AST-based merge analysis
+ * Identifies when multiple agents modify the same code symbols (functions, classes, etc.)
+ */
+export interface SemanticConflict {
+	/** Symbol name (function, class, type, etc.) */
+	symbolName: string;
+	/** Kind of symbol (function, class, interface, etc.) */
+	symbolKind: "function" | "class" | "interface" | "type" | "const" | "enum";
+	/** Files where this symbol is defined */
+	files: string[];
+	/** Agents/tasks that modified code related to this symbol */
+	touchedBy: Array<{
+		agentId: string;
+		stepId: string;
+		sessionId: string;
+	}>;
+	/** Severity of conflict based on number of agents and symbol importance */
+	severity: "warning" | "error" | "critical";
+}
+
+/**
+ * Result of semantic conflict analysis
+ */
+export interface SemanticConflictAnalysis {
+	/** Detected semantic conflicts */
+	conflicts: SemanticConflict[];
+	/** Number of files analyzed */
+	analyzedFiles: number;
+	/** Number of symbols analyzed */
+	symbolsAnalyzed: number;
+}
+
+/**
  * Overall file tracking state (persisted)
  */
 export interface FileTrackingState {

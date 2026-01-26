@@ -12,6 +12,7 @@
  */
 
 import { relative, resolve } from "node:path";
+import { getASTIndex } from "./ast-index.js";
 import { logger } from "./logger.js";
 import type {
 	CrossTaskConflict,
@@ -20,6 +21,8 @@ import type {
 	FileTouch,
 	FileTrackingEntry,
 	FileTrackingState,
+	SemanticConflict,
+	SemanticConflictAnalysis,
 } from "./types.js";
 
 const trackerLogger = logger.child({ module: "file-tracker" });
@@ -215,6 +218,162 @@ export class FileTracker {
 		}
 
 		return Array.from(paths);
+	}
+
+	/**
+	 * Analyze semantic conflicts using AST-based symbol tracking.
+	 * Detects when multiple agents modify the same exported symbols (functions, classes, types)
+	 * even if they're in different files.
+	 *
+	 * @param _excludeAgentId - Optional agent to exclude from conflict check (reserved for future use)
+	 * @returns Semantic conflict analysis with detected conflicts
+	 *
+	 * @example
+	 * ```typescript
+	 * const tracker = new FileTracker();
+	 * tracker.startTracking("agent-1", "step-1", "session-1");
+	 * tracker.recordFileAccess("agent-1", "src/utils.ts", "edit");
+	 * const analysis = await tracker.analyzeSemanticConflicts();
+	 * console.log(`Found ${analysis.conflicts.length} semantic conflicts`);
+	 * ```
+	 */
+	private async analyzeSemanticConflicts(_excludeAgentId?: string): Promise<SemanticConflictAnalysis> {
+		const conflicts: SemanticConflict[] = [];
+		const writeOps: FileOperation[] = ["write", "edit", "delete"];
+
+		// Try to get AST index, return empty analysis if not available
+		let astIndex: ReturnType<typeof getASTIndex> | null = null;
+		try {
+			astIndex = getASTIndex(this.cwd);
+			await astIndex.load();
+		} catch (error) {
+			trackerLogger.debug({ error: String(error) }, "AST index not available, skipping semantic analysis");
+			return {
+				conflicts: [],
+				analyzedFiles: 0,
+				symbolsAnalyzed: 0,
+			};
+		}
+
+		// Additional safety check
+		if (!astIndex) {
+			return {
+				conflicts: [],
+				analyzedFiles: 0,
+				symbolsAnalyzed: 0,
+			};
+		}
+
+		// Build map of file -> agents that modified it
+		const fileAgents = new Map<
+			string,
+			Array<{
+				agentId: string;
+				stepId: string;
+				sessionId: string;
+			}>
+		>();
+
+		for (const [agentId, entry] of Object.entries(this.state.entries)) {
+			// Skip completed agents
+			if (entry.endedAt) {
+				continue;
+			}
+
+			for (const touch of entry.files) {
+				if (writeOps.includes(touch.operation)) {
+					const existing = fileAgents.get(touch.path) || [];
+					// Check if this agent is already recorded for this file
+					if (!existing.some((a) => a.agentId === agentId)) {
+						existing.push({
+							agentId,
+							stepId: entry.stepId,
+							sessionId: entry.sessionId,
+						});
+						fileAgents.set(touch.path, existing);
+					}
+				}
+			}
+		}
+
+		// Build map of symbol -> agents that touched files exporting that symbol
+		const symbolAgents = new Map<
+			string,
+			{
+				kind: "function" | "class" | "interface" | "type" | "const" | "enum";
+				files: Set<string>;
+				agents: Array<{
+					agentId: string;
+					stepId: string;
+					sessionId: string;
+				}>;
+			}
+		>();
+
+		let analyzedFiles = 0;
+		let symbolsAnalyzed = 0;
+
+		for (const [filePath, agents] of fileAgents.entries()) {
+			// Get exported symbols from this file
+			const exports = astIndex.getFileExports(filePath);
+			if (exports.length === 0) {
+				continue;
+			}
+
+			analyzedFiles++;
+
+			for (const exp of exports) {
+				symbolsAnalyzed++;
+				const existing = symbolAgents.get(exp.name);
+
+				if (!existing) {
+					symbolAgents.set(exp.name, {
+						kind: exp.kind,
+						files: new Set([filePath]),
+						agents: [...agents],
+					});
+				} else {
+					// Add file to the set
+					existing.files.add(filePath);
+
+					// Add agents that aren't already tracked
+					for (const agent of agents) {
+						if (!existing.agents.some((a) => a.agentId === agent.agentId)) {
+							existing.agents.push(agent);
+						}
+					}
+				}
+			}
+		}
+
+		// Identify conflicts: symbols touched by multiple agents
+		for (const [symbolName, data] of symbolAgents.entries()) {
+			if (data.agents.length > 1) {
+				// Determine severity based on number of agents
+				let severity: "warning" | "error" | "critical";
+				if (data.agents.length >= 3) {
+					severity = "critical";
+				} else if (data.agents.length === 2) {
+					severity = "error";
+				} else {
+					severity = "warning";
+				}
+
+				conflicts.push({
+					symbolName,
+					symbolKind: data.kind,
+					files: Array.from(data.files),
+					touchedBy: data.agents,
+					severity,
+				});
+			}
+		}
+
+		return {
+			conflicts,
+			analyzedFiles,
+			symbolsAnalyzed,
+		};
 	}
 
 	/**
@@ -482,6 +641,34 @@ export class FileTracker {
 		}
 
 		return fileTaskMap;
+	}
+
+	/**
+	 * Detect semantic conflicts across active agents using AST analysis.
+	 * This method identifies when multiple agents modify the same exported symbols
+	 * (functions, classes, types) even if they're in different files.
+	 *
+	 * @returns Promise resolving to semantic conflict analysis
+	 *
+	 * @example
+	 * ```typescript
+	 * const tracker = new FileTracker();
+	 * tracker.startTracking("agent-1", "step-1", "session-1");
+	 * tracker.recordFileAccess("agent-1", "src/types.ts", "edit");
+	 * tracker.startTracking("agent-2", "step-2", "session-2");
+	 * tracker.recordFileAccess("agent-2", "src/index.ts", "edit");
+	 *
+	 * const analysis = await tracker.detectSemanticConflicts();
+	 * if (analysis.conflicts.length > 0) {
+	 *   console.log(`Found ${analysis.conflicts.length} semantic conflicts`);
+	 *   for (const conflict of analysis.conflicts) {
+	 *     console.log(`Symbol ${conflict.symbolName} (${conflict.symbolKind}) in ${conflict.files.join(", ")}`);
+	 *   }
+	 * }
+	 * ```
+	 */
+	async detectSemanticConflicts(): Promise<SemanticConflictAnalysis> {
+		return this.analyzeSemanticConflicts();
 	}
 
 	/**
