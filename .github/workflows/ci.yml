@@ -72,3 +72,6 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Edge Case Coverage Check
+        run: pnpm test:edge-coverage:ci
