@@ -55,6 +55,12 @@ export interface VerificationDependencies {
 	completeMetricsTask: (success: boolean) => void;
 	/** Record success learnings */
 	recordSuccessLearnings: (taskId: string, task: string) => Promise<void>;
+	/** Record injected learning IDs for effectiveness tracking */
+	recordInjectedLearnings: (learningIds: string[]) => void;
+	/** Record predicted files for effectiveness tracking */
+	recordPredictedFiles: (files: string[]) => void;
+	/** Record actual files modified for effectiveness tracking */
+	recordActualFilesModified: (files: string[]) => void;
 }
 
 /**
@@ -217,8 +223,12 @@ export async function handleVerificationSuccess(
 		commitSha = await deps.commitWork(identity.task);
 	}
 
-	// Update metrics
+	// Update metrics with effectiveness tracking
 	deps.recordMetricsAttempts(state.attemptRecords);
+	deps.recordInjectedLearnings(state.injectedLearningIds);
+	// Record predicted files if available (from context building phase)
+	// Note: predictedFiles would need to be passed through state if available
+	deps.recordActualFilesModified(deps.getModifiedFiles());
 	deps.completeMetricsTask(true);
 
 	// Log phase timings

@@ -298,7 +298,12 @@ function generateRecommendations(
 	const recommendations: string[] = [];
 
 	// File prediction recommendations
-	if (filePrediction.avgPrecision < 0.5 && filePrediction.tasksWithPredictions > 10) {
+	// Check if file prediction is not being tracked at all
+	if (filePrediction.tasksWithPredictions === 0 && knowledgeInjection.tasksWithoutKnowledge > 5) {
+		recommendations.push(
+			"No file prediction data recorded. Check that metrics.ts is recording predictedFiles and actualFilesModified.",
+		);
+	} else if (filePrediction.avgPrecision < 0.5 && filePrediction.tasksWithPredictions > 10) {
 		recommendations.push(
 			"File prediction precision is low (<50%). Consider tuning keyword extraction or adding more task-file pattern data.",
 		);
@@ -311,7 +316,12 @@ function generateRecommendations(
 	}
 
 	// Knowledge injection recommendations
-	if (knowledgeInjection.successRateDelta > 0.1) {
+	// CRITICAL: Check if knowledge injection is not working at all
+	if (knowledgeInjection.tasksWithKnowledge === 0 && knowledgeInjection.tasksWithoutKnowledge > 5) {
+		recommendations.push(
+			`WARNING: Knowledge injection is not working - 0 of ${knowledgeInjection.tasksWithoutKnowledge} tasks used knowledge. Check that metrics.ts is recording injectedLearningIds.`,
+		);
+	} else if (knowledgeInjection.successRateDelta > 0.1) {
 		recommendations.push(
 			`Knowledge injection improves success rate by ${(knowledgeInjection.successRateDelta * 100).toFixed(1)}%. Continue using knowledge compounding.`,
 		);

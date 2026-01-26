@@ -640,6 +640,10 @@ export class TaskWorker {
 			recordMetricsAttempts: (records) => this.metricsTracker.recordAttempts(records),
 			completeMetricsTask: (success) => this.metricsTracker.completeTask(success),
 			recordSuccessLearnings: (taskId, task) => this.recordSuccessLearnings(taskId, task),
+			// Effectiveness tracking
+			recordInjectedLearnings: (ids) => this.metricsTracker.recordInjectedLearnings(ids),
+			recordPredictedFiles: (files) => this.metricsTracker.recordPredictedFiles(files),
+			recordActualFilesModified: (files) => this.metricsTracker.recordActualFilesModified(files),
 		};
 	}
 
@@ -1778,6 +1782,9 @@ export class TaskWorker {
 		// Save debug info and metrics
 		this.saveFailedTaskDebug(task, taskId);
 		this.metricsTracker.recordAttempts(this.attemptRecords);
+		// Record effectiveness tracking before completing
+		this.metricsTracker.recordInjectedLearnings(this.injectedLearningIds);
+		this.metricsTracker.recordActualFilesModified(this.getModifiedFiles());
 		this.metricsTracker.completeTask(false);
 		this.cleanupDirtyState();
 

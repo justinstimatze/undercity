@@ -18,6 +18,8 @@ import {
 	recordResearchConclusion,
 	resolveDecision,
 } from "./decision-tracker.js";
+import { analyzeEffectiveness, type EffectivenessReport } from "./effectiveness-analysis.js";
+import { getLastGrindSummary } from "./grind-events.js";
 import { findRelevantLearnings } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
 import { constrainResearchResult } from "./pm-schemas.js";
@@ -577,6 +579,76 @@ function isTaskActionable(objective: string): boolean {
 }
 
 /**
+ * Build system health context for PM self-awareness
+ * Allows PM to propose tasks that fix systemic issues
+ */
+function buildSystemHealthContext(
+	grindSummary: ReturnType<typeof getLastGrindSummary>,
+	effectivenessReport: EffectivenessReport,
+): string {
+	const parts: string[] = [];
+
+	// Last grind session stats
+	if (grindSummary) {
+		const total = grindSummary.ok + grindSummary.fail;
+		const successRate = total > 0 ? Math.round((grindSummary.ok / total) * 100) : 0;
+
+		parts.push(`LAST GRIND SESSION:`);
+		parts.push(`  Success rate: ${successRate}% (${grindSummary.ok}/${total})`);
+
+		// Failure breakdown - only show categories with failures
+		const failureCategories = Object.entries(grindSummary.failureBreakdown)
+			.filter(([, count]) => count > 0)
+			.sort(([, a], [, b]) => b - a);
+
+		if (failureCategories.length > 0) {
+			parts.push(`  Top failure reasons:`);
+			for (const [reason, count] of failureCategories.slice(0, 3)) {
+				parts.push(`    - ${reason}: ${count}`);
+			}
+		}
+
+		if (grindSummary.escalations.total > 0) {
+			parts.push(
+				`  Escalations: ${grindSummary.escalations.total} (${grindSummary.escalations.tasksWithEscalation} tasks)`,
+			);
+		}
+	}
+
+	// Learning system effectiveness
+	if (effectivenessReport.totalTasksAnalyzed > 0) {
+		const ki = effectivenessReport.knowledgeInjection;
+
+		parts.push(`\nLEARNING SYSTEM HEALTH:`);
+
+		if (ki.tasksWithKnowledge === 0 && ki.tasksWithoutKnowledge > 0) {
+			parts.push(`  WARNING: Knowledge injection not working (0/${ki.tasksWithoutKnowledge} tasks used knowledge)`);
+		} else if (ki.tasksWithKnowledge > 0) {
+			parts.push(`  Knowledge injection: ${ki.tasksWithKnowledge} tasks`);
+			parts.push(`  Success rate delta: ${ki.successRateDelta > 0 ? "+" : ""}${Math.round(ki.successRateDelta)}%`);
+		}
+
+		const fp = effectivenessReport.filePrediction;
+		if (fp.tasksWithPredictions > 0) {
+			parts.push(`  File prediction accuracy: ${Math.round(fp.avgPrecision * 100)}% precision`);
+		}
+	}
+
+	// Include recommendations from effectiveness analysis
+	if (effectivenessReport.recommendations.length > 0) {
+		const nonGenericRecs = effectivenessReport.recommendations.filter((r) => !r.includes("look healthy"));
+		if (nonGenericRecs.length > 0) {
+			parts.push(`\nSYSTEM RECOMMENDATIONS:`);
+			for (const rec of nonGenericRecs.slice(0, 3)) {
+				parts.push(`  - ${rec}`);
+			}
+		}
+	}
+
+	return parts.length > 0 ? parts.join("\n") : "";
+}
+
+/**
  * Analyze codebase and generate task proposals for improvements
  *
  * Uses knowledge base, patterns, and codebase analysis to identify
@@ -617,6 +689,11 @@ export async function pmPropose(
 		.map((t) => t.objective)
 		.join("\n");
 
+	// Gather system health context for self-aware task generation
+	const grindSummary = getLastGrindSummary();
+	const effectivenessReport = analyzeEffectiveness(stateDir);
+	const systemHealthContext = buildSystemHealthContext(grindSummary, effectivenessReport);
+
 	const focusPrompt = focus ? `\nFOCUS AREA: ${focus}` : "";
 
 	const prompt = `You are a product manager analyzing a codebase for improvement opportunities.${focusPrompt}
@@ -633,11 +710,13 @@ ${pendingTasks || "No pending tasks"}
 RISKY AREAS (from patterns):
 ${riskyAreas || "No risky areas identified"}
 
+${systemHealthContext ? `SYSTEM HEALTH (self-analysis):\n${systemHealthContext}\n` : ""}
 YOUR TASK:
 1. Identify gaps, technical debt, or missing features
 2. Consider what would make this codebase better
 3. Propose specific, actionable tasks
 4. Avoid duplicating pending or recently completed tasks
+5. If system health shows issues (low success rate, broken learning systems), prioritize fixing those
 
 CRITICAL REQUIREMENTS FOR TASK DESCRIPTIONS:
 Tasks MUST include concrete deliverables. Vague tasks waste tokens and fail.

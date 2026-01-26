@@ -72,6 +72,19 @@ export class MetricsTracker {
 	private startingModel?: "haiku" | "sonnet" | "opus";
 	/** Whether the task was escalated */
 	private wasEscalated = false;
+	// ============== Effectiveness Tracking Fields ==============
+	/** Learning IDs that were injected into the task prompt */
+	private injectedLearningIds: string[] = [];
+	/** Files predicted to be modified based on task-file patterns */
+	private predictedFiles: string[] = [];
+	/** Files actually modified during task execution */
+	private actualFilesModified: string[] = [];
+	/** Review statistics */
+	private reviewStats?: {
+		issuesFound: number;
+		reviewTokens: number;
+		reviewPasses: number;
+	};
 
 	constructor(rateLimitTracker?: RateLimitTracker) {
 		this.rateLimitTracker = rateLimitTracker || new RateLimitTracker();
@@ -94,6 +107,10 @@ export class MetricsTracker {
 		this.complexityLevel = undefined;
 		this.startingModel = undefined;
 		this.wasEscalated = false;
+		this.injectedLearningIds = [];
+		this.predictedFiles = [];
+		this.actualFilesModified = [];
+		this.reviewStats = undefined;
 	}
 
 	/**
@@ -145,6 +162,36 @@ export class MetricsTracker {
 		if (attempts.length > 0) {
 			this.finalModel = attempts[attempts.length - 1].model;
 		}
+	}
+
+	// ============== Effectiveness Tracking Methods ==============
+
+	/**
+	 * Record learning IDs that were injected into the task prompt
+	 */
+	recordInjectedLearnings(learningIds: string[]): void {
+		this.injectedLearningIds = [...learningIds];
+	}
+
+	/**
+	 * Record files predicted to be modified based on task-file patterns
+	 */
+	recordPredictedFiles(files: string[]): void {
+		this.predictedFiles = [...files];
+	}
+
+	/**
+	 * Record files actually modified during task execution
+	 */
+	recordActualFilesModified(files: string[]): void {
+		this.actualFilesModified = [...files];
+	}
+
+	/**
+	 * Record review statistics
+	 */
+	recordReviewStats(issuesFound: number, reviewTokens: number, reviewPasses: number): void {
+		this.reviewStats = { issuesFound, reviewTokens, reviewPasses };
 	}
 
 	/**
@@ -263,6 +310,11 @@ export class MetricsTracker {
 			complexityLevel: this.complexityLevel,
 			wasEscalated: this.wasEscalated,
 			startingModel: this.startingModel,
+			// Effectiveness tracking
+			injectedLearningIds: this.injectedLearningIds.length > 0 ? [...this.injectedLearningIds] : undefined,
+			predictedFiles: this.predictedFiles.length > 0 ? [...this.predictedFiles] : undefined,
+			actualFilesModified: this.actualFilesModified.length > 0 ? [...this.actualFilesModified] : undefined,
+			reviewStats: this.reviewStats,
 		};
 
 		// Log metrics to file asynchronously, without blocking

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-26T01:37:08.080Z",
+  "generatedAt": "2026-01-26T02:10:58.310Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -18,17 +18,17 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 107,
+          "line": 109,
           "context": "map"
         },
         {
           "file": "automated-pm.ts",
-          "line": 593,
+          "line": 665,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 910,
+          "line": 989,
           "context": "info"
         },
         {
@@ -131,12 +131,12 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 120,
+          "line": 122,
           "context": "if"
         },
         {
           "file": "automated-pm.ts",
-          "line": 911,
+          "line": 990,
           "context": "info"
         },
         {
@@ -188,7 +188,7 @@
         },
         {
           "file": "worker/verification-handler.ts",
-          "line": 293,
+          "line": 303,
           "context": "if"
         },
         {
@@ -236,7 +236,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1530,
+          "line": 1534,
           "context": "if"
         }
       ]
@@ -247,7 +247,7 @@
       "calledFrom": [
         {
           "file": "worker/verification-handler.ts",
-          "line": 352,
+          "line": 362,
           "context": "require"
         }
       ]
@@ -258,7 +258,7 @@
       "calledFrom": [
         {
           "file": "worker/verification-handler.ts",
-          "line": 165,
+          "line": 171,
           "context": "if"
         }
       ]
@@ -349,7 +349,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 275,
+          "line": 277,
           "context": "if"
         },
         {
@@ -402,12 +402,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 269,
+          "line": 271,
           "context": "for"
         },
         {
           "file": "automated-pm.ts",
-          "line": 318,
+          "line": 320,
           "context": "now"
         }
       ]
@@ -423,7 +423,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 820,
+          "line": 899,
           "context": "info"
         },
         {
@@ -439,12 +439,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 809,
+          "line": 888,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 826,
+          "line": 905,
           "context": "info"
         },
         {
@@ -476,7 +476,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1236,
+          "line": 1240,
           "context": "info"
         }
       ]
