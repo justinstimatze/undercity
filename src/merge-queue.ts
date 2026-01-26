@@ -29,7 +29,6 @@ import {
 	getDefaultBranch,
 	type MergeStrategy,
 	mergeWithFallback,
-	pushToOrigin,
 	rebase,
 	runTests,
 } from "./git.js";
@@ -45,6 +44,27 @@ export const DEFAULT_RETRY_CONFIG: MergeQueueRetryConfig = {
 	baseDelayMs: 1000,
 	maxDelayMs: 30000,
 };
+
+/**
+ * Sleep utility for retry delays
+ */
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Wrap a promise with a timeout
+ * @param promise - The promise to wrap
+ * @param timeoutMs - Timeout in milliseconds
+ * @param errorMessage - Error message if timeout occurs
+ * @returns Promise that rejects on timeout
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+	return Promise.race([
+		promise,
+		new Promise<T>((_, reject) => setTimeout(() => reject(new Error(errorMessage)), timeoutMs)),
+	]);
+}
 
 /**
  * Auto-detect completed tasks based on commit message matching
@@ -163,7 +183,7 @@ RULES:
 OUTPUT THE RESOLVED FILE CONTENT:`;
 
 /**
- * Use AI to resolve a single conflict
+ * Use AI to resolve a single conflict with timeout protection
  */
 async function resolveConflictWithAI(
 	_worktreePath: string,
@@ -171,21 +191,32 @@ async function resolveConflictWithAI(
 	content: string,
 ): Promise<{ success: boolean; resolved?: string; error?: string }> {
 	const prompt = CONFLICT_RESOLUTION_PROMPT.replace("{filePath}", filePath).replace("{content}", content);
+	const AI_RESOLUTION_TIMEOUT_MS = 60000; // 60 seconds
 
 	try {
-		let result = "";
-		for await (const message of query({
-			prompt,
-			options: {
-				model: MODEL_NAMES.sonnet,
-				maxTurns: 1,
-				permissionMode: "bypassPermissions",
-			},
-		})) {
-			if (message.type === "result" && message.subtype === "success") {
-				result = message.result;
+		// Wrap AI resolution with timeout to prevent hangs on massive files
+		const resolutionPromise = (async () => {
+			let result = "";
+			for await (const message of query({
+				prompt,
+				options: {
+					model: MODEL_NAMES.sonnet,
+					maxTurns: 1,
+					permissionMode: "bypassPermissions",
+				},
+			})) {
+				if (message.type === "result" && message.subtype === "success") {
+					result = message.result;
+				}
 			}
-		}
+			return result;
+		})();
+
+		const result = await withTimeout(
+			resolutionPromise,
+			AI_RESOLUTION_TIMEOUT_MS,
+			`AI resolution timed out after ${AI_RESOLUTION_TIMEOUT_MS}ms for ${filePath}`,
+		);
 
 		if (!result) {
 			return { success: false, error: "Empty response from model" };
@@ -547,9 +578,30 @@ export class MergeQueue {
 
 	/**
 	 * Rebase a branch in its worktree, with AI conflict resolution
+	 * @param recursionDepth - Current recursion depth for multi-commit rebases
 	 */
-	private async rebaseInWorktree(branch: string, worktreePath: string): Promise<{ success: boolean; error?: string }> {
-		gitLogger.debug({ branch, worktreePath, onto: this.mainBranch }, "Rebasing in worktree");
+	private async rebaseInWorktree(
+		branch: string,
+		worktreePath: string,
+		recursionDepth = 0,
+	): Promise<{ success: boolean; error?: string }> {
+		const MAX_RECURSION_DEPTH = 10;
+
+		// Prevent infinite recursion on multi-commit rebases with recurring conflicts
+		if (recursionDepth >= MAX_RECURSION_DEPTH) {
+			try {
+				execGit(["rebase", "--abort"], worktreePath);
+			} catch {
+				// Ignore abort errors
+			}
+			return {
+				success: false,
+				error: `Rebase recursion limit exceeded (${MAX_RECURSION_DEPTH} attempts) - too many conflicting commits`,
+			};
+		}
+
+		gitLogger.debug({ branch, worktreePath, onto: this.mainBranch, recursionDepth }, "Rebasing in worktree");
+
 		try {
 			execGit(["rebase", this.mainBranch], worktreePath);
 			return { success: true };
@@ -592,24 +644,9 @@ export class MergeQueue {
 				return { success: true };
 			} catch (_continueError) {
 				// Continuing failed - there may be more conflicts in the next commit
-				// Try resolving again (recursive)
-				return this.rebaseInWorktree(branch, worktreePath);
+				// Try resolving again (recursive with incremented depth)
+				return this.rebaseInWorktree(branch, worktreePath, recursionDepth + 1);
 			}
-		}
-	}
-
-	/**
-	 * Push merge to origin and log result
-	 */
-	private pushMergeToOrigin(): void {
-		try {
-			pushToOrigin(this.mainBranch);
-			gitLogger.info({ branch: this.mainBranch }, "Pushed merge to origin");
-		} catch (pushError) {
-			gitLogger.error(
-				{ branch: this.mainBranch, error: String(pushError) },
-				"Failed to push to origin - work is on local main, push manually",
-			);
 		}
 	}
 
@@ -658,16 +695,44 @@ export class MergeQueue {
 			return this.handleMergeFailure(item, rebaseResult.error!);
 		}
 
-		// Step 2: Run tests in the worktree
+		// Step 2: Run tests in the worktree (with retry for flaky tests)
 		item.status = "testing";
 		gitLogger.debug({ branch: item.branch, worktreePath }, "Running tests in worktree");
-		const testResult = await runTests(worktreePath || cwd);
+
+		const MAX_TEST_RETRIES = 2;
+		let testAttempt = 0;
+		let testResult: { success: boolean; output: string };
+
+		do {
+			testResult = await runTests(worktreePath || cwd);
+			if (!testResult.success && testAttempt < MAX_TEST_RETRIES) {
+				testAttempt++;
+				gitLogger.warn(
+					{ branch: item.branch, attempt: testAttempt, maxRetries: MAX_TEST_RETRIES },
+					"Tests failed, retrying after delay...",
+				);
+				await sleep(2000); // 2 second delay between test retries
+			} else {
+				break;
+			}
+		} while (testAttempt <= MAX_TEST_RETRIES);
+
 		if (!testResult.success) {
 			item.status = "test_failed";
 			item.error = testResult.output;
 			item.completedAt = new Date();
-			gitLogger.warn({ branch: item.branch }, "Branch preserved for manual recovery - tests failed");
+			gitLogger.error(
+				{ branch: item.branch, retries: testAttempt },
+				"Tests failed after retries - branch preserved for manual recovery",
+			);
 			return item;
+		}
+
+		if (testAttempt > 0) {
+			gitLogger.info(
+				{ branch: item.branch, successOnAttempt: testAttempt + 1 },
+				"Tests passed after retry - may indicate flaky tests",
+			);
 		}
 
 		// Step 3: Merge into main
@@ -689,11 +754,12 @@ export class MergeQueue {
 				);
 			}
 
-			// Step 4: Push and cleanup
-			item.status = "pushing";
-			this.pushMergeToOrigin();
+			// Step 4: Cleanup
+			// NOTE: We do NOT push to origin automatically - user must push manually
+			// This follows the critical git rule: "NEVER push to remote without explicit user request"
 			this.cleanupAfterMerge(item.branch, worktreePath);
 			await this.completeItem(item);
+			gitLogger.info({ branch: item.branch }, "Merge complete - changes are on local main. Push manually when ready.");
 			return item;
 		} catch (error) {
 			return this.handleMergeFailure(item, error instanceof Error ? error.message : String(error));
