@@ -51,6 +51,18 @@ async function logMetricsToFile(metrics: TaskMetrics): Promise<void> {
 
 /**
  * Tracks efficiency metrics for tasks and sessions
+ *
+ * Provides comprehensive tracking of task execution including token usage,
+ * duration, agent spawns, model escalations, and effectiveness metrics.
+ *
+ * @example
+ * ```typescript
+ * const tracker = new MetricsTracker();
+ * tracker.startTask("task-123", "Fix login bug", "session-456", "sonnet");
+ * tracker.recordTokenUsage(sdkMessage, "sonnet");
+ * tracker.recordEscalation("sonnet", "opus");
+ * const metrics = tracker.completeTask(true);
+ * ```
  */
 export class MetricsTracker {
 	private taskStartTime?: Date;
@@ -636,6 +648,19 @@ export class MetricsTracker {
 
 /**
  * Load all task metrics from the JSONL file
+ *
+ * Reads and parses task metrics from the `.undercity/metrics.jsonl` file.
+ * Each line in the file represents a single task execution with complete metrics.
+ * Date strings are automatically converted back to Date objects.
+ *
+ * @returns Promise resolving to array of TaskMetrics objects, or empty array if file doesn't exist
+ *
+ * @example
+ * ```typescript
+ * const metrics = await loadTaskMetrics();
+ * console.log(`Loaded ${metrics.length} task records`);
+ * const successRate = metrics.filter(m => m.success).length / metrics.length;
+ * ```
  */
 export async function loadTaskMetrics(): Promise<TaskMetrics[]> {
 	try {
@@ -681,6 +706,21 @@ export async function loadTaskMetrics(): Promise<TaskMetrics[]> {
 
 /**
  * Generate efficiency analytics from stored metrics
+ *
+ * Computes comprehensive analytics including success rates, average token usage,
+ * duration statistics, agent efficiency metrics, and complexity-level breakdowns
+ * with escalation tracking. Uses all metrics stored in the JSONL file.
+ *
+ * @returns Promise resolving to EfficiencyAnalytics object containing all computed metrics
+ *
+ * @example
+ * ```typescript
+ * const analytics = await generateEfficiencyAnalytics();
+ * console.log(`Success rate: ${analytics.successRate}%`);
+ * console.log(`Avg tokens per completion: ${analytics.avgTokensPerCompletion}`);
+ * console.log(`Most efficient agent: ${analytics.mostEfficientAgentType}`);
+ * console.log(`Complex tasks success rate: ${analytics.successRateByComplexity.complex.rate}%`);
+ * ```
  */
 export async function generateEfficiencyAnalytics(): Promise<EfficiencyAnalytics> {
 	const taskMetrics = await loadTaskMetrics();
@@ -701,7 +741,22 @@ export interface MetricsSummary {
 
 /**
  * Get a summary of task metrics
- * Replaces MetricsCollector.getMetricsSummary()
+ *
+ * Provides a high-level overview of task execution including total tasks,
+ * success rate, average token usage, model distribution, average duration,
+ * and escalation rate. Replaces MetricsCollector.getMetricsSummary().
+ *
+ * @returns Promise resolving to MetricsSummary object with aggregated metrics
+ *
+ * @example
+ * ```typescript
+ * const summary = await getMetricsSummary();
+ * console.log(`Total tasks: ${summary.totalTasks}`);
+ * console.log(`Success rate: ${(summary.successRate * 100).toFixed(1)}%`);
+ * console.log(`Avg tokens: ${summary.avgTokens.toFixed(0)}`);
+ * console.log(`Escalation rate: ${(summary.escalationRate * 100).toFixed(1)}%`);
+ * console.log(`Model distribution:`, summary.modelDistribution);
+ * ```
  */
 export async function getMetricsSummary(): Promise<MetricsSummary> {
 	const metrics = await loadTaskMetrics();
@@ -751,7 +806,21 @@ export async function getMetricsSummary(): Promise<MetricsSummary> {
 
 /**
  * Get escalation analysis from metrics
- * Replaces EnhancedMetricsQuery.getEscalationAnalysis()
+ *
+ * Analyzes model escalation patterns including total escalations, escalation paths
+ * (e.g., sonnet → opus), success rates after escalation, and common reasons that
+ * triggered escalations. Replaces EnhancedMetricsQuery.getEscalationAnalysis().
+ *
+ * @returns Promise resolving to object containing escalation analysis data
+ *
+ * @example
+ * ```typescript
+ * const analysis = await getEscalationAnalysis();
+ * console.log(`Total escalations: ${analysis.totalEscalations}`);
+ * console.log(`Escalation success rate: ${(analysis.escalationSuccessRate * 100).toFixed(1)}%`);
+ * console.log(`Escalation paths:`, analysis.escalationsByModel);
+ * console.log(`Top reasons:`, analysis.commonEscalationReasons.slice(0, 3));
+ * ```
  */
 export async function getEscalationAnalysis(): Promise<{
 	totalEscalations: number;
@@ -806,7 +875,23 @@ export async function getEscalationAnalysis(): Promise<{
 
 /**
  * Get token usage trends over time
- * Replaces EnhancedMetricsQuery.getTokenUsageTrends()
+ *
+ * Analyzes token usage patterns over a specified time period, breaking down
+ * usage by model (haiku, sonnet, opus) and by day. Provides insights into
+ * token consumption trends and daily task volume. Replaces EnhancedMetricsQuery.getTokenUsageTrends().
+ *
+ * @param days - Number of days to look back (default: 30)
+ * @returns Promise resolving to object containing token usage trends and daily breakdowns
+ *
+ * @example
+ * ```typescript
+ * const trends = await getTokenUsageTrends(7); // Last 7 days
+ * console.log(`Total tokens (7 days): ${trends.totalTokens}`);
+ * console.log(`Sonnet tokens: ${trends.tokensByModel.sonnet}`);
+ * console.log(`Opus tokens: ${trends.tokensByModel.opus}`);
+ * console.log(`Daily breakdown:`, trends.dailyUsage);
+ * // Example dailyUsage: [{ date: "2024-01-15", tokens: 45000, tasks: 12 }, ...]
+ * ```
  */
 export async function getTokenUsageTrends(days = 30): Promise<{
 	totalTokens: number;
