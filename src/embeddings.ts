@@ -391,6 +391,12 @@ function deserializeVector(buffer: Buffer): SparseVector {
 
 /**
  * Calculate TF-IDF vector for content
+ *
+ * @param content - Text content to vectorize
+ * @param vocab - Vocabulary map for term lookups
+ * @param docCount - Total document count for IDF calculation
+ * @param stateDir - State directory for database operations
+ * @returns Sparse vector representation. On error, returns an empty vector with zero magnitude.
  */
 export function calculateVector(
 	content: string,
@@ -398,30 +404,42 @@ export function calculateVector(
 	docCount: number,
 	stateDir: string,
 ): SparseVector {
-	const tokens = tokenize(content);
-	const tf = termFrequencies(tokens);
+	try {
+		const tokens = tokenize(content);
+		const tf = termFrequencies(tokens);
 
-	const indices: number[] = [];
-	const values: number[] = [];
-	let magnitude = 0;
+		const indices: number[] = [];
+		const values: number[] = [];
+		let magnitude = 0;
 
-	for (const [term, tfValue] of tf) {
-		const entry = getOrCreateTerm(term, vocab, stateDir);
-		// Use smoothed IDF that works well with small corpora
-		// Formula: log(1 + (docCount + 1) / (docFreq + 1))
-		// This ensures IDF is always positive and scales reasonably
-		const idf = Math.log(1 + (docCount + 1) / (entry.docFreq + 1));
-		const tfidf = tfValue * idf;
+		for (const [term, tfValue] of tf) {
+			const entry = getOrCreateTerm(term, vocab, stateDir);
+			// Use smoothed IDF that works well with small corpora
+			// Formula: log(1 + (docCount + 1) / (docFreq + 1))
+			// This ensures IDF is always positive and scales reasonably
+			const idf = Math.log(1 + (docCount + 1) / (entry.docFreq + 1));
+			const tfidf = tfValue * idf;
 
-		// Always include terms (no zero-filtering with smoothed IDF)
-		indices.push(entry.termId);
-		values.push(tfidf);
-		magnitude += tfidf * tfidf;
+			// Always include terms (no zero-filtering with smoothed IDF)
+			indices.push(entry.termId);
+			values.push(tfidf);
+			magnitude += tfidf * tfidf;
+		}
+
+		magnitude = Math.sqrt(magnitude);
+
+		return { indices, values, magnitude };
+	} catch (error) {
+		logger.warn(
+			{
+				error: String(error),
+				contentLength: content?.length ?? 0,
+				contentPreview: content?.substring(0, 100) ?? "",
+			},
+			"Failed to calculate TF-IDF vector, returning empty vector",
+		);
+		return { indices: [], values: [], magnitude: 0 };
 	}
-
-	magnitude = Math.sqrt(magnitude);
-
-	return { indices, values, magnitude };
 }
 
 /**
