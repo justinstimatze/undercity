@@ -175,6 +175,10 @@ export interface MergeQueueItem {
 	isRetry?: boolean;
 	/** Files modified by this branch (for pre-merge conflict detection) */
 	modifiedFiles?: string[];
+	/** Duration of merge operation in milliseconds (from queue entry to completion) */
+	duration?: number;
+	/** Timestamp when merge processing started */
+	startedAt?: Date;
 }
 
 /**

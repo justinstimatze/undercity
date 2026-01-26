@@ -640,7 +640,15 @@ export class MergeQueue {
 			// AI resolved all conflicts - continue the rebase
 			try {
 				execGit(["rebase", "--continue"], worktreePath);
-				gitLogger.info({ branch, resolved: aiResult.resolved }, "Rebase continued after AI resolution");
+				gitLogger.info(
+					{
+						branch,
+						resolved: aiResult.resolved,
+						strategy: "ai_resolution",
+						conflictsResolved: aiResult.resolved.length,
+					},
+					"Rebase continued after AI resolution",
+				);
 				return { success: true };
 			} catch (_continueError) {
 				// Continuing failed - there may be more conflicts in the next commit
@@ -674,15 +682,35 @@ export class MergeQueue {
 	private async completeItem(item: MergeQueueItem): Promise<void> {
 		item.status = "complete";
 		item.completedAt = new Date();
+
+		// Calculate merge duration
+		if (item.startedAt) {
+			item.duration = item.completedAt.getTime() - item.startedAt.getTime();
+		}
+
 		await autoDetectCompletedTasks();
 		this.queue = this.queue.filter((i) => i !== item);
-		gitLogger.info({ branch: item.branch, stepId: item.stepId }, "Merge complete");
+
+		// Log merge completion with duration and strategy
+		gitLogger.info(
+			{
+				branch: item.branch,
+				stepId: item.stepId,
+				durationMs: item.duration,
+				strategyUsed: item.strategyUsed || "default",
+				queuePosition: item.queuedAt,
+			},
+			"Merge complete",
+		);
 	}
 
 	/**
 	 * Process a worktree branch safely without checkout conflicts
 	 */
 	private async processWorktreeBranch(item: MergeQueueItem, cwd: string): Promise<MergeQueueItem> {
+		// Mark start time for duration tracking
+		item.startedAt = new Date();
+
 		const worktreePath = this.getWorktreePath(item.branch);
 		if (!worktreePath) {
 			return this.handleMergeFailure(item, "Could not find worktree path for branch");
@@ -938,6 +966,9 @@ export class MergeQueue {
 	 * Process a non-worktree branch (legacy path)
 	 */
 	private async processLegacyBranch(item: MergeQueueItem, cwd: string): Promise<MergeQueueItem> {
+		// Mark start time for duration tracking
+		item.startedAt = new Date();
+
 		gitLogger.debug({ branch: item.branch }, "Checking out branch");
 		checkoutBranch(item.branch);
 
@@ -1041,7 +1072,45 @@ export class MergeQueue {
 			item = await this.processNext();
 		}
 
+		// Log aggregate statistics
+		this.logMergeStatistics(results);
+
 		return results;
+	}
+
+	/**
+	 * Log aggregate statistics for completed merges
+	 * @param results - Array of processed merge queue items
+	 */
+	private logMergeStatistics(results: MergeQueueItem[]): void {
+		const completed = results.filter((r) => r.status === "complete");
+		if (completed.length === 0) {
+			return;
+		}
+
+		// Calculate average duration
+		const durations = completed.map((r) => r.duration).filter((d): d is number => d !== undefined);
+		const avgDuration = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+
+		// Count strategies used
+		const strategies = completed.reduce(
+			(acc, item) => {
+				const strategy = item.strategyUsed || "default";
+				acc[strategy] = (acc[strategy] || 0) + 1;
+				return acc;
+			},
+			{} as Record<string, number>,
+		);
+
+		gitLogger.info(
+			{
+				totalMerges: completed.length,
+				avgDurationMs: Math.round(avgDuration),
+				strategyBreakdown: strategies,
+				failed: results.filter((r) => r.status === "conflict" || r.status === "test_failed").length,
+			},
+			"Merge queue processing complete - aggregate statistics",
+		);
 	}
 
 	/**
@@ -1106,7 +1175,44 @@ export class MergeQueue {
 			}
 		}
 
+		// Log retry statistics
+		this.logRetryStatistics(results);
+
 		return results;
+	}
+
+	/**
+	 * Log aggregate retry statistics
+	 * @param results - Array of retry attempt results
+	 */
+	private logRetryStatistics(results: MergeQueueItem[]): void {
+		if (results.length === 0) {
+			return;
+		}
+
+		const succeeded = results.filter((r) => r.status === "complete");
+		const failed = results.filter((r) => r.status === "conflict" || r.status === "test_failed");
+
+		// Count strategies used in successful retries
+		const strategies = succeeded.reduce(
+			(acc, item) => {
+				const strategy = item.strategyUsed || "default";
+				acc[strategy] = (acc[strategy] || 0) + 1;
+				return acc;
+			},
+			{} as Record<string, number>,
+		);
+
+		gitLogger.info(
+			{
+				totalRetries: results.length,
+				succeeded: succeeded.length,
+				failed: failed.length,
+				successRate: results.length > 0 ? Math.round((succeeded.length / results.length) * 100) : 0,
+				strategyBreakdown: strategies,
+			},
+			"Retry attempts complete - aggregate statistics",
+		);
 	}
 
 	/**
