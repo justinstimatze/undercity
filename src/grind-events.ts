@@ -393,6 +393,10 @@ export function getLastGrindSummary(): {
 		tasksWithEscalation: number;
 		byPath: Record<string, number>; // e.g., "sonnet→opus": 3
 	};
+	modelUsage: {
+		byModel: Record<string, number>; // e.g., { opus: 3, sonnet: 2 }
+		taskModels: Array<{ taskId: string; model: string }>; // actual model used per task
+	};
 } | null {
 	const events = readRecentEvents(500);
 	if (!events.length) return null;
@@ -456,6 +460,22 @@ export function getLastGrindSummary(): {
 
 	const totalTokens = completes.reduce((sum, c) => sum + c.tokens, 0) + failures.reduce((sum, f) => sum + f.tokens, 0);
 
+	// Track actual model usage (not just escalations)
+	const modelUsage = {
+		byModel: {} as Record<string, number>,
+		taskModels: [] as Array<{ taskId: string; model: string }>,
+	};
+
+	// Use task_complete events for final model used (after any escalations)
+	for (const c of completes) {
+		modelUsage.byModel[c.model] = (modelUsage.byModel[c.model] ?? 0) + 1;
+		modelUsage.taskModels.push({ taskId: c.task ?? "unknown", model: c.model });
+	}
+	for (const f of failures) {
+		modelUsage.byModel[f.model] = (modelUsage.byModel[f.model] ?? 0) + 1;
+		modelUsage.taskModels.push({ taskId: f.task ?? "unknown", model: f.model });
+	}
+
 	return {
 		batchId: start.batch,
 		startedAt: start.ts,
@@ -467,6 +487,7 @@ export function getLastGrindSummary(): {
 		tokens: totalTokens,
 		failureBreakdown,
 		escalations,
+		modelUsage,
 	};
 }
 

@@ -51,6 +51,7 @@ function generateRecommendations(
 	breakdown: Record<FailureReason, number>,
 	successRate: number,
 	escalationRate?: number,
+	modelUsage?: Record<string, number>,
 ): string[] {
 	const recommendations: string[] = [];
 
@@ -111,16 +112,26 @@ function generateRecommendations(
 		recommendations.push("Success rate is excellent (90%+). System is operating well.");
 	}
 
-	// Escalation rate insights
-	if (escalationRate !== undefined) {
+	// Escalation rate insights (only if there were escalations)
+	if (escalationRate !== undefined && escalationRate > 0) {
 		if (escalationRate > 30) {
 			recommendations.push(
 				`High escalation rate (${escalationRate.toFixed(1)}%). Consider:`,
 				"  - Improving task context/planning to help sonnet succeed",
 				"  - Breaking complex tasks into smaller pieces",
 			);
-		} else if (escalationRate === 0 && successRate >= 80) {
-			recommendations.push("No escalations needed - sonnet is handling tasks well.");
+		}
+	}
+
+	// Model usage insights
+	if (modelUsage) {
+		const opusCount = modelUsage.opus ?? 0;
+		const sonnetCount = modelUsage.sonnet ?? 0;
+		const total = opusCount + sonnetCount;
+		if (total > 0 && opusCount === total) {
+			recommendations.push("All tasks used opus (via learned routing or direct assignment).");
+		} else if (total > 0 && sonnetCount === total && escalationRate === 0) {
+			recommendations.push("All tasks completed with sonnet - no escalations needed.");
 		}
 	}
 
@@ -172,7 +183,12 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 	// Generate recommendations
 	// Calculate escalation rate
 	const escalationRate = total > 0 ? (summary.escalations.tasksWithEscalation / total) * 100 : 0;
-	const recommendations = generateRecommendations(summary.failureBreakdown, successRate, escalationRate);
+	const recommendations = generateRecommendations(
+		summary.failureBreakdown,
+		successRate,
+		escalationRate,
+		summary.modelUsage?.byModel,
+	);
 
 	// Get session metrics if available
 	const liveMetrics = loadLiveMetrics();
@@ -252,22 +268,27 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 		}
 	}
 
-	// Show escalation stats
-	if (report.escalations.total > 0 || report.escalations.tasksWithEscalation > 0) {
-		console.log(chalk.bold("\nModel Escalations"));
-		console.log(
-			`  Tasks requiring escalation: ${report.escalations.tasksWithEscalation} (${report.escalations.escalationRate})`,
-		);
-		console.log(`  Total escalations: ${report.escalations.total}`);
-		if (Object.keys(report.escalations.byPath).length > 0) {
-			console.log("  By path:");
-			for (const [path, count] of Object.entries(report.escalations.byPath).sort(([, a], [, b]) => b - a)) {
-				console.log(`    ${path}: ${count}`);
+	// Show model usage stats
+	if (summary.modelUsage && Object.keys(summary.modelUsage.byModel).length > 0) {
+		console.log(chalk.bold("\nModel Usage"));
+		for (const [model, count] of Object.entries(summary.modelUsage.byModel).sort(([, a], [, b]) => b - a)) {
+			console.log(`  ${model}: ${count} task(s)`);
+		}
+
+		// Show escalation stats only if there were escalations
+		if (report.escalations.total > 0) {
+			console.log(chalk.bold("\nModel Escalations"));
+			console.log(
+				`  Tasks requiring escalation: ${report.escalations.tasksWithEscalation} (${report.escalations.escalationRate})`,
+			);
+			console.log(`  Total escalations: ${report.escalations.total}`);
+			if (Object.keys(report.escalations.byPath).length > 0) {
+				console.log("  By path:");
+				for (const [path, count] of Object.entries(report.escalations.byPath).sort(([, a], [, b]) => b - a)) {
+					console.log(`    ${path}: ${count}`);
+				}
 			}
 		}
-	} else if (total > 0) {
-		console.log(chalk.bold("\nModel Escalations"));
-		console.log(chalk.green("  No escalations needed - sonnet handled all tasks"));
 	}
 
 	console.log(chalk.bold("\nRecommendations"));
@@ -279,14 +300,8 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 		}
 	}
 
-	if (report.sessionMetrics && report.sessionMetrics.totalQueries > 0) {
-		console.log(chalk.bold("\nSession Metrics"));
-		console.log(`  Total Queries: ${report.sessionMetrics.totalQueries}`);
-		console.log(`  Successful: ${report.sessionMetrics.successfulQueries}`);
-		if (report.sessionMetrics.rateLimited > 0) {
-			console.log(`  Rate Limited: ${chalk.yellow(report.sessionMetrics.rateLimited)}`);
-		}
-	}
+	// Note: Session metrics from live-metrics.json are cumulative across all sessions,
+	// not specific to this grind. Omitting to avoid confusion.
 
 	// Check for tasks needing human input
 	try {
