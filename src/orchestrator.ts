@@ -137,6 +137,7 @@ export interface ParallelTaskResult {
 	mergeError?: string;
 	modifiedFiles?: string[]; // Files modified by this task
 	decomposed?: boolean; // Task was decomposed into subtasks (not executed)
+	parentId?: string; // Parent task ID (for subtasks from decomposition)
 }
 
 export interface ParallelBatchResult {
@@ -217,6 +218,8 @@ export class Orchestrator {
 	private tickets: Map<string, TicketContent> = new Map();
 	/** Original task IDs from the board (task objective → board task ID) */
 	private originalTaskIds: Map<string, string> = new Map();
+	/** Parent task IDs for subtasks (task objective → parent task ID) */
+	private parentIds: Map<string, string> = new Map();
 	// Worker health monitoring (delegated to health-monitoring module)
 	private healthMonitorConfig: HealthMonitorConfig;
 	private healthMonitorState: HealthMonitorState = createHealthMonitorState();
@@ -724,6 +727,11 @@ export class Orchestrator {
 				if (t.id) {
 					this.originalTaskIds.set(t.objective, t.id);
 				}
+
+				// Store parent ID for subtasks (used for parent-aware merge ordering)
+				if (t.parentId) {
+					this.parentIds.set(t.objective, t.parentId);
+				}
 			}
 		}
 		return objectives;
@@ -1191,6 +1199,7 @@ export class Orchestrator {
 			branch,
 			merged: false,
 			modifiedFiles,
+			parentId: this.parentIds.get(task),
 		};
 	}
 
@@ -1217,6 +1226,7 @@ export class Orchestrator {
 			branch,
 			merged: false,
 			mergeError: String(err),
+			parentId: this.parentIds.get(task),
 		};
 	}
 
@@ -1255,7 +1265,11 @@ export class Orchestrator {
 	}
 
 	/**
-	 * Merge successful tasks serially
+	 * Merge successful tasks serially with parent-aware ordering.
+	 *
+	 * Groups subtasks by their parent task and merges siblings together before
+	 * moving to the next parent group. This reduces rebase conflicts between
+	 * related tasks that often touch the same files.
 	 */
 	private async mergeSuccessfulTasks(results: ParallelTaskResult[]): Promise<void> {
 		// Only merge tasks that completed execution (not decomposed)
@@ -1265,19 +1279,18 @@ export class Orchestrator {
 			return;
 		}
 
+		// Detect conflicts with sibling relationship instrumentation
 		const fileConflicts = detectFileConflicts(successfulTasks);
 		if (fileConflicts.size > 0) {
-			const conflictMap: Record<string, string[]> = {};
-			for (const [file, taskIds] of fileConflicts) {
-				conflictMap[file] = taskIds;
-			}
-			output.warning("Potential file conflicts detected", { conflicts: conflictMap });
-			output.info("Serial merge will handle these (later tasks may need rebase)");
+			this.logConflictInstrumentation(successfulTasks, fileConflicts);
 		}
 
-		output.section(`Merging ${successfulTasks.length} successful branches`);
+		// Parent-aware ordering: group subtasks by parent, merge siblings together
+		const orderedTasks = this.orderTasksByParent(successfulTasks);
 
-		for (const taskResult of successfulTasks) {
+		output.section(`Merging ${orderedTasks.length} successful branches`);
+
+		for (const taskResult of orderedTasks) {
 			try {
 				const { existsSync } = await import("node:fs");
 				const worktreeExists = existsSync(taskResult.worktreePath);
@@ -1299,6 +1312,98 @@ export class Orchestrator {
 
 		if (this.pushOnSuccess) {
 			await this.pushMergedCommits(successfulTasks);
+		}
+	}
+
+	/**
+	 * Order tasks by parent for optimal merge ordering.
+	 * Tasks with the same parentId are grouped together.
+	 * Orphan tasks (no parent) come first, then grouped by parent.
+	 */
+	private orderTasksByParent(tasks: ParallelTaskResult[]): ParallelTaskResult[] {
+		// Group by parentId
+		const orphans: ParallelTaskResult[] = [];
+		const byParent = new Map<string, ParallelTaskResult[]>();
+
+		for (const task of tasks) {
+			if (!task.parentId) {
+				orphans.push(task);
+			} else {
+				if (!byParent.has(task.parentId)) {
+					byParent.set(task.parentId, []);
+				}
+				byParent.get(task.parentId)!.push(task);
+			}
+		}
+
+		// Combine: orphans first, then each parent group
+		const ordered: ParallelTaskResult[] = [...orphans];
+		for (const siblings of byParent.values()) {
+			ordered.push(...siblings);
+		}
+
+		// Log if reordering occurred
+		if (byParent.size > 0) {
+			const groupInfo = Array.from(byParent.entries()).map(([parent, siblings]) => ({
+				parent,
+				count: siblings.length,
+			}));
+			sessionLogger.info({ orphans: orphans.length, groups: groupInfo }, "Parent-aware merge ordering applied");
+		}
+
+		return ordered;
+	}
+
+	/**
+	 * Log conflict instrumentation with sibling relationship tracking.
+	 * Tracks whether conflicting tasks share a parent (siblings).
+	 */
+	private logConflictInstrumentation(tasks: ParallelTaskResult[], fileConflicts: Map<string, string[]>): void {
+		const conflictMap: Record<string, string[]> = {};
+		let siblingConflicts = 0;
+		let nonSiblingConflicts = 0;
+
+		// Build task lookup for parent checking
+		const taskParentMap = new Map<string, string | undefined>();
+		for (const task of tasks) {
+			taskParentMap.set(task.taskId, task.parentId);
+		}
+
+		for (const [file, taskIds] of fileConflicts) {
+			conflictMap[file] = taskIds;
+
+			// Check if any pair of conflicting tasks are siblings (same parent)
+			for (let i = 0; i < taskIds.length; i++) {
+				for (let j = i + 1; j < taskIds.length; j++) {
+					const parent1 = taskParentMap.get(taskIds[i]);
+					const parent2 = taskParentMap.get(taskIds[j]);
+
+					if (parent1 && parent2 && parent1 === parent2) {
+						siblingConflicts++;
+					} else {
+						nonSiblingConflicts++;
+					}
+				}
+			}
+		}
+
+		output.warning("Potential file conflicts detected", { conflicts: conflictMap });
+		output.info("Serial merge will handle these (later tasks may need rebase)");
+
+		// Log instrumentation data for analysis
+		sessionLogger.info(
+			{
+				totalConflicts: fileConflicts.size,
+				siblingConflicts,
+				nonSiblingConflicts,
+				conflictFiles: Array.from(fileConflicts.keys()),
+			},
+			"Merge conflict instrumentation",
+		);
+
+		// If sibling conflicts dominate, suggest decomposition review
+		if (siblingConflicts > nonSiblingConflicts && siblingConflicts > 2) {
+			output.info("Most conflicts are between sibling tasks - consider reviewing task decomposition to reduce overlap");
 		}
 	}
 
