@@ -11,6 +11,7 @@ import {
 	isSensitiveFile,
 	isTaskObjectiveSafe,
 	validateTaskObjective,
+	validateTaskPaths,
 	validateTaskProposals,
 } from "../task-security.js";
 
@@ -379,6 +380,64 @@ describe("task-security", () => {
 			expect(categories.has("sensitive_file")).toBe(true);
 			expect(categories.has("capability")).toBe(true);
 			expect(categories.has("path_traversal")).toBe(true);
+		});
+	});
+
+	describe("validateTaskPaths", () => {
+		it("should reject tasks referencing src/types/ directory", () => {
+			const result = validateTaskPaths("Create interfaces in src/types/evaluation.ts");
+			expect(result.isValid).toBe(false);
+			expect(result.invalidFiles).toContain("src/types/evaluation.ts");
+		});
+
+		it("should reject tasks referencing src/components/ directory", () => {
+			const result = validateTaskPaths("Build component in src/components/Dashboard.tsx");
+			expect(result.isValid).toBe(false);
+			expect(result.invalidFiles).toContain("src/components/Dashboard.tsx");
+		});
+
+		it("should reject tasks referencing src/services/ directory", () => {
+			const result = validateTaskPaths("Create service in src/services/api.ts");
+			expect(result.isValid).toBe(false);
+			expect(result.invalidFiles).toContain("src/services/api.ts");
+		});
+
+		it("should accept tasks referencing valid directories", () => {
+			const result = validateTaskPaths("Add type guards to src/worker.ts");
+			expect(result.isValid).toBe(true);
+			expect(result.invalidFiles).toHaveLength(0);
+		});
+
+		it("should accept tasks referencing src/commands/ directory", () => {
+			const result = validateTaskPaths("Fix errors in src/commands/task.ts");
+			expect(result.isValid).toBe(true);
+		});
+
+		it("should accept tasks referencing src/__tests__/ directory", () => {
+			const result = validateTaskPaths("Add tests in src/__tests__/worker.test.ts");
+			expect(result.isValid).toBe(true);
+		});
+
+		it("should reject tasks referencing tests/ instead of src/__tests__/", () => {
+			const result = validateTaskPaths("Add tests in tests/unit/worker.test.ts");
+			expect(result.isValid).toBe(false);
+			expect(result.invalidDirectories).toContain("tests/unit/worker.test.ts");
+		});
+
+		it("should reject tasks referencing core/ directory", () => {
+			const result = validateTaskPaths("Create module in core/lib/utils.ts");
+			expect(result.isValid).toBe(false);
+		});
+
+		it("should handle multiple invalid paths", () => {
+			const result = validateTaskPaths("Create src/types/foo.ts and src/components/bar.tsx");
+			expect(result.isValid).toBe(false);
+			expect(result.invalidFiles.length).toBeGreaterThanOrEqual(2);
+		});
+
+		it("should accept tasks without file paths", () => {
+			const result = validateTaskPaths("Add logging to the orchestrator");
+			expect(result.isValid).toBe(true);
 		});
 	});
 });

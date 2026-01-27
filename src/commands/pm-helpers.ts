@@ -6,7 +6,7 @@
 
 import chalk from "chalk";
 import type { TaskProposal } from "../automated-pm.js";
-import { validateTaskObjective } from "../task-security.js";
+import { validateTaskObjective, validateTaskPaths } from "../task-security.js";
 
 // Re-export TaskProposal for backwards compatibility
 export type { TaskProposal };
@@ -100,13 +100,25 @@ export async function addProposalsToBoard(
 	}
 
 	for (const p of proposals) {
-		// Validate proposal objective before adding
+		// Validate proposal objective for security
 		const validation = validateTaskObjective(p.objective);
 		if (!validation.isSafe) {
 			rejected++;
 			if (isHuman) {
 				console.log(chalk.red(`  ✗ Rejected: ${p.objective.substring(0, 50)}...`));
 				console.log(chalk.dim(`    Reason: ${validation.rejectionReasons.join(", ")}`));
+			}
+			continue;
+		}
+
+		// Validate that referenced paths exist in the codebase
+		const pathValidation = validateTaskPaths(p.objective);
+		if (!pathValidation.isValid) {
+			rejected++;
+			if (isHuman) {
+				console.log(chalk.red(`  ✗ Rejected: ${p.objective.substring(0, 50)}...`));
+				const invalidPaths = [...pathValidation.invalidDirectories, ...pathValidation.invalidFiles];
+				console.log(chalk.dim(`    Reason: Invalid paths: ${invalidPaths.join(", ")}`));
 			}
 			continue;
 		}

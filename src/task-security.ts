@@ -14,6 +14,8 @@
  * | Path traversal | `../../etc/passwd` | Block |
  */
 
+import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { sessionLogger } from "./logger.js";
 import { getPackageWarnings } from "./package-validator.js";
 
@@ -520,6 +522,143 @@ export function filterSafeProposals<T extends { objective: string }>(proposals: 
  */
 export function isTaskObjectiveSafe(objective: string): boolean {
 	return validateTaskObjective(objective).isSafe;
+}
+
+/**
+ * Result of path validation
+ */
+export interface PathValidationResult {
+	/** Whether all paths are valid */
+	isValid: boolean;
+	/** Directories that don't exist */
+	invalidDirectories: string[];
+	/** Files that reference non-existent directories */
+	invalidFiles: string[];
+}
+
+/**
+ * Known valid directories in the undercity codebase
+ */
+const VALID_SRC_DIRS = new Set([
+	"src",
+	"src/__tests__",
+	"src/__tests__/utils",
+	"src/__tests__/integration",
+	"src/__tests__/orchestrator",
+	"src/commands",
+	"src/grind",
+	"src/orchestrator",
+	"src/worker",
+	"src/rag",
+]);
+
+/**
+ * Directories that definitely don't exist and indicate wrong project
+ */
+const INVALID_SRC_DIRS = new Set([
+	"src/types",
+	"src/components",
+	"src/services",
+	"src/hooks",
+	"src/utils",
+	"src/learning",
+	"src/algorithms",
+	"src/interfaces",
+	"src/scanners",
+	"src/routes",
+	"src/context",
+	"core",
+	"monitoring",
+	"analytics",
+	"tests", // undercity uses src/__tests__
+]);
+
+/**
+ * Validate that paths referenced in a task objective exist in the codebase
+ *
+ * @param objective - Task objective to validate
+ * @param cwd - Working directory (defaults to process.cwd())
+ * @returns Validation result with invalid paths
+ */
+export function validateTaskPaths(objective: string, cwd = process.cwd()): PathValidationResult {
+	const result: PathValidationResult = {
+		isValid: true,
+		invalidDirectories: [],
+		invalidFiles: [],
+	};
+
+	// Known file extensions
+	const FILE_EXTENSIONS = /\.(?:ts|tsx|js|jsx|json|md)$/;
+
+	// Extract paths that look like src/something/file.ts (allows dots in filenames like worker.test.ts)
+	const srcPathPattern = /\b(src\/[\w./-]+)\b/g;
+	const matches = objective.matchAll(srcPathPattern);
+
+	for (const match of matches) {
+		const path = match[1];
+		// It's a file if it ends with a known extension
+		const isFile = FILE_EXTENSIONS.test(path);
+		const dir = isFile ? dirname(path) : path;
+
+		// Check against known invalid directories first (fast path)
+		for (const invalidDir of INVALID_SRC_DIRS) {
+			if (dir === invalidDir || dir.startsWith(`${invalidDir}/`)) {
+				result.isValid = false;
+				if (path.includes(".")) {
+					result.invalidFiles.push(path);
+				} else {
+					result.invalidDirectories.push(dir);
+				}
+				break;
+			}
+		}
+
+		// If not in known invalid, check if directory exists
+		if (result.isValid || !result.invalidDirectories.includes(dir)) {
+			if (!VALID_SRC_DIRS.has(dir) && !existsSync(`${cwd}/${dir}`)) {
+				result.isValid = false;
+				if (path.includes(".")) {
+					result.invalidFiles.push(path);
+				} else {
+					result.invalidDirectories.push(dir);
+				}
+			}
+		}
+	}
+
+	// Also check for other invalid patterns (include dots to capture full file paths)
+	const otherInvalidPatterns = [
+		/\b(core\/[\w./-]+)/g,
+		/\b(monitoring\/[\w./-]+)/g,
+		/\b(analytics\/[\w./-]+)/g,
+		/\b(tests\/[\w./-]+)/g, // undercity uses src/__tests__, not tests/
+	];
+
+	for (const pattern of otherInvalidPatterns) {
+		const otherMatches = objective.matchAll(pattern);
+		for (const match of otherMatches) {
+			const path = match[1];
+			result.isValid = false;
+			result.invalidDirectories.push(path);
+		}
+	}
+
+	// Deduplicate
+	result.invalidDirectories = [...new Set(result.invalidDirectories)];
+	result.invalidFiles = [...new Set(result.invalidFiles)];
+
+	if (!result.isValid) {
+		sessionLogger.debug(
+			{
+				objective: objective.substring(0, 100),
+				invalidDirectories: result.invalidDirectories,
+				invalidFiles: result.invalidFiles,
+			},
+			"Task references invalid paths",
+		);
+	}
+
+	return result;
 }
 
 /**
