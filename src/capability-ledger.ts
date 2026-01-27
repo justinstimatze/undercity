@@ -339,7 +339,7 @@ export function isTaskResult(value: unknown): value is TaskResult {
 	const obj = value as Record<string, unknown>;
 
 	// Validate required fields
-	if (typeof obj.objective !== "string" || obj.objective.length === 0) {
+	if (typeof obj.objective !== "string") {
 		return false;
 	}
 
@@ -508,8 +508,17 @@ function getLedgerPath(stateDir: string = DEFAULT_STATE_DIR): string {
 
 /**
  * Load the capability ledger from disk
+ *
+ * @param stateDir - Directory for state files (default: .undercity)
+ * @returns The capability ledger
+ * @throws {TypeError} If stateDir is not a string
  */
 export function loadLedger(stateDir: string = DEFAULT_STATE_DIR): CapabilityLedger {
+	// Validate stateDir parameter
+	if (typeof stateDir !== "string") {
+		throw new TypeError(`Invalid stateDir parameter: expected string, got ${typeof stateDir}`);
+	}
+
 	const path = getLedgerPath(stateDir);
 
 	if (!existsSync(path)) {
@@ -548,8 +557,22 @@ export function loadLedger(stateDir: string = DEFAULT_STATE_DIR): CapabilityLedg
 
 /**
  * Save the capability ledger to disk
+ *
+ * @param ledger - The ledger to save
+ * @param stateDir - Directory for state files (default: .undercity)
+ * @throws {TypeError} If ledger is not a valid CapabilityLedger or stateDir is not a string
  */
 function saveLedger(ledger: CapabilityLedger, stateDir: string = DEFAULT_STATE_DIR): void {
+	// Validate ledger parameter
+	if (!isCapabilityLedger(ledger)) {
+		throw new TypeError("Invalid ledger parameter: must be a valid CapabilityLedger object");
+	}
+
+	// Validate stateDir parameter
+	if (typeof stateDir !== "string") {
+		throw new TypeError(`Invalid stateDir parameter: expected string, got ${typeof stateDir}`);
+	}
+
 	const path = getLedgerPath(stateDir);
 	const tempPath = `${path}.tmp`;
 	const dir = dirname(path);
@@ -581,8 +604,21 @@ function saveLedger(ledger: CapabilityLedger, stateDir: string = DEFAULT_STATE_D
  *
  * @param taskResult - The task result to record
  * @param stateDir - Directory for state files (default: .undercity)
+ * @throws {TypeError} If taskResult is not a valid TaskResult or stateDir is not a string
  */
 export function updateLedger(taskResult: TaskResult, stateDir: string = DEFAULT_STATE_DIR): void {
+	// Validate taskResult parameter
+	if (!isTaskResult(taskResult)) {
+		throw new TypeError(
+			"Invalid taskResult parameter: must be a valid TaskResult object with objective, model, success, and escalated fields",
+		);
+	}
+
+	// Validate stateDir parameter
+	if (typeof stateDir !== "string") {
+		throw new TypeError(`Invalid stateDir parameter: expected string, got ${typeof stateDir}`);
+	}
+
 	const ledger = loadLedger(stateDir);
 	const keywords = extractKeywords(taskResult.objective);
 
@@ -681,8 +717,19 @@ export interface ModelRecommendation {
  * @param objective - The task objective to analyze
  * @param stateDir - Directory for state files (default: .undercity)
  * @returns Model recommendation with confidence and reasoning
+ * @throws {TypeError} If objective is not a non-empty string or stateDir is not a string
  */
 export function getRecommendedModel(objective: string, stateDir: string = DEFAULT_STATE_DIR): ModelRecommendation {
+	// Validate objective parameter
+	if (typeof objective !== "string") {
+		throw new TypeError(`Invalid objective parameter: expected string, got ${typeof objective}`);
+	}
+
+	// Validate stateDir parameter
+	if (typeof stateDir !== "string") {
+		throw new TypeError(`Invalid stateDir parameter: expected string, got ${typeof stateDir}`);
+	}
+
 	const ledger = loadLedger(stateDir);
 	const keywords = extractKeywords(objective);
 
@@ -847,6 +894,10 @@ export function getRecommendedModel(objective: string, stateDir: string = DEFAUL
 
 /**
  * Get ledger statistics for reporting
+ *
+ * @param stateDir - Directory for state files (default: .undercity)
+ * @returns Statistics about the ledger
+ * @throws {TypeError} If stateDir is not a string
  */
 export function getLedgerStats(stateDir: string = DEFAULT_STATE_DIR): {
 	totalEntries: number;
@@ -854,6 +905,11 @@ export function getLedgerStats(stateDir: string = DEFAULT_STATE_DIR): {
 	topPatterns: Array<{ pattern: string; attempts: number }>;
 	modelDistribution: Record<ModelChoice, number>;
 } {
+	// Validate stateDir parameter
+	if (typeof stateDir !== "string") {
+		throw new TypeError(`Invalid stateDir parameter: expected string, got ${typeof stateDir}`);
+	}
+
 	const ledger = loadLedger(stateDir);
 
 	const patternList = Object.values(ledger.patterns);

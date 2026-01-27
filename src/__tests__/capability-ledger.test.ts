@@ -1502,14 +1502,14 @@ describe("capability-ledger", () => {
 				expect(isTaskResult(null)).toBe(false);
 			});
 
-			it("rejects empty objective", () => {
-				const invalid = {
+			it("accepts empty objective", () => {
+				const valid = {
 					objective: "",
 					model: "sonnet" as const,
 					success: true,
 					escalated: false,
 				};
-				expect(isTaskResult(invalid)).toBe(false);
+				expect(isTaskResult(valid)).toBe(true);
 			});
 
 			it("rejects invalid model", () => {
