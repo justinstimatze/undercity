@@ -53,7 +53,6 @@ export interface UndercityRc {
 	local?: boolean;
 	review?: boolean;
 	multiLens?: boolean;
-	supervised?: boolean;
 
 	// Grind options
 	parallel?: number;
@@ -96,7 +95,6 @@ const DEFAULT_CONFIG: Required<UndercityRc> = {
 	local: true,
 	review: false,
 	multiLens: false,
-	supervised: false,
 	parallel: 1,
 	push: false,
 	maxAttempts: 7,
@@ -157,7 +155,6 @@ function validateConfig(raw: unknown, filePath: string): UndercityRc | null {
 		"local",
 		"review",
 		"multiLens",
-		"supervised",
 		"autoApprove",
 		"push",
 		"auditBash",

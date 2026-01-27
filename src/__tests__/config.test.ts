@@ -77,7 +77,6 @@ describe("config.ts", () => {
 			expect(config.local).toBe(true);
 			expect(config.review).toBe(false);
 			expect(config.multiLens).toBe(false);
-			expect(config.supervised).toBe(false);
 			expect(config.parallel).toBe(1);
 			expect(config.push).toBe(false);
 			expect(config.maxAttempts).toBe(7);
@@ -240,7 +239,6 @@ describe("config.ts", () => {
 				local: true,
 				review: false,
 				multiLens: true,
-				supervised: false,
 				push: true,
 			};
 			mockFiles.set(`${mockCwd}/.undercityrc`, JSON.stringify(config));
@@ -490,7 +488,6 @@ describe("config.ts", () => {
 			expect(merged.local).toBeDefined();
 			expect(merged.review).toBeDefined();
 			expect(merged.multiLens).toBeDefined();
-			expect(merged.supervised).toBeDefined();
 			expect(merged.parallel).toBeDefined();
 			expect(merged.push).toBeDefined();
 			expect(merged.maxAttempts).toBeDefined();
@@ -525,7 +522,6 @@ describe("config.ts", () => {
 			expect(defaults.local).toBe(true);
 			expect(defaults.review).toBe(false);
 			expect(defaults.multiLens).toBe(false);
-			expect(defaults.supervised).toBe(false);
 			expect(defaults.parallel).toBe(1);
 			expect(defaults.push).toBe(false);
 			expect(defaults.maxAttempts).toBe(7);

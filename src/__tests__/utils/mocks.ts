@@ -365,7 +365,6 @@ export function createMockConfig(overrides: Partial<UndercityRc> = {}): Undercit
 		local: true,
 		review: false,
 		multiLens: false,
-		supervised: false,
 		parallel: 1,
 		push: false,
 		maxAttempts: 7,

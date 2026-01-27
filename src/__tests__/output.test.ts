@@ -28,7 +28,6 @@ import {
 	workerAttempt,
 	workerEscalation,
 	workerPhase,
-	workerReview,
 	workerVerification,
 } from "../output.js";
 
@@ -312,26 +311,6 @@ describe("output", () => {
 			workerEscalation("task-123", "sonnet", "opus");
 			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
 			expect(output.message).toBe("Escalating: sonnet → opus");
-		});
-
-		it("should output worker review passed", () => {
-			workerReview("task-123", "fast", 1, 2, "passed");
-			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
-			expect(output.type).toBe("worker_review");
-			expect(output.message).toContain("Review 1/2");
-			expect(output.data?.result).toBe("passed");
-		});
-
-		it("should output worker review fixing", () => {
-			workerReview("task-123", "slow", 2, 3, "fixing");
-			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
-			expect(output.message).toContain("fixing issues");
-		});
-
-		it("should output worker review escalating", () => {
-			workerReview("task-123", "opus", 3, 3, "escalating");
-			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
-			expect(output.message).toContain("escalating");
 		});
 	});
 

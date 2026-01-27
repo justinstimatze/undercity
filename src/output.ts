@@ -357,30 +357,6 @@ export function workerEscalation(taskId: string, fromModel: string, toModel: str
 		data: { taskId, fromModel, toModel, reason },
 	});
 }
-
-/**
- * Output worker review event
- */
-export function workerReview(
-	taskId: string,
-	tier: string,
-	pass: number,
-	maxPasses: number,
-	result: "passed" | "fixing" | "escalating",
-): void {
-	const messages: Record<string, string> = {
-		passed: `Review ${pass}/${maxPasses} (${tier}): passed`,
-		fixing: `Review ${pass}/${maxPasses} (${tier}): fixing issues...`,
-		escalating: `Review ${pass}/${maxPasses} (${tier}): escalating`,
-	};
-	outputEvent({
-		type: "worker_review",
-		message: messages[result],
-		timestamp: now(),
-		data: { taskId, tier, pass, maxPasses, result },
-	});
-}
-
 // =============================================================================
 // Human-only formatting helpers
 // =============================================================================
