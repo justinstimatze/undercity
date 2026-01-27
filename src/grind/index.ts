@@ -91,6 +91,24 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 
 	output.header("Undercity Grind Mode", "Autonomous operation • Rate limit handling • Infinite processing");
 
+	// Show lessons learned from previous grind
+	const { getLessonsLearned } = await import("../commands/analysis-handlers.js");
+	const lessons = getLessonsLearned();
+	if (lessons) {
+		output.info("=== Previous Grind Insights ===");
+		const failureInfo =
+			lessons.tasksFailed > 0
+				? `${lessons.tasksCompleted} completed, ${lessons.tasksFailed} failed`
+				: `${lessons.tasksCompleted} completed, no failures`;
+		output.info(`Last run: ${failureInfo} (${lessons.successRate} success)`);
+		if (lessons.topFailures.length > 0) {
+			const failureSummary = lessons.topFailures.map((f) => `${f.reason}: ${f.count}`).join(", ");
+			output.warning(`Top issues: ${failureSummary}`);
+		}
+		output.info(`Tip: ${lessons.topRecommendation}`);
+		output.info("================================");
+	}
+
 	// Check usage limits
 	const usageResult = await checkUsageLimits();
 	if (usageResult.percent !== undefined) {

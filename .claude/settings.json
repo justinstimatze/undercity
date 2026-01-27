@@ -23,7 +23,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash(*/undercity.js grind*)",
+        "matcher": "Bash(*undercity*grind*)",
         "hooks": [
           {
             "type": "command",
@@ -52,7 +52,7 @@
         ]
       },
       {
-        "matcher": "Bash(*/undercity.js grind*)",
+        "matcher": "Bash(*undercity*grind*)",
         "hooks": [
           {
             "type": "command",

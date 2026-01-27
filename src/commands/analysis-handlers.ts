@@ -157,6 +157,62 @@ function formatDuration(startTs?: string, endTs?: string): string {
 }
 
 /**
+ * Brief lessons learned summary for grind startup
+ * Returns null if no previous grind data available
+ */
+export interface LessonsLearned {
+	hasData: boolean;
+	successRate: string;
+	tasksCompleted: number;
+	tasksFailed: number;
+	topFailures: Array<{ reason: string; count: number }>;
+	topRecommendation: string;
+}
+
+export function getLessonsLearned(): LessonsLearned | null {
+	const summary = getLastGrindSummary();
+
+	if (!summary) {
+		return null;
+	}
+
+	const total = summary.ok + summary.fail;
+	if (total === 0) {
+		return null;
+	}
+
+	const successRate = (summary.ok / total) * 100;
+
+	// Get top 2 failures
+	const topFailures = Object.entries(summary.failureBreakdown)
+		.filter(([, count]) => count > 0)
+		.sort(([, a], [, b]) => b - a)
+		.slice(0, 2)
+		.map(([reason, count]) => ({ reason, count }));
+
+	// Generate a single top recommendation
+	const escalationRate = total > 0 ? (summary.escalations.tasksWithEscalation / total) * 100 : 0;
+	const recommendations = generateRecommendations(
+		summary.failureBreakdown,
+		successRate,
+		escalationRate,
+		summary.modelUsage?.byModel,
+	);
+
+	// Pick the first non-indented recommendation
+	const topRecommendation = recommendations.find((r) => !r.startsWith("  ")) || "No specific issues detected.";
+
+	return {
+		hasData: true,
+		successRate: `${successRate.toFixed(0)}%`,
+		tasksCompleted: summary.ok,
+		tasksFailed: summary.fail,
+		topFailures,
+		topRecommendation,
+	};
+}
+
+/**
  * Handle postmortem command
  */
 export async function handlePostmortem(options: PostmortemOptions): Promise<void> {

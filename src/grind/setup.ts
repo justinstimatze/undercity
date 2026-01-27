@@ -266,7 +266,7 @@ export function parseGrindOptions(options: GrindOptions): GrindConfig {
 		reviewPasses: options.review === true,
 		pushOnSuccess: options.push === true,
 		decompose: options.decompose !== false,
-		postmortem: options.postmortem || false,
+		postmortem: options.postmortem !== false,
 		dryRun: options.dryRun || false,
 		duration: options.duration,
 		taskId: options.taskId,
