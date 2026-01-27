@@ -71,6 +71,7 @@ import {
 	type Task,
 	updateTaskTicket,
 } from "./task.js";
+import { indexTaskOutcome } from "./task-classifier.js";
 import { findRelevantFiles } from "./task-file-patterns.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
 import type {
@@ -1174,6 +1175,23 @@ export class Orchestrator {
 			});
 		} catch {
 			// Silent failure - ledger is optional
+		}
+
+		// Index task outcome for semantic classification
+		try {
+			// Derive failure category from error string if task failed
+			const { categorizeFailure } = await import("./grind-events.js");
+			const failureCategory = result.error ? categorizeFailure(result.error) : undefined;
+
+			await indexTaskOutcome(taskId, task, result.status === "complete" ? "success" : "failure", {
+				failureReason: result.error,
+				failureCategory,
+				filesModified: modifiedFiles,
+				durationMs: result.durationMs,
+				modelUsed: normalizeModel(result.model as HistoricalModelChoice),
+			});
+		} catch {
+			// Silent failure - classification is optional enhancement
 		}
 
 		if (variant) {

@@ -20,9 +20,18 @@ const MAX_EVENTS = 1000;
 
 /**
  * Failure reasons - categorized for easy filtering
+ *
+ * Granular no_changes variants:
+ * - no_changes: Generic (backwards compat)
+ * - no_changes_complete: Task was already done (correct behavior)
+ * - no_changes_mismatch: Architectural mismatch (VAGUE_TASK detected)
+ * - no_changes_confused: Agent made no progress (bug/confusion)
  */
 export type FailureReason =
-	| "no_changes" // Agent finished without modifying files
+	| "no_changes" // Agent finished without modifying files (generic)
+	| "no_changes_complete" // Task was already done (correct outcome)
+	| "no_changes_mismatch" // Architectural mismatch (VAGUE_TASK)
+	| "no_changes_confused" // Agent made no progress (bug)
 	| "verification_typecheck" // TypeScript errors
 	| "verification_tests" // Test failures
 	| "verification_lint" // Lint errors
@@ -177,6 +186,19 @@ export function categorizeFailure(error: string): FailureReason {
 	if (e.includes("needs_decomposition") || e.includes("decomposition failed") || e.includes("parent task not found")) {
 		return "decomposition";
 	}
+
+	// Granular no_changes categorization
+	// Order matters: check specific variants before generic
+	if (e.includes("no_changes_complete") || e.includes("task already complete")) {
+		return "no_changes_complete";
+	}
+	if (e.includes("no_changes_mismatch") || e.includes("vague_task")) {
+		return "no_changes_mismatch";
+	}
+	if (e.includes("no_changes_confused") || e.includes("consecutive no-write")) {
+		return "no_changes_confused";
+	}
+	// Generic no_changes fallback
 	if (e.includes("0 writes") || e.includes("no changes") || e.includes("no_changes")) {
 		return "no_changes";
 	}
@@ -420,6 +442,9 @@ export function getLastGrindSummary(): {
 
 	const failureBreakdown: Record<FailureReason, number> = {
 		no_changes: 0,
+		no_changes_complete: 0,
+		no_changes_mismatch: 0,
+		no_changes_confused: 0,
 		verification_typecheck: 0,
 		verification_tests: 0,
 		verification_lint: 0,

@@ -611,16 +611,48 @@ export async function verifyWork(
 }
 
 /**
- * Categorize errors from verification for tracking
+ * Context for granular no_changes categorization
  */
-export function categorizeErrors(verification: VerificationResult): ErrorCategory[] {
+export interface CategorizeErrorsContext {
+	/** Number of no-op edits (content already correct) */
+	noOpEditCount?: number;
+	/** Whether VAGUE_TASK was detected */
+	isVagueTask?: boolean;
+	/** Number of consecutive attempts with no writes */
+	consecutiveNoWriteAttempts?: number;
+}
+
+/**
+ * Categorize errors from verification for tracking
+ *
+ * @param verification - Verification result
+ * @param context - Optional context for granular no_changes categorization
+ * @returns Array of error categories
+ */
+export function categorizeErrors(verification: VerificationResult, context?: CategorizeErrorsContext): ErrorCategory[] {
 	const categories: ErrorCategory[] = [];
 
 	if (!verification.lintPassed) categories.push("lint");
 	if (!verification.spellPassed) categories.push("spell");
 	if (!verification.typecheckPassed) categories.push("typecheck");
 	if (!verification.testsPassed) categories.push("test");
-	if (verification.filesChanged === 0) categories.push("no_changes");
+
+	// Granular no_changes categorization
+	if (verification.filesChanged === 0) {
+		if (context?.isVagueTask) {
+			// VAGUE_TASK detected - architectural mismatch
+			categories.push("no_changes_mismatch");
+		} else if (context?.noOpEditCount && context.noOpEditCount > 0) {
+			// Agent made no-op edits (content already correct) - task may be complete
+			categories.push("no_changes_complete");
+		} else if (context?.consecutiveNoWriteAttempts && context.consecutiveNoWriteAttempts >= 2) {
+			// Multiple attempts with no writes - agent is confused
+			categories.push("no_changes_confused");
+		} else {
+			// Generic fallback
+			categories.push("no_changes");
+		}
+	}
 
 	// Check for build issues (typecheck passed but build failed)
 	if (verification.typecheckPassed && verification.issues.some((i) => i.toLowerCase().includes("build"))) {

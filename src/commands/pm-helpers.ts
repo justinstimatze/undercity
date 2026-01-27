@@ -6,6 +6,7 @@
 
 import chalk from "chalk";
 import type { TaskProposal } from "../automated-pm.js";
+import { classifyTask, hasClassificationData } from "../task-classifier.js";
 import { validateTaskObjective, validateTaskPaths } from "../task-security.js";
 
 // Re-export TaskProposal for backwards compatibility
@@ -121,6 +122,31 @@ export async function addProposalsToBoard(
 				console.log(chalk.dim(`    Reason: Invalid paths: ${invalidPaths.join(", ")}`));
 			}
 			continue;
+		}
+
+		// Semantic classification based on historical outcomes (if corpus available)
+		if (hasClassificationData()) {
+			try {
+				const classification = await classifyTask(p.objective);
+				if (classification.recommendation === "reject") {
+					rejected++;
+					if (isHuman) {
+						console.log(chalk.red(`  ✗ Rejected (high risk): ${p.objective.substring(0, 50)}...`));
+						const riskPct = (classification.riskScore * 100).toFixed(0);
+						const reason = classification.riskFactors[0] ?? "Similar tasks failed";
+						console.log(chalk.dim(`    Risk: ${riskPct}% - ${reason}`));
+					}
+					continue;
+				}
+
+				if (classification.recommendation === "review" && isHuman) {
+					const riskPct = (classification.riskScore * 100).toFixed(0);
+					console.log(chalk.yellow(`  ! Review recommended: ${p.objective.substring(0, 50)}...`));
+					console.log(chalk.dim(`    Risk: ${riskPct}%`));
+				}
+			} catch {
+				// Classification failed - continue without it (non-blocking)
+			}
 		}
 
 		// Log warnings for suspicious but allowed proposals

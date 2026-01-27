@@ -1483,7 +1483,10 @@ export class TaskWorker {
 		});
 		phaseTimings.verification = Date.now() - verifyStart;
 
-		const errorCategories = categorizeErrors(verification);
+		const errorCategories = categorizeErrors(verification, {
+			noOpEditCount: this.noOpEditCount,
+			consecutiveNoWriteAttempts: this.consecutiveNoWriteAttempts,
+		});
 
 		// Build context for result helpers
 		const resultCtx: FailureResultContext = {
@@ -1745,7 +1748,8 @@ export class TaskWorker {
 			model: this.currentModel,
 			durationMs: Date.now() - attemptStart,
 			success: false,
-			errorCategories: isVagueTask ? ["no_changes"] : ["unknown"],
+			// Use granular no_changes category: VAGUE_TASK = architectural mismatch
+			errorCategories: isVagueTask ? ["no_changes_mismatch"] : ["unknown"],
 		});
 
 		// Don't escalate for vague tasks - it won't help

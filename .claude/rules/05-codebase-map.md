@@ -86,6 +86,7 @@
 | **decision-tracker.ts** | Capture/resolve agent decisions | captureDecision, resolveDecision, getPendingDecisions |
 | **automated-pm.ts** | Automated PM: decision resolution, task generation, web research, refinement | pmDecide, quickDecision, pmResearch, pmPropose, pmIdeate, pmRefineTask |
 | **task-file-patterns.ts** | Task→file correlations, co-modification | recordTaskFiles, findRelevantFiles, findCoModifiedFiles |
+| **task-classifier.ts** | Semantic task classification using RAG embeddings | classifyTask, indexTaskOutcome, getClassificationStats, hasClassificationData |
 | **error-fix-patterns.ts** | Error→fix patterns for known issues | recordErrorFix, findMatchingFix, getErrorFixStats |
 | **ax-programs.ts** | Ax/DSPy self-improving prompts | getAxProgramStats |
 | **claude-usage.ts** | Fetch live Claude Max usage from claude.ai | fetchClaudeUsage, loginToClaude |
@@ -140,6 +141,8 @@
 - Research topics via PM → `automated-pm.ts` (pmResearch)
 - Refine tasks with rich content → `automated-pm.ts` (pmRefineTask)
 - Track task→file patterns → `task-file-patterns.ts`
+- Classify tasks by historical outcomes → `task-classifier.ts` (classifyTask, indexTaskOutcome)
+- Check if classification corpus exists → `task-classifier.ts` (hasClassificationData)
 - Track error→fix patterns → `error-fix-patterns.ts`
 - Fetch Claude Max usage → `claude-usage.ts`
 - View Ax/DSPy training stats → `ax-programs.ts`

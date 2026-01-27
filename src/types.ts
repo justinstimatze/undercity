@@ -640,8 +640,24 @@ export interface RateLimitState {
 
 /**
  * Error categories for tracking what causes failures
+ *
+ * Granular no_changes variants:
+ * - no_changes: Generic (backwards compat)
+ * - no_changes_complete: Task was already done (noOpEditCount > 0, verification passed)
+ * - no_changes_mismatch: Architectural mismatch (VAGUE_TASK detected)
+ * - no_changes_confused: Agent made no progress (consecutive failures, no writes)
  */
-export type ErrorCategory = "lint" | "typecheck" | "build" | "test" | "spell" | "no_changes" | "unknown";
+export type ErrorCategory =
+	| "lint"
+	| "typecheck"
+	| "build"
+	| "test"
+	| "spell"
+	| "no_changes" // Generic (backwards compat)
+	| "no_changes_complete" // Task was already done
+	| "no_changes_mismatch" // Architectural mismatch (VAGUE_TASK)
+	| "no_changes_confused" // Agent made no progress
+	| "unknown";
 
 /**
  * Single attempt within a task
