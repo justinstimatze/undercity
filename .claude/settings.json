@@ -21,6 +21,17 @@
     "Bash(git push *)"
   ],
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(*/undercity.js grind*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit",
@@ -45,7 +56,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-analysis.sh 2>/dev/null && \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh 2>/dev/null || true"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-analysis.sh 2>/dev/null || true"
           }
         ]
       }
