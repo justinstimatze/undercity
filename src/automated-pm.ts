@@ -70,6 +70,314 @@ interface PMContext {
 	}>;
 }
 
+// =============================================================================
+// Type Guards for Runtime Validation
+// =============================================================================
+
+/**
+ * Type guard: Check if value is a valid DecisionPoint
+ *
+ * @param value - Value to check
+ * @returns True if value is a valid DecisionPoint
+ */
+function isDecisionPoint(value: unknown): value is DecisionPoint {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const obj = value as Record<string, unknown>;
+
+	// Required fields
+	if (typeof obj.id !== "string" || obj.id.trim().length === 0) {
+		return false;
+	}
+
+	if (typeof obj.taskId !== "string" || obj.taskId.trim().length === 0) {
+		return false;
+	}
+
+	if (typeof obj.question !== "string" || obj.question.trim().length === 0) {
+		return false;
+	}
+
+	if (typeof obj.context !== "string") {
+		return false;
+	}
+
+	if (typeof obj.category !== "string") {
+		return false;
+	}
+
+	if (!Array.isArray(obj.keywords)) {
+		return false;
+	}
+
+	if (!obj.keywords.every((kw) => typeof kw === "string")) {
+		return false;
+	}
+
+	if (typeof obj.capturedAt !== "string") {
+		return false;
+	}
+
+	// Optional fields
+	if (obj.options !== undefined) {
+		if (!Array.isArray(obj.options)) {
+			return false;
+		}
+		if (!obj.options.every((opt) => typeof opt === "string")) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/**
+ * Type guard: Check if value is a valid PMDecisionResult
+ *
+ * @param value - Value to check
+ * @returns True if value is a valid PMDecisionResult
+ */
+export function isPMDecisionResult(value: unknown): value is PMDecisionResult {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const obj = value as Record<string, unknown>;
+
+	// Required fields
+	if (typeof obj.decision !== "string") {
+		return false;
+	}
+
+	if (typeof obj.reasoning !== "string") {
+		return false;
+	}
+
+	const validConfidence = ["high", "medium", "low"];
+	if (typeof obj.confidence !== "string" || !validConfidence.includes(obj.confidence)) {
+		return false;
+	}
+
+	if (typeof obj.escalateToHuman !== "boolean") {
+		return false;
+	}
+
+	if (typeof obj.tokensUsed !== "number" || obj.tokensUsed < 0) {
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * Type guard: Check if value is a valid TaskProposal
+ *
+ * @param value - Value to check
+ * @returns True if value is a valid TaskProposal
+ */
+export function isTaskProposal(value: unknown): value is TaskProposal {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const obj = value as Record<string, unknown>;
+
+	// Required fields
+	if (typeof obj.objective !== "string" || obj.objective.trim().length === 0) {
+		return false;
+	}
+
+	if (typeof obj.rationale !== "string") {
+		return false;
+	}
+
+	if (typeof obj.suggestedPriority !== "number" || obj.suggestedPriority < 1 || obj.suggestedPriority > 1000) {
+		return false;
+	}
+
+	const validSources = ["research", "pattern_analysis", "codebase_gap", "user_request"];
+	if (typeof obj.source !== "string" || !validSources.includes(obj.source)) {
+		return false;
+	}
+
+	// Optional fields
+	if (obj.researchFindings !== undefined) {
+		if (!Array.isArray(obj.researchFindings)) {
+			return false;
+		}
+		if (!obj.researchFindings.every((f) => typeof f === "string")) {
+			return false;
+		}
+	}
+
+	if (obj.tags !== undefined) {
+		if (!Array.isArray(obj.tags)) {
+			return false;
+		}
+		if (!obj.tags.every((t) => typeof t === "string")) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/**
+ * Type guard: Check if value is a valid PMResearchResult
+ *
+ * @param value - Value to check
+ * @returns True if value is a valid PMResearchResult
+ */
+export function isPMResearchResult(value: unknown): value is PMResearchResult {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const obj = value as Record<string, unknown>;
+
+	// Required fields
+	if (typeof obj.topic !== "string" || obj.topic.trim().length === 0) {
+		return false;
+	}
+
+	if (!Array.isArray(obj.findings)) {
+		return false;
+	}
+
+	if (!obj.findings.every((f) => typeof f === "string")) {
+		return false;
+	}
+
+	if (!Array.isArray(obj.recommendations)) {
+		return false;
+	}
+
+	if (!obj.recommendations.every((r) => typeof r === "string")) {
+		return false;
+	}
+
+	if (!Array.isArray(obj.sources)) {
+		return false;
+	}
+
+	if (!obj.sources.every((s) => typeof s === "string")) {
+		return false;
+	}
+
+	if (!Array.isArray(obj.taskProposals)) {
+		return false;
+	}
+
+	if (!obj.taskProposals.every((p) => isTaskProposal(p))) {
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * Type guard: Check if value is a valid IdeationResult
+ *
+ * @param value - Value to check
+ * @returns True if value is a valid IdeationResult
+ */
+export function isIdeationResult(value: unknown): value is IdeationResult {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const obj = value as Record<string, unknown>;
+
+	// Required fields
+	if (!isPMResearchResult(obj.research)) {
+		return false;
+	}
+
+	if (!Array.isArray(obj.proposals)) {
+		return false;
+	}
+
+	if (!obj.proposals.every((p) => isTaskProposal(p))) {
+		return false;
+	}
+
+	// Optional field: researchConclusion
+	if (obj.researchConclusion !== undefined) {
+		if (typeof obj.researchConclusion !== "object" || obj.researchConclusion === null) {
+			return false;
+		}
+
+		const rc = obj.researchConclusion as Record<string, unknown>;
+		const validOutcomes = ["implement", "no_go", "insufficient", "absorbed"];
+		if (typeof rc.outcome !== "string" || !validOutcomes.includes(rc.outcome)) {
+			return false;
+		}
+
+		if (typeof rc.rationale !== "string") {
+			return false;
+		}
+
+		if (typeof rc.noveltyScore !== "number" || rc.noveltyScore < 0 || rc.noveltyScore > 1) {
+			return false;
+		}
+
+		if (typeof rc.proposalsGenerated !== "number" || rc.proposalsGenerated < 0) {
+			return false;
+		}
+
+		if (typeof rc.concludedAt !== "string") {
+			return false;
+		}
+
+		// Optional nested fields
+		if (rc.linkedDecisionId !== undefined && typeof rc.linkedDecisionId !== "string") {
+			return false;
+		}
+
+		if (rc.linkedTaskIds !== undefined) {
+			if (!Array.isArray(rc.linkedTaskIds)) {
+				return false;
+			}
+			if (!rc.linkedTaskIds.every((id) => typeof id === "string")) {
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+/**
+ * Type guard: Check if value is a valid RefineTaskResult
+ *
+ * @param value - Value to check
+ * @returns True if value is a valid RefineTaskResult
+ */
+export function isRefineTaskResult(value: unknown): value is RefineTaskResult {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const obj = value as Record<string, unknown>;
+
+	// Required fields
+	if (typeof obj.ticket !== "object" || obj.ticket === null) {
+		return false;
+	}
+
+	if (typeof obj.success !== "boolean") {
+		return false;
+	}
+
+	if (typeof obj.tokensUsed !== "number" || obj.tokensUsed < 0) {
+		return false;
+	}
+
+	return true;
+}
+
 /**
  * Gather context for PM decision-making
  */
@@ -82,8 +390,8 @@ async function gatherPMContext(decision: DecisionPoint, stateDir: string): Promi
 		ragResults: [],
 	};
 
-	// Defensive: validate decision point
-	if (!decision || typeof decision !== "object") {
+	// Validate decision point with type guard
+	if (!isDecisionPoint(decision)) {
 		return context;
 	}
 
@@ -175,8 +483,22 @@ async function gatherPMContext(decision: DecisionPoint, stateDir: string): Promi
 
 /**
  * Have the automated PM make a decision
+ *
+ * @param decision - The decision point to evaluate
+ * @param stateDir - State directory (default: ".undercity")
+ * @returns Promise resolving to PM decision result
+ * @throws {TypeError} If decision is not a valid DecisionPoint
  */
 export async function pmDecide(decision: DecisionPoint, stateDir: string = ".undercity"): Promise<PMDecisionResult> {
+	// Validate input parameters
+	if (!isDecisionPoint(decision)) {
+		throw new TypeError("pmDecide: decision parameter must be a valid DecisionPoint object");
+	}
+
+	if (typeof stateDir !== "string" || stateDir.trim().length === 0) {
+		throw new TypeError("pmDecide: stateDir parameter must be a non-empty string");
+	}
+
 	const startTime = Date.now();
 
 	try {
@@ -296,6 +618,13 @@ export async function processPendingDecisions(
 /**
  * Quick decision for inline use during task execution
  * Returns decision string or null if should escalate
+ *
+ * @param question - The decision question
+ * @param context - Context for the decision
+ * @param taskId - Task ID this decision belongs to
+ * @param stateDir - State directory (default: ".undercity")
+ * @returns Promise resolving to decision string or null if escalation needed
+ * @throws {TypeError} If parameters are invalid
  */
 export async function quickDecision(
 	question: string,
@@ -303,6 +632,23 @@ export async function quickDecision(
 	taskId: string,
 	stateDir: string = ".undercity",
 ): Promise<string | null> {
+	// Validate input parameters
+	if (typeof question !== "string" || question.trim().length === 0) {
+		throw new TypeError("quickDecision: question parameter must be a non-empty string");
+	}
+
+	if (typeof context !== "string") {
+		throw new TypeError("quickDecision: context parameter must be a string");
+	}
+
+	if (typeof taskId !== "string" || taskId.trim().length === 0) {
+		throw new TypeError("quickDecision: taskId parameter must be a non-empty string");
+	}
+
+	if (typeof stateDir !== "string" || stateDir.trim().length === 0) {
+		throw new TypeError("quickDecision: stateDir parameter must be a non-empty string");
+	}
+
 	// Create temporary decision point
 	const decision: DecisionPoint = {
 		id: `quick-${Date.now().toString(36)}`,
@@ -397,12 +743,27 @@ export interface PMResearchResult {
  *
  * Uses the Agent SDK with web tools to gather external information
  * about best practices, trends, or solutions for a given topic.
+ *
+ * @param topic - Topic to research
+ * @param cwd - Current working directory
+ * @param _stateDir - State directory (unused, for consistency)
+ * @returns Promise resolving to research result
+ * @throws {TypeError} If parameters are invalid
  */
 export async function pmResearch(
 	topic: string,
 	cwd: string,
 	_stateDir: string = ".undercity",
 ): Promise<PMResearchResult> {
+	// Validate input parameters
+	if (typeof topic !== "string" || topic.trim().length === 0) {
+		throw new TypeError("pmResearch: topic parameter must be a non-empty string");
+	}
+
+	if (typeof cwd !== "string" || cwd.trim().length === 0) {
+		throw new TypeError("pmResearch: cwd parameter must be a non-empty string");
+	}
+
 	sessionLogger.info({ topic }, "PM starting research session");
 
 	const prompt = `You are a product manager researching a technical topic.
@@ -653,12 +1014,31 @@ function buildSystemHealthContext(
  *
  * Uses knowledge base, patterns, and codebase analysis to identify
  * gaps, improvements, or new features that should be considered.
+ *
+ * @param focus - Optional focus area for proposals
+ * @param cwd - Current working directory (default: process.cwd())
+ * @param stateDir - State directory (default: ".undercity")
+ * @returns Promise resolving to array of task proposals
+ * @throws {TypeError} If parameters are invalid
  */
 export async function pmPropose(
 	focus?: string,
 	cwd: string = process.cwd(),
 	stateDir: string = ".undercity",
 ): Promise<TaskProposal[]> {
+	// Validate input parameters
+	if (focus !== undefined && typeof focus !== "string") {
+		throw new TypeError("pmPropose: focus parameter must be a string if provided");
+	}
+
+	if (typeof cwd !== "string" || cwd.trim().length === 0) {
+		throw new TypeError("pmPropose: cwd parameter must be a non-empty string");
+	}
+
+	if (typeof stateDir !== "string" || stateDir.trim().length === 0) {
+		throw new TypeError("pmPropose: stateDir parameter must be a non-empty string");
+	}
+
 	sessionLogger.info({ focus }, "PM generating task proposals");
 
 	// Gather context
@@ -824,6 +1204,13 @@ export interface IdeationResult {
  * NEW: Checks research ROI before proceeding to prevent infinite research loops.
  * If research is saturated or repetitive, may skip directly to implementation
  * or conclude with a no-go decision.
+ *
+ * @param topic - Topic to ideate on
+ * @param cwd - Current working directory (default: process.cwd())
+ * @param stateDir - State directory (default: ".undercity")
+ * @param taskId - Optional task ID for tracking
+ * @returns Promise resolving to ideation result
+ * @throws {TypeError} If parameters are invalid
  */
 export async function pmIdeate(
 	topic: string,
@@ -831,6 +1218,23 @@ export async function pmIdeate(
 	stateDir: string = ".undercity",
 	taskId?: string,
 ): Promise<IdeationResult> {
+	// Validate input parameters
+	if (typeof topic !== "string" || topic.trim().length === 0) {
+		throw new TypeError("pmIdeate: topic parameter must be a non-empty string");
+	}
+
+	if (typeof cwd !== "string" || cwd.trim().length === 0) {
+		throw new TypeError("pmIdeate: cwd parameter must be a non-empty string");
+	}
+
+	if (typeof stateDir !== "string" || stateDir.trim().length === 0) {
+		throw new TypeError("pmIdeate: stateDir parameter must be a non-empty string");
+	}
+
+	if (taskId !== undefined && typeof taskId !== "string") {
+		throw new TypeError("pmIdeate: taskId parameter must be a string if provided");
+	}
+
 	sessionLogger.info({ topic }, "PM starting ideation session");
 
 	// NEW: Check if we should even do more research
@@ -975,12 +1379,27 @@ export interface RefineTaskResult {
  * - Rationale
  *
  * Uses codebase context and knowledge base for informed refinement.
+ *
+ * @param objective - Task objective to refine
+ * @param _cwd - Current working directory (unused, for consistency)
+ * @param stateDir - State directory (default: ".undercity")
+ * @returns Promise resolving to refinement result
+ * @throws {TypeError} If parameters are invalid
  */
 export async function pmRefineTask(
 	objective: string,
 	_cwd: string = process.cwd(),
 	stateDir: string = ".undercity",
 ): Promise<RefineTaskResult> {
+	// Validate input parameters
+	if (typeof objective !== "string" || objective.trim().length === 0) {
+		throw new TypeError("pmRefineTask: objective parameter must be a non-empty string");
+	}
+
+	if (typeof stateDir !== "string" || stateDir.trim().length === 0) {
+		throw new TypeError("pmRefineTask: stateDir parameter must be a non-empty string");
+	}
+
 	const { query } = await import("@anthropic-ai/claude-agent-sdk");
 
 	sessionLogger.info({ objective: objective.substring(0, 50) }, "PM refining task");
