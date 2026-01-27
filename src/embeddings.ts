@@ -21,6 +21,104 @@ const logger = sessionLogger.child({ module: "embeddings" });
 const DEFAULT_STATE_DIR = ".undercity";
 
 // =============================================================================
+// Retry Configuration
+// =============================================================================
+
+/** Maximum number of retry attempts for transient failures */
+const MAX_RETRIES = 3;
+
+/** Initial delay for exponential backoff (ms) */
+const INITIAL_DELAY_MS = 100;
+
+/** Maximum delay for exponential backoff (ms) */
+const MAX_DELAY_MS = 5000;
+
+/**
+ * Sleep utility for retry delays
+ * @param ms - Milliseconds to sleep
+ */
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Calculate exponential backoff delay with jitter
+ * @param attempt - Current attempt number (0-indexed)
+ * @returns Delay in milliseconds
+ */
+function calculateBackoffDelay(attempt: number): number {
+	const exponentialDelay = INITIAL_DELAY_MS * 2 ** attempt;
+	const cappedDelay = Math.min(exponentialDelay, MAX_DELAY_MS);
+	// Add 10% jitter to prevent thundering herd
+	const jitter = cappedDelay * 0.1 * Math.random();
+	return cappedDelay + jitter;
+}
+
+/**
+ * Check if an error is transient and should be retried
+ * @param error - The error to check
+ * @returns true if the error is transient
+ */
+function isTransientError(error: unknown): boolean {
+	if (error instanceof Error) {
+		const message = error.message.toLowerCase();
+		// SQLite busy/locked errors are transient
+		if (message.includes("sqlite_busy") || message.includes("database is locked")) {
+			return true;
+		}
+		// Timeout errors are transient
+		if (message.includes("timeout") || message.includes("etimedout")) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Execute a database operation with retry logic for transient failures
+ * @param operation - Function to execute
+ * @param context - Context for error logging
+ * @returns Result of the operation
+ * @throws Error after exhausting all retry attempts
+ */
+async function withRetry<T>(operation: () => T, context: Record<string, unknown>): Promise<T> {
+	let lastError: unknown;
+
+	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+		try {
+			return operation();
+		} catch (error: unknown) {
+			lastError = error;
+
+			// Don't retry non-transient errors
+			if (!isTransientError(error)) {
+				logger.error({ error: String(error), ...context }, "Non-transient error in embeddings operation");
+				throw error;
+			}
+
+			// Last attempt failed
+			if (attempt === MAX_RETRIES - 1) {
+				logger.error(
+					{ error: String(error), attempts: MAX_RETRIES, ...context },
+					"Embeddings operation failed after all retry attempts",
+				);
+				break;
+			}
+
+			const delayMs = calculateBackoffDelay(attempt);
+			logger.warn(
+				{ error: String(error), attempt: attempt + 1, delayMs, ...context },
+				"Transient error in embeddings operation, retrying",
+			);
+
+			await sleep(delayMs);
+		}
+	}
+
+	throw lastError;
+}
+
+// =============================================================================
 // Text Preprocessing
 // =============================================================================
 
@@ -249,36 +347,47 @@ interface VocabularyEntry {
 
 /**
  * Load or initialize vocabulary from database
+ * @param stateDir - State directory for database operations
+ * @returns Vocabulary map. On error, returns empty map.
  */
 function loadVocabulary(stateDir: string = DEFAULT_STATE_DIR): Map<string, VocabularyEntry> {
-	const db = getDatabase(stateDir);
+	try {
+		const db = getDatabase(stateDir);
 
-	// Ensure vocabulary table exists
-	db.exec(`
-		CREATE TABLE IF NOT EXISTS vocabulary (
-			term TEXT PRIMARY KEY,
-			doc_freq INTEGER NOT NULL DEFAULT 1,
-			term_id INTEGER NOT NULL
-		);
-		CREATE INDEX IF NOT EXISTS idx_vocabulary_term_id ON vocabulary(term_id);
-	`);
+		// Ensure vocabulary table exists
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS vocabulary (
+				term TEXT PRIMARY KEY,
+				doc_freq INTEGER NOT NULL DEFAULT 1,
+				term_id INTEGER NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_vocabulary_term_id ON vocabulary(term_id);
+		`);
 
-	const rows = db.prepare("SELECT term, doc_freq, term_id FROM vocabulary").all() as Array<{
-		term: string;
-		doc_freq: number;
-		term_id: number;
-	}>;
+		const rows = db.prepare("SELECT term, doc_freq, term_id FROM vocabulary").all() as Array<{
+			term: string;
+			doc_freq: number;
+			term_id: number;
+		}>;
 
-	const vocab = new Map<string, VocabularyEntry>();
-	for (const row of rows) {
-		vocab.set(row.term, { term: row.term, docFreq: row.doc_freq, termId: row.term_id });
+		const vocab = new Map<string, VocabularyEntry>();
+		for (const row of rows) {
+			vocab.set(row.term, { term: row.term, docFreq: row.doc_freq, termId: row.term_id });
+		}
+
+		return vocab;
+	} catch (error: unknown) {
+		logger.error({ error: String(error), stateDir }, "Failed to load vocabulary, returning empty map");
+		return new Map<string, VocabularyEntry>();
 	}
-
-	return vocab;
 }
 
 /**
  * Get or create vocabulary entry for a term
+ * @param term - The term to get or create
+ * @param vocab - Vocabulary map for lookups and updates
+ * @param stateDir - State directory for database operations
+ * @returns Vocabulary entry. On error, returns a fallback entry with docFreq=1.
  */
 function getOrCreateTerm(term: string, vocab: Map<string, VocabularyEntry>, stateDir: string): VocabularyEntry {
 	let entry = vocab.get(term);
@@ -286,42 +395,66 @@ function getOrCreateTerm(term: string, vocab: Map<string, VocabularyEntry>, stat
 		return entry;
 	}
 
-	const db = getDatabase(stateDir);
-	const nextId = vocab.size;
+	try {
+		const db = getDatabase(stateDir);
+		const nextId = vocab.size;
 
-	db.prepare("INSERT OR IGNORE INTO vocabulary (term, doc_freq, term_id) VALUES (?, 1, ?)").run(term, nextId);
+		// INSERT OR IGNORE handles race conditions from concurrent access
+		db.prepare("INSERT OR IGNORE INTO vocabulary (term, doc_freq, term_id) VALUES (?, 1, ?)").run(term, nextId);
 
-	entry = { term, docFreq: 1, termId: nextId };
-	vocab.set(term, entry);
+		entry = { term, docFreq: 1, termId: nextId };
+		vocab.set(term, entry);
 
-	return entry;
+		return entry;
+	} catch (error: unknown) {
+		logger.warn({ error: String(error), term }, "Failed to insert term into vocabulary, using fallback");
+		// Fallback: return entry with same term but use vocab size as ID
+		const fallbackEntry = { term, docFreq: 1, termId: vocab.size };
+		vocab.set(term, fallbackEntry);
+		return fallbackEntry;
+	}
 }
 
 /**
  * Increment document frequency for terms
+ * @param terms - Set of unique terms to update
+ * @param stateDir - State directory for database operations
+ * @throws Error if update fails after retries
  */
-function incrementDocFreqs(terms: Set<string>, stateDir: string): void {
-	const db = getDatabase(stateDir);
-	const stmt = db.prepare("UPDATE vocabulary SET doc_freq = doc_freq + 1 WHERE term = ?");
+async function incrementDocFreqs(terms: Set<string>, stateDir: string): Promise<void> {
+	await withRetry(
+		() => {
+			const db = getDatabase(stateDir);
+			const stmt = db.prepare("UPDATE vocabulary SET doc_freq = doc_freq + 1 WHERE term = ?");
 
-	const transaction = db.transaction(() => {
-		for (const term of terms) {
-			stmt.run(term);
-		}
-	});
+			const transaction = db.transaction(() => {
+				for (const term of terms) {
+					stmt.run(term);
+				}
+			});
 
-	transaction();
+			transaction();
+		},
+		{ operation: "incrementDocFreqs", termCount: terms.size },
+	);
 }
 
 /**
  * Get total document count for IDF calculation
+ * @param stateDir - State directory for database operations
+ * @returns Document count, minimum 1. On error, returns 1 as safe default.
  */
 function getDocCount(stateDir: string): number {
-	const db = getDatabase(stateDir);
-	const result = db.prepare("SELECT COUNT(*) as count FROM learnings WHERE embedding IS NOT NULL").get() as {
-		count: number;
-	};
-	return Math.max(1, result.count);
+	try {
+		const db = getDatabase(stateDir);
+		const result = db.prepare("SELECT COUNT(*) as count FROM learnings WHERE embedding IS NOT NULL").get() as {
+			count: number;
+		};
+		return Math.max(1, result.count);
+	} catch (error: unknown) {
+		logger.warn({ error: String(error) }, "Failed to get document count, using default of 1");
+		return 1;
+	}
 }
 
 // =============================================================================
@@ -339,54 +472,127 @@ export interface SparseVector {
 
 /**
  * Serialize sparse vector to buffer for SQLite storage
+ * @param vec - Sparse vector to serialize
+ * @returns Buffer containing serialized vector
+ * @throws Error if vector is invalid or buffer allocation fails
  */
 function serializeVector(vec: SparseVector): Buffer {
-	// Format: [count (4 bytes)] [indices...] [values...] [magnitude (8 bytes)]
-	const count = vec.indices.length;
-	const buffer = Buffer.alloc(4 + count * 4 + count * 8 + 8);
+	try {
+		// Validate input vector
+		if (!vec || typeof vec !== "object") {
+			throw new Error("Invalid vector: must be an object");
+		}
+		if (!Array.isArray(vec.indices) || !Array.isArray(vec.values)) {
+			throw new Error("Invalid vector: indices and values must be arrays");
+		}
+		if (vec.indices.length !== vec.values.length) {
+			throw new Error(
+				`Invalid vector: indices length (${vec.indices.length}) must match values length (${vec.values.length})`,
+			);
+		}
+		if (typeof vec.magnitude !== "number" || !Number.isFinite(vec.magnitude)) {
+			throw new Error("Invalid vector: magnitude must be a finite number");
+		}
 
-	let offset = 0;
-	buffer.writeUInt32LE(count, offset);
-	offset += 4;
+		// Format: [count (4 bytes)] [indices...] [values...] [magnitude (8 bytes)]
+		const count = vec.indices.length;
+		const bufferSize = 4 + count * 4 + count * 8 + 8;
 
-	for (const idx of vec.indices) {
-		buffer.writeUInt32LE(idx, offset);
+		// Check for reasonable buffer size (prevent memory issues)
+		const MAX_BUFFER_SIZE = 100 * 1024 * 1024; // 100MB
+		if (bufferSize > MAX_BUFFER_SIZE) {
+			throw new Error(`Vector too large: buffer size ${bufferSize} exceeds maximum ${MAX_BUFFER_SIZE}`);
+		}
+
+		const buffer = Buffer.alloc(bufferSize);
+
+		let offset = 0;
+		buffer.writeUInt32LE(count, offset);
 		offset += 4;
+
+		for (const idx of vec.indices) {
+			buffer.writeUInt32LE(idx, offset);
+			offset += 4;
+		}
+
+		for (const val of vec.values) {
+			buffer.writeDoubleLE(val, offset);
+			offset += 8;
+		}
+
+		buffer.writeDoubleLE(vec.magnitude, offset);
+
+		return buffer;
+	} catch (error: unknown) {
+		logger.error(
+			{
+				error: String(error),
+				vectorSize: vec?.indices?.length ?? 0,
+				magnitude: vec?.magnitude ?? 0,
+			},
+			"Failed to serialize vector",
+		);
+		throw error;
 	}
-
-	for (const val of vec.values) {
-		buffer.writeDoubleLE(val, offset);
-		offset += 8;
-	}
-
-	buffer.writeDoubleLE(vec.magnitude, offset);
-
-	return buffer;
 }
 
 /**
  * Deserialize sparse vector from buffer
+ * @param buffer - Buffer containing serialized vector
+ * @returns Deserialized sparse vector. On error, returns empty vector with zero magnitude.
  */
 function deserializeVector(buffer: Buffer): SparseVector {
-	let offset = 0;
-	const count = buffer.readUInt32LE(offset);
-	offset += 4;
+	try {
+		// Validate buffer
+		if (!buffer || !Buffer.isBuffer(buffer)) {
+			throw new Error("Invalid buffer: must be a Buffer instance");
+		}
 
-	const indices: number[] = [];
-	for (let i = 0; i < count; i++) {
-		indices.push(buffer.readUInt32LE(offset));
+		// Minimum size: count (4) + magnitude (8) = 12 bytes
+		if (buffer.length < 12) {
+			throw new Error(`Buffer too small: ${buffer.length} bytes, minimum 12 required`);
+		}
+
+		let offset = 0;
+		const count = buffer.readUInt32LE(offset);
 		offset += 4;
+
+		// Validate expected buffer size
+		const expectedSize = 4 + count * 4 + count * 8 + 8;
+		if (buffer.length !== expectedSize) {
+			throw new Error(`Buffer size mismatch: expected ${expectedSize}, got ${buffer.length}`);
+		}
+
+		const indices: number[] = [];
+		for (let i = 0; i < count; i++) {
+			indices.push(buffer.readUInt32LE(offset));
+			offset += 4;
+		}
+
+		const values: number[] = [];
+		for (let i = 0; i < count; i++) {
+			values.push(buffer.readDoubleLE(offset));
+			offset += 8;
+		}
+
+		const magnitude = buffer.readDoubleLE(offset);
+
+		// Validate deserialized data
+		if (!Number.isFinite(magnitude)) {
+			throw new Error("Deserialized magnitude is not finite");
+		}
+
+		return { indices, values, magnitude };
+	} catch (error: unknown) {
+		logger.warn(
+			{
+				error: String(error),
+				bufferLength: buffer?.length ?? 0,
+			},
+			"Failed to deserialize vector, returning empty vector",
+		);
+		return { indices: [], values: [], magnitude: 0 };
 	}
-
-	const values: number[] = [];
-	for (let i = 0; i < count; i++) {
-		values.push(buffer.readDoubleLE(offset));
-		offset += 8;
-	}
-
-	const magnitude = buffer.readDoubleLE(offset);
-
-	return { indices, values, magnitude };
 }
 
 /**
@@ -473,53 +679,102 @@ export function cosineSimilarity(a: SparseVector, b: SparseVector): number {
 
 /**
  * Generate and store embedding for a learning
+ * @param learningId - ID of the learning to embed
+ * @param content - Text content to vectorize
+ * @param stateDir - State directory for database operations
+ * @throws Error if embedding generation fails after retries
  */
-export function embedLearning(learningId: string, content: string, stateDir: string = DEFAULT_STATE_DIR): void {
-	const vocab = loadVocabulary(stateDir);
-	const docCount = getDocCount(stateDir);
-	const vector = calculateVector(content, vocab, docCount, stateDir);
+export async function embedLearning(
+	learningId: string,
+	content: string,
+	stateDir: string = DEFAULT_STATE_DIR,
+): Promise<void> {
+	try {
+		const vocab = loadVocabulary(stateDir);
+		const docCount = getDocCount(stateDir);
+		const vector = calculateVector(content, vocab, docCount, stateDir);
 
-	// Store embedding
-	const db = getDatabase(stateDir);
-	const buffer = serializeVector(vector);
+		// Store embedding with retry logic for database operations
+		await withRetry(
+			() => {
+				const db = getDatabase(stateDir);
+				const buffer = serializeVector(vector);
+				db.prepare("UPDATE learnings SET embedding = ? WHERE id = ?").run(buffer, learningId);
+			},
+			{ operation: "storeEmbedding", learningId },
+		);
 
-	db.prepare("UPDATE learnings SET embedding = ? WHERE id = ?").run(buffer, learningId);
+		// Update document frequencies
+		const tokens = tokenize(content);
+		const uniqueTerms = new Set(tokens);
+		await incrementDocFreqs(uniqueTerms, stateDir);
 
-	// Update document frequencies
-	const tokens = tokenize(content);
-	const uniqueTerms = new Set(tokens);
-	incrementDocFreqs(uniqueTerms, stateDir);
-
-	logger.debug({ learningId, vectorSize: vector.indices.length }, "Generated embedding for learning");
+		logger.debug({ learningId, vectorSize: vector.indices.length }, "Generated embedding for learning");
+	} catch (error: unknown) {
+		logger.error(
+			{
+				error: String(error),
+				learningId,
+				contentLength: content?.length ?? 0,
+			},
+			"Failed to embed learning",
+		);
+		throw error;
+	}
 }
 
 /**
  * Generate embeddings for all learnings without them
+ * @param stateDir - State directory for database operations
+ * @returns Number of successfully embedded learnings
  */
-export function embedAllLearnings(stateDir: string = DEFAULT_STATE_DIR): number {
-	const db = getDatabase(stateDir);
+export async function embedAllLearnings(stateDir: string = DEFAULT_STATE_DIR): Promise<number> {
+	try {
+		const db = getDatabase(stateDir);
 
-	const rows = db.prepare("SELECT id, content FROM learnings WHERE embedding IS NULL").all() as Array<{
-		id: string;
-		content: string;
-	}>;
+		const rows = db.prepare("SELECT id, content FROM learnings WHERE embedding IS NULL").all() as Array<{
+			id: string;
+			content: string;
+		}>;
 
-	let count = 0;
-	for (const row of rows) {
-		try {
-			embedLearning(row.id, row.content, stateDir);
-			count++;
-		} catch (err) {
-			logger.warn({ learningId: row.id, error: String(err) }, "Failed to embed learning");
+		let successCount = 0;
+		let failureCount = 0;
+
+		for (const row of rows) {
+			try {
+				await embedLearning(row.id, row.content, stateDir);
+				successCount++;
+			} catch (err: unknown) {
+				failureCount++;
+				// Categorize error for better logging
+				const errorType = isTransientError(err) ? "transient" : "permanent";
+				logger.warn(
+					{
+						learningId: row.id,
+						error: String(err),
+						errorType,
+						contentLength: row.content?.length ?? 0,
+					},
+					"Failed to embed learning",
+				);
+			}
 		}
-	}
 
-	logger.info({ count }, "Generated embeddings for learnings");
-	return count;
+		logger.info({ successCount, failureCount, total: rows.length }, "Completed embeddings generation batch");
+		return successCount;
+	} catch (error: unknown) {
+		logger.error({ error: String(error) }, "Failed to embed learnings batch");
+		return 0;
+	}
 }
 
 /**
  * Search learnings by semantic similarity
+ * @param query - Query text to search for
+ * @param limit - Maximum number of results to return
+ * @param minSimilarity - Minimum similarity threshold (0-1)
+ * @param stateDir - State directory for database operations
+ * @returns Array of learning IDs with similarity scores, sorted by relevance. On error, returns empty array.
  */
 export function searchBySemanticSimilarity(
 	query: string,
@@ -527,39 +782,58 @@ export function searchBySemanticSimilarity(
 	minSimilarity: number = 0.1,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): Array<{ learningId: string; similarity: number }> {
-	const vocab = loadVocabulary(stateDir);
-	const docCount = getDocCount(stateDir);
-	const queryVector = calculateVector(query, vocab, docCount, stateDir);
+	try {
+		const vocab = loadVocabulary(stateDir);
+		const docCount = getDocCount(stateDir);
+		const queryVector = calculateVector(query, vocab, docCount, stateDir);
 
-	if (queryVector.magnitude === 0) {
+		if (queryVector.magnitude === 0) {
+			logger.debug({ query }, "Query vector has zero magnitude, returning empty results");
+			return [];
+		}
+
+		const db = getDatabase(stateDir);
+		const rows = db.prepare("SELECT id, embedding FROM learnings WHERE embedding IS NOT NULL").all() as Array<{
+			id: string;
+			embedding: Buffer;
+		}>;
+
+		const results: Array<{ learningId: string; similarity: number }> = [];
+
+		for (const row of rows) {
+			try {
+				const docVector = deserializeVector(row.embedding);
+				const similarity = cosineSimilarity(queryVector, docVector);
+
+				if (similarity >= minSimilarity) {
+					results.push({ learningId: row.id, similarity });
+				}
+			} catch (err: unknown) {
+				logger.warn({ learningId: row.id, error: String(err) }, "Failed to process embedding during search, skipping");
+			}
+		}
+
+		// Sort by similarity descending
+		results.sort((a, b) => b.similarity - a.similarity);
+
+		return results.slice(0, limit);
+	} catch (error: unknown) {
+		logger.error({ error: String(error), query }, "Failed to perform semantic similarity search");
 		return [];
 	}
-
-	const db = getDatabase(stateDir);
-	const rows = db.prepare("SELECT id, embedding FROM learnings WHERE embedding IS NOT NULL").all() as Array<{
-		id: string;
-		embedding: Buffer;
-	}>;
-
-	const results: Array<{ learningId: string; similarity: number }> = [];
-
-	for (const row of rows) {
-		const docVector = deserializeVector(row.embedding);
-		const similarity = cosineSimilarity(queryVector, docVector);
-
-		if (similarity >= minSimilarity) {
-			results.push({ learningId: row.id, similarity });
-		}
-	}
-
-	// Sort by similarity descending
-	results.sort((a, b) => b.similarity - a.similarity);
-
-	return results.slice(0, limit);
 }
 
 /**
  * Enhanced search combining keyword and semantic similarity
+ * @param query - Query text to search for
+ * @param options - Search options including weights and limits
+ * @param stateDir - State directory for database operations
+ * @returns Array of learning IDs with combined scores, sorted by relevance. On error, returns empty array.
+ * @example
+ * const results = hybridSearch("error handling retry", { limit: 5, keywordWeight: 0.5, semanticWeight: 0.5 });
+ * for (const result of results) {
+ *   console.log(`Learning ${result.learningId}: score ${result.score}`);
+ * }
  */
 export function hybridSearch(
 	query: string,
@@ -571,80 +845,87 @@ export function hybridSearch(
 	} = {},
 	stateDir: string = DEFAULT_STATE_DIR,
 ): Array<{ learningId: string; score: number; keywordScore: number; semanticScore: number }> {
-	const { limit = 10, keywordWeight = 0.4, semanticWeight = 0.6, minScore = 0.1 } = options;
+	try {
+		const { limit = 10, keywordWeight = 0.4, semanticWeight = 0.6, minScore = 0.1 } = options;
 
-	const db = getDatabase(stateDir);
-	const vocab = loadVocabulary(stateDir);
-	const docCount = getDocCount(stateDir);
+		const db = getDatabase(stateDir);
+		const vocab = loadVocabulary(stateDir);
+		const docCount = getDocCount(stateDir);
 
-	// Get query tokens and vector
-	const queryTokens = tokenize(query);
-	const queryVector = calculateVector(query, vocab, docCount, stateDir);
+		// Get query tokens and vector
+		const queryTokens = tokenize(query);
+		const queryVector = calculateVector(query, vocab, docCount, stateDir);
 
-	// Score all learnings
-	const scores = new Map<string, { keyword: number; semantic: number }>();
+		// Score all learnings
+		const scores = new Map<string, { keyword: number; semantic: number }>();
 
-	// Keyword scoring
-	const keywordConditions = queryTokens.map(() => "keywords LIKE ?").join(" OR ");
-	const keywordParams = queryTokens.map((t) => `%"${t}"%`);
+		// Keyword scoring
+		const keywordConditions = queryTokens.map(() => "keywords LIKE ?").join(" OR ");
+		const keywordParams = queryTokens.map((t) => `%"${t}"%`);
 
-	if (keywordConditions) {
-		const keywordRows = db
-			.prepare(
-				`
+		if (keywordConditions) {
+			const keywordRows = db
+				.prepare(
+					`
 			SELECT id, keywords FROM learnings
 			WHERE ${keywordConditions}
 		`,
-			)
-			.all(...keywordParams) as Array<{ id: string; keywords: string }>;
+				)
+				.all(...keywordParams) as Array<{ id: string; keywords: string }>;
 
-		for (const row of keywordRows) {
-			const keywords = JSON.parse(row.keywords) as string[];
-			const matches = queryTokens.filter((t) => keywords.includes(t)).length;
-			const keywordScore = matches / Math.max(queryTokens.length, 1);
-			scores.set(row.id, { keyword: keywordScore, semantic: 0 });
-		}
-	}
-
-	// Semantic scoring
-	if (queryVector.magnitude > 0) {
-		const embeddingRows = db.prepare("SELECT id, embedding FROM learnings WHERE embedding IS NOT NULL").all() as Array<{
-			id: string;
-			embedding: Buffer;
-		}>;
-
-		for (const row of embeddingRows) {
-			const docVector = deserializeVector(row.embedding);
-			const similarity = cosineSimilarity(queryVector, docVector);
-
-			const existing = scores.get(row.id);
-			if (existing) {
-				existing.semantic = similarity;
-			} else {
-				scores.set(row.id, { keyword: 0, semantic: similarity });
+			for (const row of keywordRows) {
+				const keywords = JSON.parse(row.keywords) as string[];
+				const matches = queryTokens.filter((t) => keywords.includes(t)).length;
+				const keywordScore = matches / Math.max(queryTokens.length, 1);
+				scores.set(row.id, { keyword: keywordScore, semantic: 0 });
 			}
 		}
-	}
 
-	// Combine scores
-	const results: Array<{ learningId: string; score: number; keywordScore: number; semanticScore: number }> = [];
+		// Semantic scoring
+		if (queryVector.magnitude > 0) {
+			const embeddingRows = db
+				.prepare("SELECT id, embedding FROM learnings WHERE embedding IS NOT NULL")
+				.all() as Array<{
+				id: string;
+				embedding: Buffer;
+			}>;
 
-	for (const [id, score] of scores) {
-		const combinedScore = score.keyword * keywordWeight + score.semantic * semanticWeight;
-		if (combinedScore >= minScore) {
-			results.push({
-				learningId: id,
-				score: combinedScore,
-				keywordScore: score.keyword,
-				semanticScore: score.semantic,
-			});
+			for (const row of embeddingRows) {
+				const docVector = deserializeVector(row.embedding);
+				const similarity = cosineSimilarity(queryVector, docVector);
+
+				const existing = scores.get(row.id);
+				if (existing) {
+					existing.semantic = similarity;
+				} else {
+					scores.set(row.id, { keyword: 0, semantic: similarity });
+				}
+			}
 		}
+
+		// Combine scores
+		const results: Array<{ learningId: string; score: number; keywordScore: number; semanticScore: number }> = [];
+
+		for (const [id, score] of scores) {
+			const combinedScore = score.keyword * keywordWeight + score.semantic * semanticWeight;
+			if (combinedScore >= minScore) {
+				results.push({
+					learningId: id,
+					score: combinedScore,
+					keywordScore: score.keyword,
+					semanticScore: score.semantic,
+				});
+			}
+		}
+
+		// Sort by combined score
+		results.sort((a, b) => b.score - a.score);
+
+		return results.slice(0, limit);
+	} catch (error: unknown) {
+		logger.error({ error: String(error), query }, "Failed to perform hybrid search");
+		return [];
 	}
-
-	// Sort by combined score
-	results.sort((a, b) => b.score - a.score);
-
-	return results.slice(0, limit);
 }
 
 // =============================================================================
@@ -660,48 +941,66 @@ export interface EmbeddingStats {
 
 /**
  * Get embedding statistics
+ * @param stateDir - State directory for database operations
+ * @returns Embedding statistics. On error, returns zeroed stats.
  */
 export function getEmbeddingStats(stateDir: string = DEFAULT_STATE_DIR): EmbeddingStats {
-	const db = getDatabase(stateDir);
+	try {
+		const db = getDatabase(stateDir);
 
-	// Ensure vocabulary table exists
-	db.exec(`
-		CREATE TABLE IF NOT EXISTS vocabulary (
-			term TEXT PRIMARY KEY,
-			doc_freq INTEGER NOT NULL DEFAULT 1,
-			term_id INTEGER NOT NULL
-		);
-	`);
+		// Ensure vocabulary table exists
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS vocabulary (
+				term TEXT PRIMARY KEY,
+				doc_freq INTEGER NOT NULL DEFAULT 1,
+				term_id INTEGER NOT NULL
+			);
+		`);
 
-	const vocabSize = (db.prepare("SELECT COUNT(*) as count FROM vocabulary").get() as { count: number }).count;
+		const vocabSize = (db.prepare("SELECT COUNT(*) as count FROM vocabulary").get() as { count: number }).count;
 
-	const embeddedCount = (
-		db.prepare("SELECT COUNT(*) as count FROM learnings WHERE embedding IS NOT NULL").get() as { count: number }
-	).count;
+		const embeddedCount = (
+			db.prepare("SELECT COUNT(*) as count FROM learnings WHERE embedding IS NOT NULL").get() as { count: number }
+		).count;
 
-	const unembeddedCount = (
-		db.prepare("SELECT COUNT(*) as count FROM learnings WHERE embedding IS NULL").get() as { count: number }
-	).count;
+		const unembeddedCount = (
+			db.prepare("SELECT COUNT(*) as count FROM learnings WHERE embedding IS NULL").get() as { count: number }
+		).count;
 
-	// Calculate average vector size
-	let avgVectorSize = 0;
-	if (embeddedCount > 0) {
-		const rows = db.prepare("SELECT embedding FROM learnings WHERE embedding IS NOT NULL LIMIT 100").all() as Array<{
-			embedding: Buffer;
-		}>;
+		// Calculate average vector size
+		let avgVectorSize = 0;
+		if (embeddedCount > 0) {
+			const rows = db.prepare("SELECT embedding FROM learnings WHERE embedding IS NOT NULL LIMIT 100").all() as Array<{
+				embedding: Buffer;
+			}>;
 
-		let totalSize = 0;
-		for (const row of rows) {
-			const vec = deserializeVector(row.embedding);
-			totalSize += vec.indices.length;
+			let totalSize = 0;
+			let validCount = 0;
+			for (const row of rows) {
+				try {
+					const vec = deserializeVector(row.embedding);
+					totalSize += vec.indices.length;
+					validCount++;
+				} catch (err: unknown) {
+					logger.warn({ error: String(err) }, "Failed to deserialize embedding during stats calculation");
+				}
+			}
+			avgVectorSize = validCount > 0 ? totalSize / validCount : 0;
 		}
-		avgVectorSize = totalSize / rows.length;
-	}
 
-	return {
-		vocabSize,
-		embeddedCount,
-		unembeddedCount,
-		avgVectorSize,
-	};
+		return {
+			vocabSize,
+			embeddedCount,
+			unembeddedCount,
+			avgVectorSize,
+		};
+	} catch (error: unknown) {
+		logger.error({ error: String(error) }, "Failed to get embedding statistics");
+		return {
+			vocabSize: 0,
+			embeddedCount: 0,
+			unembeddedCount: 0,
+			avgVectorSize: 0,
+		};
+	}
 }
