@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-27T02:07:18.724Z",
+  "generatedAt": "2026-01-27T02:58:13.899Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -18,17 +18,17 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 109,
+          "line": 417,
           "context": "map"
         },
         {
           "file": "automated-pm.ts",
-          "line": 665,
+          "line": 1045,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 989,
+          "line": 1408,
           "context": "info"
         },
         {
@@ -131,12 +131,12 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 122,
+          "line": 430,
           "context": "if"
         },
         {
           "file": "automated-pm.ts",
-          "line": 990,
+          "line": 1409,
           "context": "info"
         },
         {
@@ -314,13 +314,24 @@
           "file": "orchestrator.ts",
           "line": 1166,
           "context": "if"
+        },
+        {
+          "file": "capability-ledger.ts",
+          "line": 331,
+          "context": "if"
         }
       ]
     },
     {
       "function": "getRecommendedModel",
       "definedIn": "capability-ledger.ts",
-      "calledFrom": []
+      "calledFrom": [
+        {
+          "file": "capability-ledger.ts",
+          "line": 431,
+          "context": "if"
+        }
+      ]
     },
     {
       "function": "captureDecision",
@@ -349,7 +360,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 277,
+          "line": 599,
           "context": "if"
         },
         {
@@ -402,12 +413,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 271,
+          "line": 593,
           "context": "for"
         },
         {
           "file": "automated-pm.ts",
-          "line": 320,
+          "line": 666,
           "context": "now"
         }
       ]
@@ -423,7 +434,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 899,
+          "line": 1303,
           "context": "info"
         },
         {
@@ -439,12 +450,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 888,
+          "line": 1292,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 905,
+          "line": 1309,
           "context": "info"
         },
         {

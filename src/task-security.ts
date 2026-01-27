@@ -542,14 +542,13 @@ export interface PathValidationResult {
 const VALID_SRC_DIRS = new Set([
 	"src",
 	"src/__tests__",
-	"src/__tests__/utils",
-	"src/__tests__/integration",
-	"src/__tests__/orchestrator",
+	"src/__tests__/integration", // This one exists
 	"src/commands",
 	"src/grind",
 	"src/orchestrator",
 	"src/worker",
 	"src/rag",
+	"src/api",
 ]);
 
 /**
