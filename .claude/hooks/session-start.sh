@@ -22,11 +22,15 @@ echo ""
 if [ -f "$ANALYSIS_DIR/postmortem-$TIMESTAMP.json" ]; then
     echo "## Postmortem (Last Grind)"
     jq -r '
-      "Success Rate: \(.successRate // "N/A")",
-      "Failed Tasks: \(.failedCount // 0)",
+      "Success Rate: \(.summary.successRate // "N/A")",
+      "Tasks Completed: \(.summary.tasksCompleted // 0)",
+      "Tasks Failed: \(.summary.tasksFailed // 0)",
+      "Duration: \(.summary.duration // "N/A")",
       "",
       "Failure Breakdown:",
-      ((.failureBreakdown // {}) | to_entries[] | "  - \(.key): \(.value)"),
+      ((.failureAnalysis.breakdown // {}) | to_entries | map(select(.value > 0)) | if length == 0 then ["  (none)"] else map("  - \(.key): \(.value)") end | .[]),
+      "",
+      "Escalations: \(.escalations.total // 0) (\(.escalations.escalationRate // "0%"))",
       "",
       "Recommendations:",
       ((.recommendations // [])[:3][] | "  - \(.)")
@@ -34,27 +38,15 @@ if [ -f "$ANALYSIS_DIR/postmortem-$TIMESTAMP.json" ]; then
     echo ""
 fi
 
-# Show metrics highlights
-if [ -f "$ANALYSIS_DIR/metrics-$TIMESTAMP.json" ]; then
-    echo "## Metrics"
-    jq -r '
-      "Total Tasks: \(.totalTasks // 0)",
-      "Completed: \(.completed // 0)",
-      "Failed: \(.failed // 0)",
-      "Avg Duration: \(.avgDurationMs // 0)ms"
-    ' "$ANALYSIS_DIR/metrics-$TIMESTAMP.json" 2>/dev/null || echo "  (no metrics data)"
-    echo ""
-fi
-
 # Show introspection highlights (model routing, escalation)
 if [ -f "$ANALYSIS_DIR/introspect-$TIMESTAMP.json" ]; then
     echo "## Introspection"
     jq -r '
-      "Model Usage:",
-      ((.modelUsage // {}) | to_entries[] | "  - \(.key): \(.value)"),
+      "Model Performance:",
+      ((.modelPerformance // {}) | to_entries[:3][] | "  - \(.key): \(.value.successRate // "N/A") success, \(.value.avgTokens // 0) avg tokens"),
       "",
-      "Escalation Rate: \(.escalationRate // "N/A")",
-      "Avg Retries: \(.avgRetries // "N/A")"
+      "Top Failure Patterns:",
+      ((.failurePatterns // [])[:3][] | "  - \(.pattern // .category): \(.count // 0) occurrences")
     ' "$ANALYSIS_DIR/introspect-$TIMESTAMP.json" 2>/dev/null || echo "  (no introspection data)"
     echo ""
 fi
@@ -63,9 +55,9 @@ fi
 if [ -f "$ANALYSIS_DIR/effectiveness-$TIMESTAMP.json" ]; then
     echo "## Learning Effectiveness"
     jq -r '
-      "File Prediction Accuracy: \(.filePredictionAccuracy // "N/A")",
-      "Knowledge Correlation: \(.knowledgeCorrelation // "N/A")",
-      "Pattern Match Rate: \(.patternMatchRate // "N/A")"
+      "File Prediction: \(.filePrediction.accuracy // "N/A")% accuracy (\(.filePrediction.sampleSize // 0) samples)",
+      "Knowledge Impact: \(.knowledgeImpact.correlation // "N/A")",
+      "Error Fix Patterns: \(.errorPatterns.matchRate // "N/A")% match rate"
     ' "$ANALYSIS_DIR/effectiveness-$TIMESTAMP.json" 2>/dev/null || echo "  (no effectiveness data)"
     echo ""
 fi
