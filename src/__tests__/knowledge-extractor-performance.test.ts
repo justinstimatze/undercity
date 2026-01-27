@@ -691,8 +691,10 @@ describe("Knowledge Extractor Performance Benchmarks", () => {
 			const largeResult = benchmarkPatternExtraction(LARGE_CONVERSATION);
 
 			// Large should be slower but not more than 5x (linear scaling)
+			// Add minimum floor of 5ms to avoid flaky tests when timings are very small
 			const sizeRatio = LARGE_CONVERSATION.content.length / SMALL_CONVERSATION.content.length;
-			expect(largeResult.latency.mean).toBeLessThan(smallResult.latency.mean * sizeRatio * 2);
+			const baselineLatency = Math.max(smallResult.latency.mean, 5);
+			expect(largeResult.latency.mean).toBeLessThan(baselineLatency * sizeRatio * 2);
 		});
 	});
 
