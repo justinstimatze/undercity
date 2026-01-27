@@ -10,6 +10,7 @@ import { generateToolsPrompt } from "../efficiency-tools.js";
 import { formatPatternsAsRules, getFailureWarningsForTask } from "../error-fix-patterns.js";
 import { findRelevantLearnings, formatLearningsCompact } from "../knowledge.js";
 import { getMetaTaskPrompt } from "../meta-tasks.js";
+import { classifyTask, hasClassificationData } from "../task-classifier.js";
 import { findRelevantFiles, formatCoModificationHints, formatFileSuggestionsForPrompt } from "../task-file-patterns.js";
 import { formatExecutionPlanAsContext, type TieredPlanResult } from "../task-planner.js";
 import type { MetaTaskType, TicketContent } from "../types.js";
@@ -93,15 +94,26 @@ Return your analysis as JSON in the format specified above.`;
 }
 
 /**
- * Build prompt for research tasks
+ * Result from building a research prompt
  */
-export function buildResearchPrompt(
+export interface ResearchPromptResult {
+	prompt: string;
+	injectedLearningIds: string[];
+}
+
+/**
+ * Build prompt for research tasks with learning context injection
+ */
+export async function buildResearchPrompt(
 	task: string,
 	attempts: number,
 	lastFeedback?: string,
 	consecutiveNoWriteAttempts?: number,
-): string {
+	stateDir?: string,
+): Promise<ResearchPromptResult> {
 	const objectiveWithoutPrefix = task.replace(/^\[research\]\s*/i, "");
+	const sections: string[] = [];
+	let injectedLearningIds: string[] = [];
 
 	// Generate a filename from the objective
 	const slug = objectiveWithoutPrefix
@@ -111,6 +123,37 @@ export function buildResearchPrompt(
 		.slice(0, 50);
 	const timestamp = new Date().toISOString().split("T")[0];
 	const outputPath = `.undercity/research/${timestamp}-${slug}.md`;
+
+	// Inject relevant learnings from previous research/tasks
+	const relevantLearnings = findRelevantLearnings(objectiveWithoutPrefix, 5, stateDir);
+	if (relevantLearnings.length > 0) {
+		const learningsPrompt = formatLearningsCompact(relevantLearnings);
+		sections.push(learningsPrompt);
+		injectedLearningIds = relevantLearnings.map((l) => l.id);
+	}
+
+	// Inject semantic warnings from similar failed tasks
+	if (stateDir && hasClassificationData(stateDir)) {
+		try {
+			const classification = await classifyTask(objectiveWithoutPrefix, stateDir);
+			if (classification.similarTasks.some((t) => t.outcome === "failure")) {
+				const failedSimilar = classification.similarTasks.filter((t) => t.outcome === "failure");
+				const warningLines = [
+					"SIMILAR RESEARCH HAS FAILED BEFORE:",
+					...failedSimilar.slice(0, 3).map((t) => {
+						const reason = t.failureReason || "unknown reason";
+						const objective = t.objective.length > 60 ? `${t.objective.substring(0, 60)}...` : t.objective;
+						return `  - "${objective}" failed: ${reason}`;
+					}),
+					"",
+					"Learn from these failures - try a different approach.",
+				];
+				sections.push(warningLines.join("\n"));
+			}
+		} catch {
+			// Classification failed - continue without it
+		}
+	}
 
 	let retryContext = "";
 	if (attempts > 1 && lastFeedback) {
@@ -140,7 +183,10 @@ Please provide more detailed findings and ensure the markdown file is written.`;
 		}
 	}
 
-	return `You are a research assistant. Your task is to gather information and document findings.
+	// Build context section from learnings/warnings
+	const contextSection = sections.length > 0 ? `${sections.join("\n\n---\n\n")}\n\n---\n\n` : "";
+
+	const prompt = `${contextSection}You are a research assistant. Your task is to gather information and document findings.
 
 RESEARCH OBJECTIVE:
 ${objectiveWithoutPrefix}${retryContext}
@@ -178,6 +224,8 @@ Brief summary of key findings.
 \`\`\`
 
 The file MUST be created at ${outputPath} for this task to succeed.`;
+
+	return { prompt, injectedLearningIds };
 }
 
 /**
@@ -346,8 +394,12 @@ RULES:
 
 /**
  * Main entry point: build prompt based on task type
+ * @deprecated Use the individual prompt builders from agent-loop.ts instead
  */
-export function buildPromptForTask(ctx: PromptBuildContext, currentAgentSessionId?: string): PromptBuildResult {
+export async function buildPromptForTask(
+	ctx: PromptBuildContext,
+	currentAgentSessionId?: string,
+): Promise<PromptBuildResult> {
 	const isRetry = ctx.attempts > 1 && ctx.lastFeedback;
 	const canResume = isRetry && currentAgentSessionId && !ctx.lastPostMortem;
 
@@ -374,10 +426,17 @@ export function buildPromptForTask(ctx: PromptBuildContext, currentAgentSessionI
 
 	// Research task
 	if (ctx.isResearchTask) {
+		const result = await buildResearchPrompt(
+			ctx.task,
+			ctx.attempts,
+			ctx.lastFeedback,
+			ctx.consecutiveNoWriteAttempts,
+			ctx.stateDir,
+		);
 		return {
-			prompt: buildResearchPrompt(ctx.task, ctx.attempts, ctx.lastFeedback, ctx.consecutiveNoWriteAttempts),
+			prompt: result.prompt,
 			canResume: false,
-			injectedLearningIds: [],
+			injectedLearningIds: result.injectedLearningIds,
 			predictedFiles: [],
 		};
 	}

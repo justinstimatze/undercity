@@ -396,12 +396,12 @@ function handleAgentErrorSubtype(resultData: ResultMessageData, state: AgentLoop
 /**
  * Build the prompt for agent execution
  */
-function buildPrompt(
+async function buildPrompt(
 	context: AgentLoopContext,
 	state: AgentLoopState,
 	config: AgentLoopConfig,
 	deps: AgentLoopDependencies,
-): { prompt: string; resumePrompt?: string; injectedLearningIds: string[] } {
+): Promise<{ prompt: string; resumePrompt?: string; injectedLearningIds: string[] }> {
 	const metaType = state.isCurrentTaskMeta ? extractMetaTaskType(context.task) : null;
 
 	// Check if this is a retry with an existing session to resume
@@ -431,18 +431,19 @@ function buildPrompt(
 	}
 
 	if (state.isCurrentTaskResearch) {
-		// Research task prompt
-		const prompt = buildResearchPrompt(
+		// Research task prompt with learning context
+		const result = await buildResearchPrompt(
 			context.task,
 			state.attempts,
 			state.lastFeedback,
 			state.consecutiveNoWriteAttempts,
+			config.stateDir,
 		);
-		return { prompt, injectedLearningIds: [] };
+		return { prompt: result.prompt, injectedLearningIds: result.injectedLearningIds };
 	}
 
 	// Standard implementation task: build prompt with context
-	const contextResult = buildImplementationContext({
+	const contextResult = await buildImplementationContext({
 		task: context.task,
 		stateDir: config.stateDir,
 		workingDirectory: config.workingDirectory,
@@ -480,7 +481,7 @@ export async function runAgentLoop(
 	let result = "";
 
 	// Build prompt
-	const { prompt, resumePrompt, injectedLearningIds } = buildPrompt(context, state, config, deps);
+	const { prompt, resumePrompt, injectedLearningIds } = await buildPrompt(context, state, config, deps);
 	state.injectedLearningIds = injectedLearningIds;
 
 	// Clear post-mortem after use - only applies to first attempt at new tier

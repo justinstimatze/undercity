@@ -8,6 +8,7 @@ import type { ContextBriefing } from "../context.js";
 import { generateToolsPrompt } from "../efficiency-tools.js";
 import { formatPatternsAsRules, getFailureWarningsForTask } from "../error-fix-patterns.js";
 import { findRelevantLearnings, formatLearningsCompact } from "../knowledge.js";
+import { classifyTask, hasClassificationData } from "../task-classifier.js";
 import { findRelevantFiles, formatCoModificationHints, formatFileSuggestionsForPrompt } from "../task-file-patterns.js";
 import { formatExecutionPlanAsContext, type TieredPlanResult } from "../task-planner.js";
 import type { TicketContent } from "../types.js";
@@ -44,7 +45,7 @@ export interface ContextBuildResult {
 /**
  * Build the context section for a standard implementation task prompt
  */
-export function buildImplementationContext(config: ContextBuildConfig): ContextBuildResult {
+export async function buildImplementationContext(config: ContextBuildConfig): Promise<ContextBuildResult> {
 	const {
 		task,
 		stateDir,
@@ -102,6 +103,29 @@ export function buildImplementationContext(config: ContextBuildConfig): ContextB
 	const failureWarnings = getFailureWarningsForTask(task, 2, stateDir);
 	if (failureWarnings) {
 		sections.push(failureWarnings);
+	}
+
+	// Add semantic warnings from similar failed tasks (RAG-based classification)
+	if (hasClassificationData(stateDir)) {
+		try {
+			const classification = await classifyTask(task, stateDir);
+			if (classification.similarTasks.some((t) => t.outcome === "failure")) {
+				const failedSimilar = classification.similarTasks.filter((t) => t.outcome === "failure");
+				const warningLines = [
+					"⚠️ SIMILAR TASKS HAVE FAILED BEFORE:",
+					...failedSimilar.slice(0, 3).map((t) => {
+						const reason = t.failureReason || "unknown reason";
+						const objective = t.objective.length > 60 ? `${t.objective.substring(0, 60)}...` : t.objective;
+						return `  - "${objective}" failed: ${reason}`;
+					}),
+					"",
+					"Learn from these failures - avoid the same mistakes.",
+				];
+				sections.push(warningLines.join("\n"));
+			}
+		} catch {
+			// Classification failed - continue without it
+		}
 	}
 
 	// Ralph-style: inject RULES from error patterns and current session errors

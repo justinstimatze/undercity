@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-27T08:02:34.730Z",
+  "generatedAt": "2026-01-27T08:53:53.847Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -8,12 +8,17 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 94,
+          "line": 95,
           "context": "if"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 254,
+          "line": 128,
+          "context": "unknown"
+        },
+        {
+          "file": "worker/prompt-builder.ts",
+          "line": 302,
           "context": "if"
         },
         {
@@ -111,12 +116,12 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 115,
+          "line": 139,
           "context": "if"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 275,
+          "line": 323,
           "context": "if"
         },
         {
@@ -167,12 +172,12 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 117,
+          "line": 141,
           "context": "if"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 277,
+          "line": 325,
           "context": "if"
         }
       ]
@@ -183,7 +188,7 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 124,
+          "line": 148,
           "context": "if"
         },
         {
@@ -193,7 +198,7 @@
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 284,
+          "line": 332,
           "context": "if"
         }
       ]
@@ -280,12 +285,12 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 102,
+          "line": 103,
           "context": "if"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 262,
+          "line": 310,
           "context": "if"
         }
       ]
