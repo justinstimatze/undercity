@@ -152,11 +152,24 @@ function validateTaskTargets(task: string, cwd: string): TaskValidationResult {
 	const taskLower = task.toLowerCase();
 
 	// Skip validation for create/new tasks - they're supposed to create files
-	const isCreateTask =
-		taskLower.includes("create ") ||
-		taskLower.includes("add new ") ||
-		taskLower.includes("implement new ") ||
-		taskLower.includes("write new ");
+	// These keywords suggest the task is about creating/implementing something new
+	const createKeywords = [
+		"create ",
+		"add new ",
+		"implement new ",
+		"write new ",
+		"implement ",
+		"define ",
+		"build ",
+		"design ",
+		"set up ",
+		"setup ",
+		"initialize ",
+		"scaffold ",
+		"generate ",
+		"make ",
+	];
+	const isCreateTask = createKeywords.some((kw) => taskLower.includes(kw));
 
 	if (isCreateTask) {
 		return { valid: true };

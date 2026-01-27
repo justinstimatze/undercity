@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-27T00:14:33.977Z",
+  "generatedAt": "2026-01-27T00:56:23.010Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -236,7 +236,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1534,
+          "line": 1547,
           "context": "if"
         }
       ]
@@ -476,7 +476,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1240,
+          "line": 1253,
           "context": "info"
         }
       ]
