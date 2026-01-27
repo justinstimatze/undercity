@@ -162,6 +162,344 @@ function createEmptyPatternStats(pattern: string): PatternStats {
 }
 
 /**
+ * Type guard to validate PatternModelStats structure
+ *
+ * Validates all required numeric fields are present and non-negative.
+ * Optional fields (totalTokens, totalDurationMs, totalRetries) are validated if present,
+ * allowing for backward compatibility with older ledger formats.
+ *
+ * @param value - The value to validate
+ * @returns True if value is a valid PatternModelStats object
+ * @example
+ * const stats = { attempts: 5, successes: 4, escalations: 1, totalTokens: 1000, totalDurationMs: 5000, totalRetries: 6 };
+ * if (isPatternModelStats(stats)) {
+ *   console.log(`Success rate: ${stats.successes / stats.attempts}`);
+ * }
+ */
+export function isPatternModelStats(value: unknown): value is PatternModelStats {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const obj = value as Record<string, unknown>;
+
+	// Validate required core fields
+	if (
+		typeof obj.attempts !== "number" ||
+		obj.attempts < 0 ||
+		typeof obj.successes !== "number" ||
+		obj.successes < 0 ||
+		typeof obj.escalations !== "number" ||
+		obj.escalations < 0
+	) {
+		return false;
+	}
+
+	// Validate optional fields only if present (for backward compatibility)
+	if (obj.totalTokens !== undefined && (typeof obj.totalTokens !== "number" || obj.totalTokens < 0)) {
+		return false;
+	}
+
+	if (obj.totalDurationMs !== undefined && (typeof obj.totalDurationMs !== "number" || obj.totalDurationMs < 0)) {
+		return false;
+	}
+
+	if (obj.totalRetries !== undefined && (typeof obj.totalRetries !== "number" || obj.totalRetries < 0)) {
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * Type guard to validate PatternStats structure
+ *
+ * Validates pattern string, model stats, and lastSeen date.
+ *
+ * @param value - The value to validate
+ * @returns True if value is a valid PatternStats object
+ * @example
+ * const stats = {
+ *   pattern: "fix",
+ *   byModel: { sonnet: {...}, opus: {...} },
+ *   lastSeen: new Date()
+ * };
+ * if (isPatternStats(stats)) {
+ *   console.log(`Pattern: ${stats.pattern}`);
+ * }
+ */
+export function isPatternStats(value: unknown): value is PatternStats {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const obj = value as Record<string, unknown>;
+
+	// Validate pattern is non-empty string
+	if (typeof obj.pattern !== "string" || obj.pattern.length === 0) {
+		return false;
+	}
+
+	// Validate byModel is an object with valid ModelChoice keys
+	if (typeof obj.byModel !== "object" || obj.byModel === null) {
+		return false;
+	}
+
+	const byModel = obj.byModel as Record<string, unknown>;
+
+	// Check both sonnet and opus exist and are valid
+	if (!isPatternModelStats(byModel.sonnet) || !isPatternModelStats(byModel.opus)) {
+		return false;
+	}
+
+	// Validate lastSeen is a valid Date (can be Date object or ISO string)
+	if (obj.lastSeen instanceof Date) {
+		return !Number.isNaN(obj.lastSeen.getTime());
+	}
+	if (typeof obj.lastSeen === "string") {
+		const date = new Date(obj.lastSeen);
+		return !Number.isNaN(date.getTime());
+	}
+
+	return false;
+}
+
+/**
+ * Type guard to validate CapabilityLedger structure
+ *
+ * Validates all ledger fields including nested pattern stats.
+ *
+ * @param value - The value to validate
+ * @returns True if value is a valid CapabilityLedger object
+ * @example
+ * const ledger = loadLedgerData();
+ * if (isCapabilityLedger(ledger)) {
+ *   console.log(`Total entries: ${ledger.totalEntries}`);
+ * }
+ */
+export function isCapabilityLedger(value: unknown): value is CapabilityLedger {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const obj = value as Record<string, unknown>;
+
+	// Validate patterns object
+	if (typeof obj.patterns !== "object" || obj.patterns === null) {
+		return false;
+	}
+
+	const patterns = obj.patterns as Record<string, unknown>;
+	for (const key in patterns) {
+		if (!isPatternStats(patterns[key])) {
+			return false;
+		}
+	}
+
+	// Validate totalEntries is non-negative number
+	if (typeof obj.totalEntries !== "number" || obj.totalEntries < 0) {
+		return false;
+	}
+
+	// Validate version is non-empty string
+	if (typeof obj.version !== "string" || obj.version.length === 0) {
+		return false;
+	}
+
+	// Validate lastUpdated is a valid Date (can be Date object or ISO string)
+	if (obj.lastUpdated instanceof Date) {
+		return !Number.isNaN(obj.lastUpdated.getTime());
+	}
+	if (typeof obj.lastUpdated === "string") {
+		const date = new Date(obj.lastUpdated);
+		return !Number.isNaN(date.getTime());
+	}
+
+	return false;
+}
+
+/**
+ * Type guard to validate TaskResult structure
+ *
+ * Validates required fields and optional metric fields.
+ *
+ * @param value - The value to validate
+ * @returns True if value is a valid TaskResult object
+ * @example
+ * const result = { objective: "fix bug", model: "sonnet", success: true, escalated: false };
+ * if (isTaskResult(result)) {
+ *   updateLedger(result);
+ * }
+ */
+export function isTaskResult(value: unknown): value is TaskResult {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const obj = value as Record<string, unknown>;
+
+	// Validate required fields
+	if (typeof obj.objective !== "string" || obj.objective.length === 0) {
+		return false;
+	}
+
+	// Validate model is valid ModelChoice
+	if (obj.model !== "sonnet" && obj.model !== "opus") {
+		return false;
+	}
+
+	if (typeof obj.success !== "boolean") {
+		return false;
+	}
+
+	if (typeof obj.escalated !== "boolean") {
+		return false;
+	}
+
+	// Validate optional fields if present
+	if (obj.tokenCost !== undefined && (typeof obj.tokenCost !== "number" || obj.tokenCost < 0)) {
+		return false;
+	}
+
+	if (obj.durationMs !== undefined && (typeof obj.durationMs !== "number" || obj.durationMs < 0)) {
+		return false;
+	}
+
+	if (obj.attempts !== undefined && (typeof obj.attempts !== "number" || obj.attempts < 0)) {
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * Type guard to validate ModelCostMetrics structure
+ *
+ * Validates all numeric metric fields with appropriate ranges.
+ *
+ * @param value - The value to validate
+ * @returns True if value is a valid ModelCostMetrics object
+ * @example
+ * const metrics = {
+ *   successRate: 0.85,
+ *   escalationRate: 0.15,
+ *   attempts: 10,
+ *   avgTokens: 1200,
+ *   avgDurationMs: 5000,
+ *   avgRetries: 1.2,
+ *   expectedValue: 0.5
+ * };
+ * if (isModelCostMetrics(metrics)) {
+ *   console.log(`Expected value: ${metrics.expectedValue}`);
+ * }
+ */
+export function isModelCostMetrics(value: unknown): value is ModelCostMetrics {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const obj = value as Record<string, unknown>;
+
+	return (
+		typeof obj.successRate === "number" &&
+		obj.successRate >= 0 &&
+		obj.successRate <= 1 &&
+		typeof obj.escalationRate === "number" &&
+		obj.escalationRate >= 0 &&
+		obj.escalationRate <= 1 &&
+		typeof obj.attempts === "number" &&
+		obj.attempts >= 0 &&
+		typeof obj.avgTokens === "number" &&
+		obj.avgTokens >= 0 &&
+		typeof obj.avgDurationMs === "number" &&
+		obj.avgDurationMs >= 0 &&
+		typeof obj.avgRetries === "number" &&
+		obj.avgRetries >= 0 &&
+		typeof obj.expectedValue === "number" &&
+		obj.expectedValue >= 0
+	);
+}
+
+/**
+ * Type guard to validate ModelRecommendation structure
+ *
+ * Validates recommendation fields including optional pattern rates and cost metrics.
+ *
+ * @param value - The value to validate
+ * @returns True if value is a valid ModelRecommendation object
+ * @example
+ * const rec = getRecommendedModel("fix bug");
+ * if (isModelRecommendation(rec)) {
+ *   console.log(`Recommended: ${rec.model} (${rec.confidence * 100}% confidence)`);
+ * }
+ */
+export function isModelRecommendation(value: unknown): value is ModelRecommendation {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const obj = value as Record<string, unknown>;
+
+	// Validate required fields
+	if (obj.model !== "sonnet" && obj.model !== "opus") {
+		return false;
+	}
+
+	if (typeof obj.confidence !== "number" || obj.confidence < 0 || obj.confidence > 1) {
+		return false;
+	}
+
+	if (typeof obj.reason !== "string" || obj.reason.length === 0) {
+		return false;
+	}
+
+	// Validate optional patternRates if present
+	if (obj.patternRates !== undefined) {
+		if (typeof obj.patternRates !== "object" || obj.patternRates === null) {
+			return false;
+		}
+
+		const rates = obj.patternRates as Record<string, unknown>;
+		for (const model of ["sonnet", "opus"]) {
+			const modelRate = rates[model];
+			if (typeof modelRate !== "object" || modelRate === null) {
+				return false;
+			}
+
+			const rate = modelRate as Record<string, unknown>;
+			if (
+				typeof rate.successRate !== "number" ||
+				rate.successRate < 0 ||
+				rate.successRate > 1 ||
+				typeof rate.escalationRate !== "number" ||
+				rate.escalationRate < 0 ||
+				rate.escalationRate > 1 ||
+				typeof rate.attempts !== "number" ||
+				rate.attempts < 0
+			) {
+				return false;
+			}
+		}
+	}
+
+	// Validate optional costMetrics if present
+	if (obj.costMetrics !== undefined) {
+		if (typeof obj.costMetrics !== "object" || obj.costMetrics === null) {
+			return false;
+		}
+
+		const metrics = obj.costMetrics as Record<string, unknown>;
+		for (const model of ["sonnet", "opus"]) {
+			if (metrics[model] !== undefined && !isModelCostMetrics(metrics[model])) {
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+/**
  * Get the ledger file path
  */
 function getLedgerPath(stateDir: string = DEFAULT_STATE_DIR): string {
@@ -185,7 +523,19 @@ export function loadLedger(stateDir: string = DEFAULT_STATE_DIR): CapabilityLedg
 
 	try {
 		const content = readFileSync(path, "utf-8");
-		return JSON.parse(content) as CapabilityLedger;
+		const parsed = JSON.parse(content);
+
+		// Validate the parsed data before returning
+		if (!isCapabilityLedger(parsed)) {
+			return {
+				patterns: {},
+				totalEntries: 0,
+				version: "1.0",
+				lastUpdated: new Date(),
+			};
+		}
+
+		return parsed;
 	} catch {
 		return {
 			patterns: {},

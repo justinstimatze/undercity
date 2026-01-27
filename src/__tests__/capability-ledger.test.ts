@@ -43,7 +43,18 @@ vi.mock("node:fs", () => ({
 
 // Import after mocking
 import type { CapabilityLedger, TaskResult } from "../capability-ledger.js";
-import { getLedgerStats, getRecommendedModel, loadLedger, updateLedger } from "../capability-ledger.js";
+import {
+	getLedgerStats,
+	getRecommendedModel,
+	isCapabilityLedger,
+	isModelCostMetrics,
+	isModelRecommendation,
+	isPatternModelStats,
+	isPatternStats,
+	isTaskResult,
+	loadLedger,
+	updateLedger,
+} from "../capability-ledger.js";
 
 /**
  * Create a mock TaskResult with sensible defaults
@@ -1092,6 +1103,719 @@ describe("capability-ledger", () => {
 
 			expect(lastUpdated.getTime()).toBeGreaterThanOrEqual(beforeUpdate.getTime());
 			expect(lastUpdated.getTime()).toBeLessThanOrEqual(afterUpdate.getTime());
+		});
+	});
+
+	describe("type guards", () => {
+		describe("isPatternModelStats", () => {
+			it("accepts valid PatternModelStats", () => {
+				const valid = {
+					attempts: 5,
+					successes: 4,
+					escalations: 1,
+					totalTokens: 1000,
+					totalDurationMs: 5000,
+					totalRetries: 6,
+				};
+				expect(isPatternModelStats(valid)).toBe(true);
+			});
+
+			it("accepts zero values", () => {
+				const valid = {
+					attempts: 0,
+					successes: 0,
+					escalations: 0,
+					totalTokens: 0,
+					totalDurationMs: 0,
+					totalRetries: 0,
+				};
+				expect(isPatternModelStats(valid)).toBe(true);
+			});
+
+			it("rejects null", () => {
+				expect(isPatternModelStats(null)).toBe(false);
+			});
+
+			it("rejects undefined", () => {
+				expect(isPatternModelStats(undefined)).toBe(false);
+			});
+
+			it("rejects non-object types", () => {
+				expect(isPatternModelStats("string")).toBe(false);
+				expect(isPatternModelStats(123)).toBe(false);
+				expect(isPatternModelStats(true)).toBe(false);
+				expect(isPatternModelStats([])).toBe(false);
+			});
+
+			it("rejects missing required fields", () => {
+				const missing = {
+					attempts: 5,
+					successes: 4,
+					// missing escalations
+					totalTokens: 1000,
+					totalDurationMs: 5000,
+					totalRetries: 6,
+				};
+				expect(isPatternModelStats(missing)).toBe(false);
+			});
+
+			it("rejects negative values", () => {
+				const negative = {
+					attempts: -1,
+					successes: 4,
+					escalations: 1,
+					totalTokens: 1000,
+					totalDurationMs: 5000,
+					totalRetries: 6,
+				};
+				expect(isPatternModelStats(negative)).toBe(false);
+			});
+
+			it("rejects wrong field types", () => {
+				const wrongType = {
+					attempts: "5",
+					successes: 4,
+					escalations: 1,
+					totalTokens: 1000,
+					totalDurationMs: 5000,
+					totalRetries: 6,
+				};
+				expect(isPatternModelStats(wrongType)).toBe(false);
+			});
+		});
+
+		describe("isPatternStats", () => {
+			it("accepts valid PatternStats", () => {
+				const valid = {
+					pattern: "fix",
+					byModel: {
+						sonnet: {
+							attempts: 5,
+							successes: 4,
+							escalations: 1,
+							totalTokens: 1000,
+							totalDurationMs: 5000,
+							totalRetries: 6,
+						},
+						opus: {
+							attempts: 2,
+							successes: 2,
+							escalations: 0,
+							totalTokens: 500,
+							totalDurationMs: 2000,
+							totalRetries: 2,
+						},
+					},
+					lastSeen: new Date(),
+				};
+				expect(isPatternStats(valid)).toBe(true);
+			});
+
+			it("accepts Date as ISO string", () => {
+				const valid = {
+					pattern: "fix",
+					byModel: {
+						sonnet: {
+							attempts: 5,
+							successes: 4,
+							escalations: 1,
+							totalTokens: 1000,
+							totalDurationMs: 5000,
+							totalRetries: 6,
+						},
+						opus: {
+							attempts: 2,
+							successes: 2,
+							escalations: 0,
+							totalTokens: 500,
+							totalDurationMs: 2000,
+							totalRetries: 2,
+						},
+					},
+					lastSeen: "2024-01-01T00:00:00.000Z",
+				};
+				expect(isPatternStats(valid)).toBe(true);
+			});
+
+			it("rejects null", () => {
+				expect(isPatternStats(null)).toBe(false);
+			});
+
+			it("rejects empty pattern string", () => {
+				const invalid = {
+					pattern: "",
+					byModel: {
+						sonnet: {
+							attempts: 5,
+							successes: 4,
+							escalations: 1,
+							totalTokens: 1000,
+							totalDurationMs: 5000,
+							totalRetries: 6,
+						},
+						opus: {
+							attempts: 2,
+							successes: 2,
+							escalations: 0,
+							totalTokens: 500,
+							totalDurationMs: 2000,
+							totalRetries: 2,
+						},
+					},
+					lastSeen: new Date(),
+				};
+				expect(isPatternStats(invalid)).toBe(false);
+			});
+
+			it("rejects missing model stats", () => {
+				const missingOpus = {
+					pattern: "fix",
+					byModel: {
+						sonnet: {
+							attempts: 5,
+							successes: 4,
+							escalations: 1,
+							totalTokens: 1000,
+							totalDurationMs: 5000,
+							totalRetries: 6,
+						},
+						// missing opus
+					},
+					lastSeen: new Date(),
+				};
+				expect(isPatternStats(missingOpus)).toBe(false);
+			});
+
+			it("rejects invalid Date string", () => {
+				const invalid = {
+					pattern: "fix",
+					byModel: {
+						sonnet: {
+							attempts: 5,
+							successes: 4,
+							escalations: 1,
+							totalTokens: 1000,
+							totalDurationMs: 5000,
+							totalRetries: 6,
+						},
+						opus: {
+							attempts: 2,
+							successes: 2,
+							escalations: 0,
+							totalTokens: 500,
+							totalDurationMs: 2000,
+							totalRetries: 2,
+						},
+					},
+					lastSeen: "invalid-date",
+				};
+				expect(isPatternStats(invalid)).toBe(false);
+			});
+
+			it("rejects invalid model stats", () => {
+				const invalid = {
+					pattern: "fix",
+					byModel: {
+						sonnet: {
+							attempts: -5, // negative value
+							successes: 4,
+							escalations: 1,
+							totalTokens: 1000,
+							totalDurationMs: 5000,
+							totalRetries: 6,
+						},
+						opus: {
+							attempts: 2,
+							successes: 2,
+							escalations: 0,
+							totalTokens: 500,
+							totalDurationMs: 2000,
+							totalRetries: 2,
+						},
+					},
+					lastSeen: new Date(),
+				};
+				expect(isPatternStats(invalid)).toBe(false);
+			});
+		});
+
+		describe("isCapabilityLedger", () => {
+			it("accepts valid CapabilityLedger", () => {
+				const valid = {
+					patterns: {
+						fix: {
+							pattern: "fix",
+							byModel: {
+								sonnet: {
+									attempts: 5,
+									successes: 4,
+									escalations: 1,
+									totalTokens: 1000,
+									totalDurationMs: 5000,
+									totalRetries: 6,
+								},
+								opus: {
+									attempts: 2,
+									successes: 2,
+									escalations: 0,
+									totalTokens: 500,
+									totalDurationMs: 2000,
+									totalRetries: 2,
+								},
+							},
+							lastSeen: new Date(),
+						},
+					},
+					totalEntries: 10,
+					version: "1.0",
+					lastUpdated: new Date(),
+				};
+				expect(isCapabilityLedger(valid)).toBe(true);
+			});
+
+			it("accepts empty patterns object", () => {
+				const valid = {
+					patterns: {},
+					totalEntries: 0,
+					version: "1.0",
+					lastUpdated: new Date(),
+				};
+				expect(isCapabilityLedger(valid)).toBe(true);
+			});
+
+			it("accepts Date as ISO string", () => {
+				const valid = {
+					patterns: {},
+					totalEntries: 0,
+					version: "1.0",
+					lastUpdated: "2024-01-01T00:00:00.000Z",
+				};
+				expect(isCapabilityLedger(valid)).toBe(true);
+			});
+
+			it("rejects null", () => {
+				expect(isCapabilityLedger(null)).toBe(false);
+			});
+
+			it("rejects negative totalEntries", () => {
+				const invalid = {
+					patterns: {},
+					totalEntries: -1,
+					version: "1.0",
+					lastUpdated: new Date(),
+				};
+				expect(isCapabilityLedger(invalid)).toBe(false);
+			});
+
+			it("rejects empty version string", () => {
+				const invalid = {
+					patterns: {},
+					totalEntries: 0,
+					version: "",
+					lastUpdated: new Date(),
+				};
+				expect(isCapabilityLedger(invalid)).toBe(false);
+			});
+
+			it("rejects invalid pattern stats", () => {
+				const invalid = {
+					patterns: {
+						fix: {
+							pattern: "", // empty pattern
+							byModel: {
+								sonnet: {
+									attempts: 5,
+									successes: 4,
+									escalations: 1,
+									totalTokens: 1000,
+									totalDurationMs: 5000,
+									totalRetries: 6,
+								},
+								opus: {
+									attempts: 2,
+									successes: 2,
+									escalations: 0,
+									totalTokens: 500,
+									totalDurationMs: 2000,
+									totalRetries: 2,
+								},
+							},
+							lastSeen: new Date(),
+						},
+					},
+					totalEntries: 10,
+					version: "1.0",
+					lastUpdated: new Date(),
+				};
+				expect(isCapabilityLedger(invalid)).toBe(false);
+			});
+
+			it("rejects invalid Date string", () => {
+				const invalid = {
+					patterns: {},
+					totalEntries: 0,
+					version: "1.0",
+					lastUpdated: "not-a-date",
+				};
+				expect(isCapabilityLedger(invalid)).toBe(false);
+			});
+		});
+
+		describe("isTaskResult", () => {
+			it("accepts valid TaskResult with all fields", () => {
+				const valid = {
+					objective: "fix bug",
+					model: "sonnet" as const,
+					success: true,
+					escalated: false,
+					tokenCost: 1000,
+					durationMs: 5000,
+					attempts: 3,
+				};
+				expect(isTaskResult(valid)).toBe(true);
+			});
+
+			it("accepts valid TaskResult with only required fields", () => {
+				const valid = {
+					objective: "fix bug",
+					model: "opus" as const,
+					success: false,
+					escalated: true,
+				};
+				expect(isTaskResult(valid)).toBe(true);
+			});
+
+			it("accepts zero for optional fields", () => {
+				const valid = {
+					objective: "fix bug",
+					model: "sonnet" as const,
+					success: true,
+					escalated: false,
+					tokenCost: 0,
+					durationMs: 0,
+					attempts: 0,
+				};
+				expect(isTaskResult(valid)).toBe(true);
+			});
+
+			it("rejects null", () => {
+				expect(isTaskResult(null)).toBe(false);
+			});
+
+			it("rejects empty objective", () => {
+				const invalid = {
+					objective: "",
+					model: "sonnet" as const,
+					success: true,
+					escalated: false,
+				};
+				expect(isTaskResult(invalid)).toBe(false);
+			});
+
+			it("rejects invalid model", () => {
+				const invalid = {
+					objective: "fix bug",
+					model: "invalid",
+					success: true,
+					escalated: false,
+				};
+				expect(isTaskResult(invalid)).toBe(false);
+			});
+
+			it("rejects non-boolean success", () => {
+				const invalid = {
+					objective: "fix bug",
+					model: "sonnet",
+					success: "true",
+					escalated: false,
+				};
+				expect(isTaskResult(invalid)).toBe(false);
+			});
+
+			it("rejects negative optional fields", () => {
+				const invalid = {
+					objective: "fix bug",
+					model: "sonnet" as const,
+					success: true,
+					escalated: false,
+					tokenCost: -100,
+				};
+				expect(isTaskResult(invalid)).toBe(false);
+			});
+
+			it("rejects wrong type for optional fields", () => {
+				const invalid = {
+					objective: "fix bug",
+					model: "sonnet" as const,
+					success: true,
+					escalated: false,
+					attempts: "3",
+				};
+				expect(isTaskResult(invalid)).toBe(false);
+			});
+		});
+
+		describe("isModelCostMetrics", () => {
+			it("accepts valid ModelCostMetrics", () => {
+				const valid = {
+					successRate: 0.85,
+					escalationRate: 0.15,
+					attempts: 10,
+					avgTokens: 1200,
+					avgDurationMs: 5000,
+					avgRetries: 1.2,
+					expectedValue: 0.5,
+				};
+				expect(isModelCostMetrics(valid)).toBe(true);
+			});
+
+			it("accepts zero values", () => {
+				const valid = {
+					successRate: 0,
+					escalationRate: 0,
+					attempts: 0,
+					avgTokens: 0,
+					avgDurationMs: 0,
+					avgRetries: 0,
+					expectedValue: 0,
+				};
+				expect(isModelCostMetrics(valid)).toBe(true);
+			});
+
+			it("accepts boundary values for rates", () => {
+				const valid = {
+					successRate: 1.0,
+					escalationRate: 1.0,
+					attempts: 10,
+					avgTokens: 1200,
+					avgDurationMs: 5000,
+					avgRetries: 1.2,
+					expectedValue: 0.5,
+				};
+				expect(isModelCostMetrics(valid)).toBe(true);
+			});
+
+			it("rejects null", () => {
+				expect(isModelCostMetrics(null)).toBe(false);
+			});
+
+			it("rejects rate > 1", () => {
+				const invalid = {
+					successRate: 1.5,
+					escalationRate: 0.15,
+					attempts: 10,
+					avgTokens: 1200,
+					avgDurationMs: 5000,
+					avgRetries: 1.2,
+					expectedValue: 0.5,
+				};
+				expect(isModelCostMetrics(invalid)).toBe(false);
+			});
+
+			it("rejects negative rate", () => {
+				const invalid = {
+					successRate: -0.1,
+					escalationRate: 0.15,
+					attempts: 10,
+					avgTokens: 1200,
+					avgDurationMs: 5000,
+					avgRetries: 1.2,
+					expectedValue: 0.5,
+				};
+				expect(isModelCostMetrics(invalid)).toBe(false);
+			});
+
+			it("rejects negative attempts", () => {
+				const invalid = {
+					successRate: 0.85,
+					escalationRate: 0.15,
+					attempts: -1,
+					avgTokens: 1200,
+					avgDurationMs: 5000,
+					avgRetries: 1.2,
+					expectedValue: 0.5,
+				};
+				expect(isModelCostMetrics(invalid)).toBe(false);
+			});
+
+			it("rejects missing fields", () => {
+				const invalid = {
+					successRate: 0.85,
+					escalationRate: 0.15,
+					attempts: 10,
+					// missing avgTokens and others
+				};
+				expect(isModelCostMetrics(invalid)).toBe(false);
+			});
+		});
+
+		describe("isModelRecommendation", () => {
+			it("accepts valid ModelRecommendation with all fields", () => {
+				const valid = {
+					model: "sonnet" as const,
+					confidence: 0.85,
+					reason: "High success rate",
+					patternRates: {
+						sonnet: {
+							successRate: 0.9,
+							escalationRate: 0.1,
+							attempts: 10,
+						},
+						opus: {
+							successRate: 0.95,
+							escalationRate: 0.05,
+							attempts: 5,
+						},
+					},
+					costMetrics: {
+						sonnet: {
+							successRate: 0.9,
+							escalationRate: 0.1,
+							attempts: 10,
+							avgTokens: 1000,
+							avgDurationMs: 5000,
+							avgRetries: 1.1,
+							expectedValue: 0.8,
+						},
+						opus: {
+							successRate: 0.95,
+							escalationRate: 0.05,
+							attempts: 5,
+							avgTokens: 2000,
+							avgDurationMs: 3000,
+							avgRetries: 1.0,
+							expectedValue: 0.5,
+						},
+					},
+				};
+				expect(isModelRecommendation(valid)).toBe(true);
+			});
+
+			it("accepts valid ModelRecommendation with only required fields", () => {
+				const valid = {
+					model: "opus" as const,
+					confidence: 0.7,
+					reason: "Default recommendation",
+				};
+				expect(isModelRecommendation(valid)).toBe(true);
+			});
+
+			it("accepts boundary confidence values", () => {
+				const valid = {
+					model: "sonnet" as const,
+					confidence: 0,
+					reason: "Low confidence",
+				};
+				expect(isModelRecommendation(valid)).toBe(true);
+
+				const valid2 = {
+					model: "opus" as const,
+					confidence: 1,
+					reason: "High confidence",
+				};
+				expect(isModelRecommendation(valid2)).toBe(true);
+			});
+
+			it("rejects null", () => {
+				expect(isModelRecommendation(null)).toBe(false);
+			});
+
+			it("rejects invalid model", () => {
+				const invalid = {
+					model: "invalid",
+					confidence: 0.85,
+					reason: "Test",
+				};
+				expect(isModelRecommendation(invalid)).toBe(false);
+			});
+
+			it("rejects confidence > 1", () => {
+				const invalid = {
+					model: "sonnet" as const,
+					confidence: 1.5,
+					reason: "Test",
+				};
+				expect(isModelRecommendation(invalid)).toBe(false);
+			});
+
+			it("rejects negative confidence", () => {
+				const invalid = {
+					model: "sonnet" as const,
+					confidence: -0.1,
+					reason: "Test",
+				};
+				expect(isModelRecommendation(invalid)).toBe(false);
+			});
+
+			it("rejects empty reason", () => {
+				const invalid = {
+					model: "sonnet" as const,
+					confidence: 0.85,
+					reason: "",
+				};
+				expect(isModelRecommendation(invalid)).toBe(false);
+			});
+
+			it("rejects invalid patternRates structure", () => {
+				const invalid = {
+					model: "sonnet" as const,
+					confidence: 0.85,
+					reason: "Test",
+					patternRates: {
+						sonnet: {
+							successRate: 1.5, // > 1
+							escalationRate: 0.1,
+							attempts: 10,
+						},
+						opus: {
+							successRate: 0.95,
+							escalationRate: 0.05,
+							attempts: 5,
+						},
+					},
+				};
+				expect(isModelRecommendation(invalid)).toBe(false);
+			});
+
+			it("rejects invalid costMetrics structure", () => {
+				const invalid = {
+					model: "sonnet" as const,
+					confidence: 0.85,
+					reason: "Test",
+					costMetrics: {
+						sonnet: {
+							successRate: 0.9,
+							escalationRate: 0.1,
+							attempts: -1, // negative
+							avgTokens: 1000,
+							avgDurationMs: 5000,
+							avgRetries: 1.1,
+							expectedValue: 0.8,
+						},
+					},
+				};
+				expect(isModelRecommendation(invalid)).toBe(false);
+			});
+
+			it("accepts partial costMetrics (only one model)", () => {
+				const valid = {
+					model: "sonnet" as const,
+					confidence: 0.85,
+					reason: "Test",
+					costMetrics: {
+						sonnet: {
+							successRate: 0.9,
+							escalationRate: 0.1,
+							attempts: 10,
+							avgTokens: 1000,
+							avgDurationMs: 5000,
+							avgRetries: 1.1,
+							expectedValue: 0.8,
+						},
+					},
+				};
+				expect(isModelRecommendation(valid)).toBe(true);
+			});
 		});
 	});
 
