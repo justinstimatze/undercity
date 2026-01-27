@@ -152,109 +152,135 @@ describe("RateLimitTracker - Boundary Values", () => {
 	});
 
 	describe("Time Window Boundaries - 5 hours and 7 days", () => {
+		// Use fake timers to freeze time and prevent race conditions
+		// between timestamp creation and boundary checks
+
 		it("should include task exactly at 5-hour boundary", () => {
-			const _tracker = new RateLimitTracker();
-			const now = new Date();
-			const fiveHoursAgo = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+			vi.useFakeTimers();
+			const frozenNow = new Date("2026-01-15T12:00:00.000Z");
+			vi.setSystemTime(frozenNow);
 
-			// Create state with a task exactly at 5-hour boundary
-			const state: Partial<RateLimitState> = {
-				tasks: [
-					{
-						taskId: "task-1",
-						model: "sonnet",
-						tokens: {
-							inputTokens: 100,
-							outputTokens: 100,
-							totalTokens: 200,
-							sonnetEquivalentTokens: 200,
+			try {
+				const fiveHoursAgo = new Date(frozenNow.getTime() - 5 * 60 * 60 * 1000);
+
+				const state: Partial<RateLimitState> = {
+					tasks: [
+						{
+							taskId: "task-1",
+							model: "sonnet",
+							tokens: {
+								inputTokens: 100,
+								outputTokens: 100,
+								totalTokens: 200,
+								sonnetEquivalentTokens: 200,
+							},
+							timestamp: fiveHoursAgo,
 						},
-						timestamp: fiveHoursAgo,
-					},
-				],
-			};
+					],
+				};
 
-			const tracker2 = new RateLimitTracker(state);
-			const usage = tracker2.getCurrentUsage();
-			expect(usage.last5Hours).toBe(200);
+				const tracker = new RateLimitTracker(state);
+				const usage = tracker.getCurrentUsage();
+				expect(usage.last5Hours).toBe(200);
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 
 		it("should exclude task just outside 5-hour boundary", () => {
-			const _tracker = new RateLimitTracker();
-			const now = new Date();
-			const justOver5Hours = new Date(now.getTime() - 5 * 60 * 60 * 1000 - 1000);
+			vi.useFakeTimers();
+			const frozenNow = new Date("2026-01-15T12:00:00.000Z");
+			vi.setSystemTime(frozenNow);
 
-			const state: Partial<RateLimitState> = {
-				tasks: [
-					{
-						taskId: "task-1",
-						model: "sonnet",
-						tokens: {
-							inputTokens: 100,
-							outputTokens: 100,
-							totalTokens: 200,
-							sonnetEquivalentTokens: 200,
+			try {
+				const justOver5Hours = new Date(frozenNow.getTime() - 5 * 60 * 60 * 1000 - 1000);
+
+				const state: Partial<RateLimitState> = {
+					tasks: [
+						{
+							taskId: "task-1",
+							model: "sonnet",
+							tokens: {
+								inputTokens: 100,
+								outputTokens: 100,
+								totalTokens: 200,
+								sonnetEquivalentTokens: 200,
+							},
+							timestamp: justOver5Hours,
 						},
-						timestamp: justOver5Hours,
-					},
-				],
-			};
+					],
+				};
 
-			const tracker2 = new RateLimitTracker(state);
-			const usage = tracker2.getCurrentUsage();
-			expect(usage.last5Hours).toBe(0); // Should not include task outside window
+				const tracker = new RateLimitTracker(state);
+				const usage = tracker.getCurrentUsage();
+				expect(usage.last5Hours).toBe(0); // Should not include task outside window
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 
 		it("should include task exactly at 7-day boundary", () => {
-			const _tracker = new RateLimitTracker();
-			const now = new Date();
-			const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+			vi.useFakeTimers();
+			const frozenNow = new Date("2026-01-15T12:00:00.000Z");
+			vi.setSystemTime(frozenNow);
 
-			const state: Partial<RateLimitState> = {
-				tasks: [
-					{
-						taskId: "task-1",
-						model: "sonnet",
-						tokens: {
-							inputTokens: 100,
-							outputTokens: 100,
-							totalTokens: 200,
-							sonnetEquivalentTokens: 200,
+			try {
+				const sevenDaysAgo = new Date(frozenNow.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+				const state: Partial<RateLimitState> = {
+					tasks: [
+						{
+							taskId: "task-1",
+							model: "sonnet",
+							tokens: {
+								inputTokens: 100,
+								outputTokens: 100,
+								totalTokens: 200,
+								sonnetEquivalentTokens: 200,
+							},
+							timestamp: sevenDaysAgo,
 						},
-						timestamp: sevenDaysAgo,
-					},
-				],
-			};
+					],
+				};
 
-			const tracker2 = new RateLimitTracker(state);
-			const usage = tracker2.getCurrentUsage();
-			expect(usage.currentWeek).toBe(200);
+				const tracker = new RateLimitTracker(state);
+				const usage = tracker.getCurrentUsage();
+				expect(usage.currentWeek).toBe(200);
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 
 		it("should exclude task just outside 7-day boundary", () => {
-			const _tracker = new RateLimitTracker();
-			const now = new Date();
-			const justOver7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000 - 1000);
+			vi.useFakeTimers();
+			const frozenNow = new Date("2026-01-15T12:00:00.000Z");
+			vi.setSystemTime(frozenNow);
 
-			const state: Partial<RateLimitState> = {
-				tasks: [
-					{
-						taskId: "task-1",
-						model: "sonnet",
-						tokens: {
-							inputTokens: 100,
-							outputTokens: 100,
-							totalTokens: 200,
-							sonnetEquivalentTokens: 200,
+			try {
+				const justOver7Days = new Date(frozenNow.getTime() - 7 * 24 * 60 * 60 * 1000 - 1000);
+
+				const state: Partial<RateLimitState> = {
+					tasks: [
+						{
+							taskId: "task-1",
+							model: "sonnet",
+							tokens: {
+								inputTokens: 100,
+								outputTokens: 100,
+								totalTokens: 200,
+								sonnetEquivalentTokens: 200,
+							},
+							timestamp: justOver7Days,
 						},
-						timestamp: justOver7Days,
-					},
-				],
-			};
+					],
+				};
 
-			const tracker2 = new RateLimitTracker(state);
-			const usage = tracker2.getCurrentUsage();
-			expect(usage.currentWeek).toBe(0); // Should not include task outside window
+				const tracker = new RateLimitTracker(state);
+				const usage = tracker.getCurrentUsage();
+				expect(usage.currentWeek).toBe(0); // Should not include task outside window
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 	});
 
@@ -362,29 +388,35 @@ describe("RateLimitTracker - Boundary Values", () => {
 		});
 
 		it("should handle 24-hour boundary for last24Hours calculation", () => {
-			const _tracker = new RateLimitTracker();
-			const now = new Date();
-			const just24HoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000 - 1000);
+			vi.useFakeTimers();
+			const frozenNow = new Date("2026-01-15T12:00:00.000Z");
+			vi.setSystemTime(frozenNow);
 
-			const state: Partial<RateLimitState> = {
-				tasks: [
-					{
-						taskId: "task-old",
-						model: "sonnet",
-						tokens: {
-							inputTokens: 100,
-							outputTokens: 100,
-							totalTokens: 200,
-							sonnetEquivalentTokens: 200,
+			try {
+				const just24HoursAgo = new Date(frozenNow.getTime() - 24 * 60 * 60 * 1000 - 1000);
+
+				const state: Partial<RateLimitState> = {
+					tasks: [
+						{
+							taskId: "task-old",
+							model: "sonnet",
+							tokens: {
+								inputTokens: 100,
+								outputTokens: 100,
+								totalTokens: 200,
+								sonnetEquivalentTokens: 200,
+							},
+							timestamp: just24HoursAgo,
 						},
-						timestamp: just24HoursAgo,
-					},
-				],
-			};
+					],
+				};
 
-			const tracker2 = new RateLimitTracker(state);
-			const usage = tracker2.getModelUsage("sonnet");
-			expect(usage.last24Hours).toBe(0); // Should exclude task outside 24-hour window
+				const tracker = new RateLimitTracker(state);
+				const usage = tracker.getModelUsage("sonnet");
+				expect(usage.last24Hours).toBe(0); // Should exclude task outside 24-hour window
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 	});
 

@@ -68,7 +68,10 @@ export async function prepareASTIndex(): Promise<{
 		await index.load();
 		const stats = index.getStats();
 
-		if (stats.fileCount === 0) {
+		// Rebuild if empty OR stale (git commit changed since last build)
+		if (stats.fileCount === 0 || index.isIndexStale()) {
+			const reason = stats.fileCount === 0 ? "empty" : "stale (git commit changed)";
+			output.debug(`AST index ${reason}, rebuilding...`);
 			await index.rebuildFull();
 			await index.save();
 			const newStats = index.getStats();

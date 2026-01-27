@@ -118,15 +118,15 @@ export function createStandardStopHooks(
 /**
  * Get max turns based on model tier
  *
- * Prevents runaway exploration - simple tasks don't need 20+ turns.
- * - Simple tasks (haiku): 10 turns
- * - Standard (sonnet): 15 turns
- * - Complex (opus): 25 turns
+ * Prevents runaway exploration while giving enough runway for complex tasks.
+ * - Sonnet: 35 turns (increased from 25 based on postmortem showing tasks
+ *   exhausting turns despite significant work done)
+ * - Opus: 35 turns
  */
 export function getMaxTurnsForModel(model: "haiku" | "sonnet" | "opus"): number {
 	const maxTurnsPerModel: Record<string, number> = {
-		sonnet: 15,
-		opus: 25,
+		sonnet: 35,
+		opus: 35,
 	};
 	return maxTurnsPerModel[model] ?? 15;
 }

@@ -19,12 +19,12 @@ vi.mock("../logger.js", () => ({
 
 describe("worker/stop-hooks", () => {
 	describe("getMaxTurnsForModel", () => {
-		it("returns 15 for sonnet", () => {
-			expect(getMaxTurnsForModel("sonnet")).toBe(15);
+		it("returns 35 for sonnet", () => {
+			expect(getMaxTurnsForModel("sonnet")).toBe(35);
 		});
 
-		it("returns 25 for opus", () => {
-			expect(getMaxTurnsForModel("opus")).toBe(25);
+		it("returns 35 for opus", () => {
+			expect(getMaxTurnsForModel("opus")).toBe(35);
 		});
 
 		it("returns 15 as default for haiku (not yet implemented)", () => {

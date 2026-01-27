@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-26T06:00:30.588Z",
+  "generatedAt": "2026-01-27T00:12:50.274Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -126,7 +126,7 @@
         },
         {
           "file": "ast-index.ts",
-          "line": 349,
+          "line": 394,
           "context": "getRepoRoot"
         },
         {
@@ -465,7 +465,7 @@
         },
         {
           "file": "grind/validation.ts",
-          "line": 96,
+          "line": 136,
           "context": "progress"
         }
       ]

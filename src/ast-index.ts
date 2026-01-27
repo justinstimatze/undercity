@@ -64,6 +64,8 @@ export interface ASTIndex {
 	symbolToFiles: Record<string, string[]>;
 	importedBy: Record<string, string[]>;
 	lastUpdated: string;
+	/** Git commit hash when index was built - used for staleness detection */
+	gitCommit?: string;
 }
 
 // ============================================================================
@@ -131,6 +133,7 @@ export class ASTIndexManager {
 
 			const tempPath = `${this.indexPath}.tmp`;
 			this.index.lastUpdated = new Date().toISOString();
+			this.index.gitCommit = this.getCurrentGitCommit();
 
 			fs.writeFileSync(tempPath, JSON.stringify(this.index, null, 2));
 			fs.renameSync(tempPath, this.indexPath);
@@ -144,6 +147,48 @@ export class ASTIndexManager {
 			if (fs.existsSync(tempPath)) {
 				fs.unlinkSync(tempPath);
 			}
+		}
+	}
+
+	/**
+	 * Check if the entire index is stale (git HEAD differs from when index was built)
+	 * Different from isStale(filePath) which checks a single file.
+	 */
+	isIndexStale(): boolean {
+		if (!this.index.gitCommit) {
+			// No commit stored - treat as stale to force rebuild with commit tracking
+			return true;
+		}
+
+		const currentCommit = this.getCurrentGitCommit();
+		if (!currentCommit) {
+			// Not a git repo - can't determine staleness, assume not stale
+			return false;
+		}
+
+		const stale = this.index.gitCommit !== currentCommit;
+		if (stale) {
+			logger.debug(
+				{ storedCommit: this.index.gitCommit.substring(0, 8), currentCommit: currentCommit.substring(0, 8) },
+				"AST index is stale (git commit changed)",
+			);
+		}
+		return stale;
+	}
+
+	/**
+	 * Get current git HEAD commit hash
+	 */
+	private getCurrentGitCommit(): string | undefined {
+		try {
+			const { execFileSync } = require("node:child_process");
+			return execFileSync("git", ["rev-parse", "HEAD"], {
+				cwd: this.repoRoot,
+				encoding: "utf-8",
+				timeout: 5000,
+			}).trim();
+		} catch {
+			return undefined;
 		}
 	}
 

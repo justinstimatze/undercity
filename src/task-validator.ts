@@ -11,7 +11,15 @@ import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 export interface ValidationIssue {
-	type: "missing_directory" | "missing_file" | "invalid_path" | "ambiguous_target" | "path_corrected";
+	type:
+		| "missing_directory"
+		| "missing_file"
+		| "invalid_path"
+		| "ambiguous_target"
+		| "path_corrected"
+		| "symbol_not_found"
+		| "symbol_wrong_file"
+		| "symbol_corrected";
 	severity: "error" | "warning" | "info";
 	message: string;
 	suggestion?: string;
@@ -107,6 +115,232 @@ export function extractPathsFromObjective(objective: string): string[] {
 
 	// Deduplicate
 	return [...new Set(paths)];
+}
+
+/**
+ * Symbol reference extracted from task objective
+ */
+export interface SymbolReference {
+	/** The symbol name (function, class, etc.) */
+	name: string;
+	/** The file it's claimed to be in (if specified) */
+	claimedFile?: string;
+	/** Type of symbol if known */
+	type?: "function" | "class" | "method" | "variable" | "type";
+}
+
+/**
+ * Extract symbol references (function names, class names) from task objective
+ * Looks for patterns like:
+ * - "calculateVector()" or "calculateVector function"
+ * - "class LocalEmbedder" or "LocalEmbedder class"
+ * - "the doSomething() method"
+ * - "In src/file.ts, fix calculateVector()"
+ */
+export function extractSymbolsFromObjective(objective: string): SymbolReference[] {
+	const symbols: SymbolReference[] = [];
+	const seenNames = new Set<string>();
+
+	// Extract file paths to associate symbols with files
+	const paths = extractPathsFromObjective(objective);
+	const primaryFile = paths.length > 0 ? paths[0] : undefined;
+
+	// Pattern 1: function calls like "functionName()" or "functionName(args)"
+	const funcCallPattern = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
+	for (const match of objective.matchAll(funcCallPattern)) {
+		const name = match[1];
+		// Filter out common non-function words
+		if (!isCommonWord(name) && !seenNames.has(name)) {
+			seenNames.add(name);
+			symbols.push({ name, claimedFile: primaryFile, type: "function" });
+		}
+	}
+
+	// Pattern 2: "function functionName" or "functionName function"
+	const funcNamePattern = /\bfunction\s+([a-zA-Z_][a-zA-Z0-9_]*)\b|\b([a-zA-Z_][a-zA-Z0-9_]*)\s+function\b/gi;
+	for (const match of objective.matchAll(funcNamePattern)) {
+		const name = match[1] || match[2];
+		if (name && !isCommonWord(name) && !seenNames.has(name)) {
+			seenNames.add(name);
+			symbols.push({ name, claimedFile: primaryFile, type: "function" });
+		}
+	}
+
+	// Pattern 3: "class ClassName" or "ClassName class"
+	const classPattern = /\bclass\s+([A-Z][a-zA-Z0-9_]*)\b|\b([A-Z][a-zA-Z0-9_]*)\s+class\b/g;
+	for (const match of objective.matchAll(classPattern)) {
+		const name = match[1] || match[2];
+		if (name && !seenNames.has(name)) {
+			seenNames.add(name);
+			symbols.push({ name, claimedFile: primaryFile, type: "class" });
+		}
+	}
+
+	// Pattern 4: "method methodName" or "the methodName method"
+	const methodPattern = /\bmethod\s+([a-zA-Z_][a-zA-Z0-9_]*)\b|\bthe\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+method\b/gi;
+	for (const match of objective.matchAll(methodPattern)) {
+		const name = match[1] || match[2];
+		if (name && !isCommonWord(name) && !seenNames.has(name)) {
+			seenNames.add(name);
+			symbols.push({ name, claimedFile: primaryFile, type: "method" });
+		}
+	}
+
+	// Pattern 5: PascalCase names that look like classes/types (without explicit "class" keyword)
+	// Only if they appear near code-related words
+	const pascalPattern =
+		/\b([A-Z][a-zA-Z0-9]*(?:Error|Manager|Handler|Service|Factory|Builder|Config|Options|Result|State|Context|Provider))\b/g;
+	for (const match of objective.matchAll(pascalPattern)) {
+		const name = match[1];
+		if (!seenNames.has(name)) {
+			seenNames.add(name);
+			symbols.push({ name, claimedFile: primaryFile, type: "class" });
+		}
+	}
+
+	return symbols;
+}
+
+/**
+ * Common words that look like function names but aren't
+ */
+function isCommonWord(word: string): boolean {
+	const common = new Set([
+		"add",
+		"fix",
+		"update",
+		"remove",
+		"delete",
+		"create",
+		"get",
+		"set",
+		"is",
+		"has",
+		"can",
+		"should",
+		"will",
+		"the",
+		"a",
+		"an",
+		"to",
+		"in",
+		"on",
+		"at",
+		"by",
+		"for",
+		"with",
+		"from",
+		"if",
+		"else",
+		"when",
+		"where",
+		"how",
+		"why",
+		"what",
+		"which",
+		"that",
+		"this",
+		"then",
+		"return",
+		"export",
+		"import",
+		"async",
+		"await",
+		"const",
+		"let",
+		"var",
+		"new",
+		"try",
+		"catch",
+		"throw",
+		"Error",
+		"null",
+		"undefined",
+		"true",
+		"false",
+	]);
+	return common.has(word.toLowerCase());
+}
+
+/**
+ * Validate symbol references against AST index
+ * Returns issues if symbols don't exist or are in wrong files
+ */
+export async function validateSymbolReferences(
+	symbols: SymbolReference[],
+	repoRoot: string,
+): Promise<{
+	issues: ValidationIssue[];
+	corrections: Array<{ symbol: string; originalFile: string; correctFile: string }>;
+}> {
+	const issues: ValidationIssue[] = [];
+	const corrections: Array<{ symbol: string; originalFile: string; correctFile: string }> = [];
+
+	if (symbols.length === 0) {
+		return { issues, corrections };
+	}
+
+	try {
+		// Dynamically import to avoid circular dependency
+		const { getASTIndex } = await import("./ast-index.js");
+		const index = getASTIndex(repoRoot);
+		await index.load();
+
+		for (const symbol of symbols) {
+			// Skip very short names (likely false positives)
+			if (symbol.name.length < 3) continue;
+
+			// Find where this symbol is actually defined
+			const actualFiles = index.findSymbolDefinition(symbol.name);
+
+			if (actualFiles.length === 0) {
+				// Symbol not found in codebase - might be new or typo
+				// Only warn if we have a claimed file (task is specific)
+				if (symbol.claimedFile) {
+					issues.push({
+						type: "symbol_not_found",
+						severity: "warning",
+						message: `Symbol "${symbol.name}" not found in codebase`,
+						suggestion: `Verify the symbol name is correct, or it may be a new symbol to create`,
+					});
+				}
+				continue;
+			}
+
+			// If task claims a specific file, check if symbol is there
+			if (symbol.claimedFile) {
+				const normalizedClaimed = symbol.claimedFile.replace(/^\.\//, "");
+				const isInClaimedFile = actualFiles.some((f) => f === normalizedClaimed || f.endsWith(normalizedClaimed));
+
+				if (!isInClaimedFile) {
+					// Symbol exists but in a different file!
+					const correctFile = actualFiles[0];
+
+					corrections.push({
+						symbol: symbol.name,
+						originalFile: normalizedClaimed,
+						correctFile,
+					});
+
+					issues.push({
+						type: "symbol_wrong_file",
+						severity: "error",
+						message: `Symbol "${symbol.name}" is not in ${normalizedClaimed}`,
+						suggestion: `Found in ${correctFile} instead`,
+						autoFix: {
+							originalPath: normalizedClaimed,
+							correctedPath: correctFile,
+						},
+					});
+				}
+			}
+		}
+	} catch {
+		// AST index not available - skip symbol validation
+		// This is non-fatal, path validation still works
+	}
+
+	return { issues, corrections };
 }
 
 /**

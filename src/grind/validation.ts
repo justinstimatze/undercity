@@ -8,14 +8,14 @@ import * as output from "../output.js";
 import type { Task } from "../task.js";
 
 /**
- * Validate task references (paths, etc.) and auto-fix when possible
+ * Validate task references (paths, symbols, etc.) and auto-fix when possible
  */
 export async function validateTaskReferences(tasks: Task[]): Promise<{
 	validTasks: Task[];
 	invalidTaskIds: string[];
 	corrections: Array<{ taskId: string; original: string; corrected: string }>;
 }> {
-	const { validateTask } = await import("../task-validator.js");
+	const { validateTask, extractSymbolsFromObjective, validateSymbolReferences } = await import("../task-validator.js");
 	const { updateTaskFields } = await import("../task.js");
 
 	const validTasks: Task[] = [];
@@ -23,31 +23,71 @@ export async function validateTaskReferences(tasks: Task[]): Promise<{
 	const corrections: Array<{ taskId: string; original: string; corrected: string }> = [];
 
 	for (const task of tasks) {
-		const validation = validateTask(task.objective);
+		let currentObjective = task.objective;
+		let hasCorrections = false;
 
-		// Auto-fix correctable paths
+		// Step 1: Path validation (synchronous)
+		const validation = validateTask(currentObjective);
+
+		// Apply path auto-fixes
 		if (validation.correctedObjective) {
 			output.info(`Auto-fixed path in task: ${task.id}`);
 			for (const issue of validation.issues.filter((i) => i.type === "path_corrected")) {
 				output.debug(`  ${issue.autoFix?.originalPath} → ${issue.autoFix?.correctedPath}`);
 			}
+			currentObjective = validation.correctedObjective;
+			hasCorrections = true;
+		}
 
+		// Step 2: Symbol validation (async) - only if path validation passed
+		if (validation.valid) {
+			const symbols = extractSymbolsFromObjective(currentObjective);
+			if (symbols.length > 0) {
+				const symbolValidation = await validateSymbolReferences(symbols, process.cwd());
+
+				// Apply symbol auto-fixes (wrong file corrections)
+				for (const correction of symbolValidation.corrections) {
+					output.info(`Symbol "${correction.symbol}" found in different file:`);
+					output.info(`  ${correction.originalFile} → ${correction.correctFile}`);
+
+					// Replace the file path in the objective
+					currentObjective = currentObjective.replace(correction.originalFile, correction.correctFile);
+					hasCorrections = true;
+				}
+
+				// Add symbol issues to validation
+				for (const issue of symbolValidation.issues) {
+					if (issue.severity === "error" && !issue.autoFix) {
+						// Only block if we couldn't auto-fix
+						validation.issues.push(issue);
+					} else if (issue.severity === "warning") {
+						output.warning(`Task ${task.id}: ${issue.message}`);
+						if (issue.suggestion) {
+							output.debug(`  → ${issue.suggestion}`);
+						}
+					}
+				}
+			}
+		}
+
+		// Record corrections
+		if (hasCorrections) {
 			corrections.push({
 				taskId: task.id,
 				original: task.objective,
-				corrected: validation.correctedObjective,
+				corrected: currentObjective,
 			});
 
-			// Update the task
-			updateTaskFields({ id: task.id, objective: validation.correctedObjective });
-			task.objective = validation.correctedObjective;
+			// Update the task in the database
+			updateTaskFields({ id: task.id, objective: currentObjective });
+			task.objective = currentObjective;
 		}
 
 		// Flag invalid tasks that can't be auto-fixed
-		if (!validation.valid) {
-			const errorIssues = validation.issues.filter((i) => i.severity === "error");
+		const unfixedErrors = validation.issues.filter((i) => i.severity === "error" && !i.autoFix);
+		if (unfixedErrors.length > 0) {
 			output.warning(`Task ${task.id} has validation errors:`);
-			for (const issue of errorIssues) {
+			for (const issue of unfixedErrors) {
 				output.warning(`  ${issue.message}`);
 				if (issue.suggestion) {
 					output.debug(`  → ${issue.suggestion}`);
