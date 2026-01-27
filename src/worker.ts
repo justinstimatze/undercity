@@ -63,6 +63,7 @@ import {
 	checkDefaultRetryLimit,
 	checkFileThrashing,
 	checkFinalTier,
+	checkLearningSystemsForEscalation,
 	checkNoChanges,
 	checkRepeatedErrorLoop,
 	checkSeriousErrors,
@@ -2117,13 +2118,41 @@ Be concise and specific. Focus on actionable insights.`;
 		result = checkFinalTier(this.currentModel, this.maxTier, this.sameModelRetries, this.maxOpusRetries);
 		if (result) return result;
 
-		result = checkTrivialErrors(errorCategories, this.sameModelRetries, this.maxRetriesPerTier);
+		// Consult learning systems for retry limit adjustments
+		// - Capability ledger: May suggest earlier escalation if opus has better track record
+		// - Error-fix patterns: May suggest more retries if a known fix exists
+		const learningSignals = checkLearningSystemsForEscalation(
+			task,
+			this.currentModel,
+			errorCategories[0],
+			errorMessage,
+			this.sameModelRetries,
+			this.stateDir,
+		);
+
+		// Adjust effective retry limit based on learning signals
+		const adjustedRetryLimit = Math.max(1, this.maxRetriesPerTier + learningSignals.modifyRetryLimit);
+
+		if (learningSignals.modifyRetryLimit !== 0) {
+			sessionLogger.debug(
+				{
+					originalLimit: this.maxRetriesPerTier,
+					adjustedLimit: adjustedRetryLimit,
+					reason: learningSignals.reason,
+					hasKnownFix: learningSignals.hasKnownFix,
+					ledgerSuggestsEscalation: learningSignals.ledgerSuggestsEscalation,
+				},
+				"Learning systems modified retry limit",
+			);
+		}
+
+		result = checkTrivialErrors(errorCategories, this.sameModelRetries, adjustedRetryLimit);
 		if (result) return result;
 
-		result = checkSeriousErrors(errorCategories, task, this.sameModelRetries, this.maxRetriesPerTier);
+		result = checkSeriousErrors(errorCategories, task, this.sameModelRetries, adjustedRetryLimit);
 		if (result) return result;
 
-		return checkDefaultRetryLimit(this.sameModelRetries, this.maxRetriesPerTier);
+		return checkDefaultRetryLimit(this.sameModelRetries, adjustedRetryLimit);
 	}
 
 	/**

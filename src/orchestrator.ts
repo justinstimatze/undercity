@@ -110,6 +110,10 @@ export interface ParallelSoloOptions {
 	// Repository root directory (default: process.cwd())
 	// CRITICAL: Capture this at CLI invocation time to avoid wrong repo issues
 	repoRoot?: string;
+	// Security options
+	auditBash?: boolean; // Enable bash command auditing via PreToolUse hooks
+	// Experimental options
+	useSystemPromptPreset?: boolean; // Use SDK systemPrompt preset with claude_code
 }
 
 /**
@@ -238,6 +242,10 @@ export class Orchestrator {
 	private totalTasksProcessed: number = 0;
 	/** Repository root directory */
 	private repoRoot: string;
+	/** Enable bash command auditing via PreToolUse hooks */
+	private auditBash: boolean;
+	/** Use SDK systemPrompt preset with claude_code */
+	private useSystemPromptPreset: boolean;
 
 	constructor(options: ParallelSoloOptions = {}) {
 		this.maxConcurrent = options.maxConcurrent ?? 3;
@@ -264,6 +272,10 @@ export class Orchestrator {
 			attemptRecovery: healthConfig.attemptRecovery ?? true,
 			maxRecoveryAttempts: healthConfig.maxRecoveryAttempts ?? 2,
 		};
+
+		// Security and experimental options
+		this.auditBash = options.auditBash ?? false;
+		this.useSystemPromptPreset = options.useSystemPromptPreset ?? false;
 
 		// CRITICAL: Capture repo root at CLI invocation time to avoid wrong repo issues
 		// When undercity is installed globally and run from another project, process.cwd()
@@ -515,6 +527,8 @@ export class Orchestrator {
 				maxReviewPassesPerTier: this.maxReviewPassesPerTier,
 				maxOpusReviewPasses: this.maxOpusReviewPasses,
 				maxTier: this.maxTier,
+				auditBash: this.auditBash,
+				useSystemPromptPreset: this.useSystemPromptPreset,
 				// No workingDirectory - runs in current directory
 			});
 
@@ -1077,6 +1091,8 @@ export class Orchestrator {
 				maxReviewPassesPerTier: this.maxReviewPassesPerTier,
 				maxOpusReviewPasses: this.maxOpusReviewPasses,
 				maxTier: this.maxTier,
+				auditBash: this.auditBash,
+				useSystemPromptPreset: this.useSystemPromptPreset,
 			});
 
 			const assignment: TaskAssignment = {

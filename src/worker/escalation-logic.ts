@@ -2,8 +2,13 @@
  * Worker Escalation Logic Helpers
  *
  * Extracted escalation decision logic from shouldEscalate.
+ * Now integrates with learning systems:
+ * - capability-ledger: Historical model performance for similar tasks
+ * - error-fix-patterns: Known fixes for specific errors
  */
 
+import { getRecommendedModel, type ModelRecommendation } from "../capability-ledger.js";
+import { type ErrorFix, type ErrorFixPattern, findFixSuggestions } from "../error-fix-patterns.js";
 import { sessionLogger } from "../logger.js";
 import { isTestTask } from "../task-planner.js";
 import type { ErrorCategory } from "../types.js";
@@ -195,4 +200,228 @@ export function checkDefaultRetryLimit(sameModelRetries: number, maxRetriesPerTi
 		return { shouldEscalate: true, reason: `max retries at tier (${maxRetriesPerTier})` };
 	}
 	return { shouldEscalate: false, reason: "retrying" };
+}
+
+// =============================================================================
+// Learning System Integration
+// =============================================================================
+
+/**
+ * Result of checking capability ledger for model recommendation
+ */
+export interface LedgerCheckResult {
+	/** Recommended model based on historical data */
+	recommendedModel: "sonnet" | "opus";
+	/** Confidence in recommendation (0-1) */
+	confidence: number;
+	/** Reason for recommendation */
+	reason: string;
+	/** Whether we should escalate based on ledger data */
+	suggestEscalate: boolean;
+}
+
+/**
+ * Check capability ledger for historical model performance on similar tasks.
+ *
+ * The ledger tracks success rates per model for different task patterns.
+ * If the ledger shows that opus consistently succeeds where sonnet fails
+ * for similar tasks, this can inform early escalation decisions.
+ *
+ * @param objective - Task objective to check
+ * @param currentModel - Current model tier
+ * @param stateDir - State directory for ledger data
+ * @returns Ledger check result with recommendation
+ */
+export function checkCapabilityLedger(
+	objective: string,
+	currentModel: string,
+	stateDir: string = ".undercity",
+): LedgerCheckResult {
+	try {
+		const recommendation: ModelRecommendation = getRecommendedModel(objective, stateDir);
+
+		// Default result - no strong signal
+		const result: LedgerCheckResult = {
+			recommendedModel: recommendation.model,
+			confidence: recommendation.confidence,
+			reason: recommendation.reason,
+			suggestEscalate: false,
+		};
+
+		// If ledger strongly recommends opus (>70% confidence) and we're on sonnet,
+		// suggest escalation after fewer retries
+		if (recommendation.model === "opus" && currentModel === "sonnet" && recommendation.confidence >= 0.7) {
+			result.suggestEscalate = true;
+			sessionLogger.debug(
+				{
+					objective: objective.slice(0, 50),
+					recommendedModel: recommendation.model,
+					confidence: recommendation.confidence,
+				},
+				"Capability ledger suggests escalation to opus",
+			);
+		}
+
+		// If ledger shows sonnet works well and we're already on sonnet,
+		// don't suggest escalation
+		if (recommendation.model === "sonnet" && currentModel === "sonnet" && recommendation.confidence >= 0.7) {
+			result.suggestEscalate = false;
+			sessionLogger.debug(
+				{ objective: objective.slice(0, 50), confidence: recommendation.confidence },
+				"Capability ledger confirms sonnet is appropriate",
+			);
+		}
+
+		return result;
+	} catch {
+		// Ledger not available or error - return neutral result
+		return {
+			recommendedModel: "sonnet",
+			confidence: 0,
+			reason: "Ledger unavailable",
+			suggestEscalate: false,
+		};
+	}
+}
+
+/**
+ * Result of checking error-fix patterns
+ */
+export interface ErrorFixCheckResult {
+	/** Whether a known fix exists for this error */
+	hasKnownFix: boolean;
+	/** The pattern that matched */
+	pattern?: ErrorFixPattern;
+	/** Suggested fixes */
+	fixes?: ErrorFix[];
+	/** Whether to suggest more retries (a known fix exists) */
+	suggestRetry: boolean;
+	/** Reason for suggestion */
+	reason: string;
+}
+
+/**
+ * Check error-fix patterns for known solutions to an error.
+ *
+ * If we've seen this exact error before and successfully fixed it,
+ * this informs whether to retry (with fix hints) rather than escalate.
+ *
+ * @param category - Error category (typecheck, test, lint, build)
+ * @param message - Error message
+ * @param stateDir - State directory for patterns
+ * @returns Error fix check result
+ */
+export function checkErrorFixPatterns(
+	category: string,
+	message: string,
+	stateDir: string = ".undercity",
+): ErrorFixCheckResult {
+	try {
+		const result = findFixSuggestions(category, message, stateDir);
+
+		if (!result || result.suggestions.length === 0) {
+			return {
+				hasKnownFix: false,
+				suggestRetry: false,
+				reason: "No known fix for this error",
+			};
+		}
+
+		const successRate = result.pattern.occurrences > 0 ? result.pattern.fixSuccesses / result.pattern.occurrences : 0;
+
+		// If we have a fix that worked >50% of the time, suggest retry
+		const suggestRetry = successRate >= 0.5;
+
+		sessionLogger.debug(
+			{
+				category,
+				signature: result.pattern.signature,
+				successRate,
+				fixCount: result.suggestions.length,
+			},
+			suggestRetry ? "Known fix found - suggesting retry" : "Fix pattern found but low success rate",
+		);
+
+		return {
+			hasKnownFix: true,
+			pattern: result.pattern,
+			fixes: result.suggestions,
+			suggestRetry,
+			reason: suggestRetry
+				? `Known fix exists (${Math.round(successRate * 100)}% success rate)`
+				: `Fix pattern found but only ${Math.round(successRate * 100)}% success rate`,
+		};
+	} catch {
+		return {
+			hasKnownFix: false,
+			suggestRetry: false,
+			reason: "Error fix patterns unavailable",
+		};
+	}
+}
+
+/**
+ * Combined learning system check for escalation decisions.
+ *
+ * This is the main entry point for integrating learning systems into
+ * escalation decisions. It combines signals from:
+ * - Capability ledger (historical model performance)
+ * - Error-fix patterns (known solutions)
+ *
+ * @param objective - Task objective
+ * @param currentModel - Current model tier
+ * @param errorCategory - Current error category (if any)
+ * @param errorMessage - Current error message (if any)
+ * @param sameModelRetries - Number of retries at current tier
+ * @param stateDir - State directory
+ * @returns Combined recommendation
+ */
+export function checkLearningSystemsForEscalation(
+	objective: string,
+	currentModel: string,
+	errorCategory: string | undefined,
+	errorMessage: string | undefined,
+	_sameModelRetries: number,
+	stateDir: string = ".undercity",
+): {
+	modifyRetryLimit: number;
+	reason: string;
+	hasKnownFix: boolean;
+	ledgerSuggestsEscalation: boolean;
+} {
+	// Check capability ledger
+	const ledgerResult = checkCapabilityLedger(objective, currentModel, stateDir);
+
+	// Check error-fix patterns if we have an error
+	let errorFixResult: ErrorFixCheckResult = {
+		hasKnownFix: false,
+		suggestRetry: false,
+		reason: "No error to check",
+	};
+	if (errorCategory && errorMessage) {
+		errorFixResult = checkErrorFixPatterns(errorCategory, errorMessage, stateDir);
+	}
+
+	// Determine retry limit modification
+	let modifyRetryLimit = 0;
+	const reasons: string[] = [];
+
+	// If ledger strongly suggests opus, reduce retries before escalation
+	if (ledgerResult.suggestEscalate && currentModel === "sonnet") {
+		modifyRetryLimit = -1; // Escalate one retry sooner
+		reasons.push(`ledger: ${ledgerResult.reason}`);
+	}
+
+	// If we have a known fix, add an extra retry to try it
+	if (errorFixResult.hasKnownFix && errorFixResult.suggestRetry) {
+		modifyRetryLimit = Math.max(modifyRetryLimit, 1); // At least one extra retry
+		reasons.push(`known fix: ${errorFixResult.reason}`);
+	}
+
+	return {
+		modifyRetryLimit,
+		reason: reasons.length > 0 ? reasons.join("; ") : "No learning signals",
+		hasKnownFix: errorFixResult.hasKnownFix,
+		ledgerSuggestsEscalation: ledgerResult.suggestEscalate,
+	};
 }

@@ -6,6 +6,7 @@
 
 import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { loadConfig } from "../config.js";
 import * as output from "../output.js";
 import { Persistence } from "../persistence.js";
 import type { GrindConfig, GrindOptions } from "./types.js";
@@ -233,14 +234,28 @@ export function formatDuration(ms: number): string {
 
 /**
  * Parse CLI options into validated config
+ *
+ * Merges CLI options with .undercityrc config file values.
+ * CLI options (when explicitly set) override config file values.
  */
 export function parseGrindOptions(options: GrindOptions): GrindConfig {
+	// Load config file (merges home + project .undercityrc)
+	const fileConfig = loadConfig();
+
 	const maxCount = parseInt(options.count || "0", 10);
-	const parallelism = Math.min(5, Math.max(1, parseInt(options.parallel || "1", 10)));
-	const maxAttempts = options.maxAttempts ? parseInt(options.maxAttempts, 10) : undefined;
-	const maxRetriesPerTier = options.maxRetriesPerTier ? parseInt(options.maxRetriesPerTier, 10) : undefined;
-	const maxReviewPassesPerTier = options.maxReviewPasses ? parseInt(options.maxReviewPasses, 10) : undefined;
-	const maxOpusReviewPasses = options.maxOpusReviewPasses ? parseInt(options.maxOpusReviewPasses, 10) : undefined;
+	const parallelism = Math.min(5, Math.max(1, parseInt(options.parallel || String(fileConfig.parallel), 10)));
+
+	// CLI overrides config file, which overrides defaults
+	const maxAttempts = options.maxAttempts ? parseInt(options.maxAttempts, 10) : fileConfig.maxAttempts;
+	const maxRetriesPerTier = options.maxRetriesPerTier
+		? parseInt(options.maxRetriesPerTier, 10)
+		: fileConfig.maxRetriesPerTier;
+	const maxReviewPassesPerTier = options.maxReviewPasses
+		? parseInt(options.maxReviewPasses, 10)
+		: fileConfig.maxReviewPassesPerTier;
+	const maxOpusReviewPasses = options.maxOpusReviewPasses
+		? parseInt(options.maxOpusReviewPasses, 10)
+		: fileConfig.maxOpusReviewPasses;
 	const maxDecompositionDepth = options.maxDecompositionDepth ? parseInt(options.maxDecompositionDepth, 10) : 1;
 	const maxTier = options.maxTier as "sonnet" | "opus" | undefined;
 
@@ -259,16 +274,18 @@ export function parseGrindOptions(options: GrindOptions): GrindConfig {
 		maxOpusReviewPasses,
 		maxDecompositionDepth,
 		maxTier,
-		startingModel: (options.model || "sonnet") as "sonnet" | "opus",
-		autoCommit: options.commit !== false,
-		stream: options.stream || false,
-		verbose: options.verbose || false,
-		reviewPasses: options.review === true,
-		pushOnSuccess: options.push === true,
+		startingModel: (options.model || fileConfig.model || "sonnet") as "sonnet" | "opus",
+		autoCommit: options.commit !== false && fileConfig.autoCommit !== false,
+		stream: options.stream || fileConfig.stream || false,
+		verbose: options.verbose || fileConfig.verbose || false,
+		reviewPasses: options.review === true || fileConfig.review === true,
+		pushOnSuccess: options.push === true || fileConfig.push === true,
 		decompose: options.decompose !== false,
 		postmortem: options.postmortem !== false,
 		dryRun: options.dryRun || false,
 		duration: options.duration,
 		taskId: options.taskId,
+		auditBash: fileConfig.auditBash,
+		useSystemPromptPreset: fileConfig.useSystemPromptPreset,
 	};
 }

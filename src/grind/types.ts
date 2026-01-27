@@ -54,6 +54,10 @@ export interface GrindConfig {
 	dryRun: boolean;
 	duration?: string;
 	taskId?: string;
+	/** Enable bash command auditing via PreToolUse hooks */
+	auditBash: boolean;
+	/** Use SDK systemPrompt preset with claude_code */
+	useSystemPromptPreset: boolean;
 }
 
 /**

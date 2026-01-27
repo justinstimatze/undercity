@@ -12,6 +12,7 @@
 
 import { formatFixSuggestionsForPrompt, recordSuccessfulFix } from "../error-fix-patterns.js";
 import { formatGuidanceForWorker, markGuidanceUsed } from "../human-input-tracking.js";
+import { findRelevantLearnings, formatLearningsForPrompt } from "../knowledge.js";
 import { sessionLogger } from "../logger.js";
 import * as output from "../output.js";
 import { runEscalatingReview } from "../review.js";
@@ -261,6 +262,12 @@ export async function handleVerificationSuccess(
 
 /**
  * Build enhanced feedback with fix suggestions and hints
+ *
+ * Integrates multiple learning systems to provide rich context:
+ * - Error-fix patterns: Known fixes for similar errors
+ * - Knowledge base: Past learnings about similar issues
+ * - Human guidance: User-provided hints for this error
+ * - Co-modification hints: Files commonly modified together
  */
 export function buildEnhancedFeedback(
 	taskId: string,
@@ -282,6 +289,25 @@ export function buildEnhancedFeedback(
 		}
 	} catch {
 		// Non-critical
+	}
+
+	// Add relevant knowledge about similar errors
+	// Query the knowledge base for learnings related to this type of error
+	try {
+		const errorQuery = `${primaryCategory} error: ${errorMessage.slice(0, 100)}`;
+		const learnings = findRelevantLearnings(errorQuery, 3, stateDir);
+		if (learnings.length > 0) {
+			const knowledgeHints = formatLearningsForPrompt(learnings);
+			if (knowledgeHints) {
+				output.debug("Found relevant knowledge for error recovery", {
+					taskId,
+					learningsCount: learnings.length,
+				});
+				enhancedFeedback += `\n\n## RELEVANT KNOWLEDGE FROM PAST TASKS\n${knowledgeHints}`;
+			}
+		}
+	} catch {
+		// Non-critical - knowledge base may not be available
 	}
 
 	// Add human guidance if available

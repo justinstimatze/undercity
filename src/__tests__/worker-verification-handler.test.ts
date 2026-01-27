@@ -187,7 +187,9 @@ describe("worker/verification-handler", () => {
 				".undercity",
 			);
 
-			expect(result).toBe("Base feedback");
+			// Base feedback should always be present
+			// Additional knowledge may be appended if relevant learnings exist
+			expect(result).toContain("Base feedback");
 		});
 
 		it("appends fix suggestions when available", async () => {
@@ -266,7 +268,9 @@ describe("worker/verification-handler", () => {
 				".undercity",
 			);
 
-			expect(result).toBe("Base feedback");
+			// Should not crash, and should always contain base feedback
+			// Additional knowledge may be appended if relevant learnings exist
+			expect(result).toContain("Base feedback");
 		});
 	});
 

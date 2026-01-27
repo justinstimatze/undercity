@@ -153,6 +153,8 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		maxReviewPassesPerTier: config.maxReviewPassesPerTier,
 		maxOpusReviewPasses: config.maxOpusReviewPasses,
 		maxTier: config.maxTier,
+		auditBash: config.auditBash,
+		useSystemPromptPreset: config.useSystemPromptPreset,
 	});
 
 	// Set up auto-drain timer if duration specified
@@ -337,6 +339,8 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 					maxReviewPassesPerTier: config.maxReviewPassesPerTier,
 					maxOpusReviewPasses: config.maxOpusReviewPasses,
 					maxTier: config.maxTier,
+					auditBash: config.auditBash,
+					useSystemPromptPreset: config.useSystemPromptPreset,
 				});
 
 				const batchStartTime = Date.now();
