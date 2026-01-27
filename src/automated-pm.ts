@@ -30,6 +30,129 @@ import { filterSafeProposals } from "./task-security.js";
 import type { ResearchConclusion } from "./types.js";
 import { extractAndValidateURLs, logURLsForAudit } from "./url-validator.js";
 
+// =============================================================================
+// Project Context and Quality Filters
+// =============================================================================
+
+/**
+ * Detect project tech stack from actual project files.
+ * Returns a context string describing what the project IS and IS NOT.
+ */
+function detectProjectContext(cwd: string = process.cwd()): string {
+	const { existsSync, readFileSync } = require("node:fs") as typeof import("node:fs");
+	const { join } = require("node:path") as typeof import("node:path");
+
+	const parts: string[] = ["PROJECT TECH STACK (auto-detected):"];
+	const antiParts: string[] = ["THIS PROJECT DOES NOT USE:"];
+
+	// Check package.json for dependencies
+	const pkgPath = join(cwd, "package.json");
+	let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> } = {};
+	if (existsSync(pkgPath)) {
+		try {
+			pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+		} catch {
+			// Ignore parse errors
+		}
+	}
+
+	const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+	const depNames = Object.keys(allDeps);
+
+	// Detect runtime
+	if (existsSync(join(cwd, "tsconfig.json"))) {
+		parts.push("- TypeScript");
+	} else if (depNames.some((d) => d.includes("typescript"))) {
+		parts.push("- TypeScript");
+	}
+
+	if (existsSync(join(cwd, "package.json"))) {
+		parts.push("- Node.js");
+	}
+
+	// Detect package manager
+	if (existsSync(join(cwd, "pnpm-lock.yaml"))) {
+		parts.push("- pnpm");
+	} else if (existsSync(join(cwd, "yarn.lock"))) {
+		parts.push("- yarn");
+	} else if (existsSync(join(cwd, "package-lock.json"))) {
+		parts.push("- npm");
+	}
+
+	// Detect test framework
+	if (depNames.includes("vitest")) {
+		parts.push("- vitest for testing");
+	} else if (depNames.includes("jest")) {
+		parts.push("- jest for testing");
+	} else if (depNames.includes("mocha")) {
+		parts.push("- mocha for testing");
+	}
+
+	// Detect frontend framework (or lack thereof)
+	const hasFrontend =
+		depNames.includes("react") ||
+		depNames.includes("vue") ||
+		depNames.includes("angular") ||
+		depNames.includes("svelte") ||
+		depNames.includes("next") ||
+		depNames.includes("nuxt");
+
+	if (hasFrontend) {
+		if (depNames.includes("react")) parts.push("- React");
+		if (depNames.includes("vue")) parts.push("- Vue");
+		if (depNames.includes("next")) parts.push("- Next.js");
+	} else {
+		antiParts.push("- Frontend frameworks (React, Vue, Angular)");
+	}
+
+	// Detect database
+	const hasPostgres = depNames.includes("pg") || depNames.includes("postgres");
+	const hasMongo = depNames.includes("mongodb") || depNames.includes("mongoose");
+	const hasSqlite = depNames.includes("better-sqlite3") || depNames.includes("sqlite3");
+
+	if (hasPostgres) parts.push("- PostgreSQL");
+	if (hasMongo) parts.push("- MongoDB");
+	if (hasSqlite) parts.push("- SQLite");
+
+	if (!hasPostgres && !hasMongo) {
+		if (hasSqlite) {
+			antiParts.push("- PostgreSQL, MongoDB (uses SQLite only)");
+		}
+	}
+
+	// Detect cloud/infra (or lack thereof)
+	const hasK8s = depNames.some((d) => d.includes("kubernetes"));
+	const hasAWS = depNames.some((d) => d.includes("aws-sdk") || d.includes("@aws-"));
+	const hasTerraform = existsSync(join(cwd, "terraform")) || existsSync(join(cwd, "main.tf"));
+
+	if (!hasK8s && !hasAWS && !hasTerraform) {
+		antiParts.push("- Cloud infrastructure (Kubernetes, AWS, Terraform)");
+	}
+
+	// Check for CLI indicators
+	const isCLI =
+		depNames.includes("commander") ||
+		depNames.includes("yargs") ||
+		depNames.includes("meow") ||
+		existsSync(join(cwd, "bin"));
+
+	if (isCLI && !hasFrontend) {
+		parts.push("- CLI application (command-line tool)");
+	}
+
+	// Build final context
+	if (parts.length <= 1) {
+		return ""; // No meaningful context detected
+	}
+
+	const result = [parts.join("\n")];
+	if (antiParts.length > 1) {
+		result.push(antiParts.join("\n"));
+	}
+
+	return result.join("\n\n");
+}
+
 /**
  * PM decision result
  */
@@ -766,15 +889,35 @@ export async function pmResearch(
 
 	sessionLogger.info({ topic }, "PM starting research session");
 
+	// Get project context for relevance filtering
+	const projectContext = detectProjectContext(cwd);
+	const contextSection = projectContext
+		? `\n${projectContext}\n\nONLY propose changes relevant to this project's actual tech stack.\n`
+		: "";
+
 	const prompt = `You are a product manager researching a technical topic.
 
 TOPIC: ${topic}
-
+${contextSection}
 YOUR TASK:
 1. Search the web for current best practices, recent developments, and expert opinions
 2. Find 2-3 authoritative sources
-3. Summarize key findings relevant to a software project
+3. Summarize key findings relevant to THIS project (see tech stack above)
 4. Recommend specific actions or improvements
+
+=== ANTI-PATTERNS (will be filtered out) ===
+
+WRONG (too vague):
+- "Improve error handling across the codebase"
+- "Refactor for better DRY"
+
+WRONG (overly broad):
+- "Audit all TypeScript files"
+- "Comprehensive security review"
+
+GOOD (specific, actionable):
+- "Add retry logic to src/api/client.ts fetchData() function"
+- "Fix TypeScript error TS2345 in src/worker.ts line 234"
 
 Output your research in this exact JSON format:
 
@@ -786,7 +929,7 @@ Output your research in this exact JSON format:
   "sources": ["source URL or description 1", ...],
   "taskProposals": [
     {
-      "objective": "specific task description",
+      "objective": "Verb + specific file + specific change",
       "rationale": "why this matters",
       "suggestedPriority": 800,
       "source": "research",
@@ -885,6 +1028,23 @@ Be specific and actionable. Focus on practical improvements, not theoretical ide
 }
 
 /**
+ * Patterns that indicate overly broad scope.
+ * Tasks matching these patterns lack specific targets and will fail.
+ */
+const OVERLY_BROAD_PATTERNS: RegExp[] = [
+	/\b(?:entire|whole|all|every)\s+(?:codebase|project|repo(?:sitory)?)\b/i,
+	/\bcomprehensive(?:ly)?\b/i,
+	/\bsystematic(?:ally)?\b/i,
+	/\bholistic(?:ally)?\b/i,
+	/\brefactor\s+(?:for\s+)?(?:DRY|consistency|readability|maintainability)\b/i,
+	/\bmigrate\s+(?:the\s+)?(?:codebase|project)\s+(?:to|from)\b/i,
+	/\baudit\s+(?:all|the|every)\b/i,
+	/\bstandardize\s+(?:all|every|the)\b/i,
+	/\breview\s+(?:all|every|the\s+entire)\b/i,
+	/\bcodebase[\s-]?wide\b/i,
+];
+
+/**
  * Check if a task description is actionable (not vague)
  *
  * Vague tasks waste tokens and have low success rates.
@@ -916,6 +1076,17 @@ function isTaskActionable(objective: string): boolean {
 			return false;
 		}
 	}
+
+	// Reject overly broad scope (codebase-wide, comprehensive, etc.)
+	for (const pattern of OVERLY_BROAD_PATTERNS) {
+		if (pattern.test(objective)) {
+			sessionLogger.debug({ objective, pattern: pattern.toString() }, "Rejected task with overly broad scope");
+			return false;
+		}
+	}
+
+	// Note: Tech stack filtering is done at the prompt level using detectProjectContext()
+	// rather than hardcoded patterns, to support any project type
 
 	// Reject tasks without any concrete identifiers (files, functions, modules)
 	const hasConcreteTarget =
@@ -1076,8 +1247,14 @@ export async function pmPropose(
 
 	const focusPrompt = focus ? `\nFOCUS AREA: ${focus}` : "";
 
-	const prompt = `You are a product manager analyzing a codebase for improvement opportunities.${focusPrompt}
+	// Get project context for relevance filtering
+	const projectContext = detectProjectContext(cwd);
+	const projectContextSection = projectContext
+		? `\n${projectContext}\n\nONLY propose changes relevant to this project's actual tech stack.\n`
+		: "";
 
+	const prompt = `You are a product manager analyzing a codebase for improvement opportunities.${focusPrompt}
+${projectContextSection}
 CONTEXT FROM KNOWLEDGE BASE:
 ${knowledgeContext || "No prior learnings available"}
 
@@ -1098,13 +1275,20 @@ YOUR TASK:
 4. Avoid duplicating pending or recently completed tasks
 5. If system health shows issues (low success rate, broken learning systems), prioritize fixing those
 
-CRITICAL REQUIREMENTS FOR TASK DESCRIPTIONS:
-Tasks MUST include concrete deliverables. Vague tasks waste tokens and fail.
+=== ANTI-PATTERNS (will be filtered out) ===
 
-BAD (too vague - will fail):
+WRONG (too vague - will fail):
 - "Explore the test configuration" (no deliverable)
 - "Research best practices for X" (no code output)
 - "Improve error handling" (which errors? which files?)
+
+WRONG (overly broad - will fail):
+- "Audit all TypeScript files for type safety"
+- "Comprehensive security review"
+- "Refactor for DRY across the codebase"
+- "Standardize all error handling"
+
+=== GOOD EXAMPLES ===
 
 GOOD (specific, actionable):
 - "Add try-catch wrapper to fetchUser() in src/api/users.ts with specific error types"
@@ -1313,10 +1497,16 @@ export async function pmIdeate(
 	);
 
 	// Combine research-derived proposals with codebase-derived proposals
-	// Defensive: filter for valid proposal objects before combining
+	// Filter research proposals for actionability BEFORE combining (they bypass pmPropose's filter)
 	const validResearchProposals = Array.isArray(research.taskProposals)
-		? research.taskProposals.filter((p) => p && typeof p.objective === "string")
+		? research.taskProposals.filter((p) => p && typeof p.objective === "string" && isTaskActionable(p.objective))
 		: [];
+	const researchFilteredCount = (research.taskProposals?.length || 0) - validResearchProposals.length;
+	if (researchFilteredCount > 0) {
+		sessionLogger.debug({ topic, filtered: researchFilteredCount }, "Filtered non-actionable research proposals");
+	}
+
+	// Codebase proposals already filtered by pmPropose
 	const validProposals = Array.isArray(proposals) ? proposals.filter((p) => p && typeof p.objective === "string") : [];
 	const allProposals = [...validResearchProposals, ...validProposals];
 

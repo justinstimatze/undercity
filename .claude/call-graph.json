@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-27T08:53:53.847Z",
+  "generatedAt": "2026-01-27T20:25:08.080Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -23,17 +23,17 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 417,
+          "line": 540,
           "context": "map"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1045,
+          "line": 1216,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1408,
+          "line": 1629,
           "context": "info"
         },
         {
@@ -136,12 +136,12 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 430,
+          "line": 553,
           "context": "if"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1409,
+          "line": 1630,
           "context": "info"
         },
         {
@@ -365,7 +365,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 599,
+          "line": 722,
           "context": "if"
         },
         {
@@ -418,12 +418,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 593,
+          "line": 716,
           "context": "for"
         },
         {
           "file": "automated-pm.ts",
-          "line": 666,
+          "line": 789,
           "context": "now"
         }
       ]
@@ -439,7 +439,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1303,
+          "line": 1487,
           "context": "info"
         },
         {
@@ -455,12 +455,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 1292,
+          "line": 1476,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1309,
+          "line": 1493,
           "context": "info"
         },
         {
