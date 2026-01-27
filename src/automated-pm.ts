@@ -1371,20 +1371,51 @@ export interface RefineTaskResult {
 /**
  * Refine a task objective into rich ticket content
  *
- * Takes an existing task objective and generates:
- * - Expanded description
- * - Acceptance criteria
- * - Test plan
- * - Implementation notes
- * - Rationale
+ * Takes an existing task objective and generates structured, detailed ticket content
+ * to guide autonomous coding agents. This PM capability transforms single-line task
+ * descriptions into comprehensive specifications with context-aware guidance.
  *
- * Uses codebase context and knowledge base for informed refinement.
+ * The function gathers context from multiple learning systems:
+ * - Knowledge base: Relevant learnings from past tasks
+ * - Task-file patterns: Files historically modified for similar tasks
+ * - RAG search: Semantically similar past work and decisions
+ * - Project statistics: Overall codebase activity metrics
  *
- * @param objective - Task objective to refine
- * @param _cwd - Current working directory (unused, for consistency)
- * @param stateDir - State directory (default: ".undercity")
- * @returns Promise resolving to refinement result
- * @throws {TypeError} If parameters are invalid
+ * Generated ticket content includes:
+ * - Expanded description (2-4 sentences of actionable detail)
+ * - Acceptance criteria (2-5 specific, testable conditions)
+ * - Test plan (concrete verification steps)
+ * - Implementation notes (approach hints, patterns, gotchas)
+ * - Rationale (business value or technical necessity)
+ *
+ * @param objective - Task objective to refine (non-empty string). Example: "Add error handling to user service"
+ * @param _cwd - Current working directory (unused, included for API consistency with other PM functions)
+ * @param stateDir - State directory containing knowledge base and patterns (default: ".undercity")
+ * @returns Promise resolving to RefineTaskResult with:
+ *   - ticket: TicketContent object containing description, acceptanceCriteria, testPlan, implementationNotes, rationale
+ *   - success: boolean indicating whether refinement succeeded
+ *   - tokensUsed: number of tokens consumed (currently 0 as not exposed by SDK)
+ * @throws {TypeError} If objective or stateDir are not non-empty strings
+ *
+ * @example
+ * ```typescript
+ * // Refine a simple task objective into a rich ticket
+ * const result = await pmRefineTask(
+ *   "Add validation to user registration endpoint",
+ *   process.cwd(),
+ *   ".undercity"
+ * );
+ *
+ * if (result.success) {
+ *   console.log(result.ticket.description);
+ *   // "Add comprehensive input validation to the user registration endpoint..."
+ *
+ *   console.log(result.ticket.acceptanceCriteria);
+ *   // ["Email format validation prevents invalid addresses",
+ *   //  "Password strength requirements enforced (8+ chars, mixed case)",
+ *   //  "Duplicate email detection returns clear error message"]
+ * }
+ * ```
  */
 export async function pmRefineTask(
 	objective: string,
