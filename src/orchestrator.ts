@@ -48,6 +48,7 @@ import {
 	type HealthMonitorDependencies,
 	type HealthMonitorState,
 	handleTaskDecomposition,
+	handleUnresolvedTickets,
 	mergeIntoLocalMain,
 	type PredictedConflict,
 	type RecoveryTask,
@@ -1152,6 +1153,11 @@ export class Orchestrator {
 		);
 		if (decompositionResult.earlyReturn) {
 			return decompositionResult.earlyReturn;
+		}
+
+		// Handle unresolved tickets from review - spawn follow-up tasks
+		if (result.unresolvedTickets && result.unresolvedTickets.length > 0) {
+			handleUnresolvedTickets(taskId, task, result.unresolvedTickets, this.originalTaskIds);
 		}
 
 		const workerName = nameFromId(taskId);

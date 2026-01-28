@@ -208,83 +208,150 @@ Orchestrator.run():
 7. Auto-complete parent if all subtasks done
 ```
 
-## Task Execution Lifecycle (Learning System Integration)
+## Task Execution Lifecycle (Full Flow)
 
-Shows which learning systems are invoked at each phase of task execution.
+Complete flow showing verification, review, retry loops, and learning capture.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ PLANNING PHASE (worker.ts:runPlanningPhase)                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
 │  findRelevantLearnings()        ← knowledge.ts                              │
 │  findRelevantFiles()            ← task-file-patterns.ts                     │
 │  planTaskWithReview()           ← task-planner.ts                           │
 │    └─ quickDecision()           ← automated-pm.ts (resolves open questions) │
-│                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ CONTEXT BUILDING (worker/context-builder.ts)                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
 │  findRelevantLearnings()          ← knowledge.ts                            │
 │  formatLearningsForPrompt()       ← knowledge.ts                            │
 │  formatFileSuggestionsForPrompt() ← task-file-patterns.ts                   │
 │  formatCoModificationHints()      ← task-file-patterns.ts                   │
 │  getFailureWarningsForTask()      ← error-fix-patterns.ts                   │
-│                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ EXECUTION PHASE (worker/agent-loop.ts:runAgentLoop)                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
 │  Agent executes with injected context                                       │
 │  captureDecision()              ← decision-tracker.ts (if decisions made)   │
 │  buildStopHooks()               ← worker/agent-loop.ts                      │
-│                                                                             │
+│  lastAgentOutput captured       → used for knowledge extraction later       │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ VERIFICATION PHASE (worker/verification-handler.ts)                         │
+│ VERIFICATION PHASE (verification.ts, worker/verification-handler.ts)        │
 ├─────────────────────────────────────────────────────────────────────────────┤
+│  verifyWork() runs in PARALLEL:                                             │
+│    ├─ typecheck (pnpm typecheck)                                            │
+│    ├─ lint (pnpm lint)                                                      │
+│    └─ tests (pnpm test) [--bail on retries for faster feedback]             │
 │                                                                             │
-│  runVerification()              ← verification.ts                           │
-│    │                                                                        │
-│    ├─ On FAILURE:                                                           │
-│    │   recordVerificationFailure() ← worker/verification-handler.ts        │
-│    │   recordPendingError()     ← error-fix-patterns.ts                     │
-│    │   buildEnhancedFeedback()  ← worker/verification-handler.ts           │
-│    │                                                                        │
-│    └─ On SUCCESS:                                                           │
-│        handleAlreadyComplete()  ← worker/verification-handler.ts           │
-│        recordSuccessfulFix()    ← error-fix-patterns.ts                     │
+│  On FAILURE:                                                                │
+│    recordVerificationFailure()  ← worker/verification-handler.ts            │
+│    recordPendingError()         ← error-fix-patterns.ts                     │
+│    buildEnhancedFeedback()      ← injects fix hints, knowledge, co-mod tips │
+│    → RETRY (back to EXECUTION with feedback)                                │
 │                                                                             │
+│  On SUCCESS:                                                                │
+│    → continue to REVIEW PHASE                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ REVIEW PHASE (review.ts, worker/verification-handler.ts:runReviewPasses)    │
+│ [Enabled by default since review catches issues verification can't]         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  runEscalatingReview() tiers: sonnet → sonnet → opus (capped by complexity) │
+│  [Only runs for complex/critical tasks - skipped for trivial/simple/std]    │
+│                                                                             │
+│  Each review pass:                                                          │
+│    1. Reviewer agent examines changes for:                                  │
+│       - Logic bugs, edge cases, race conditions                             │
+│       - Poor naming, unclear code, missing docs                             │
+│       - Security issues, potential bugs                                     │
+│       - Things typecheck/lint/tests CAN'T catch                             │
+│                                                                             │
+│    2. If issues found:                                                      │
+│       - Review agent tries to FIX directly (has edit permissions)           │
+│       - If fixed → run verification again                                   │
+│       - If verification fails → RETRY task                                  │
+│                                                                             │
+│    3. If review can't fix:                                                  │
+│       - Generates unresolvedTickets (child task suggestions)                │
+│       - Orchestrator spawns follow-up tasks with [review-fix] prefix        │
+│       - Follow-up tasks get priority based on ticket severity               │
+│                                                                             │
+│  On CONVERGED (no issues found):                                            │
+│    lastReviewOutput captured    → combined with agent output for learning   │
+│    → continue to COMPLETION                                                 │
+│                                                                             │
+│  On NOT CONVERGED:                                                          │
+│    → RETRY (back to EXECUTION with review feedback)                         │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ COMPLETION PHASE (worker.ts + orchestrator.ts)                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
+│  Knowledge Extraction (combines agent + review learnings):                  │
+│    combinedOutput = lastAgentOutput + lastReviewOutput                      │
+│    extractAndStoreLearnings()   ← knowledge-extractor.ts → auto-indexes RAG │
+│    markLearningsUsed()          ← knowledge.ts (effectiveness tracking)     │
 │                                                                             │
-│  extractAndStoreLearnings()     ← knowledge-extractor.ts                    │
-│  markLearningsUsed()            ← knowledge.ts                              │
-│  recordTaskFiles()              ← task-file-patterns.ts                     │
-│  updateLedger()                 ← capability-ledger.ts (orchestrator)       │
+│  Pattern Recording:                                                         │
+│    recordTaskFiles()            ← task-file-patterns.ts                     │
+│    recordSuccessfulFix()        ← error-fix-patterns.ts (if had errors)     │
+│    updateLedger()               ← capability-ledger.ts (model routing)      │
 │                                                                             │
-│  On FAILURE:                                                                │
+│  Commit & Merge:                                                            │
+│    commitWork()                 → creates commit in worktree                │
+│    MergeQueue.add()             → queues for serial merge to main           │
+│                                                                             │
+│  On FAILURE (max retries exhausted):                                        │
 │    recordPermanentFailure()     ← error-fix-patterns.ts                     │
 │                                                                             │
 │  Meta/Research tasks:                                                       │
-│    handleMetaTaskResult()       ← worker/meta-task-handler.ts              │
-│    handleResearchTaskResult()   ← worker/meta-task-handler.ts              │
-│                                                                             │
+│    handleMetaTaskResult()       ← worker/meta-task-handler.ts               │
+│    handleResearchTaskResult()   ← worker/meta-task-handler.ts               │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Retry Flow Detail
+
+```
+EXECUTION ──► VERIFICATION ──► REVIEW ──► COMPLETION
+    ▲              │              │
+    │              │              │
+    │    ┌─────────┘              │
+    │    │ verification           │
+    │    │ failed                 │
+    │    ▼                        │
+    └─── RETRY ◄──────────────────┘
+         with                review failed
+         feedback            to converge
+
+Retry includes:
+  - Original task objective
+  - Verification/review error details
+  - Fix hints from error-fix-patterns.ts
+  - Relevant knowledge from knowledge.ts
+  - Co-modification hints for related files
+```
+
+## Review-Generated Follow-Up Tasks
+
+When review finds issues it cannot fix, it generates `unresolvedTickets`:
+- Orchestrator calls `handleUnresolvedTickets()` to spawn follow-up tasks
+- Tasks are prefixed with `[review-fix]` and tagged `review-fix`
+- Priority based on ticket severity (high=1, medium=5, low=10)
+- Tasks include rich context: description, files involved, what was tried
+- Related to original task via `relatedTo` field for traceability
 
 ## Learning System Call Sites
 
@@ -319,6 +386,10 @@ Quick reference for where each learning function is called:
 | `handleAlreadyComplete` | worker/verification-handler.ts | worker.ts |
 | `recordVerificationFailure` | worker/verification-handler.ts | worker.ts |
 | `buildEnhancedFeedback` | worker/verification-handler.ts | worker.ts |
+| `runReviewPasses` | worker/verification-handler.ts | worker.ts (captures reviewOutput) |
+| `runEscalatingReview` | review.ts | worker/verification-handler.ts |
+| `runSingleReview` | review.ts | review.ts (returns responseText for learning) |
+| `handleUnresolvedTickets` | orchestrator/result-handlers.ts | orchestrator.ts (spawns follow-up tasks) |
 | `handleMetaTaskResult` | worker/meta-task-handler.ts | worker.ts |
 | `handleResearchTaskResult` | worker/meta-task-handler.ts | worker.ts |
 

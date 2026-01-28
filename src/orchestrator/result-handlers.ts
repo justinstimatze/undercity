@@ -5,7 +5,8 @@
  */
 
 import * as output from "../output.js";
-import { decomposeTaskIntoSubtasks, getAllTasks } from "../task.js";
+import type { UnresolvedTicket } from "../review.js";
+import { addTask, decomposeTaskIntoSubtasks, getAllTasks } from "../task.js";
 import type { TaskResult } from "../worker.js";
 
 /**
@@ -122,4 +123,83 @@ export function reportTaskOutcome(
 	} else {
 		output.taskFailed(taskId, "Task failed", result.error, { workerName });
 	}
+}
+
+/**
+ * Handle unresolved tickets from review - spawn follow-up tasks
+ *
+ * When review finds issues it cannot fix, it generates UnresolvedTickets.
+ * These are converted to child tasks that will be picked up in the next grind.
+ *
+ * Unlike decomposition, the parent task is NOT marked as decomposed - it already
+ * did work (possibly partial). These are follow-up fixes, not a task breakdown.
+ */
+export function handleUnresolvedTickets(
+	taskId: string,
+	task: string,
+	tickets: UnresolvedTicket[],
+	originalTaskIds: Map<string, string>,
+): string[] {
+	if (!tickets || tickets.length === 0) {
+		return [];
+	}
+
+	// Get the original task ID from the board
+	let originalTaskId = originalTaskIds.get(task);
+	if (!originalTaskId) {
+		const allTasks = getAllTasks();
+		const matchingTask = allTasks.find((t) => t.objective === task);
+		if (matchingTask) {
+			originalTaskId = matchingTask.id;
+			originalTaskIds.set(task, originalTaskId);
+		}
+	}
+
+	const createdTaskIds: string[] = [];
+
+	for (const ticket of tickets) {
+		try {
+			// Build a rich task description from the ticket
+			const objective = `[review-fix] ${ticket.title}`;
+
+			// Map ticket priority to task priority (lower number = higher priority)
+			const priorityMap = { high: 1, medium: 5, low: 10 };
+			const priority = priorityMap[ticket.priority] ?? 5;
+
+			// Create the follow-up task with context
+			const newTask = addTask(objective, {
+				priority,
+				ticket: {
+					description: ticket.description,
+					acceptanceCriteria: [`Fix the issue: ${ticket.title}`],
+					testPlan: ticket.files ? `Verify changes in: ${ticket.files.join(", ")}` : undefined,
+					implementationNotes: ticket.context,
+				},
+				tags: ["review-fix"],
+				relatedTo: originalTaskId ? [originalTaskId] : undefined,
+			});
+
+			createdTaskIds.push(newTask.id);
+
+			output.info(`Created follow-up task from review: ${ticket.title}`, {
+				taskId: newTask.id,
+				priority: ticket.priority,
+				parentTaskId: originalTaskId,
+			});
+		} catch (err) {
+			output.warning(`Failed to create follow-up task: ${ticket.title}`, {
+				error: String(err),
+				taskId,
+			});
+		}
+	}
+
+	if (createdTaskIds.length > 0) {
+		output.info(`Created ${createdTaskIds.length} follow-up task(s) from review findings`, {
+			taskId,
+			createdTaskIds,
+		});
+	}
+
+	return createdTaskIds;
 }

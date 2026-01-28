@@ -2073,14 +2073,17 @@ Be concise and specific. Focus on actionable insights.`;
 	/**
 	 * Determine review level based on complexity assessment
 	 *
-	 * Review escalation is capped by task complexity to save opus tokens:
-	 * - trivial/simple/standard: haiku → sonnet only (no opus review)
-	 * - complex/critical: haiku → sonnet → opus (full escalation + multi-lens)
+	 * Review is ONLY enabled for complex/critical tasks to save tokens:
+	 * - trivial/simple/standard: NO review (verification is sufficient)
+	 * - complex: review with sonnet cap (catches subtle issues)
+	 * - critical: full review with opus + multi-lens
 	 *
 	 * Also respects maxTier cap - review tier will not exceed configured maximum.
 	 *
-	 * Rationale: 95% of tasks are trivial/simple/standard and don't benefit from
-	 * opus review. The token cost isn't justified when sonnet can catch most issues.
+	 * Rationale: Trivial/simple/standard tasks pass verification, which catches
+	 * typecheck/lint/test failures. Review adds ~2-6 API calls per task for
+	 * "soft" issues (logic bugs, naming) that are rare in simple changes.
+	 * Only complex/critical tasks justify the token cost of review.
 	 */
 	private determineReviewLevel(assessment: ComplexityAssessment): {
 		review: boolean;
@@ -2100,25 +2103,25 @@ Be concise and specific. Focus on actionable insights.`;
 			return { review: false, multiLens: false, maxReviewTier: this.capAtMaxTier("sonnet") };
 		}
 
-		// Reviews are enabled - determine escalation cap based on complexity
-		// Note: Complex tasks now start on sonnet, so review should match
+		// Reviews only for complex/critical tasks - saves tokens on simple work
 		switch (assessment.level) {
 			case "trivial":
 			case "simple":
 			case "standard":
+				// Simple tasks: verification is sufficient, skip review
+				return { review: false, multiLens: false, maxReviewTier: this.capAtMaxTier("sonnet") };
 			case "complex":
-				// Simple and complex tasks get capped review: haiku → sonnet only
-				// Complex tasks execution was demoted from opus to sonnet, review follows
+				// Complex tasks: review with sonnet cap (catches subtle issues)
 				return { review: true, multiLens: false, maxReviewTier: this.capAtMaxTier("sonnet") };
 			case "critical": {
-				// Only critical tasks get opus review + multi-lens (capped at maxTier)
+				// Critical tasks: full review with opus + multi-lens
 				const cappedTier = this.capAtMaxTier("opus");
 				const canMultiLens = cappedTier === "opus";
 				return { review: true, multiLens: canMultiLens, maxReviewTier: cappedTier };
 			}
 			default:
-				// Default to capped review
-				return { review: true, multiLens: false, maxReviewTier: this.capAtMaxTier("sonnet") };
+				// Default to no review (conservative on tokens)
+				return { review: false, multiLens: false, maxReviewTier: this.capAtMaxTier("sonnet") };
 		}
 	}
 
