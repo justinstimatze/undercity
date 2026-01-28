@@ -44,7 +44,7 @@ function getVerificationCommands(workingDirectory: string): {
 				qualityCheck: "pnpm quality:check", // Quality check not yet in profile
 			};
 		}
-	} catch {
+	} catch (_error: unknown) {
 		// Profile not available, use defaults
 	}
 
@@ -177,7 +177,7 @@ export async function verifyWork(
 		try {
 			execSync("pnpm check:fix 2>&1", { encoding: "utf-8", cwd, timeout: 30000 });
 			feedbackParts.push("✓ Auto-fixed lint/format issues");
-		} catch {
+		} catch (_error: unknown) {
 			// check:fix may not be available in all projects, continue
 		}
 	}
@@ -189,7 +189,7 @@ export async function verifyWork(
 		try {
 			execSync("bash ./scripts/security-scan.sh 2>&1", { encoding: "utf-8", cwd, timeout: 30000 });
 			feedbackParts.push("✓ Security scan passed");
-		} catch (error) {
+		} catch (error: unknown) {
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 			// Security issues are blocking
 			if (output.includes("secret") || output.includes("leak")) {
@@ -208,7 +208,7 @@ export async function verifyWork(
 			// Only run spell check on typescript and markdown files
 			execSync(`${commands.spell} 2>&1`, { encoding: "utf-8", cwd, timeout: 30000 });
 			feedbackParts.push("✓ Spell check passed");
-		} catch (error) {
+		} catch (error: unknown) {
 			// Spell errors are non-blocking - just log a warning
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 			const spellingErrors = output.split("\n").filter((line) => line.includes("spelling error"));
@@ -238,7 +238,7 @@ export async function verifyWork(
 				timeout: 10000,
 			});
 			feedbackParts.push("✓ Knowledge validation passed");
-		} catch (error) {
+		} catch (error: unknown) {
 			// Knowledge validation is blocking if files exist and are invalid
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 			// If no files found, that's OK (new repos)
@@ -297,7 +297,7 @@ export async function verifyWork(
 					encoding: "utf-8",
 					cwd,
 				});
-			} catch {
+			} catch (_error: unknown) {
 				// Ignore errors (e.g., no parent commit or invalid base)
 			}
 		}
@@ -322,7 +322,7 @@ export async function verifyWork(
 			cwd,
 		});
 		changedFiles = [...diffNames.trim().split("\n").filter(Boolean), ...untrackedFiles];
-	} catch {
+	} catch (_error: unknown) {
 		issues.push("No changes detected");
 		feedbackParts.push("ERROR: No file changes were made. The task may not have been completed.");
 	}
@@ -351,7 +351,7 @@ export async function verifyWork(
 		try {
 			execSync(`${commands.typecheck} 2>&1`, { encoding: "utf-8", cwd, timeout: 60000 });
 			feedback.push("✓ Typecheck passed");
-		} catch (error) {
+		} catch (error: unknown) {
 			passed = false;
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 
@@ -389,7 +389,7 @@ export async function verifyWork(
 		try {
 			execSync(`${commands.lint} 2>&1`, { encoding: "utf-8", cwd, timeout: 60000 });
 			feedback.push("✓ Lint passed");
-		} catch (error) {
+		} catch (error: unknown) {
 			passed = false;
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 
@@ -437,7 +437,7 @@ export async function verifyWork(
 					hasConfirmedNoTestFiles = true;
 				}
 			}
-		} catch {
+		} catch (_error: unknown) {
 			// Git command failed - don't skip tests, let the test runner decide
 		}
 
@@ -458,7 +458,7 @@ export async function verifyWork(
 				env: { ...process.env, UNDERCITY_VERIFICATION: "true" },
 			});
 			feedback.push("✓ Tests passed");
-		} catch (error) {
+		} catch (error: unknown) {
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 
 			// Check if failure is due to no test files existing - treat as pass
@@ -533,7 +533,7 @@ export async function verifyWork(
 	try {
 		execSync("pnpm build 2>&1", { encoding: "utf-8", cwd, timeout: 60000 });
 		feedbackParts.push("✓ Build passed");
-	} catch (error) {
+	} catch (error: unknown) {
 		buildPassed = false;
 		const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 		issues.push("Build failed");
@@ -570,7 +570,7 @@ export async function verifyWork(
 					}
 				}
 			}
-		} catch {
+		} catch (_error: unknown) {
 			// CodeScene check is optional, don't fail on errors
 		}
 	}
@@ -699,7 +699,7 @@ export async function verifyBaseline(cwd: string = process.cwd()): Promise<Basel
 	let currentCommit: string;
 	try {
 		currentCommit = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8" }).trim();
-	} catch {
+	} catch (_error: unknown) {
 		return { passed: true, feedback: "Not a git repo, skipping baseline check", cached: false };
 	}
 
@@ -717,7 +717,7 @@ export async function verifyBaseline(cwd: string = process.cwd()): Promise<Basel
 				return { passed: false, feedback: "Baseline previously failed (cached)", cached: true };
 			}
 		}
-	} catch {
+	} catch (_error: unknown) {
 		// No cache or invalid cache - continue with verification
 	}
 
@@ -729,7 +729,7 @@ export async function verifyBaseline(cwd: string = process.cwd()): Promise<Basel
 	try {
 		execSync(`${commands.typecheck} 2>&1`, { encoding: "utf-8", cwd, timeout: 60000 });
 		feedbackParts.push("✓ Typecheck passed");
-	} catch (error) {
+	} catch (error: unknown) {
 		passed = false;
 		const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 		const tsErrors = parseTypeScriptErrors(output);
@@ -748,7 +748,7 @@ export async function verifyBaseline(cwd: string = process.cwd()): Promise<Basel
 			mkdirSync(dir, { recursive: true });
 		}
 		writeFileSync(cachePath, JSON.stringify({ commit: currentCommit, verifiedAt: Date.now(), passed }));
-	} catch {
+	} catch (_error: unknown) {
 		// Cache write failure is non-fatal
 		logger.warn("Failed to write baseline cache");
 	}

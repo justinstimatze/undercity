@@ -635,7 +635,7 @@ export function calculateVector(
 		magnitude = Math.sqrt(magnitude);
 
 		return { indices, values, magnitude };
-	} catch (error) {
+	} catch (error: unknown) {
 		logger.warn(
 			{
 				error: String(error),

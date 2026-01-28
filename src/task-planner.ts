@@ -193,7 +193,7 @@ Start by exploring the codebase, then provide your plan.`,
 			summary: String(parsed.summary || ""),
 			notes: Array.isArray(parsed.notes) ? parsed.notes.map(String) : [],
 		};
-	} catch (error) {
+	} catch (error: unknown) {
 		logger.error({ error, objective: cleanObjective }, "Planning failed");
 		return {
 			success: false,
@@ -347,7 +347,7 @@ Respond with ONLY a JSON array of subtask descriptions:
 		}
 		logger.warn({ model, result: result.substring(0, 200) }, "Failed to parse subtasks from response");
 		return [];
-	} catch (error) {
+	} catch (error: unknown) {
 		logger.warn({ error: String(error), model }, "Failed to request decomposition subtasks");
 		return [];
 	}
@@ -386,8 +386,8 @@ async function gatherPlanningContext(task: string, cwd: string): Promise<Plannin
 	let briefing: ContextBriefing | undefined;
 	try {
 		briefing = await prepareContext(task, { cwd, mode: "compact" });
-	} catch (e) {
-		logger.warn({ error: String(e) }, "Failed to prepare context for planning");
+	} catch (error: unknown) {
+		logger.warn({ error: String(error) }, "Failed to prepare context for planning");
 	}
 
 	return {
@@ -507,15 +507,15 @@ RULES:
 	if (jsonMatch) {
 		try {
 			return JSON.parse(jsonMatch[1]) as ExecutionPlan;
-		} catch (e) {
-			logger.warn({ error: String(e) }, "Failed to parse plan JSON");
+		} catch (error: unknown) {
+			logger.warn({ error: String(error) }, "Failed to parse plan JSON");
 		}
 	}
 
 	// Fallback: try to parse the whole response as JSON
 	try {
 		return JSON.parse(planJson) as ExecutionPlan;
-	} catch {
+	} catch (_error: unknown) {
 		// Return minimal plan if parsing fails - marked for retry
 		return {
 			objective: task,
@@ -630,15 +630,15 @@ Address ALL issues raised by the reviewer. If a file doesn't exist, either remov
 	if (jsonMatch) {
 		try {
 			return JSON.parse(jsonMatch[1]) as ExecutionPlan;
-		} catch (e) {
-			logger.warn({ error: String(e) }, "Failed to parse revised plan JSON");
+		} catch (error: unknown) {
+			logger.warn({ error: String(error) }, "Failed to parse revised plan JSON");
 		}
 	}
 
 	// Fallback: try to parse the whole response as JSON
 	try {
 		return JSON.parse(planJson) as ExecutionPlan;
-	} catch {
+	} catch (_error: unknown) {
 		// Return original plan if revision parsing fails
 		logger.warn("Revision failed to parse, keeping original plan");
 		return currentPlan;
@@ -703,7 +703,7 @@ function preValidatePlan(
 			}
 			checked++;
 		}
-	} catch {
+	} catch (_error: unknown) {
 		// AST index not available, skip symbol validation
 	}
 
@@ -882,7 +882,7 @@ async function resolveOpenQuestions(
 				// PM escalated to human - leave question open
 				logger.info({ question: q.question.substring(0, 50) }, "PM escalated question to human");
 			}
-		} catch (error) {
+		} catch (error: unknown) {
 			logger.warn({ error: String(error), question: q.question.substring(0, 50) }, "Failed to resolve question via PM");
 		}
 	}
