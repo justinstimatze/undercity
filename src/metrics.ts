@@ -97,6 +97,18 @@ export class MetricsTracker {
 		reviewTokens: number;
 		reviewPasses: number;
 	};
+	// ============== Additional Effectiveness Tracking Fields ==============
+	/** RAG searches performed during task */
+	private ragSearches: Array<{ query: string; resultsCount: number; wasUsed: boolean }> = [];
+	/** Model recommended by self-tuning routing profile */
+	private recommendedModel?: "sonnet" | "opus";
+	/** Task classifier prediction */
+	private classifierPrediction?: { riskLevel: "low" | "medium" | "high"; confidence: number };
+	// ============== Throughput Tracking Fields ==============
+	/** Lines changed (insertions + deletions) */
+	private linesChanged?: number;
+	/** Files changed count */
+	private filesChanged?: number;
 
 	constructor(rateLimitTracker?: RateLimitTracker) {
 		this.rateLimitTracker = rateLimitTracker || new RateLimitTracker();
@@ -123,6 +135,11 @@ export class MetricsTracker {
 		this.predictedFiles = [];
 		this.actualFilesModified = [];
 		this.reviewStats = undefined;
+		this.ragSearches = [];
+		this.recommendedModel = undefined;
+		this.classifierPrediction = undefined;
+		this.linesChanged = undefined;
+		this.filesChanged = undefined;
 	}
 
 	/**
@@ -204,6 +221,39 @@ export class MetricsTracker {
 	 */
 	recordReviewStats(issuesFound: number, reviewTokens: number, reviewPasses: number): void {
 		this.reviewStats = { issuesFound, reviewTokens, reviewPasses };
+	}
+
+	// ============== Additional Effectiveness Recording Methods ==============
+
+	/**
+	 * Record a RAG search performed during task context building
+	 */
+	recordRagSearch(query: string, resultsCount: number, wasUsed: boolean): void {
+		this.ragSearches.push({ query, resultsCount, wasUsed });
+	}
+
+	/**
+	 * Record the model recommended by self-tuning routing profile
+	 */
+	recordRecommendedModel(model: "sonnet" | "opus"): void {
+		this.recommendedModel = model;
+	}
+
+	/**
+	 * Record task classifier prediction for risk assessment
+	 */
+	recordClassifierPrediction(riskLevel: "low" | "medium" | "high", confidence: number): void {
+		this.classifierPrediction = { riskLevel, confidence };
+	}
+
+	// ============== Throughput Recording Methods ==============
+
+	/**
+	 * Record lines and files changed from verification results
+	 */
+	recordThroughput(linesChanged: number, filesChanged: number): void {
+		this.linesChanged = linesChanged;
+		this.filesChanged = filesChanged;
 	}
 
 	/**
@@ -327,6 +377,13 @@ export class MetricsTracker {
 			predictedFiles: this.predictedFiles.length > 0 ? [...this.predictedFiles] : undefined,
 			actualFilesModified: this.actualFilesModified.length > 0 ? [...this.actualFilesModified] : undefined,
 			reviewStats: this.reviewStats,
+			// Additional effectiveness tracking
+			ragSearches: this.ragSearches.length > 0 ? [...this.ragSearches] : undefined,
+			recommendedModel: this.recommendedModel,
+			classifierPrediction: this.classifierPrediction,
+			// Throughput tracking
+			linesChanged: this.linesChanged,
+			filesChanged: this.filesChanged,
 		};
 
 		// Log metrics to file asynchronously, without blocking

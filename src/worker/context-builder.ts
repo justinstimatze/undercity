@@ -40,6 +40,11 @@ export interface ContextBuildResult {
 	injectedLearningIds: string[];
 	/** Files predicted to be modified based on task-file patterns */
 	predictedFiles: string[];
+	/** Classifier prediction for effectiveness tracking */
+	classifierPrediction?: {
+		riskLevel: "low" | "medium" | "high";
+		confidence: number;
+	};
 }
 
 /**
@@ -61,6 +66,7 @@ export async function buildImplementationContext(config: ContextBuildConfig): Pr
 	const sections: string[] = [];
 	let injectedLearningIds: string[] = [];
 	let predictedFiles: string[] = [];
+	let classifierPrediction: ContextBuildResult["classifierPrediction"];
 
 	// Add assignment context for worker identity and recovery
 	if (assignmentContext) {
@@ -109,6 +115,17 @@ export async function buildImplementationContext(config: ContextBuildConfig): Pr
 	if (hasClassificationData(stateDir)) {
 		try {
 			const classification = await classifyTask(task, stateDir);
+
+			// Convert riskScore (0-1) to riskLevel for effectiveness tracking
+			const riskLevel: "low" | "medium" | "high" =
+				classification.riskScore < 0.33 ? "low" : classification.riskScore < 0.66 ? "medium" : "high";
+
+			// Capture classifier prediction for effectiveness tracking
+			classifierPrediction = {
+				riskLevel,
+				confidence: classification.confidence,
+			};
+
 			if (classification.similarTasks.some((t) => t.outcome === "failure")) {
 				const failedSimilar = classification.similarTasks.filter((t) => t.outcome === "failure");
 				const warningLines = [
@@ -192,5 +209,5 @@ RULES:
 6. Minimal changes only - nothing beyond task scope
 7. No questions - decide and proceed`;
 
-	return { prompt, injectedLearningIds, predictedFiles };
+	return { prompt, injectedLearningIds, predictedFiles, classifierPrediction };
 }

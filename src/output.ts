@@ -55,13 +55,33 @@ interface ProgressState {
 interface OutputConfig {
 	mode: OutputMode;
 	verbose: boolean;
+	/**
+	 * Compact mode reduces token consumption for machine consumers:
+	 * - Omits timestamps (caller can add if needed)
+	 * - Removes redundant message when data contains same info
+	 * - Uses shorter event format
+	 */
+	compact: boolean;
 }
 
 // Global configuration - can be set once at startup
 const globalConfig: OutputConfig = {
 	mode: detectMode(),
 	verbose: false,
+	compact: detectCompactMode(),
 };
+
+/**
+ * Auto-detect compact mode - enabled when running as agent
+ */
+function detectCompactMode(): boolean {
+	// Explicit env var takes priority
+	if (process.env.UNDERCITY_COMPACT === "true") return true;
+	if (process.env.UNDERCITY_COMPACT === "false") return false;
+
+	// Default: compact when in agent mode (non-TTY)
+	return !process.stdout.isTTY;
+}
 
 /**
  * Auto-detect output mode based on environment
@@ -90,6 +110,9 @@ export function configureOutput(config: Partial<OutputConfig>): void {
 	if (config.verbose !== undefined) {
 		globalConfig.verbose = config.verbose;
 	}
+	if (config.compact !== undefined) {
+		globalConfig.compact = config.compact;
+	}
 }
 
 /**
@@ -107,12 +130,30 @@ export function isHumanMode(): boolean {
 }
 
 /**
+ * Compact event format - reduces token consumption by ~40%
+ */
+interface CompactEvent {
+	t: OutputEvent["type"]; // type
+	m: string; // message
+	d?: Record<string, unknown>; // data (optional)
+}
+
+/**
  * Output a structured event (JSON in agent mode, formatted in human mode)
  */
 function outputEvent(event: OutputEvent): void {
 	if (globalConfig.mode === "agent") {
-		// Agent mode: single-line JSON per event
-		console.log(JSON.stringify(event));
+		if (globalConfig.compact) {
+			// Compact mode: shorter keys, no timestamp
+			const compact: CompactEvent = { t: event.type, m: event.message };
+			if (event.data && Object.keys(event.data).length > 0) {
+				compact.d = event.data;
+			}
+			console.log(JSON.stringify(compact));
+		} else {
+			// Standard agent mode: full JSON per event
+			console.log(JSON.stringify(event));
+		}
 	} else {
 		// Human mode: formatted output
 		const prefix = getHumanPrefix(event.type);
@@ -286,12 +327,18 @@ export function debug(message: string, data?: Record<string, unknown>): void {
 
 /**
  * Output worker phase change (analyzing, executing, verifying, etc.)
+ * In compact mode, these are suppressed as task lifecycle events provide sufficient info
  */
 export function workerPhase(
 	taskId: string,
 	phase: "planning" | "analyzing" | "executing" | "verifying" | "committing" | "reviewing" | "parsing" | "pm-research",
 	data?: Record<string, unknown>,
 ): void {
+	// In compact mode, suppress intermediate phase events
+	if (globalConfig.compact && globalConfig.mode === "agent") {
+		return;
+	}
+
 	const phaseMessages: Record<string, string> = {
 		planning: "Planning execution...",
 		analyzing: "Analyzing task complexity...",
@@ -312,6 +359,7 @@ export function workerPhase(
 
 /**
  * Output worker attempt information
+ * In compact mode, suppressed (retry info included in task completion)
  */
 export function workerAttempt(
 	taskId: string,
@@ -320,6 +368,11 @@ export function workerAttempt(
 	model: string,
 	data?: Record<string, unknown>,
 ): void {
+	// In compact mode, suppress intermediate attempt events
+	if (globalConfig.compact && globalConfig.mode === "agent") {
+		return;
+	}
+
 	outputEvent({
 		type: "worker_attempt",
 		message: `Attempt ${attempt}/${maxAttempts} (${model})`,
@@ -330,6 +383,7 @@ export function workerAttempt(
 
 /**
  * Output worker verification result
+ * In compact mode, only emit failures (success is implied by task completion)
  */
 export function workerVerification(
 	taskId: string,
@@ -337,6 +391,11 @@ export function workerVerification(
 	issues?: string[],
 	data?: Record<string, unknown>,
 ): void {
+	// In compact mode, only emit failures
+	if (globalConfig.compact && globalConfig.mode === "agent" && passed) {
+		return;
+	}
+
 	const message = passed ? "Verification passed" : `Verification failed: ${issues?.join(", ") || "unknown"}`;
 	outputEvent({
 		type: "worker_verification",
@@ -348,8 +407,14 @@ export function workerVerification(
 
 /**
  * Output worker escalation event
+ * In compact mode, suppressed (final model included in task completion)
  */
 export function workerEscalation(taskId: string, fromModel: string, toModel: string, reason?: string): void {
+	// In compact mode, suppress intermediate escalation events
+	if (globalConfig.compact && globalConfig.mode === "agent") {
+		return;
+	}
+
 	outputEvent({
 		type: "worker_escalation",
 		message: `Escalating: ${fromModel} → ${toModel}${reason ? ` (${reason})` : ""}`,

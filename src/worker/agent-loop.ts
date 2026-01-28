@@ -161,6 +161,14 @@ export interface AgentLoopResult {
 	reportedInvalidTarget: boolean;
 	/** Whether agent needs decomposition */
 	needsDecomposition: boolean;
+	// Effectiveness tracking data
+	/** Files predicted to be modified */
+	predictedFiles?: string[];
+	/** Classifier prediction for risk assessment */
+	classifierPrediction?: {
+		riskLevel: "low" | "medium" | "high";
+		confidence: number;
+	};
 }
 
 // =============================================================================
@@ -394,6 +402,20 @@ function handleAgentErrorSubtype(resultData: ResultMessageData, state: AgentLoop
 // =============================================================================
 
 /**
+ * Result from building prompt
+ */
+interface BuildPromptResult {
+	prompt: string;
+	resumePrompt?: string;
+	injectedLearningIds: string[];
+	predictedFiles?: string[];
+	classifierPrediction?: {
+		riskLevel: "low" | "medium" | "high";
+		confidence: number;
+	};
+}
+
+/**
  * Build the prompt for agent execution
  */
 async function buildPrompt(
@@ -401,7 +423,7 @@ async function buildPrompt(
 	state: AgentLoopState,
 	config: AgentLoopConfig,
 	deps: AgentLoopDependencies,
-): Promise<{ prompt: string; resumePrompt?: string; injectedLearningIds: string[] }> {
+): Promise<BuildPromptResult> {
 	const metaType = state.isCurrentTaskMeta ? extractMetaTaskType(context.task) : null;
 
 	// Check if this is a retry with an existing session to resume
@@ -459,6 +481,8 @@ async function buildPrompt(
 	return {
 		prompt: contextResult.prompt,
 		injectedLearningIds: contextResult.injectedLearningIds,
+		predictedFiles: contextResult.predictedFiles,
+		classifierPrediction: contextResult.classifierPrediction,
 	};
 }
 
@@ -481,7 +505,12 @@ export async function runAgentLoop(
 	let result = "";
 
 	// Build prompt
-	const { prompt, resumePrompt, injectedLearningIds } = await buildPrompt(context, state, config, deps);
+	const { prompt, resumePrompt, injectedLearningIds, predictedFiles, classifierPrediction } = await buildPrompt(
+		context,
+		state,
+		config,
+		deps,
+	);
 	state.injectedLearningIds = injectedLearningIds;
 
 	// Clear post-mortem after use - only applies to first attempt at new tier
@@ -618,5 +647,8 @@ export async function runAgentLoop(
 		reportedComplete: state.taskAlreadyCompleteReason !== null,
 		reportedInvalidTarget: state.invalidTargetReason !== null,
 		needsDecomposition: state.needsDecompositionReason !== null,
+		// Effectiveness tracking data
+		predictedFiles,
+		classifierPrediction,
 	};
 }

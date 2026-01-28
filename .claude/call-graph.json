@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-27T23:45:33.197Z",
+  "generatedAt": "2026-01-28T01:28:24.465Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -8,7 +8,7 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 95,
+          "line": 101,
           "context": "if"
         },
         {
@@ -127,7 +127,7 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 139,
+          "line": 156,
           "context": "if"
         },
         {
@@ -183,7 +183,7 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 141,
+          "line": 158,
           "context": "if"
         },
         {
@@ -199,7 +199,7 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 148,
+          "line": 165,
           "context": "if"
         },
         {
@@ -252,7 +252,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1551,
+          "line": 1576,
           "context": "if"
         }
       ]
@@ -296,7 +296,7 @@
       "calledFrom": [
         {
           "file": "worker/context-builder.ts",
-          "line": 103,
+          "line": 109,
           "context": "if"
         },
         {
@@ -346,6 +346,11 @@
           "file": "worker/escalation-logic.ts",
           "line": 241,
           "context": "tier"
+        },
+        {
+          "file": "worker.ts",
+          "line": 1457,
+          "context": "startTask"
         },
         {
           "file": "capability-ledger.ts",
@@ -508,7 +513,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1254,
+          "line": 1266,
           "context": "info"
         }
       ]

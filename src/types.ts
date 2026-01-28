@@ -712,6 +712,33 @@ export interface TaskMetrics {
 		/** Number of review passes */
 		reviewPasses: number;
 	};
+	// ============== Additional Effectiveness Tracking ==============
+	/** RAG searches performed during task context building */
+	ragSearches?: Array<{
+		/** Query used for search */
+		query: string;
+		/** Number of results returned */
+		resultsCount: number;
+		/** Whether search results were incorporated into prompt */
+		wasUsed: boolean;
+	}>;
+	/** Model recommended by self-tuning routing profile */
+	recommendedModel?: "sonnet" | "opus";
+	/** Task classifier prediction for risk assessment */
+	classifierPrediction?: {
+		/** Predicted risk level */
+		riskLevel: "low" | "medium" | "high";
+		/** Confidence score (0-1) */
+		confidence: number;
+	};
+	// ============== Throughput Tracking ==============
+	/** Lines changed (insertions + deletions) */
+	linesChanged?: number;
+	/** Number of files modified */
+	filesChanged?: number;
+	// ============== Prompt Efficiency Tracking ==============
+	/** Initial prompt size in characters (before any retries) */
+	initialPromptSize?: number;
 }
 
 /**

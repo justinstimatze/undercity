@@ -40,8 +40,8 @@ describe("output", () => {
 
 	afterEach(() => {
 		consoleSpy.mockRestore();
-		// Reset to agent mode (default for testing)
-		configureOutput({ mode: "agent", verbose: false });
+		// Reset to agent mode with compact disabled (default for testing standard format)
+		configureOutput({ mode: "agent", verbose: false, compact: false });
 	});
 
 	describe("mode detection and configuration", () => {
@@ -61,7 +61,7 @@ describe("output", () => {
 
 	describe("agent mode (JSON output)", () => {
 		beforeEach(() => {
-			configureOutput({ mode: "agent" });
+			configureOutput({ mode: "agent", compact: false });
 		});
 
 		it("should output JSON for info", () => {
@@ -143,10 +143,67 @@ describe("output", () => {
 		});
 
 		it("should output debug in verbose mode", () => {
-			configureOutput({ mode: "agent", verbose: true });
+			configureOutput({ mode: "agent", verbose: true, compact: false });
 			debug("Debug info");
 			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
 			expect(output.type).toBe("debug");
+		});
+	});
+
+	describe("compact mode (token-efficient JSON)", () => {
+		beforeEach(() => {
+			configureOutput({ mode: "agent", compact: true });
+		});
+
+		it("should use short field names in compact mode", () => {
+			info("Test message", { key: "value" });
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.t).toBe("info");
+			expect(output.m).toBe("Test message");
+			expect(output.d?.key).toBe("value");
+			// Should NOT have timestamp or long field names
+			expect(output.type).toBeUndefined();
+			expect(output.message).toBeUndefined();
+			expect(output.timestamp).toBeUndefined();
+		});
+
+		it("should omit empty data field", () => {
+			info("No data");
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.d).toBeUndefined();
+		});
+
+		it("should suppress worker phase events", () => {
+			workerPhase("task-123", "analyzing");
+			expect(consoleSpy).not.toHaveBeenCalled();
+		});
+
+		it("should suppress worker attempt events", () => {
+			workerAttempt("task-123", 1, 3, "sonnet");
+			expect(consoleSpy).not.toHaveBeenCalled();
+		});
+
+		it("should suppress passed verification events", () => {
+			workerVerification("task-123", true);
+			expect(consoleSpy).not.toHaveBeenCalled();
+		});
+
+		it("should emit failed verification events", () => {
+			workerVerification("task-123", false, ["typecheck failed"]);
+			expect(consoleSpy).toHaveBeenCalled();
+			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+			expect(output.t).toBe("worker_verification");
+		});
+
+		it("should suppress escalation events", () => {
+			workerEscalation("task-123", "sonnet", "opus");
+			expect(consoleSpy).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("standard agent mode (full JSON)", () => {
+		beforeEach(() => {
+			configureOutput({ mode: "agent", compact: false });
 		});
 
 		it("should output JSON for header", () => {
@@ -226,7 +283,7 @@ describe("output", () => {
 
 	describe("progress tracker", () => {
 		beforeEach(() => {
-			configureOutput({ mode: "agent" });
+			configureOutput({ mode: "agent", compact: false });
 		});
 
 		it("should create progress tracker and track increments", () => {
@@ -264,7 +321,7 @@ describe("output", () => {
 
 	describe("worker-level events (agent mode)", () => {
 		beforeEach(() => {
-			configureOutput({ mode: "agent" });
+			configureOutput({ mode: "agent", compact: false });
 		});
 
 		it("should output worker phase event", () => {
@@ -378,7 +435,7 @@ describe("output", () => {
 		});
 
 		it("should strip ANSI codes in agent mode", () => {
-			configureOutput({ mode: "agent" });
+			configureOutput({ mode: "agent", compact: false });
 			compat.log("\x1b[32mcolored\x1b[0m");
 			const output = JSON.parse(consoleSpy.mock.calls[0][0]);
 			expect(output.message).toBe("colored");

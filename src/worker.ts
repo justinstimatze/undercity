@@ -24,6 +24,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { recordComplexityOutcome, recordReviewTriageOutcome } from "./ax-programs.js";
+import { getRecommendedModel } from "./capability-ledger.js";
 import {
 	adjustModelFromMetrics,
 	assessComplexityFast,
@@ -1054,6 +1055,17 @@ export class TaskWorker {
 				// Sync state changes back to instance
 				this.syncAgentLoopState(agentLoopState);
 
+				// Record effectiveness tracking metrics
+				if (agentLoopResult.predictedFiles) {
+					this.metricsTracker.recordPredictedFiles(agentLoopResult.predictedFiles);
+				}
+				if (agentLoopResult.classifierPrediction) {
+					this.metricsTracker.recordClassifierPrediction(
+						agentLoopResult.classifierPrediction.riskLevel,
+						agentLoopResult.classifierPrediction.confidence,
+					);
+				}
+
 				const agentOutput = agentLoopResult.output;
 				phaseTimings.agentExecution = Date.now() - agentStart;
 
@@ -1440,6 +1452,16 @@ export class TaskWorker {
 		this.metricsTracker.startTask(taskId, task, `session_${Date.now()}`, this.currentModel);
 		this.metricsTracker.recordAgentSpawn(this.currentModel === "opus" ? "reviewer" : "builder");
 
+		// Track self-tuning recommendation for effectiveness analysis
+		try {
+			const recommendation = getRecommendedModel(task, this.stateDir);
+			if (recommendation.model === "sonnet" || recommendation.model === "opus") {
+				this.metricsTracker.recordRecommendedModel(recommendation.model);
+			}
+		} catch {
+			// Silent failure - recommendation tracking is optional
+		}
+
 		this.log("Starting task", { task, model: this.currentModel, assessment: assessment.level, reviewLevel });
 		output.info(`Model: ${this.currentModel}`, { taskId, model: this.currentModel });
 		if (reviewLevel.review) {
@@ -1483,6 +1505,9 @@ export class TaskWorker {
 			skipOptionalChecks: this.skipOptionalVerification,
 		});
 		phaseTimings.verification = Date.now() - verifyStart;
+
+		// Record throughput metrics from verification
+		this.metricsTracker.recordThroughput(verification.linesChanged, verification.filesChanged);
 
 		const errorCategories = categorizeErrors(verification, {
 			noOpEditCount: this.noOpEditCount,
