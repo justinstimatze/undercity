@@ -34,39 +34,145 @@ const DB_FILENAME = "undercity.db";
 const SCHEMA_VERSION = 6;
 
 // =============================================================================
+// Retry Configuration for Concurrent Access
+// =============================================================================
+
+/** Maximum number of retry attempts for transient SQLite errors */
+const MAX_RETRIES = 5;
+
+/** Initial delay for exponential backoff (ms) */
+const INITIAL_DELAY_MS = 100;
+
+/** Maximum delay for exponential backoff (ms) */
+const MAX_DELAY_MS = 5000;
+
+/**
+ * Calculate exponential backoff delay with ~10% jitter
+ * Prevents thundering herd problem in concurrent access scenarios
+ * @param attempt - Current attempt number (0-indexed)
+ * @returns Delay in milliseconds
+ */
+function calculateRetryDelay(attempt: number): number {
+	const exponentialDelay = INITIAL_DELAY_MS * 2 ** attempt;
+	const cappedDelay = Math.min(exponentialDelay, MAX_DELAY_MS);
+	// Add ~10% jitter to prevent thundering herd
+	const jitter = cappedDelay * 0.1 * Math.random();
+	return cappedDelay + jitter;
+}
+
+/**
+ * Check if an error is a transient SQLite error that should be retried
+ * @param error - The error to check
+ * @returns true if the error is transient (SQLITE_BUSY, SQLITE_LOCKED, or "database is locked")
+ */
+function isTransientSQLiteError(error: unknown): boolean {
+	if (error instanceof Error) {
+		const message = error.message.toLowerCase();
+		// SQLite busy/locked errors (error codes 5 and 6) are transient
+		if (
+			message.includes("sqlite_busy") ||
+			message.includes("sqlite_locked") ||
+			message.includes("database is locked")
+		) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// =============================================================================
 // Database Instance Management
 // =============================================================================
 
 let dbInstance: Database.Database | null = null;
 
 /**
- * Get or create the database connection
+ * Get or create the database connection with retry logic for concurrent access
+ *
+ * Automatically retries on transient SQLite errors (SQLITE_BUSY, database locked)
+ * using exponential backoff with jitter. This ensures reliable database access
+ * during concurrent operations.
+ *
+ * @param stateDir - Directory for database file (default: .undercity)
+ * @returns Database instance
+ * @throws Error after exhausting retry attempts or on non-transient errors
+ *
+ * @example
+ * ```typescript
+ * // Normal usage - retries automatically on SQLITE_BUSY
+ * const db = getDatabase();
+ *
+ * // Custom state directory
+ * const db = getDatabase("/custom/path");
+ * ```
  */
 export function getDatabase(stateDir: string = DEFAULT_STATE_DIR): Database.Database {
+	// Return existing instance if available (singleton pattern)
 	if (dbInstance) {
 		return dbInstance;
 	}
 
 	const dbPath = join(stateDir, DB_FILENAME);
 
-	// Ensure directory exists
+	// Ensure directory exists (do NOT retry this - not a database operation)
 	if (!existsSync(stateDir)) {
 		mkdirSync(stateDir, { recursive: true });
 	}
 
-	dbInstance = new Database(dbPath);
+	// Retry logic for database initialization
+	let lastError: unknown;
 
-	// Enable WAL mode for better concurrent access
-	dbInstance.pragma("journal_mode = WAL");
-	dbInstance.pragma("busy_timeout = 5000");
-	dbInstance.pragma("synchronous = NORMAL");
+	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+		try {
+			// Database creation and initialization
+			dbInstance = new Database(dbPath);
 
-	// Initialize schema
-	initializeSchema(dbInstance);
+			// Enable WAL mode for better concurrent access
+			dbInstance.pragma("journal_mode = WAL");
+			dbInstance.pragma("busy_timeout = 5000");
+			dbInstance.pragma("synchronous = NORMAL");
 
-	logger.info({ path: dbPath }, "SQLite database initialized");
+			// Initialize schema
+			initializeSchema(dbInstance);
 
-	return dbInstance;
+			logger.info({ path: dbPath }, "SQLite database initialized");
+
+			return dbInstance;
+		} catch (error: unknown) {
+			lastError = error;
+
+			// Don't retry non-transient errors
+			if (!isTransientSQLiteError(error)) {
+				logger.error({ error: String(error), path: dbPath }, "Non-transient error initializing database");
+				throw error;
+			}
+
+			// Last attempt failed
+			if (attempt === MAX_RETRIES - 1) {
+				logger.error(
+					{ error: String(error), attempts: MAX_RETRIES, path: dbPath },
+					"Failed to initialize database after max retries",
+				);
+				break;
+			}
+
+			// Calculate delay and log retry attempt
+			const delayMs = calculateRetryDelay(attempt);
+			logger.info(
+				{ attempt: attempt + 1, maxRetries: MAX_RETRIES, delayMs, path: dbPath },
+				"Transient database error, retrying with backoff",
+			);
+
+			// Wait before retrying (synchronous sleep for simplicity)
+			const start = Date.now();
+			while (Date.now() - start < delayMs) {
+				// Busy wait
+			}
+		}
+	}
+
+	// All retries exhausted
+	throw new Error(`Failed to initialize database after ${MAX_RETRIES} attempts: ${String(lastError)}`);
 }
 
 /**
