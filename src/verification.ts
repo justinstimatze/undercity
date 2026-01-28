@@ -628,11 +628,77 @@ export interface CategorizeErrorsContext {
 }
 
 /**
- * Categorize errors from verification for tracking
+ * Exhaustive type guard to ensure all ErrorCategory enum values are handled.
+ * This helper function uses a switch statement with a never type guard in the
+ * default case to enforce compile-time checking. If a new ErrorCategory is added
+ * without updating this function, TypeScript will produce a compile-time error.
  *
- * @param verification - Verification result
+ * @param category - The ErrorCategory to validate
+ * @returns true if the category is recognized
+ * @throws Error if an unhandled category is encountered (should never happen at runtime)
+ *
+ * @example
+ * ```typescript
+ * // This ensures all ErrorCategory values are explicitly handled:
+ * assertExhaustiveErrorCategory("lint"); // true
+ * assertExhaustiveErrorCategory("typecheck"); // true
+ * // If a new category is added to ErrorCategory enum, TypeScript will error here
+ * ```
+ */
+function assertExhaustiveErrorCategory(category: ErrorCategory): boolean {
+	switch (category) {
+		case "lint":
+		case "typecheck":
+		case "build":
+		case "test":
+		case "spell":
+		case "no_changes":
+		case "no_changes_complete":
+		case "no_changes_mismatch":
+		case "no_changes_confused":
+		case "unknown":
+			return true;
+		default: {
+			// Never type guard: if this line is reached, it means a new ErrorCategory
+			// was added without updating this switch statement. TypeScript will error
+			// at compile time if category is not of type 'never'.
+			const _exhaustiveCheck: never = category;
+			throw new Error(`Unhandled error category: ${_exhaustiveCheck}`);
+		}
+	}
+}
+
+/**
+ * Categorize errors from verification for tracking.
+ *
+ * Returns an array of error categories based on verification results. Multiple
+ * categories can be returned as they are independent (e.g., both "lint" and
+ * "typecheck" failures can occur). The no_changes variants are mutually exclusive.
+ *
+ * This function is protected by exhaustive type checking via assertExhaustiveErrorCategory,
+ * which ensures all ErrorCategory enum values are handled at compile time.
+ *
+ * @param verification - Verification result containing pass/fail status for each check
  * @param context - Optional context for granular no_changes categorization
- * @returns Array of error categories
+ * @returns Array of error categories (empty array returns ["unknown"])
+ *
+ * @example
+ * ```typescript
+ * // Single failure
+ * const result1 = categorizeErrors({ typecheckPassed: false, ... });
+ * // Returns: ["typecheck"]
+ *
+ * // Multiple failures
+ * const result2 = categorizeErrors({ typecheckPassed: false, testsPassed: false, ... });
+ * // Returns: ["typecheck", "test"]
+ *
+ * // Granular no_changes categorization
+ * const result3 = categorizeErrors(
+ *   { filesChanged: 0, ... },
+ *   { isVagueTask: true }
+ * );
+ * // Returns: ["no_changes_mismatch"]
+ * ```
  */
 export function categorizeErrors(verification: VerificationResult, context?: CategorizeErrorsContext): ErrorCategory[] {
 	const categories: ErrorCategory[] = [];
@@ -662,6 +728,11 @@ export function categorizeErrors(verification: VerificationResult, context?: Cat
 	// Check for build issues (typecheck passed but build failed)
 	if (verification.typecheckPassed && verification.issues.some((i) => i.toLowerCase().includes("build"))) {
 		categories.push("build");
+	}
+
+	// Validate that all returned categories are handled (compile-time exhaustiveness check)
+	for (const category of categories) {
+		assertExhaustiveErrorCategory(category);
 	}
 
 	return categories.length > 0 ? categories : ["unknown"];
