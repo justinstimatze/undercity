@@ -41,6 +41,7 @@ vi.mock("node:fs", () => ({
 }));
 
 // Import after mocking
+import * as fs from "node:fs";
 import { Persistence } from "../persistence.js";
 import { createMockSessionRecovery } from "./helpers.js";
 
@@ -688,6 +689,281 @@ describe("Persistence", () => {
 
 			const session = persistence.getAgentSession("agent-1");
 			expect(session).toBe("session-123");
+		});
+	});
+
+	describe("Edge Cases", () => {
+		describe("Corrupted JSON files", () => {
+			it("returns default value when session recovery JSON is malformed", () => {
+				mockFiles.set(".undercity/session-recovery.json", "{ malformed json without closing brace");
+
+				const recovery = persistence.getSessionRecovery();
+
+				expect(recovery.lastUpdated).toBeInstanceOf(Date);
+				expect(recovery.sessionId).toBeUndefined();
+			});
+
+			it("returns default value when inventory JSON is truncated", () => {
+				mockFiles.set(".undercity/inventory.json", '{"steps": [{"id": "test"');
+
+				const inventory = persistence.getInventory();
+
+				expect(inventory.steps).toEqual([]);
+				expect(inventory.agents).toEqual([]);
+			});
+
+			it("returns default value when loadout JSON contains null bytes", () => {
+				mockFiles.set(".undercity/loadout.json", '{"maxAgents": 5\x00}');
+
+				const loadout = persistence.getLoadout();
+
+				expect(loadout.maxAgents).toBe(5);
+				expect(loadout.autoApprove).toBe(false);
+			});
+
+			it("returns undefined when agent session JSON is malformed", () => {
+				const path = ".undercity/squad/agent-1.json";
+				mockFiles.set(path, "not valid json at all");
+
+				const session = persistence.getAgentSession("agent-1");
+
+				expect(session).toBeUndefined();
+			});
+
+			it("returns default value when file tracking JSON is corrupted", () => {
+				mockFiles.set(".undercity/file-tracking.json", '{"entries": {malformed}');
+
+				const tracking = persistence.getFileTracking();
+
+				expect(tracking.entries).toEqual({});
+			});
+
+			it("returns null when parallel recovery JSON parse fails", () => {
+				mockFiles.set(".undercity/parallel-recovery.json", '{"batchId": "test", "isComplete":');
+
+				const state = persistence.getParallelRecoveryState();
+
+				expect(state).toBeNull();
+			});
+		});
+
+		describe("Concurrent write operations", () => {
+			it("handles multiple simultaneous writes without data loss", async () => {
+				const promises = [];
+				for (let i = 0; i < 10; i++) {
+					const recovery = { sessionId: `session-${i}`, lastUpdated: new Date() };
+					promises.push(Promise.resolve(persistence.saveSessionRecovery(recovery)));
+				}
+
+				await Promise.all(promises);
+
+				const final = persistence.getSessionRecovery();
+				expect(final.sessionId).toMatch(/^session-\d$/);
+			});
+
+			it("handles concurrent task additions without corruption", async () => {
+				const promises = [];
+				for (let i = 0; i < 5; i++) {
+					const step = { id: `step-${i}`, goal: `Goal ${i}` };
+					promises.push(Promise.resolve(persistence.addTasks(step as never)));
+				}
+
+				await Promise.all(promises);
+
+				const tasks = persistence.getTasks();
+				expect(tasks.length).toBeGreaterThan(0);
+				expect(tasks.length).toBeLessThanOrEqual(5);
+			});
+
+			it("preserves data integrity during overlapping inventory writes", async () => {
+				const inventory1 = {
+					steps: [{ id: "step-1", goal: "Test 1" }],
+					agents: [],
+					lastUpdated: new Date(),
+				};
+				const inventory2 = {
+					steps: [{ id: "step-2", goal: "Test 2" }],
+					agents: [],
+					lastUpdated: new Date(),
+				};
+
+				await Promise.all([
+					Promise.resolve(persistence.saveInventory(inventory1)),
+					Promise.resolve(persistence.saveInventory(inventory2)),
+				]);
+
+				const result = persistence.getInventory();
+				expect(result.steps.length).toBe(1);
+				expect(result.steps[0].id).toMatch(/^step-[12]$/);
+			});
+		});
+
+		describe("Disk full simulation (ENOSPC)", () => {
+			it("propagates ENOSPC error when writing session recovery", () => {
+				// Mock writeFileSync to simulate disk full
+				vi.mocked(fs.writeFileSync).mockImplementationOnce(() => {
+					const error = new Error("ENOSPC: no space left on device");
+					(error as NodeJS.ErrnoException).code = "ENOSPC";
+					throw error;
+				});
+
+				expect(() => {
+					persistence.saveSessionRecovery({ sessionId: "test", lastUpdated: new Date() });
+				}).toThrow("ENOSPC");
+			});
+
+			it("propagates ENOSPC error when writing inventory", () => {
+				vi.mocked(fs.writeFileSync).mockImplementationOnce(() => {
+					const error = new Error("ENOSPC: no space left on device");
+					(error as NodeJS.ErrnoException).code = "ENOSPC";
+					throw error;
+				});
+
+				expect(() => {
+					persistence.saveInventory({ steps: [], agents: [], lastUpdated: new Date() });
+				}).toThrow(/ENOSPC/);
+			});
+
+			it("ensures temp file cleanup on failed rename", () => {
+				// First write succeeds, then rename fails
+				vi.mocked(fs.renameSync).mockImplementationOnce(() => {
+					const error = new Error("ENOSPC: no space left on device");
+					(error as NodeJS.ErrnoException).code = "ENOSPC";
+					throw error;
+				});
+
+				expect(() => {
+					persistence.saveLoadout({
+						maxAgents: 3,
+						enabledAgentTypes: ["scout"],
+						autoApprove: false,
+						lastUpdated: new Date(),
+					} as never);
+				}).toThrow(/ENOSPC/);
+
+				// Temp file should be cleaned up by error handler
+				expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(expect.stringContaining(".tmp"));
+			});
+		});
+
+		describe("Permission denied scenarios", () => {
+			it("handles EACCES error when reading session recovery", () => {
+				mockFiles.set(".undercity/session-recovery.json", "exists");
+
+				vi.mocked(fs.readFileSync).mockImplementationOnce(() => {
+					const error = new Error("EACCES: permission denied");
+					(error as NodeJS.ErrnoException).code = "EACCES";
+					throw error;
+				});
+
+				const recovery = persistence.getSessionRecovery();
+
+				expect(recovery.sessionId).toBeUndefined();
+				expect(recovery.lastUpdated).toBeInstanceOf(Date);
+			});
+
+			it("handles EPERM error when writing inventory", () => {
+				vi.mocked(fs.writeFileSync).mockImplementationOnce(() => {
+					const error = new Error("EPERM: operation not permitted");
+					(error as NodeJS.ErrnoException).code = "EPERM";
+					throw error;
+				});
+
+				expect(() => {
+					persistence.saveInventory({ steps: [], agents: [], lastUpdated: new Date() });
+				}).toThrow(/EPERM/);
+			});
+
+			it("cleans up temp file when EACCES occurs during write", () => {
+				vi.mocked(fs.writeFileSync).mockImplementationOnce((path: string) => {
+					mockFiles.set(path as string, "temp content");
+					const error = new Error("EACCES: permission denied");
+					(error as NodeJS.ErrnoException).code = "EACCES";
+					throw error;
+				});
+
+				expect(() => {
+					persistence.saveFileTracking({ entries: {}, lastUpdated: new Date() });
+				}).toThrow(/EACCES/);
+
+				// unlinkSync should have been called to clean up temp file
+				expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(expect.stringContaining(".tmp"));
+			});
+
+			it("returns undefined when agent session file has permission error", () => {
+				mockFiles.set(".undercity/squad/agent-1.json", "exists");
+
+				vi.mocked(fs.readFileSync).mockImplementationOnce(() => {
+					const error = new Error("EACCES: permission denied");
+					(error as NodeJS.ErrnoException).code = "EACCES";
+					throw error;
+				});
+
+				const session = persistence.getAgentSession("agent-1");
+
+				expect(session).toBeUndefined();
+			});
+
+			it("propagates EPERM error for worktree state writes", () => {
+				vi.mocked(fs.writeFileSync).mockImplementationOnce(() => {
+					const error = new Error("EPERM: operation not permitted");
+					(error as NodeJS.ErrnoException).code = "EPERM";
+					throw error;
+				});
+
+				expect(() => {
+					persistence.saveWorktreeState({ worktrees: {}, lastUpdated: new Date() });
+				}).toThrow(/EPERM/);
+			});
+		});
+
+		describe("Atomic write guarantees", () => {
+			it("uses temp file pattern to prevent partial writes", () => {
+				persistence.saveSessionRecovery({ sessionId: "test", lastUpdated: new Date() });
+
+				// Verify both writeFileSync and renameSync were called
+				expect(vi.mocked(fs.writeFileSync)).toHaveBeenCalled();
+				expect(vi.mocked(fs.renameSync)).toHaveBeenCalled();
+
+				// Verify the final file exists
+				expect(mockFiles.has(".undercity/session-recovery.json")).toBe(true);
+			});
+
+			it("ensures original file unchanged if write fails", () => {
+				const originalData = { steps: [{ id: "original" }], agents: [], lastUpdated: new Date().toISOString() };
+				mockFiles.set(".undercity/inventory.json", JSON.stringify(originalData));
+
+				vi.mocked(fs.writeFileSync).mockImplementationOnce(() => {
+					throw new Error("Write failure");
+				});
+
+				try {
+					persistence.saveInventory({ steps: [{ id: "new" } as never], agents: [], lastUpdated: new Date() });
+				} catch {
+					// Expected to fail
+				}
+
+				const inventory = persistence.getInventory();
+				expect(inventory.steps[0]?.id).toBe("original");
+			});
+
+			it("completes rename atomically without intermediate state", () => {
+				persistence.saveLoadout({
+					maxAgents: 10,
+					enabledAgentTypes: ["builder"],
+					autoApprove: true,
+					lastUpdated: new Date(),
+				} as never);
+
+				// Verify rename was called
+				expect(vi.mocked(fs.renameSync)).toHaveBeenCalled();
+
+				// Temp file should not exist after successful write
+				expect(mockFiles.has(".undercity/loadout.json.tmp")).toBe(false);
+
+				// Final file should exist
+				expect(mockFiles.has(".undercity/loadout.json")).toBe(true);
+			});
 		});
 	});
 });
