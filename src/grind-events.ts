@@ -13,10 +13,22 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { WorktreeError } from "./worktree-manager.js";
 
 const UNDERCITY_DIR = ".undercity";
 const EVENTS_FILE = "grind-events.jsonl";
 const MAX_EVENTS = 1000;
+
+/**
+ * Validation error for invalid input or state
+ */
+export class ValidationError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "ValidationError";
+		Object.setPrototypeOf(this, ValidationError.prototype);
+	}
+}
 
 /**
  * Failure reasons - categorized for easy filtering
@@ -56,7 +68,8 @@ export type GrindEventType =
 	| "task_complete"
 	| "task_failed"
 	| "task_escalated"
-	| "rate_limit";
+	| "rate_limit"
+	| "error";
 
 /**
  * Base event structure
@@ -148,6 +161,17 @@ interface RateLimitEvent extends BaseEvent {
 	wait?: number; // Wait time in seconds
 }
 
+/**
+ * Error event
+ */
+interface ErrorEvent extends BaseEvent {
+	type: "error";
+	errorType: string;
+	errorMessage: string;
+	stackTrace?: string;
+	context: Record<string, unknown>;
+}
+
 type GrindEvent =
 	| GrindStartEvent
 	| GrindEndEvent
@@ -155,7 +179,8 @@ type GrindEvent =
 	| TaskCompleteEvent
 	| TaskFailedEvent
 	| TaskEscalatedEvent
-	| RateLimitEvent;
+	| RateLimitEvent
+	| ErrorEvent;
 
 function getEventsPath(): string {
 	return join(process.cwd(), UNDERCITY_DIR, EVENTS_FILE);
@@ -652,8 +677,78 @@ export function logRateLimitHit(options: { batchId?: string; model: string; deta
 	logRateLimit({ batchId: options.batchId, model: options.model });
 }
 
-export function logError(_message: string, _options?: { batchId?: string; taskId?: string; error?: string }): void {
-	// Removed - errors are captured in task_failed
+/**
+ * Type-safe error logging utility
+ *
+ * Logs errors with proper type discrimination and context. Handles Error, WorktreeError,
+ * and ValidationError types with appropriate property extraction.
+ *
+ * @param error - Error value of unknown type (could be Error, WorktreeError, ValidationError, or anything)
+ * @param context - Additional context information for debugging (taskId, batchId, stage, etc.)
+ *
+ * @example
+ * // Log a standard Error
+ * try {
+ *   await riskyOperation();
+ * } catch (error: unknown) {
+ *   logError(error, { taskId: 'task-123', stage: 'execution' });
+ * }
+ *
+ * @example
+ * // Log a WorktreeError with command context
+ * try {
+ *   execGit(['checkout', branch]);
+ * } catch (error: unknown) {
+ *   logError(error, { taskId: 'task-456', operation: 'checkout' });
+ * }
+ *
+ * @example
+ * // Log a ValidationError
+ * if (!isValid(input)) {
+ *   const error = new ValidationError('Invalid input format');
+ *   logError(error, { input, source: 'user' });
+ * }
+ */
+export function logError(error: unknown, context: Record<string, unknown>): void {
+	let errorType: string;
+	let errorMessage: string;
+	let stackTrace: string | undefined;
+
+	// Type discrimination via instanceof checks
+	// Check specific types before base Error type
+	if (error instanceof ValidationError) {
+		errorType = "ValidationError";
+		errorMessage = error.message;
+		stackTrace = error.stack;
+	} else if (error instanceof WorktreeError) {
+		errorType = "WorktreeError";
+		errorMessage = error.message;
+		stackTrace = error.stack;
+		// Enrich context with WorktreeError-specific properties
+		context = {
+			...context,
+			command: error.command,
+			exitCode: error.exitCode,
+		};
+	} else if (error instanceof Error) {
+		errorType = error.name || "Error";
+		errorMessage = error.message;
+		stackTrace = error.stack;
+	} else {
+		// Handle non-Error types (strings, objects, primitives)
+		errorType = "Unknown";
+		errorMessage = String(error);
+		stackTrace = undefined;
+	}
+
+	writeEvent({
+		ts: new Date().toISOString(),
+		type: "error",
+		errorType,
+		errorMessage,
+		stackTrace,
+		context,
+	});
 }
 
 // Legacy types for backwards compat
