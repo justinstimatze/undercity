@@ -47,6 +47,12 @@ export interface HealthMonitorState {
 
 /**
  * Create initial health monitor state
+ *
+ * @returns {HealthMonitorState} A new health monitor state with null interval and empty recovery attempts map
+ * @example
+ * const state = createHealthMonitorState();
+ * // state.intervalHandle === null
+ * // state.recoveryAttempts.size === 0
  */
 export function createHealthMonitorState(): HealthMonitorState {
 	return {
@@ -58,9 +64,22 @@ export function createHealthMonitorState(): HealthMonitorState {
 /**
  * Start health monitoring
  *
- * @param state - Mutable health monitor state
- * @param config - Health monitor configuration
- * @param deps - Dependencies for monitoring
+ * @param {HealthMonitorState} state - Mutable health monitor state that will be updated with interval handle
+ * @param {HealthMonitorConfig} config - Health monitor configuration including enabled flag, check interval, and thresholds
+ * @param {HealthMonitorDependencies} deps - Dependencies for monitoring including scanActiveTasks function
+ * @returns {void}
+ * @example
+ * const state = createHealthMonitorState();
+ * const config = {
+ *   enabled: true,
+ *   checkIntervalMs: 60000,
+ *   stuckThresholdMs: 300000,
+ *   attemptRecovery: true,
+ *   maxRecoveryAttempts: 2
+ * };
+ * const deps = { scanActiveTasks: () => [...activeTasks] };
+ * startHealthMonitoring(state, config, deps);
+ * // Health checks now run every 60 seconds
  */
 export function startHealthMonitoring(
 	state: HealthMonitorState,
@@ -86,7 +105,14 @@ export function startHealthMonitoring(
 /**
  * Stop health monitoring
  *
- * @param state - Mutable health monitor state
+ * @param {HealthMonitorState} state - Mutable health monitor state with interval handle to clear
+ * @returns {void}
+ * @example
+ * const state = createHealthMonitorState();
+ * // ... after starting monitoring
+ * stopHealthMonitoring(state);
+ * // state.intervalHandle === null
+ * // state.recoveryAttempts.size === 0
  */
 export function stopHealthMonitoring(state: HealthMonitorState): void {
 	if (state.intervalHandle) {
@@ -101,9 +127,22 @@ export function stopHealthMonitoring(state: HealthMonitorState): void {
  * Check health of all active workers
  * Detects stuck workers via stale checkpoints
  *
- * @param state - Mutable health monitor state
- * @param config - Health monitor configuration
- * @param deps - Dependencies for monitoring
+ * @param {HealthMonitorState} state - Mutable health monitor state for tracking recovery attempts
+ * @param {HealthMonitorConfig} config - Health monitor configuration with stuck threshold and recovery settings
+ * @param {HealthMonitorDependencies} deps - Dependencies for monitoring including scanActiveTasks function
+ * @returns {void}
+ * @example
+ * const state = createHealthMonitorState();
+ * const config = {
+ *   enabled: true,
+ *   checkIntervalMs: 60000,
+ *   stuckThresholdMs: 300000,
+ *   attemptRecovery: true,
+ *   maxRecoveryAttempts: 2
+ * };
+ * const deps = { scanActiveTasks: () => getActiveTasksFromState() };
+ * checkWorkerHealth(state, config, deps);
+ * // Checks all running tasks for stale checkpoints and triggers recovery if needed
  */
 export function checkWorkerHealth(
 	state: HealthMonitorState,
@@ -155,11 +194,23 @@ export function checkWorkerHealth(
 /**
  * Handle a stuck worker - attempt recovery or log for manual intervention
  *
- * @param state - Mutable health monitor state
- * @param config - Health monitor configuration
- * @param taskId - ID of the stuck task
- * @param worktreePath - Path to the worktree
- * @param stuckPhase - Phase where the worker is stuck
+ * @param {HealthMonitorState} state - Mutable health monitor state for tracking recovery attempts per task
+ * @param {HealthMonitorConfig} config - Health monitor configuration with attemptRecovery flag and maxRecoveryAttempts
+ * @param {string} taskId - ID of the stuck task to recover
+ * @param {string} worktreePath - Path to the worktree where nudge file will be written
+ * @param {string} stuckPhase - Phase where the worker is stuck (e.g., "executing", "verifying")
+ * @returns {void}
+ * @example
+ * const state = createHealthMonitorState();
+ * const config = {
+ *   enabled: true,
+ *   checkIntervalMs: 60000,
+ *   stuckThresholdMs: 300000,
+ *   attemptRecovery: true,
+ *   maxRecoveryAttempts: 2
+ * };
+ * handleStuckWorker(state, config, "task-abc123", "/repo/worktrees/task-abc123", "executing");
+ * // Writes nudge file and increments recovery attempt count for task-abc123
  */
 export function handleStuckWorker(
 	state: HealthMonitorState,
@@ -196,11 +247,21 @@ export function handleStuckWorker(
 /**
  * Write a nudge file to the worktree for worker detection
  *
- * @param worktreePath - Path to the worktree
- * @param stuckPhase - Phase where the worker is stuck
- * @param attempt - Recovery attempt number
+ * @param {string} worktreePath - Path to the worktree where nudge file will be written
+ * @param {string} stuckPhase - Phase where the worker is stuck (e.g., "executing", "verifying")
+ * @param {number} attempt - Recovery attempt number (1-indexed)
+ * @returns {void}
+ * @example
+ * writeNudgeFile("/repo/worktrees/task-abc123", "executing", 1);
+ * // Creates /repo/worktrees/task-abc123/.undercity-nudge with JSON:
+ * // {
+ * //   "timestamp": "2024-01-15T10:30:00.000Z",
+ * //   "reason": "Stuck in executing phase",
+ * //   "attempt": 1,
+ * //   "message": "Health check detected inactivity. Please continue or report status."
+ * // }
  */
-function writeNudgeFile(worktreePath: string, stuckPhase: string, attempt: number): void {
+export function writeNudgeFile(worktreePath: string, stuckPhase: string, attempt: number): void {
 	try {
 		const nudgePath = `${worktreePath}/.undercity-nudge`;
 		const nudgeContent = JSON.stringify(
