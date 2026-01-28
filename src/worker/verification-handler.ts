@@ -64,6 +64,8 @@ export interface VerificationDependencies {
 	recordActualFilesModified: (files: string[]) => void;
 	/** Record phase timings for performance analysis */
 	recordPhaseTimings: (timings: Record<string, number>) => void;
+	/** Record review output for knowledge extraction */
+	recordReviewOutput: (output: string) => void;
 }
 
 /**
@@ -108,7 +110,7 @@ export async function runReviewPasses(
 	reviewLevel: ReviewLevel,
 	baseCommit: string | undefined,
 	deps: Pick<VerificationDependencies, "saveCheckpoint">,
-): Promise<{ continue: boolean; verification?: VerificationResult; feedback?: string }> {
+): Promise<{ continue: boolean; verification?: VerificationResult; feedback?: string; reviewOutput?: string }> {
 	deps.saveCheckpoint("reviewing", { passed: true });
 	output.workerPhase(identity.taskId, "reviewing");
 
@@ -126,7 +128,7 @@ export async function runReviewPasses(
 	if (!reviewResult.converged) {
 		output.warning("Review could not fully resolve issues, retrying task...", { taskId: identity.taskId });
 		const feedback = `Review found issues that couldn't be fully resolved: ${reviewResult.issuesFound.join(", ")}`;
-		return { continue: false, feedback };
+		return { continue: false, feedback, reviewOutput: reviewResult.reviewOutput };
 	}
 
 	if (reviewResult.issuesFound.length > 0) {
@@ -139,12 +141,12 @@ export async function runReviewPasses(
 		});
 		if (!finalVerification.passed) {
 			output.warning("Final verification failed after reviews", { taskId: identity.taskId });
-			return { continue: false, feedback: finalVerification.feedback };
+			return { continue: false, feedback: finalVerification.feedback, reviewOutput: reviewResult.reviewOutput };
 		}
-		return { continue: true, verification: finalVerification };
+		return { continue: true, verification: finalVerification, reviewOutput: reviewResult.reviewOutput };
 	}
 
-	return { continue: true };
+	return { continue: true, reviewOutput: reviewResult.reviewOutput };
 }
 
 /**
@@ -204,6 +206,10 @@ export async function handleVerificationSuccess(
 	if (reviewLevel.review) {
 		const reviewResult = await runReviewPasses(identity, config, reviewLevel, baseCommit, deps);
 		if (!reviewResult.continue) {
+			// Still record review output even on failure for learning
+			if (reviewResult.reviewOutput) {
+				deps.recordReviewOutput(reviewResult.reviewOutput);
+			}
 			return {
 				done: false,
 				feedback: reviewResult.feedback || "Review failed",
@@ -212,6 +218,10 @@ export async function handleVerificationSuccess(
 		}
 		if (reviewResult.verification) {
 			finalVerification = reviewResult.verification;
+		}
+		// Record review output for knowledge extraction
+		if (reviewResult.reviewOutput) {
+			deps.recordReviewOutput(reviewResult.reviewOutput);
 		}
 	}
 

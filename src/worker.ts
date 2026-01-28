@@ -442,6 +442,9 @@ export class TaskWorker {
 	/** Last agent output for knowledge extraction */
 	private lastAgentOutput: string = "";
 
+	/** Last review output for knowledge extraction */
+	private lastReviewOutput: string = "";
+
 	/** Count of no-op edits (content already correct) - signals task may be complete */
 	private noOpEditCount: number = 0;
 
@@ -660,6 +663,9 @@ export class TaskWorker {
 			recordPredictedFiles: (files) => this.metricsTracker.recordPredictedFiles(files),
 			recordActualFilesModified: (files) => this.metricsTracker.recordActualFilesModified(files),
 			recordPhaseTimings: (timings) => this.metricsTracker.recordPhaseTimings(timings),
+			recordReviewOutput: (output) => {
+				this.lastReviewOutput = output;
+			},
 		};
 	}
 
@@ -1167,6 +1173,8 @@ export class TaskWorker {
 		this.autoRemediationAttempted = false;
 		// Ralph-style: clear error history for new task
 		this.errorHistory = [];
+		// Clear review output from previous task
+		this.lastReviewOutput = "";
 
 		this.saveCheckpoint("starting");
 		this.cleanupDirtyState();
@@ -1674,8 +1682,11 @@ export class TaskWorker {
 	 * Record learnings and patterns after successful task completion
 	 */
 	private async recordSuccessLearnings(taskId: string, task: string): Promise<void> {
-		// Knowledge extraction and learnings
-		await recordKnowledgeLearnings(taskId, this.lastAgentOutput, this.injectedLearningIds, this.stateDir);
+		// Knowledge extraction and learnings (combine agent output with review output)
+		const combinedOutput = this.lastReviewOutput
+			? `${this.lastAgentOutput}\n\n=== REVIEW LEARNINGS ===\n\n${this.lastReviewOutput}`
+			: this.lastAgentOutput;
+		await recordKnowledgeLearnings(taskId, combinedOutput, this.injectedLearningIds, this.stateDir);
 
 		// Task-file patterns
 		recordSuccessfulTaskPattern(taskId, task, this.getFilesFromLastCommit());

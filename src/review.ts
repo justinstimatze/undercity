@@ -29,6 +29,8 @@ export interface ReviewResult {
 	passedClean: boolean;
 	/** True if the review agent made changes to fix issues */
 	madeChanges?: boolean;
+	/** Full response text for knowledge extraction */
+	responseText?: string;
 }
 
 /**
@@ -85,6 +87,8 @@ export async function runEscalatingReview(
 	multiLensInsights?: string[];
 	/** Tickets for issues that couldn't be fixed - queue these as child tasks */
 	unresolvedTickets?: UnresolvedTicket[];
+	/** Combined review responses for knowledge extraction */
+	reviewOutput?: string;
 }> {
 	const {
 		useMultiLens = false,
@@ -111,6 +115,7 @@ export async function runEscalatingReview(
 	const allIssuesFound: string[] = [];
 	let totalPasses = 0;
 	const multiLensInsights: string[] = [];
+	const reviewResponses: string[] = []; // Collect responses for knowledge extraction
 
 	const cappedNote = maxReviewTier !== "opus" ? ` (capped at ${maxReviewTier})` : "";
 	console.log(chalk.cyan(`\n  ━━━ Review Passes${cappedNote} ━━━`));
@@ -126,6 +131,7 @@ export async function runEscalatingReview(
 			// Still do a final convergence check with standard review
 			const finalReview = await runSingleReview(task, "opus", workingDirectory, log);
 			totalPasses++;
+			if (finalReview.responseText) reviewResponses.push(finalReview.responseText);
 
 			if (finalReview.passedClean) {
 				console.log(chalk.green("  [opus] Final check: Converged ✓"));
@@ -143,6 +149,7 @@ export async function runEscalatingReview(
 						reviewPasses: totalPasses,
 						finalTier: "opus",
 						multiLensInsights,
+						reviewOutput: reviewResponses.join("\n\n---\n\n"),
 					};
 				}
 			} else if (finalReview.foundIssues) {
@@ -168,6 +175,7 @@ export async function runEscalatingReview(
 			totalPasses++;
 
 			const review = await runSingleReview(task, tier, workingDirectory, log);
+			if (review.responseText) reviewResponses.push(review.responseText);
 
 			if (review.passedClean) {
 				// No issues found - tier is clean
@@ -206,6 +214,7 @@ export async function runEscalatingReview(
 					issuesFound: allIssuesFound,
 					reviewPasses: totalPasses,
 					finalTier: tier,
+					reviewOutput: reviewResponses.join("\n\n---\n\n"),
 				};
 			}
 		}
@@ -236,6 +245,7 @@ export async function runEscalatingReview(
 					finalTier: tier,
 					multiLensInsights: multiLensInsights.length > 0 ? multiLensInsights : undefined,
 					unresolvedTickets: tickets.length > 0 ? tickets : undefined,
+					reviewOutput: reviewResponses.join("\n\n---\n\n"),
 				};
 			}
 			console.log(chalk.yellow(`  [${tier}] Exhausted ${maxPasses} passes, escalating...`));
@@ -256,6 +266,7 @@ export async function runEscalatingReview(
 		reviewPasses: totalPasses,
 		finalTier: highestTierUsed,
 		multiLensInsights: multiLensInsights.length > 0 ? multiLensInsights : undefined,
+		reviewOutput: reviewResponses.length > 0 ? reviewResponses.join("\n\n---\n\n") : undefined,
 	};
 }
 
@@ -542,9 +553,10 @@ After reviewing:
 			suggestion: undefined, // No longer used - fixes applied directly
 			passedClean,
 			madeChanges: reviewMadeChanges,
+			responseText: response, // Capture for knowledge extraction
 		};
 	} catch (error) {
 		log("Review failed", { error: String(error), model });
-		return { model, foundIssues: false, issues: [], passedClean: true };
+		return { model, foundIssues: false, issues: [], passedClean: true, responseText: "" };
 	}
 }
