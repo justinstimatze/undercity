@@ -113,6 +113,8 @@ export class RAGEngine {
 	 * Index content programmatically (not from a file)
 	 *
 	 * Use this for indexing learnings, decisions, and other in-memory content.
+	 *
+	 * @throws {Error} If embedder fails to generate embeddings (model loading, network issues, etc.)
 	 */
 	async indexContent(opts: IndexContentOptions): Promise<IndexResult> {
 		const { content, source, title, metadata = {} } = opts;
@@ -152,7 +154,34 @@ export class RAGEngine {
 		}
 
 		// Generate embeddings for all chunks
-		const embeddings = await this.embedder.embedBatch(chunks.map((c) => c.content));
+		let embeddings: number[][];
+		try {
+			embeddings = await this.embedder.embedBatch(chunks.map((c) => c.content));
+		} catch (error) {
+			// Clean up orphaned document if embedding fails
+			deleteDocument(documentId, this.stateDir);
+
+			const errorMessage =
+				`Failed to generate embeddings for content in indexContent(). ` +
+				`This may indicate: model loading failure, network issues accessing HuggingFace models, ` +
+				`corrupted model cache, or insufficient memory. ` +
+				`Document: ${title || source} (${documentId}). ` +
+				`Try clearing the HuggingFace cache at ~/.cache/huggingface or checking network connectivity. ` +
+				`Underlying error: ${error instanceof Error ? error.message : String(error)}`;
+
+			logger.error(
+				{
+					documentId,
+					source,
+					title,
+					chunkCount: chunks.length,
+					error: String(error),
+				},
+				errorMessage,
+			);
+
+			throw new Error(errorMessage);
+		}
 
 		// Store chunks and embeddings
 		let tokensIndexed = 0;
@@ -227,7 +256,17 @@ export class RAGEngine {
 				},
 			});
 		} catch (error) {
-			logger.warn({ filePath, error: String(error) }, "Failed to read file");
+			const errorMessage = String(error);
+			// Distinguish between file read errors and embedding errors
+			if (errorMessage.includes("generate embeddings") || errorMessage.includes("model loading")) {
+				logger.error(
+					{ filePath, error: errorMessage },
+					"Failed to index file due to embedding/model loading failure. " +
+						"Check HuggingFace cache, network connectivity, or available memory.",
+				);
+			} else {
+				logger.warn({ filePath, error: errorMessage }, "Failed to read or process file");
+			}
 			return null;
 		}
 	}
