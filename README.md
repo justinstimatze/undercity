@@ -217,19 +217,15 @@ Auth via Claude Max OAuth - run `undercity setup` to verify login status.
 | `undercity tuning` | View learned routing profile | Human: model thresholds |
 | `undercity introspect` | Analyze own metrics | Human/JSON: success rates, patterns |
 | `undercity decisions` | Decision tracking stats | Human: pending, resolved, overrides |
-| `undercity ax` | Ax/DSPy training data stats | Human: example counts |
 
 ## Analysis Commands
 
 | Command | Purpose | Output |
 |---------|---------|--------|
 | `undercity metrics` | Performance metrics | Human: success rate, tokens |
-| `undercity complexity-metrics` | Success by complexity level | Human/JSON |
-| `undercity enhanced-metrics` | Token usage + escalation | Human/JSON |
-| `undercity escalation-patterns` | Escalation effectiveness | Human |
 | `undercity insights` | Routing recommendations | Human/JSON |
-| `undercity semantic-check` | Semantic density analysis | JSON |
-| `undercity semantic-check --fix` | Auto-fix density issues | - |
+| `undercity postmortem` | Analyze last grind session | Human/JSON |
+| `undercity effectiveness` | Learning systems effectiveness | Human/JSON |
 
 ## State Files
 

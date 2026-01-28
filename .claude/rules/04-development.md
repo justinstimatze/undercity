@@ -139,10 +139,9 @@ undercity introspect                # Self-analysis
 
 ```bash
 undercity metrics                   # Performance metrics
-undercity complexity-metrics        # Success by complexity
 undercity insights                  # Routing recommendations
 undercity decisions                 # Decision tracking stats
-undercity ax                        # Ax/DSPy training stats
+undercity postmortem                # Analyze last grind session
 ```
 
 ## PM2 Daemon
