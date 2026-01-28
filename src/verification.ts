@@ -123,6 +123,8 @@ export interface VerifyWorkOptions {
 	skipOptionalChecks?: boolean;
 	/** Skip auto-format/lint-fix step */
 	skipAutoFix?: boolean;
+	/** Stop tests on first failure (faster feedback during retries) */
+	bailOnTestFailure?: boolean;
 }
 
 export async function verifyWork(
@@ -153,6 +155,7 @@ export async function verifyWork(
 	const profileOpt = opts.profile ?? false;
 	const skipOptionalChecks = opts.skipOptionalChecks ?? false;
 	const skipAutoFix = opts.skipAutoFix ?? false;
+	const bailOnTestFailure = opts.bailOnTestFailure ?? false;
 	const issues: string[] = [];
 	const feedbackParts: string[] = [];
 	let typecheckPassed = true;
@@ -446,7 +449,9 @@ export async function verifyWork(
 		try {
 			// Run tests with short timeout - we just want to know if they pass
 			// Set UNDERCITY_VERIFICATION to skip integration tests
-			execSync(`${commands.test} 2>&1`, {
+			// Add --bail for faster feedback during retries (stop on first failure)
+			const testCommand = bailOnTestFailure ? `${commands.test} --bail` : commands.test;
+			execSync(`${testCommand} 2>&1`, {
 				encoding: "utf-8",
 				cwd,
 				timeout: 120000,

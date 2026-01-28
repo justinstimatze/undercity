@@ -253,7 +253,7 @@ export class Orchestrator {
 		this.autoCommit = options.autoCommit ?? true;
 		this.stream = options.stream ?? false;
 		this.verbose = options.verbose ?? false;
-		this.reviewPasses = options.reviewPasses ?? false; // Default to no automatic reviews - use --review flag to enable
+		this.reviewPasses = options.reviewPasses ?? true; // Default to review enabled - catches issues before merge
 		this.multiLensAtOpus = options.multiLensAtOpus ?? false;
 		this.pushOnSuccess = options.pushOnSuccess ?? false; // Default to no push - user must explicitly opt in
 		// Verification retry options with defaults

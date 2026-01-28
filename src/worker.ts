@@ -513,7 +513,7 @@ export class TaskWorker {
 		this.runTypecheck = options.runTypecheck ?? true;
 		this.runTests = options.runTests ?? true;
 		this.workingDirectory = options.workingDirectory ?? process.cwd();
-		this.reviewPasses = options.reviewPasses ?? false;
+		this.reviewPasses = options.reviewPasses ?? true; // Default to review enabled
 		this.maxReviewPassesPerTier = options.maxReviewPassesPerTier ?? 2;
 		// Opus is final tier - no escalation path, so give it more attempts by default
 		this.maxOpusReviewPasses = options.maxOpusReviewPasses ?? this.maxReviewPassesPerTier * 3;
@@ -1504,6 +1504,8 @@ export class TaskWorker {
 			workingDirectory: this.workingDirectory,
 			baseCommit,
 			skipOptionalChecks: this.skipOptionalVerification,
+			// Bail on first test failure during retries for faster feedback
+			bailOnTestFailure: this.attempts > 1,
 		});
 		phaseTimings.verification = Date.now() - verifyStart;
 
@@ -1584,13 +1586,14 @@ export class TaskWorker {
 					patchedFiles: remediation.patchedFiles,
 				});
 
-				// Re-verify after auto-fix
+				// Re-verify after auto-fix (bail on failure since this is a retry)
 				const reVerification = await verifyWork({
 					runTypecheck: this.runTypecheck,
 					runTests: this.runTests,
 					workingDirectory: this.workingDirectory,
 					baseCommit,
 					skipOptionalChecks: this.skipOptionalVerification,
+					bailOnTestFailure: true,
 				});
 
 				if (reVerification.passed) {
