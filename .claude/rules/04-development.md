@@ -43,6 +43,28 @@ pnpm syncpack:lint  # Check dependency version consistency
 pnpm syncpack:fix   # Fix version mismatches
 ```
 
+### Before Removing a Dependency
+
+**CRITICAL**: A dependency may appear "unused" in source code but still be required:
+
+1. **Peer dependencies** - Required by other packages (e.g., `@xenova/transformers` is needed by `embeddings.js`)
+2. **Runtime dependencies** - Loaded dynamically or by other packages
+3. **Build-time dependencies** - Used by tooling, not application code
+
+**Before removing any dependency, run:**
+```bash
+pnpm why <package-name>  # Shows what depends on it
+```
+
+If `pnpm why` shows the package is a peer dependency of something we use, **do not remove it**.
+
+**Example:**
+```bash
+$ pnpm why @xenova/transformers
+@xenova/transformers 2.17.2
+└── is peer of @themaximalist/embeddings.js 0.1.3  # <-- DON'T REMOVE
+```
+
 ## Security Scanning
 
 ```bash

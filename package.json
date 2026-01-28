@@ -48,6 +48,7 @@
     "check:fix": "biome check --write --unsafe ./src",
     "syncpack:lint": "syncpack lint",
     "syncpack:fix": "syncpack fix-mismatches",
+    "deps:check-peers": "bash ./scripts/check-peer-deps.sh",
     "spell": "cspell \"**/*.{ts,md}\" --gitignore",
     "quality:check": "cs check --staged",
     "codescene:pr": "cs review --base-branch main",
