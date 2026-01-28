@@ -225,8 +225,8 @@ undercity grind --review
 # Disable review (for quick iteration)
 undercity grind --no-review
 
-# Use supervised mode (Opus orchestrates workers)
-undercity solo --supervised --worker sonnet
+# Start with opus model for complex work
+undercity grind "complex task" --model opus
 ```
 
 ### Post-Completion Escalation
@@ -372,7 +372,7 @@ undercity grind  # Auto-resumes interrupted batch
 | File | Purpose | When to Clear |
 |------|---------|---------------|
 | `parallel-recovery.json` | Crash recovery | After successful completion |
-| `tasks.json` | Task board | Never (persistent queue) |
+| `undercity.db` | Task board (SQLite) | Never (persistent queue) |
 | `grind-events.jsonl` | Audit log | Periodically for space |
 | `rate-limit-state.json` | Token tracking | Never |
 
@@ -453,19 +453,23 @@ All execution events logged to `.undercity/grind-events.jsonl`:
 | Architectural | 1-2 | High review needs |
 | Mixed batch | 5-10 | Balanced approach |
 
-### Supervised Mode & Advanced Review Techniques
+### Model Selection & Review Techniques
 
-#### Supervised Execution
+#### Model Selection
 ```bash
-undercity solo --supervised --worker sonnet
+# Default: sonnet for most tasks
+undercity grind
+
+# Force opus for complex work
+undercity grind --model opus
 ```
 
-**Use supervised mode when:**
+**Use opus model when:**
 - Very complex architectural tasks
-- Need Opus-level planning with Sonnet execution
-- High-stakes changes requiring careful orchestration
+- Security-sensitive changes
+- High-stakes changes requiring careful reasoning
 
-**Standard mode is sufficient for:**
+**Sonnet is sufficient for:**
 - Routine development tasks
 - Well-defined feature work
 - Bug fixes with clear scope

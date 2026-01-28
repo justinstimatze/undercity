@@ -136,6 +136,8 @@ Write clear, actionable task descriptions:
 
 ## Task Board Location
 
-Tasks are stored in `.undercity/tasks.json` (tracked in git for team visibility).
+Tasks are stored in SQLite at `.undercity/undercity.db` (gitignored).
 
-Runtime state files (knowledge, metrics, recovery) are in `.undercity/` but gitignored.
+Use CLI commands (`undercity tasks`, `undercity add`, etc.) to manage tasks.
+
+Runtime state files (knowledge, metrics, recovery) are in `.undercity/` and gitignored.

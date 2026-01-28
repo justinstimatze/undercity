@@ -12,7 +12,7 @@
 
 | Capability | Implementation | State File |
 |------------|----------------|------------|
-| Task Management | Priority queuing | `.undercity/tasks.json` |
+| Task Management | Priority queuing (SQLite) | `.undercity/undercity.db` |
 | Parallel Execution | Isolated git worktrees | `.undercity/worktree-state.json` |
 | Model Routing | Complexity-based + learned routing | `.undercity/routing-profile.json` |
 | Crash Recovery | Auto-resume batch | `.undercity/parallel-recovery.json` |
@@ -113,7 +113,7 @@ undercity remove <task-id>    # Clean up test task
 
 | Command | Behavior | State Impact |
 |---------|----------|--------------|
-| `undercity add "task"` | Add task | Append to `tasks.json` |
+| `undercity add "task"` | Add task | Insert into database |
 | `undercity tasks` | List tasks | Read-only |
 | `undercity tasks pending` | Show pending | Read-only |
 | `undercity load <file>` | Bulk import | Append multiple tasks |
@@ -199,7 +199,7 @@ Auth via Claude Max OAuth - run `undercity setup` to verify login status.
 
 | Command | Purpose | Output |
 |---------|---------|--------|
-| `undercity limits` | Rate limit snapshot | Usage summary |
+| `undercity usage` | Claude Max usage | Usage summary (from claude.ai) |
 | `undercity watch` | Live TUI dashboard | Matrix-style visualization |
 | `undercity status` | Grind session status | JSON (default) |
 | `undercity pulse` | Quick state check | JSON: workers, queue, health |
@@ -238,9 +238,9 @@ Auth via Claude Max OAuth - run `undercity setup` to verify login status.
 
 | File | Purpose | Tracked |
 |------|---------|---------|
-| `tasks.json` | Task board | Yes |
+| `undercity.db` | Task board + learnings (SQLite) | No |
+| `rag.db` | RAG embeddings (SQLite) | No |
 | `knowledge.json` | Accumulated learnings | No |
-| `decisions.json` | Decision history | No |
 | `task-file-patterns.json` | Task→file correlations | No |
 | `error-fix-patterns.json` | Error→fix patterns | No |
 | `routing-profile.json` | Learned model routing | No |
@@ -250,7 +250,6 @@ Auth via Claude Max OAuth - run `undercity setup` to verify login status.
 | `live-metrics.json` | Token usage/cost | No |
 | `grind-events.jsonl` | Event log | No |
 | `ast-index.json` | Symbol/dependency index | No |
-| `ax-training.json` | Ax/DSPy examples | No |
 
 ## Development Commands
 

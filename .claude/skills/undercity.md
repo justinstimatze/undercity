@@ -37,7 +37,7 @@ undercity patterns                 # Task→file correlations
 
 ## Task Board
 
-Tasks live in `.undercity/tasks.json`. Each task has:
+Tasks are stored in SQLite (`.undercity/undercity.db`). Each task has:
 - `id`: Unique identifier
 - `objective`: What needs to be done
 - `status`: pending | in_progress | complete | failed
@@ -45,6 +45,8 @@ Tasks live in `.undercity/tasks.json`. Each task has:
 - `tags`: Optional categorization (bugfix, feature, refactor, critical)
 - `packageHints`: Optional hints about which packages are affected
 - `estimatedFiles`: Optional list of files likely to be modified
+
+**Always use CLI commands to manage tasks** - never edit the database directly.
 
 ## Writing Good Task Descriptions
 
@@ -107,7 +109,7 @@ cat .undercity/parallel-recovery.json  # Details of current/last grind run
 
 ## Adding Tasks
 
-Use the CLI (preferred) or edit `.undercity/tasks.json` directly:
+Use the CLI to manage tasks:
 
 ```bash
 # Single task
@@ -123,22 +125,21 @@ undercity add "Implement feature X" --context handoff.json
 undercity load tasks.txt
 ```
 
-## Editing Tasks
-
-To update a task's objective or properties, use jq:
+## Managing Tasks
 
 ```bash
-# Update objective
-cat .undercity/tasks.json | jq '(.tasks[] | select(.id == "task-xxx")) |= . + {objective: "New objective"}' > /tmp/tasks.json && mv /tmp/tasks.json .undercity/tasks.json
+# List all tasks
+undercity tasks
 
-# Update tags
-cat .undercity/tasks.json | jq '(.tasks[] | select(.id == "task-xxx")) |= . + {tags: ["feature", "critical"]}' > /tmp/tasks.json && mv /tmp/tasks.json .undercity/tasks.json
+# List pending tasks only
+undercity tasks --status pending
 
-# Delete a task
-cat .undercity/tasks.json | jq '.tasks |= map(select(.id != "task-xxx"))' > /tmp/tasks.json && mv /tmp/tasks.json .undercity/tasks.json
+# Remove a task
+undercity remove <task-id>
+
+# View a specific task
+undercity task-status <task-id>
 ```
-
-To find a task ID, use: `cat .undercity/tasks.json | jq '.tasks[] | {id, objective}'`
 
 ## Marking Tasks Complete
 
@@ -182,6 +183,6 @@ If a grind session crashes:
 - Worktrees remain in `.undercity/worktrees/`
 - Running `undercity grind` will offer to resume or clean up
 
-## File Locking
+## Database Locking
 
-The task board uses file locking to prevent race conditions. Multiple processes can safely read/write `tasks.json` concurrently without losing changes.
+The task board uses SQLite with WAL mode for concurrent access. Multiple processes can safely read/write tasks concurrently without race conditions.

@@ -178,10 +178,10 @@ cat .undercity/research/2026-01-19-*.md    # Read specific doc
 
 | File | Purpose | Tracked |
 |------|---------|---------|
-| `tasks.json` | Task board | Yes |
+| `undercity.db` | Task board (SQLite) | No |
+| `rag.db` | RAG embeddings (SQLite) | No |
 | `research/` | PM-generated design docs | Yes |
 | `knowledge.json` | Accumulated learnings | No |
-| `decisions.json` | Decision history | No |
 | `task-file-patterns.json` | Task→file correlations | No |
 | `error-fix-patterns.json` | Error→fix patterns | No |
 | `routing-profile.json` | Learned model routing | No |
