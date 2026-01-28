@@ -850,3 +850,345 @@ describe("ContextBriefing structure", () => {
 		}
 	});
 });
+
+describe("prepareContext edge cases", () => {
+	let testDir: string;
+
+	beforeEach(() => {
+		testDir = mkdtempSync(join(tmpdir(), "context-edge-case-"));
+	});
+
+	afterEach(() => {
+		rmSync(testDir, { recursive: true, force: true });
+	});
+
+	describe("empty codebase scenarios", () => {
+		it("handles empty directory with no TypeScript files", async () => {
+			// Create empty directory structure
+			mkdirSync(join(testDir, "src"), { recursive: true });
+
+			const briefing = await prepareContext("Implement a feature", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should not crash and return a valid briefing
+			expect(briefing.objective).toBe("Implement a feature");
+			expect(briefing.briefingDoc).toBeTruthy();
+			expect(briefing.targetFiles).toEqual([]);
+			expect(briefing.constraints.length).toBeGreaterThan(0);
+		});
+
+		it("handles directory with only node_modules", async () => {
+			// Create node_modules with some files
+			mkdirSync(join(testDir, "node_modules", "some-package"), { recursive: true });
+			writeFileSync(join(testDir, "node_modules", "some-package", "index.ts"), "export const foo = 1;");
+
+			const briefing = await prepareContext("Find the auth module", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should not include node_modules files
+			expect(briefing.targetFiles).toEqual([]);
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+
+		it("handles codebase with only test files", async () => {
+			// Create only test files
+			mkdirSync(join(testDir, "src"), { recursive: true });
+			writeFileSync(join(testDir, "src", "app.test.ts"), 'import { test } from "vitest";\ntest("works", () => {});');
+			writeFileSync(join(testDir, "src", "utils.test.ts"), 'import { test } from "vitest";\ntest("utils", () => {});');
+
+			const briefing = await prepareContext("Add a utility function", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should handle gracefully - test files filtered out by context gathering
+			expect(briefing.objective).toBe("Add a utility function");
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+	});
+
+	describe("missing file scenarios", () => {
+		it("handles references to non-existent files gracefully", async () => {
+			// Create minimal structure but reference a missing file
+			mkdirSync(join(testDir, "src"), { recursive: true });
+
+			const briefing = await prepareContext("Fix src/auth.ts authentication bug", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should not crash even though auth.ts doesn't exist
+			expect(briefing.objective).toContain("auth.ts");
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+
+		it("handles broken symlinks in codebase", async () => {
+			// Create a broken symlink (pointing to non-existent file)
+			mkdirSync(join(testDir, "src"), { recursive: true });
+			try {
+				const { symlinkSync } = await import("node:fs");
+				symlinkSync(join(testDir, "nonexistent.ts"), join(testDir, "src", "broken-link.ts"));
+			} catch {
+				// Symlink creation may fail on some systems, skip this test
+				return;
+			}
+
+			const briefing = await prepareContext("Update the module", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should handle broken symlinks without crashing
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+
+		it("handles missing tsconfig.json gracefully", async () => {
+			// Create source files but no tsconfig
+			mkdirSync(join(testDir, "src"), { recursive: true });
+			writeFileSync(join(testDir, "src", "index.ts"), "export function hello() { return 'world'; }");
+
+			const briefing = await prepareContext("Update hello function", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should work without tsconfig, just with limited type info
+			expect(briefing.briefingDoc).toBeTruthy();
+			expect(briefing.objective).toBe("Update hello function");
+		});
+	});
+
+	describe("malformed AST index scenarios", () => {
+		it("handles corrupted AST index JSON", async () => {
+			// Create .undercity directory with corrupted index
+			mkdirSync(join(testDir, ".undercity"), { recursive: true });
+			writeFileSync(join(testDir, ".undercity", "ast-index.json"), "{invalid json here broken");
+
+			const briefing = await prepareContext("Refactor the code", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should fall back to minimal context without crashing
+			expect(briefing.briefingDoc).toBeTruthy();
+			expect(briefing.objective).toBe("Refactor the code");
+		});
+
+		it("handles AST index with missing required fields", async () => {
+			// Create index missing critical fields
+			mkdirSync(join(testDir, ".undercity"), { recursive: true });
+			const malformedIndex = {
+				version: "1.0",
+				// Missing: files, symbolToFiles, importedBy
+				lastUpdated: new Date().toISOString(),
+			};
+			writeFileSync(join(testDir, ".undercity", "ast-index.json"), JSON.stringify(malformedIndex));
+
+			const briefing = await prepareContext("Update types", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should handle missing fields gracefully
+			expect(briefing.briefingDoc).toBeTruthy();
+			expect(briefing.targetFiles).toEqual([]);
+		});
+
+		it("handles AST index with invalid version", async () => {
+			// Create index with wrong version
+			mkdirSync(join(testDir, ".undercity"), { recursive: true });
+			const oldIndex = {
+				version: "0.5",
+				files: {},
+				symbolToFiles: {},
+				importedBy: {},
+				lastUpdated: new Date().toISOString(),
+			};
+			writeFileSync(join(testDir, ".undercity", "ast-index.json"), JSON.stringify(oldIndex));
+
+			const briefing = await prepareContext("Implement feature", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should rebuild or ignore old version
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+
+		it("handles AST index with malformed file entries", async () => {
+			// Create index with invalid file data structures
+			mkdirSync(join(testDir, ".undercity"), { recursive: true });
+			const malformedIndex = {
+				version: "1.0",
+				files: {
+					"src/test.ts": {
+						// Missing required fields: hash, indexedAt
+						exports: "not an array",
+						imports: null,
+					},
+				},
+				symbolToFiles: {},
+				importedBy: {},
+				lastUpdated: new Date().toISOString(),
+			};
+			writeFileSync(join(testDir, ".undercity", "ast-index.json"), JSON.stringify(malformedIndex));
+
+			const briefing = await prepareContext("Fix bug in test", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should handle malformed entries without crashing
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+
+		it("handles truncated AST index file", async () => {
+			// Create partially written index (simulates write interruption)
+			mkdirSync(join(testDir, ".undercity"), { recursive: true });
+			const validIndex = {
+				version: "1.0",
+				files: { "test.ts": { path: "test.ts", hash: "abc", exports: [], imports: [] } },
+				symbolToFiles: {},
+				importedBy: {},
+			};
+			const truncated = JSON.stringify(validIndex).slice(0, 50); // Cut off mid-JSON
+			writeFileSync(join(testDir, ".undercity", "ast-index.json"), truncated);
+
+			const briefing = await prepareContext("Update code", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should detect JSON parse error and continue
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+	});
+
+	describe("timeout and resource constraint scenarios", () => {
+		it("handles very large codebase without hanging", async () => {
+			// Create many files to simulate large codebase
+			mkdirSync(join(testDir, "src"), { recursive: true });
+			for (let i = 0; i < 20; i++) {
+				writeFileSync(
+					join(testDir, "src", `file${i}.ts`),
+					`export const value${i} = ${i};\nexport function func${i}() { return ${i}; }`,
+				);
+			}
+
+			const startTime = Date.now();
+			const briefing = await prepareContext("Find a specific function", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+			const duration = Date.now() - startTime;
+
+			// Should complete in reasonable time (under 10 seconds for 20 files)
+			expect(duration).toBeLessThan(10000);
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+
+		it("handles codebase with very long file paths", async () => {
+			// Create deeply nested directory structure
+			const deepPath = join(
+				testDir,
+				"src",
+				"very",
+				"deeply",
+				"nested",
+				"directory",
+				"structure",
+				"that",
+				"goes",
+				"many",
+				"levels",
+			);
+			mkdirSync(deepPath, { recursive: true });
+			writeFileSync(join(deepPath, "module.ts"), "export const deepModule = true;");
+
+			const briefing = await prepareContext("Update the deep module", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should handle long paths without issues
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+
+		it("handles files with very long content", async () => {
+			// Create file with large content
+			mkdirSync(join(testDir, "src"), { recursive: true });
+			const longContent = `export const data = ${JSON.stringify(Array(1000).fill("data"))};`;
+			writeFileSync(join(testDir, "src", "large.ts"), longContent);
+
+			const briefing = await prepareContext("Optimize the data structure", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should handle large files without excessive memory usage
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+	});
+
+	describe("git operation edge cases", () => {
+		it("handles missing git repository gracefully", async () => {
+			// Don't initialize git repo
+			mkdirSync(join(testDir, "src"), { recursive: true });
+			writeFileSync(join(testDir, "src", "app.ts"), "export const app = 'test';");
+
+			const briefing = await prepareContext("Update app constant", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should work without git, just without git-based features
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+
+		it("handles corrupted git repository", async () => {
+			// Create .git directory but make it invalid
+			mkdirSync(join(testDir, ".git", "objects"), { recursive: true });
+			writeFileSync(join(testDir, ".git", "HEAD"), "corrupted ref");
+
+			const briefing = await prepareContext("Implement feature", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			// Should handle git errors gracefully
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+	});
+
+	describe("edge case: special characters and encoding", () => {
+		it("handles files with special characters in names", async () => {
+			mkdirSync(join(testDir, "src"), { recursive: true });
+			// Create file with special but valid characters
+			writeFileSync(join(testDir, "src", "file-with-dashes.ts"), "export const value = 1;");
+			writeFileSync(join(testDir, "src", "file_with_underscores.ts"), "export const other = 2;");
+
+			const briefing = await prepareContext("Update special files", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+
+		it("handles files with unicode content", async () => {
+			mkdirSync(join(testDir, "src"), { recursive: true });
+			writeFileSync(join(testDir, "src", "i18n.ts"), "export const greeting = '你好世界 🌍';");
+
+			const briefing = await prepareContext("Update internationalization", {
+				cwd: testDir,
+				repoRoot: testDir,
+			});
+
+			expect(briefing.briefingDoc).toBeTruthy();
+		});
+	});
+});
