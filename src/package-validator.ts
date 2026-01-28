@@ -346,6 +346,16 @@ function levenshteinDistance(a: string, b: string): number {
  * @param packageName - Name of the package
  * @param manager - Package manager (npm, pip, etc.)
  * @returns Validation result
+ * @example
+ * ```typescript
+ * // Validating a trusted package
+ * const result1 = validatePackageLocal("react", "npm");
+ * // => { isSafe: true, isClean: true, warnings: [], details: { name: "react" } }
+ *
+ * // Validating a suspicious package
+ * const result2 = validatePackageLocal("lodahs", "npm");
+ * // => { isSafe: true, isClean: false, warnings: ["Very similar to popular package \"lodash\" (1 character difference)"], details: { name: "lodahs" } }
+ * ```
  */
 export function validatePackageLocal(
 	packageName: string,
