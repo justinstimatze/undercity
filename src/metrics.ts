@@ -15,6 +15,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { ComplexityLevel } from "./complexity.js";
 import { assessComplexityFast } from "./complexity.js";
+import { warning } from "./output.js";
 import { RateLimitTracker } from "./rate-limit.js";
 import type { AgentType, AttemptRecord, EfficiencyAnalytics, TaskMetrics, TokenUsage } from "./types.js";
 
@@ -31,6 +32,48 @@ interface SdkMessage {
 
 const METRICS_DIR = path.join(process.cwd(), ".undercity");
 const METRICS_FILE = path.join(METRICS_DIR, "metrics.jsonl");
+
+/**
+ * Model tier hierarchy for escalation validation.
+ * Maps model names to numeric tiers for comparison.
+ */
+const MODEL_TIERS: Record<"haiku" | "sonnet" | "opus", number> = {
+	haiku: 1,
+	sonnet: 2,
+	opus: 3,
+} as const;
+
+/**
+ * Validates that a model escalation follows the correct tier hierarchy.
+ *
+ * Valid escalations must move from a lower tier to a higher tier:
+ * - haiku → sonnet (valid)
+ * - haiku → opus (valid)
+ * - sonnet → opus (valid)
+ *
+ * Invalid escalations:
+ * - Same tier (e.g., sonnet → sonnet)
+ * - Downward (e.g., opus → sonnet, sonnet → haiku)
+ * - From opus to any model (opus is the highest tier)
+ *
+ * @param fromModel - The starting model tier
+ * @param toModel - The target model tier after escalation
+ * @returns True if the escalation follows valid hierarchy (fromModel tier < toModel tier), false otherwise
+ *
+ * @example
+ * ```typescript
+ * isValidEscalation("haiku", "sonnet"); // true - valid escalation
+ * isValidEscalation("sonnet", "opus"); // true - valid escalation
+ * isValidEscalation("sonnet", "haiku"); // false - invalid downward escalation
+ * isValidEscalation("opus", "sonnet"); // false - invalid escalation from highest tier
+ * isValidEscalation("sonnet", "sonnet"); // false - invalid same-tier escalation
+ * ```
+ */
+function isValidEscalation(fromModel: "haiku" | "sonnet" | "opus", toModel: "haiku" | "sonnet" | "opus"): boolean {
+	const fromTier = MODEL_TIERS[fromModel];
+	const toTier = MODEL_TIERS[toModel];
+	return fromTier < toTier;
+}
 
 /**
  * Logs metrics to .undercity/metrics.jsonl
@@ -174,7 +217,21 @@ export class MetricsTracker {
 	/**
 	 * Record model escalation
 	 */
-	recordEscalation(_fromModel: "haiku" | "sonnet" | "opus", toModel: "haiku" | "sonnet" | "opus"): void {
+	recordEscalation(fromModel: "haiku" | "sonnet" | "opus", toModel: "haiku" | "sonnet" | "opus"): void {
+		// Validate escalation follows correct tier hierarchy
+		if (!isValidEscalation(fromModel, toModel)) {
+			warning("Invalid model escalation detected", {
+				fromModel,
+				toModel,
+				reason:
+					fromModel === toModel
+						? "Same tier escalation"
+						: MODEL_TIERS[fromModel] > MODEL_TIERS[toModel]
+							? "Downward escalation"
+							: "Invalid escalation path",
+			});
+		}
+
 		this.wasEscalated = true;
 		this.finalModel = toModel;
 	}
