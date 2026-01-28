@@ -301,6 +301,113 @@ export class MetricsTracker {
 	}
 
 	/**
+	 * Start timing a phase with validation for logical phase transitions.
+	 * Automatically ends the previous phase if one is active.
+	 * Validates that phase transitions follow a logical sequence.
+	 *
+	 * Valid phase transition sequences:
+	 * - planning → execution → verification → review → merge
+	 * - Phases can be skipped (e.g., planning → execution → verification → merge)
+	 * - Phases can repeat (e.g., verification can run multiple times)
+	 *
+	 * @param phase - The phase to start timing ("planning" | "execution" | "verification" | "review" | "merge")
+	 * @throws {Error} If phase transition is invalid (e.g., trying to go backwards in the sequence)
+	 *
+	 * @example
+	 * ```typescript
+	 * const tracker = new MetricsTracker();
+	 * tracker.startTask("task-123", "Fix bug", "session-456", "sonnet");
+	 * tracker.phaseStart("planning");
+	 * // ... planning work ...
+	 * tracker.phaseEnd("planning");
+	 * tracker.phaseStart("execution");
+	 * // ... execution work ...
+	 * tracker.phaseEnd("execution");
+	 * ```
+	 */
+	phaseStart(phase: "planning" | "execution" | "verification" | "review" | "merge"): void {
+		// Define valid phase order for validation
+		const phaseOrder: Record<"planning" | "execution" | "verification" | "review" | "merge", number> = {
+			planning: 0,
+			execution: 1,
+			verification: 2,
+			review: 3,
+			merge: 4,
+		};
+
+		// Validate phase transition if there's a current phase
+		if (this.currentPhase) {
+			const currentOrder = phaseOrder[this.currentPhase];
+			const nextOrder = phaseOrder[phase];
+
+			// Allow repeating the same phase (e.g., multiple verification passes)
+			// Allow moving forward in the sequence
+			// Disallow moving backwards (e.g., execution → planning)
+			if (nextOrder < currentOrder) {
+				throw new Error(
+					`Invalid phase transition: cannot move from "${this.currentPhase}" to "${phase}". ` +
+						`Phases must follow logical sequence: planning → execution → verification → review → merge`,
+				);
+			}
+		}
+
+		// End previous phase if active and transitioning to a new phase
+		if (this.currentPhase && this.phaseStartTime && this.currentPhase !== phase) {
+			this.endPhase();
+		}
+
+		this.currentPhase = phase;
+		this.phaseStartTime = Date.now();
+	}
+
+	/**
+	 * End the current phase and record its duration with validation.
+	 * Validates that a phase is currently active before ending it.
+	 *
+	 * @param phase - The phase to end (must match the currently active phase)
+	 * @throws {Error} If no phase is currently active or if the specified phase doesn't match the current phase
+	 *
+	 * @example
+	 * ```typescript
+	 * const tracker = new MetricsTracker();
+	 * tracker.startTask("task-123", "Fix bug", "session-456", "sonnet");
+	 * tracker.phaseStart("planning");
+	 * // ... planning work ...
+	 * tracker.phaseEnd("planning"); // Records planning duration
+	 *
+	 * // Error case:
+	 * tracker.phaseStart("execution");
+	 * tracker.phaseEnd("planning"); // Throws error: phase mismatch
+	 * ```
+	 */
+	phaseEnd(phase: "planning" | "execution" | "verification" | "review" | "merge"): void {
+		// Validate that a phase is currently active
+		if (!this.currentPhase || !this.phaseStartTime) {
+			throw new Error(
+				`Cannot end phase "${phase}": no phase is currently active. Call phaseStart() before calling phaseEnd().`,
+			);
+		}
+
+		// Validate that the phase being ended matches the current phase
+		if (this.currentPhase !== phase) {
+			throw new Error(
+				`Cannot end phase "${phase}": current phase is "${this.currentPhase}". ` +
+					`Phase mismatch detected. Ensure you end the correct phase.`,
+			);
+		}
+
+		// Calculate duration and record
+		const duration = Date.now() - this.phaseStartTime;
+		const key = `${this.currentPhase}Ms` as keyof typeof this.phaseTiming;
+
+		// Accumulate if phase runs multiple times (e.g., multiple verification passes)
+		this.phaseTiming[key] = (this.phaseTiming[key] || 0) + duration;
+
+		this.phaseStartTime = undefined;
+		this.currentPhase = undefined;
+	}
+
+	/**
 	 * Get current phase timing data
 	 */
 	getPhaseTiming(): typeof this.phaseTiming {
