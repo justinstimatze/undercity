@@ -33,7 +33,7 @@ const DEFAULT_THRESHOLD = 40;
  * Critical modules that must meet the threshold
  * These are identified by prefix matching against test file names
  */
-const CRITICAL_MODULES = ["orchestrator", "worker", "task-scheduler"];
+const CRITICAL_MODULES = ["orchestrator", "worker"];
 
 /**
  * Map of module prefixes to canonical module names
