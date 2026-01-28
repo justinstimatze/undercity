@@ -218,6 +218,149 @@ describe("complexity", () => {
 				const manySignals = assessComplexityFast("refactor authentication security critical");
 				expect(manySignals.confidence).toBeGreaterThan(fewSignals.confidence);
 			});
+
+			describe("integer overflow boundary conditions", () => {
+				const createBaseMetrics = (): QuantitativeMetrics => ({
+					fileCount: 0,
+					totalLines: 0,
+					functionCount: 0,
+					unhealthyFiles: [],
+					crossPackage: false,
+					packages: [],
+					git: {
+						avgChangeFrequency: 0,
+						hotspots: [],
+						bugProneFiles: [],
+					},
+				});
+
+				it("should handle MAX_SAFE_INTEGER totalLines without overflow", () => {
+					const metrics = {
+						...createBaseMetrics(),
+						fileCount: 1,
+						totalLines: Number.MAX_SAFE_INTEGER,
+					};
+					const result = scoreFromMetrics(metrics);
+					expect(result.score).toBeGreaterThan(0);
+					expect(Number.isFinite(result.score)).toBe(true);
+					expect(Number.isSafeInteger(result.score)).toBe(true);
+				});
+
+				it("should handle MAX_SAFE_INTEGER functionCount without overflow", () => {
+					const metrics = {
+						...createBaseMetrics(),
+						fileCount: 1,
+						functionCount: Number.MAX_SAFE_INTEGER,
+					};
+					const result = scoreFromMetrics(metrics);
+					expect(result.score).toBeGreaterThan(0);
+					expect(Number.isFinite(result.score)).toBe(true);
+					expect(Number.isSafeInteger(result.score)).toBe(true);
+				});
+
+				it("should handle zero totalLines gracefully", () => {
+					const metrics = {
+						...createBaseMetrics(),
+						fileCount: 1,
+						totalLines: 0,
+					};
+					const result = scoreFromMetrics(metrics);
+					expect(result.score).toBeGreaterThanOrEqual(0);
+					expect(Number.isFinite(result.score)).toBe(true);
+				});
+
+				it("should handle zero functionCount gracefully", () => {
+					const metrics = {
+						...createBaseMetrics(),
+						fileCount: 1,
+						functionCount: 0,
+					};
+					const result = scoreFromMetrics(metrics);
+					expect(result.score).toBeGreaterThanOrEqual(0);
+					expect(Number.isFinite(result.score)).toBe(true);
+				});
+
+				it("should handle 32-bit signed integer boundary (2^31 - 1) for totalLines", () => {
+					const int32Max = 2147483647; // 2^31 - 1
+					const metrics = {
+						...createBaseMetrics(),
+						fileCount: 1,
+						totalLines: int32Max,
+					};
+					const result = scoreFromMetrics(metrics);
+					expect(result.score).toBeGreaterThan(0);
+					expect(Number.isFinite(result.score)).toBe(true);
+					expect(result.signals.some((s) => s.includes("lines:"))).toBe(true);
+				});
+
+				it("should handle 32-bit unsigned integer boundary (2^32 - 1) for totalLines", () => {
+					const uint32Max = 4294967295; // 2^32 - 1
+					const metrics = {
+						...createBaseMetrics(),
+						fileCount: 1,
+						totalLines: uint32Max,
+					};
+					const result = scoreFromMetrics(metrics);
+					expect(result.score).toBeGreaterThan(0);
+					expect(Number.isFinite(result.score)).toBe(true);
+					expect(result.signals.some((s) => s.includes("lines:"))).toBe(true);
+				});
+
+				it("should handle large fileCount without score overflow", () => {
+					const metrics = {
+						...createBaseMetrics(),
+						fileCount: 1000000,
+					};
+					const result = scoreFromMetrics(metrics);
+					expect(result.score).toBeGreaterThan(0);
+					expect(Number.isFinite(result.score)).toBe(true);
+					expect(result.signals.some((s) => s.includes("files:"))).toBe(true);
+				});
+
+				it("should handle cumulative large values without producing NaN", () => {
+					const metrics = {
+						...createBaseMetrics(),
+						fileCount: 1000,
+						totalLines: 1000000,
+						functionCount: 100000,
+						unhealthyFiles: new Array(100).fill("file.ts"),
+						git: {
+							avgChangeFrequency: 1000,
+							hotspots: new Array(100).fill("hot.ts"),
+							bugProneFiles: new Array(100).fill("buggy.ts"),
+						},
+					};
+					const result = scoreFromMetrics(metrics);
+					expect(Number.isNaN(result.score)).toBe(false);
+					expect(Number.isFinite(result.score)).toBe(true);
+					expect(result.score).toBeGreaterThan(0);
+				});
+
+				it("should handle cumulative large values without producing Infinity", () => {
+					const metrics = {
+						...createBaseMetrics(),
+						fileCount: Number.MAX_SAFE_INTEGER,
+						totalLines: 1000,
+						functionCount: 1000,
+					};
+					const result = scoreFromMetrics(metrics);
+					expect(result.score).not.toBe(Number.POSITIVE_INFINITY);
+					expect(result.score).not.toBe(Number.NEGATIVE_INFINITY);
+					expect(Number.isFinite(result.score)).toBe(true);
+				});
+
+				it("should handle near-zero boundary conditions", () => {
+					const metrics = {
+						...createBaseMetrics(),
+						fileCount: 1,
+						totalLines: 1,
+						functionCount: 1,
+					};
+					const result = scoreFromMetrics(metrics);
+					expect(result.score).toBeGreaterThanOrEqual(0);
+					expect(Number.isFinite(result.score)).toBe(true);
+				});
+			});
 		});
 	});
 
