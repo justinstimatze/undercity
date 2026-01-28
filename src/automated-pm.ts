@@ -8,6 +8,8 @@
  * Designed for sustained autonomous operation.
  */
 
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { makeDecisionAx } from "./ax-programs.js";
 import { sanitizeContent, wrapUntrustedContent } from "./content-sanitizer.js";
 import {
@@ -39,9 +41,6 @@ import { extractAndValidateURLs, logURLsForAudit } from "./url-validator.js";
  * Returns a context string describing what the project IS and IS NOT.
  */
 function detectProjectContext(cwd: string = process.cwd()): string {
-	const { existsSync, readFileSync } = require("node:fs") as typeof import("node:fs");
-	const { join } = require("node:path") as typeof import("node:path");
-
 	const parts: string[] = ["PROJECT TECH STACK (auto-detected):"];
 	const antiParts: string[] = ["THIS PROJECT DOES NOT USE:"];
 
@@ -1325,22 +1324,39 @@ Generate 3-5 high-value proposals. Each must be executable by an AI agent withou
 				model: MODEL_NAMES.sonnet,
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
-				maxTurns: 8,
+				maxTurns: 15,
 				cwd,
 			},
 		})) {
-			if (message.type === "result" && message.subtype === "success") {
-				resultJson = message.result;
+			if (message.type === "result") {
+				if (message.subtype === "success") {
+					resultJson = message.result;
+				} else {
+					sessionLogger.error({ subtype: message.subtype }, "PM query returned non-success result");
+				}
 			}
 		}
 
 		// Parse JSON response
+		if (!resultJson || resultJson.trim() === "") {
+			sessionLogger.warn("PM proposal returned empty response");
+			return [];
+		}
+
 		const jsonMatch = resultJson.match(/```json\s*([\s\S]*?)\s*```/);
 		let proposals: TaskProposal[];
-		if (jsonMatch) {
-			proposals = JSON.parse(jsonMatch[1]) as TaskProposal[];
-		} else {
-			proposals = JSON.parse(resultJson) as TaskProposal[];
+		try {
+			if (jsonMatch) {
+				proposals = JSON.parse(jsonMatch[1]) as TaskProposal[];
+			} else {
+				proposals = JSON.parse(resultJson) as TaskProposal[];
+			}
+		} catch (parseError) {
+			sessionLogger.error(
+				{ parseError: String(parseError), responsePreview: resultJson.slice(0, 500) },
+				"Failed to parse PM proposal JSON",
+			);
+			return [];
 		}
 
 		// Filter out vague tasks that are likely to fail
