@@ -166,6 +166,31 @@ describe("task-classifier.ts", () => {
 			// Confidence should increase with more matches
 			expect(moreTasksResult.confidence).toBeLessThanOrEqual(1);
 		});
+
+		it("returns neutral classification when RAG search fails", async () => {
+			// To simulate RAG failure, we'll use a non-existent state dir with corrupted DB
+			// Create a corrupted rag.db file
+			const { writeFileSync } = await import("node:fs");
+			const { join } = await import("node:path");
+
+			const corruptedTempDir = mkdtempSync(join(tmpdir(), "corrupted-rag-"));
+			writeFileSync(join(corruptedTempDir, "rag.db"), "corrupted data", "utf-8");
+
+			try {
+				// This should trigger an error in RAG search
+				const result = await classifyTask("Task that will trigger RAG failure", corruptedTempDir);
+
+				// Even if search fails, should return neutral classification
+				expect(result.riskScore).toBe(0.5);
+				expect(result.confidence).toBe(0);
+				expect(result.similarTasks).toHaveLength(0);
+				expect(result.riskFactors).toContain("Classification unavailable (search failed)");
+				expect(result.recommendation).toBe("proceed");
+			} finally {
+				// Clean up
+				rmSync(corruptedTempDir, { recursive: true, force: true });
+			}
+		});
 	});
 
 	// ==========================================================================
@@ -215,6 +240,32 @@ describe("task-classifier.ts", () => {
 			const stats = getClassificationStats(tempDir);
 			// Should only have 1 due to content deduplication
 			expect(stats.totalIndexed).toBe(1);
+		});
+
+		it("handles RAG indexing failures gracefully", async () => {
+			// To simulate RAG indexing failure, use a corrupted database
+			const { writeFileSync } = await import("node:fs");
+			const { join } = await import("node:path");
+
+			const corruptedTempDir = mkdtempSync(join(tmpdir(), "corrupted-rag-"));
+
+			// Create corrupted database file
+			const dbPath = join(corruptedTempDir, "rag.db");
+			writeFileSync(dbPath, "corrupted data", "utf-8");
+
+			try {
+				// The key test: indexTaskOutcome should not throw even when RAG is corrupted
+				// It should fail silently and log a warning
+				await expect(
+					indexTaskOutcome("task-fail", "Task that will fail to index", "success", {}, corruptedTempDir),
+				).resolves.not.toThrow();
+
+				// Since the implementation catches and silently fails, this function completes successfully
+				// even though no actual indexing occurred
+			} finally {
+				// Clean up
+				rmSync(corruptedTempDir, { recursive: true, force: true });
+			}
 		});
 	});
 
