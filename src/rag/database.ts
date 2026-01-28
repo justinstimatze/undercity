@@ -351,7 +351,57 @@ export function vectorSearch(
 // =============================================================================
 
 /**
+ * Sanitize FTS5 query by escaping special characters
+ *
+ * FTS5 has special meaning for: " / @ - ^ * : ( ) and operators like AND, OR, NOT.
+ * To prevent syntax errors when searching for literal strings containing these
+ * characters (e.g., "src/rag/database.ts" or "user@example.com"), we wrap the
+ * entire query in double quotes to treat it as a phrase search and escape any
+ * internal quotes by doubling them.
+ *
+ * @param query - Raw search query that may contain FTS5 special characters
+ * @returns Sanitized query safe for FTS5 MATCH operator
+ * @example
+ * ```typescript
+ * sanitizeFtsQuery('src/rag/database.ts')  // Returns: '"src/rag/database.ts"'
+ * sanitizeFtsQuery('user@example.com')     // Returns: '"user@example.com"'
+ * sanitizeFtsQuery('say "hello"')          // Returns: '"say ""hello"""'
+ * ```
+ */
+function sanitizeFtsQuery(query: string): string {
+	// Trim whitespace
+	const trimmed = query.trim();
+	if (!trimmed) {
+		return "";
+	}
+
+	// Escape internal double quotes by doubling them (FTS5 phrase escaping)
+	const escaped = trimmed.replace(/"/g, '""');
+
+	// Wrap in double quotes to treat as phrase search
+	// This prevents FTS5 from interpreting special chars as operators
+	return `"${escaped}"`;
+}
+
+/**
  * Full-text search - returns chunk rowids with BM25 scores
+ *
+ * Searches indexed chunks using FTS5 full-text search with BM25 ranking.
+ * Automatically sanitizes queries containing special FTS5 characters like
+ * forward slashes, at signs, and quotes to prevent syntax errors.
+ *
+ * @param query - Search query (may contain special characters)
+ * @param limit - Maximum number of results to return
+ * @param stateDir - State directory containing the RAG database
+ * @returns Array of chunk rowids with BM25 relevance scores (closer to 0 = more relevant)
+ * @example
+ * ```typescript
+ * // Search for file path
+ * const results = ftsSearch('src/rag/database.ts', 10);
+ *
+ * // Search for email
+ * const results = ftsSearch('user@example.com', 5);
+ * ```
  */
 export function ftsSearch(
 	query: string,
@@ -360,8 +410,8 @@ export function ftsSearch(
 ): Array<{ rowid: number; score: number }> {
 	const db = getRAGDatabase(stateDir);
 
-	// Escape special FTS5 characters and create search query
-	const safeQuery = query.replace(/['"]/g, "").trim();
+	// Sanitize query to prevent FTS5 syntax errors
+	const safeQuery = sanitizeFtsQuery(query);
 	if (!safeQuery) {
 		return [];
 	}

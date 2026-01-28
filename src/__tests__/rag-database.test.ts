@@ -315,6 +315,186 @@ describe("rag/database.ts", () => {
 			const results = ftsSearch("", 10, tempDir);
 			expect(results).toEqual([]);
 		});
+
+		it("should handle queries with forward slashes (file paths)", () => {
+			insertChunk(
+				{
+					id: "c3",
+					documentId: "doc-1",
+					sequence: 2,
+					content: "The ftsSearch() function in src/rag/database.ts handles escaping",
+					tokenCount: 15,
+					metadata: {},
+				},
+				tempDir,
+			);
+
+			// Should not throw FTS5 syntax error
+			expect(() => ftsSearch("src/rag/database.ts", 10, tempDir)).not.toThrow();
+
+			// Should find the chunk
+			const results = ftsSearch("src/rag/database.ts", 10, tempDir);
+			expect(results.length).toBeGreaterThan(0);
+		});
+
+		it("should handle queries with at signs (email addresses)", () => {
+			insertChunk(
+				{
+					id: "c3",
+					documentId: "doc-1",
+					sequence: 2,
+					content: "Contact user@example.com for support",
+					tokenCount: 10,
+					metadata: {},
+				},
+				tempDir,
+			);
+
+			// Should not throw FTS5 syntax error
+			expect(() => ftsSearch("user@example.com", 10, tempDir)).not.toThrow();
+
+			// Should find the chunk
+			const results = ftsSearch("user@example.com", 10, tempDir);
+			expect(results.length).toBeGreaterThan(0);
+		});
+
+		it("should handle queries with double quotes", () => {
+			insertChunk(
+				{
+					id: "c3",
+					documentId: "doc-1",
+					sequence: 2,
+					content: 'The function returns "success" or "failure"',
+					tokenCount: 10,
+					metadata: {},
+				},
+				tempDir,
+			);
+
+			// Should not throw FTS5 syntax error
+			expect(() => ftsSearch('say "hello"', 10, tempDir)).not.toThrow();
+
+			// Should find results (phrase search)
+			const results = ftsSearch('"success"', 10, tempDir);
+			expect(results.length).toBeGreaterThan(0);
+		});
+
+		it("should handle queries with hyphens", () => {
+			insertChunk(
+				{
+					id: "c3",
+					documentId: "doc-1",
+					sequence: 2,
+					content: "Use the foo-bar-baz pattern for naming",
+					tokenCount: 10,
+					metadata: {},
+				},
+				tempDir,
+			);
+
+			// Should not throw FTS5 syntax error
+			expect(() => ftsSearch("foo-bar-baz", 10, tempDir)).not.toThrow();
+
+			// Should find the chunk
+			const results = ftsSearch("foo-bar-baz", 10, tempDir);
+			expect(results.length).toBeGreaterThan(0);
+		});
+
+		it("should handle queries with asterisks", () => {
+			insertChunk(
+				{
+					id: "c3",
+					documentId: "doc-1",
+					sequence: 2,
+					content: "The pattern test*pattern matches wildcards",
+					tokenCount: 10,
+					metadata: {},
+				},
+				tempDir,
+			);
+
+			// Should not throw FTS5 syntax error
+			expect(() => ftsSearch("test*pattern", 10, tempDir)).not.toThrow();
+
+			// Should find the chunk
+			const results = ftsSearch("test*pattern", 10, tempDir);
+			expect(results.length).toBeGreaterThan(0);
+		});
+
+		it("should handle queries with parentheses", () => {
+			insertChunk(
+				{
+					id: "c3",
+					documentId: "doc-1",
+					sequence: 2,
+					content: "The function signature is foo(bar, baz)",
+					tokenCount: 10,
+					metadata: {},
+				},
+				tempDir,
+			);
+
+			// Should not throw FTS5 syntax error
+			expect(() => ftsSearch("foo(bar, baz)", 10, tempDir)).not.toThrow();
+
+			// Should find the chunk
+			const results = ftsSearch("foo(bar", 10, tempDir);
+			expect(results.length).toBeGreaterThan(0);
+		});
+
+		it("should handle queries with colons", () => {
+			insertChunk(
+				{
+					id: "c3",
+					documentId: "doc-1",
+					sequence: 2,
+					content: "The URL is https://example.com:8080/path",
+					tokenCount: 10,
+					metadata: {},
+				},
+				tempDir,
+			);
+
+			// Should not throw FTS5 syntax error
+			expect(() => ftsSearch("https://example.com", 10, tempDir)).not.toThrow();
+
+			// Should find the chunk
+			const results = ftsSearch("https://example.com", 10, tempDir);
+			expect(results.length).toBeGreaterThan(0);
+		});
+
+		it("should handle queries with mixed special characters", () => {
+			insertChunk(
+				{
+					id: "c3",
+					documentId: "doc-1",
+					sequence: 2,
+					content: "Email support@test-site.com for help with path/to/file.ts:42",
+					tokenCount: 15,
+					metadata: {},
+				},
+				tempDir,
+			);
+
+			// Should not throw FTS5 syntax error with mixed special chars
+			expect(() => ftsSearch("support@test-site.com", 10, tempDir)).not.toThrow();
+			expect(() => ftsSearch("path/to/file.ts", 10, tempDir)).not.toThrow();
+			expect(() => ftsSearch("file.ts:42", 10, tempDir)).not.toThrow();
+
+			// Should find the chunk
+			const results = ftsSearch("support@test-site.com", 10, tempDir);
+			expect(results.length).toBeGreaterThan(0);
+		});
+
+		it("should handle queries with only special characters", () => {
+			// Should not throw but return empty (no meaningful query)
+			expect(() => ftsSearch("@#$%", 10, tempDir)).not.toThrow();
+		});
+
+		it("should handle whitespace queries", () => {
+			const results = ftsSearch("   ", 10, tempDir);
+			expect(results).toEqual([]);
+		});
 	});
 
 	// ==========================================================================
