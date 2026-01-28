@@ -42,6 +42,10 @@ export class LocalEmbedder {
 	 *
 	 * First call downloads the model (~90MB). Subsequent calls with the
 	 * same text return instantly from cache.
+	 *
+	 * @param text - Text to embed
+	 * @returns Vector embedding of 384 dimensions
+	 * @throws {Error} If model loading fails, files are missing, or ONNX runtime errors occur
 	 */
 	async embed(text: string): Promise<number[]> {
 		if (!this.initialized) {
@@ -54,8 +58,69 @@ export class LocalEmbedder {
 			const embedding = (await Embeddings(text, this.options)) as number[];
 			return embedding;
 		} catch (error) {
-			logger.error({ error: String(error) }, "Embedding failed");
-			throw error;
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			const errorStack = error instanceof Error ? error.stack : undefined;
+
+			// Detect specific error types and provide actionable guidance
+			let enhancedMessage = "Embedding generation failed";
+			let resolution = "";
+
+			// Check for missing model files (ENOENT, file not found)
+			if (errorMessage.includes("ENOENT") || errorMessage.toLowerCase().includes("no such file")) {
+				enhancedMessage = `Model file not found for ${this.options.model}`;
+				resolution =
+					"The ONNX model files may not have been downloaded. " +
+					"Ensure you have internet connectivity for the first run. " +
+					"Model files are cached in the HuggingFace cache directory (~/.cache/huggingface).";
+			}
+			// Check for ONNX runtime errors
+			else if (
+				errorMessage.includes("onnx") ||
+				errorMessage.includes("ONNX") ||
+				errorMessage.toLowerCase().includes("runtime error")
+			) {
+				enhancedMessage = `ONNX runtime error while loading model ${this.options.model}`;
+				resolution =
+					"The model files may be corrupted or incompatible with your system. " +
+					"Try clearing the HuggingFace cache (~/.cache/huggingface) and re-downloading. " +
+					"Ensure @xenova/transformers is properly installed.";
+			}
+			// Check for network/download errors
+			else if (
+				errorMessage.toLowerCase().includes("network") ||
+				errorMessage.toLowerCase().includes("fetch") ||
+				errorMessage.includes("ECONNREFUSED") ||
+				errorMessage.includes("ETIMEDOUT")
+			) {
+				enhancedMessage = `Network error while downloading model ${this.options.model}`;
+				resolution =
+					"Failed to download model files from HuggingFace. " +
+					"Check your internet connection and firewall settings. " +
+					"If behind a proxy, configure HTTP_PROXY/HTTPS_PROXY environment variables.";
+			}
+			// Generic embedding error
+			else {
+				enhancedMessage = `Failed to generate embedding using ${this.options.model}`;
+				resolution =
+					"An unexpected error occurred during embedding generation. " +
+					"Check that @themaximalist/embeddings.js and @xenova/transformers are installed correctly.";
+			}
+
+			// Log structured error with full context
+			logger.error(
+				{
+					error: errorMessage,
+					stack: errorStack,
+					model: this.options.model,
+					cacheFile: this.options.cache_file,
+					cacheEnabled: this.options.cache,
+				},
+				enhancedMessage,
+			);
+
+			// Throw enhanced error with actionable guidance
+			const fullMessage = `${enhancedMessage}. ${resolution}\n\nOriginal error: ${errorMessage}`;
+			throw new Error(fullMessage);
 		}
 	}
 
