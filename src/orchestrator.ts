@@ -779,7 +779,7 @@ export class Orchestrator {
 				remaining,
 				resumeAt: pauseState.resumeAt?.toISOString() || "unknown",
 			});
-			output.info("Run 'undercity limits' to check rate limit state");
+			output.info("Run 'undercity usage' to check Claude Max usage");
 			return false;
 		}
 

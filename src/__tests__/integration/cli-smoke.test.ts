@@ -82,11 +82,6 @@ describe("CLI Smoke Tests", () => {
 			expect(result.length).toBeGreaterThan(0);
 		});
 
-		it("limits command works", () => {
-			const result = runCli(["limits"], { cwd: testDir });
-			expect(result.length).toBeGreaterThan(0);
-		});
-
 		it("status command works", () => {
 			const result = runCli(["status"], { cwd: testDir });
 			expect(result.length).toBeGreaterThan(0);
@@ -94,11 +89,6 @@ describe("CLI Smoke Tests", () => {
 
 		it("config command works", () => {
 			const result = runCli(["config"], { cwd: testDir });
-			expect(result.length).toBeGreaterThan(0);
-		});
-
-		it("task-status command works", () => {
-			const result = runCli(["task-status"], { cwd: testDir });
 			expect(result.length).toBeGreaterThan(0);
 		});
 
@@ -140,11 +130,6 @@ describe("CLI Smoke Tests", () => {
 			// Verify task was added by checking tasks command output (tasks now in SQLite)
 			const result = runCli(["tasks"], { cwd: testDir });
 			expect(result).toContain("Test task from smoke test");
-		});
-
-		it("task-analyze command works", () => {
-			const result = runCli(["task-analyze"], { cwd: testDir });
-			expect(result.length).toBeGreaterThan(0);
 		});
 
 		it("triage command works", () => {

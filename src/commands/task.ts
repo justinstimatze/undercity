@@ -9,12 +9,8 @@
  * | update       | Update task objective, priority, tags, status|
  * | remove       | Permanently delete a task                    |
  * | load         | Bulk load goals from file                    |
- * | import-plan  | Parse plan file into discrete tasks          |
  * | dispatch     | Import plan + grind (one-command handoff)    |
- * | plan         | Execute plan file with judgment              |
  * | plans        | Manage plan-task linkage (frontmatter)       |
- * | work         | Process backlog continuously                 |
- * | task-analyze | Parallelization opportunities                |
  * | reconcile    | Sync completed tasks with git history        |
  * | triage       | Analyze board health                         |
  * | prune        | Remove stale/test/duplicate tasks            |
@@ -32,31 +28,22 @@ import {
 	handleAdd,
 	handleComplete,
 	handleDispatch,
-	handleImportPlan,
 	handleLoad,
 	handleMaintain,
-	handlePlan,
 	handlePrune,
 	handleReconcile,
 	handleRefine,
 	handleRemove,
-	handleTaskAnalyze,
-	handleTaskStatus,
 	handleTasks,
 	handleTriage,
 	handleUpdate,
-	handleWork,
-	type ImportPlanOptions,
 	type MaintainOptions,
-	type PlanOptions,
 	type PruneOptions,
 	type ReconcileOptions,
 	type RefineOptions,
-	type TaskAnalyzeOptions,
 	type TasksOptions,
 	type TriageOptions,
 	type UpdateOptions,
-	type WorkOptions,
 } from "./task-handlers.js";
 import type { CommandModule } from "./types.js";
 
@@ -93,14 +80,6 @@ export const taskCommands: CommandModule = {
 			.description("Load goals from a file (one per line)")
 			.action((file: string) => handleLoad(file));
 
-		// Import-plan command - parse plan files into discrete tasks
-		program
-			.command("import-plan <file>")
-			.description("Import a plan file as discrete tasks (extracts steps from markdown plans)")
-			.option("--dry-run", "Show what would be imported without adding to task board")
-			.option("--by-priority", "Sort steps by section priority (default: by file order)")
-			.action((file: string, options: ImportPlanOptions) => handleImportPlan(file, options));
-
 		// Dispatch command - import plan and immediately start grind (single-command handoff)
 		program
 			.command("dispatch <file>")
@@ -109,38 +88,6 @@ export const taskCommands: CommandModule = {
 			.option("-n, --count <n>", "Max tasks to process (0 = all)", "0")
 			.option("--dry-run", "Show what would be dispatched without executing")
 			.action((file: string, options: DispatchOptions) => handleDispatch(file, options));
-
-		// Plan command - execute a plan file intelligently
-		program
-			.command("plan <file>")
-			.description("Execute a plan file with good judgment (uses logistics to determine next steps)")
-			.option("-s, --stream", "Stream agent activity")
-			.option("-c, --continuous", "Keep executing until plan is complete")
-			.option("-n, --steps <n>", "Max steps to execute (default: unlimited in continuous mode)")
-			.option("--legacy", "Use legacy mode (re-read whole plan each iteration)")
-			.action((file: string, options: PlanOptions) => handlePlan(file, options));
-
-		// Work command - process the backlog continuously
-		program
-			.command("work")
-			.description("Process the backlog continuously (run in separate terminal)")
-			.option("-n, --count <n>", "Process only N goals then stop", "0")
-			.option("-s, --stream", "Stream agent activity")
-			.action((options: WorkOptions) => handleWork(options));
-
-		// Task analyze command - analyze task board for parallelization opportunities
-		program
-			.command("task-analyze")
-			.description("Analyze task board for parallelization opportunities")
-			.option("--compatibility", "Show compatibility matrix")
-			.option("--suggestions", "Show optimization suggestions")
-			.action((options: TaskAnalyzeOptions) => handleTaskAnalyze(options));
-
-		// Task status command - show detailed task board status
-		program
-			.command("task-status")
-			.description("Show detailed task board status and analytics")
-			.action(() => handleTaskStatus());
 
 		// Reconcile command - detect duplicate tasks from git history
 		program

@@ -4,13 +4,11 @@
  */
 
 import {
-	type BriefOptions,
 	type ConfigOptions,
 	type DecideOptions,
 	type EmergencyOptions,
 	type GrindOptions,
 	type HumanInputOptions,
-	handleBrief,
 	handleConfig,
 	handleDaemon,
 	handleDecide,
@@ -23,10 +21,8 @@ import {
 	handleInit,
 	handleIntrospect,
 	handleKnowledge,
-	handleLimits,
 	handleOracle,
 	handlePM,
-	handlePulse,
 	handleServe,
 	handleSetup,
 	handleStatus,
@@ -39,7 +35,6 @@ import {
 	type KnowledgeOptions,
 	type OracleOptions,
 	type PMOptions,
-	type PulseOptions,
 	type ServeOptions,
 	type StatusOptions,
 	type TuningOptions,
@@ -75,13 +70,6 @@ export const mixedCommands: CommandModule = {
 			.option("--no-postmortem", "Skip post-mortem analysis (runs by default)")
 			.action((options: GrindOptions) => handleGrind(options));
 
-		// Limits command - quick snapshot of usage (use 'watch' for live monitoring)
-		// NOTE: Consider using 'status' for session overview or 'watch' for live monitoring
-		program
-			.command("limits")
-			.description("[Deprecated: use 'status'] Show current usage snapshot")
-			.action(() => handleLimits());
-
 		// Usage command - fetch Claude Max usage from claude.ai
 		program
 			.command("usage")
@@ -91,29 +79,6 @@ export const mixedCommands: CommandModule = {
 			.action((options: UsageOptions, cmd) => {
 				const parentOpts = cmd.parent?.opts() || {};
 				handleUsage({ ...options, human: parentOpts.human || options.human });
-			});
-
-		// Pulse command - quick state check
-		// NOTE: Consider using 'status' for session overview
-		program
-			.command("pulse")
-			.description("[Deprecated: use 'status'] Quick state check with workers and queue")
-			.option("-w, --watch", "Live updating (like htop)")
-			.action((options: PulseOptions, cmd) => {
-				// Inherit --human from parent program if set
-				const parentOpts = cmd.parent?.opts() || {};
-				handlePulse({ ...options, human: parentOpts.human || options.human });
-			});
-
-		// Brief command - narrative summary
-		// NOTE: Consider using 'status --events' for recent activity
-		program
-			.command("brief")
-			.description("[Deprecated: use 'status'] Narrative summary of recent activity")
-			.option("--hours <n>", "Time window in hours (default: 24)", "24")
-			.action((options: BriefOptions, cmd) => {
-				const parentOpts = cmd.parent?.opts() || {};
-				handleBrief({ ...options, human: parentOpts.human || options.human });
 			});
 
 		// Decide command - view and resolve pending decisions

@@ -109,7 +109,7 @@ undercity pm "topic" --ideate --add
 # Live TUI dashboard
 undercity watch
 
-# Current status snapshot
+# Current grind session status (JSON)
 undercity status
 ```
 

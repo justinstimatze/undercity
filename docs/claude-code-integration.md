@@ -57,8 +57,7 @@ undercity grind -n 5               # Process up to 5 tasks
 undercity grind --parallel 3       # Run 3 concurrent workers
 
 # 3. Check progress
-undercity pulse                    # Quick JSON status
-undercity brief                    # Narrative summary
+undercity status                   # Grind session status (JSON)
 ```
 
 ## Commands
@@ -67,8 +66,6 @@ undercity brief                    # Narrative summary
 
 | Command | Purpose | Output |
 |---------|---------|--------|
-| `pulse` | Quick state check | JSON: workers, queue, health, attention |
-| `brief --hours <n>` | Narrative summary | JSON: accomplishments, failures, recommendations |
 | `status` | Grind session status | JSON: current/recent events |
 | `usage` | Live Claude Max usage | JSON: limits, consumed, remaining |
 
@@ -102,13 +99,13 @@ All commands output JSON by default for programmatic use. Use `--human` for read
 
 ### Morning Reconnect
 ```bash
-undercity brief              # What happened overnight?
+undercity status             # What happened overnight?
 undercity decide             # Any decisions need me?
 ```
 
 ### During the Day
 ```bash
-undercity pulse              # Quick status check
+undercity status             # Quick status check
 undercity add "task" -c context.json  # Delegate with context
 ```
 
@@ -128,8 +125,7 @@ undercity grind              # Start autonomous processing
 - **Decisions**: `undercity decide --resolve <id> --decision "choice"` - provide judgment
 
 ### Undercity → Claude Code
-- **Status**: `undercity pulse` returns queue, health, attention items
-- **Summary**: `undercity brief` returns accomplishments, failures, recommendations
+- **Status**: `undercity status` returns current/recent grind events
 - **Decisions**: `undercity decide` returns pending decisions needing judgment
 - **Knowledge**: `undercity knowledge "query"` returns relevant learnings
 - **Research**: `.undercity/research/` contains PM-generated design docs

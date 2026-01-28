@@ -93,8 +93,8 @@ cp /path/to/undercity/.claude/skills/undercity.md .claude/skills/
 **Claude Code workflow:**
 1. Add tasks: `undercity add "task description"`
 2. Start autonomous execution: `undercity grind`
-3. Monitor progress: `undercity watch` or `undercity pulse`
-4. Check results: `undercity brief`
+3. Monitor progress: `undercity watch` or `undercity status`
+4. Check results: `undercity status`
 
 See [docs/claude-code-integration.md](docs/claude-code-integration.md) for detailed agent workflow.
 
@@ -131,9 +131,8 @@ undercity remove <task-id>    # Clean up test task
 
 | Command | Input | Behavior |
 |---------|-------|----------|
-| `undercity import-plan <file>` | Markdown | Extract task steps |
-| `undercity plan <file>` | Markdown | Execute with context |
-| `undercity plan <file> -c` | Markdown | Continuous execution |
+| `undercity dispatch <file>` | Markdown | Import plan + start grind |
+| `undercity add "x" --from-file <file>` | YAML/JSON/MD | Load task from file |
 
 ## Infrastructure Commands
 
@@ -202,8 +201,6 @@ Auth via Claude Max OAuth - run `undercity setup` to verify login status.
 | `undercity usage` | Claude Max usage | Usage summary (from claude.ai) |
 | `undercity watch` | Live TUI dashboard | Matrix-style visualization |
 | `undercity status` | Grind session status | JSON (default) |
-| `undercity pulse` | Quick state check | JSON: workers, queue, health |
-| `undercity brief` | Narrative summary | JSON: accomplishments, failures, recommendations |
 | `undercity usage` | Live Claude Max usage | JSON: fetches from claude.ai |
 | `undercity metrics-dashboard` | Interactive TUI | Token usage, success rates, costs |
 
@@ -340,6 +337,5 @@ undercity tuning --rebuild # Rebuild from metrics
 |---------|---------|
 | `undercity usage` | Fetch live Claude Max usage from claude.ai |
 | `undercity usage --login` | One-time browser auth setup |
-| `undercity limits` | Local rate limit state |
 
 **Pacing**: Dynamic based on live usage queries. Auto-pauses when approaching limits, resumes when headroom available. Usage cached 5 minutes to avoid excessive scraping.

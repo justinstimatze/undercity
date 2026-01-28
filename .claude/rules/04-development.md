@@ -126,8 +126,7 @@ pnpm start grind "goal"
 ## Monitoring & Learning
 
 ```bash
-undercity pulse                     # Quick state check (JSON)
-undercity brief                     # Narrative summary (JSON)
+undercity status                    # Grind session status (JSON)
 undercity usage                     # Live Claude Max usage
 undercity usage --login             # One-time browser auth
 undercity knowledge "query"         # Search learnings

@@ -25,8 +25,7 @@ undercity dispatch plan.md --dry-run     # Preview without executing
 
 # Monitoring
 undercity watch                    # Live TUI dashboard
-undercity pulse                    # Quick JSON status
-undercity brief                    # Narrative summary of recent work
+undercity status                   # Grind session status (JSON)
 undercity usage                    # Live Claude Max usage from claude.ai
 
 # Learning & intelligence
@@ -137,8 +136,8 @@ undercity tasks --status pending
 # Remove a task
 undercity remove <task-id>
 
-# View a specific task
-undercity task-status <task-id>
+# View tasks by status
+undercity tasks --status pending
 ```
 
 ## Marking Tasks Complete

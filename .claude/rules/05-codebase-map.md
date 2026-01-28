@@ -5,7 +5,7 @@
 | File | Purpose | Key Exports |
 |------|---------|-------------|
 | **cli.ts** | CLI entry, routes to command modules | - |
-| **commands/task.ts** | Task board commands (tasks, add, work, plan, plans, import-plan, reconcile, triage, prune) | taskCommands |
+| **commands/task.ts** | Task board commands (tasks, add, complete, update, remove, load, dispatch, plans, reconcile, triage, prune, maintain, refine) | taskCommands |
 | **commands/plan-handlers.ts** | Plan-task linkage command handlers | handlePlan (linkage) |
 | **commands/mixed.ts** | Execution + learning commands (grind, pm, usage, knowledge, decide, tuning, watch) | mixedCommands |
 | **commands/analysis.ts** | Metrics/analysis commands (patterns, decisions, ax, postmortem, effectiveness) | analysisCommands |
@@ -473,7 +473,7 @@ Quick reference for where each learning function is called:
 - Serial execution (one at a time)
 
 **Monitor:**
-- Snapshot: `undercity limits` → live-metrics.ts
+- Snapshot: `undercity usage` → claude-usage.ts
 - Live: `undercity watch` → dashboard.ts (TUI)
 - Status: `undercity status` → grind-events.ts
 

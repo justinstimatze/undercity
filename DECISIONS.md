@@ -414,7 +414,7 @@ Tasks automatically routed to local tools when possible:
 ```bash
 undercity watch      # TUI dashboard
 undercity status     # Current grind state
-undercity limits     # Token usage snapshot
+undercity usage      # Claude Max usage from claude.ai
 ```
 
 ### Event Logging
@@ -430,7 +430,7 @@ All execution events logged to `.undercity/grind-events.jsonl`:
 1. Check event log: `undercity status --events`
 2. Examine worktree state: `git worktree list`
 3. Review task decomposition: enable verbose logging
-4. Check rate limits: `undercity limits`
+4. Check usage: `undercity usage`
 
 ## Performance Tuning
 
@@ -527,7 +527,7 @@ Need to run a task?
 - ✅ Let system auto-route models based on complexity
 - ✅ Enable review passes for critical changes
 - ✅ Use task board for related work
-- ✅ Check `undercity limits` before large batches
+- ✅ Check `undercity usage` before large batches
 - ✅ Use `--parallel 3` for most workloads
 
 ### Don'ts

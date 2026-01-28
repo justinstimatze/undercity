@@ -943,7 +943,6 @@ export function handleTaskStatus(): void {
 		console.log();
 	}
 
-	console.log(chalk.dim("Run 'undercity task-analyze' for detailed parallelization analysis"));
 	console.log(chalk.dim("Run 'undercity grind --parallel 3' to process tasks in parallel"));
 }
 
