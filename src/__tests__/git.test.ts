@@ -1377,3 +1377,350 @@ describe("isCacheableState", () => {
 		expect(isCacheableState()).toBe(false);
 	});
 });
+
+// =============================================================================
+// Edge Case Tests
+// =============================================================================
+
+describe("getCurrentBranch edge cases", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns 'HEAD' when in detached HEAD state", () => {
+		vi.mocked(execFileSync).mockReturnValue("HEAD\n");
+		expect(getCurrentBranch()).toBe("HEAD");
+	});
+
+	it("handles detached HEAD at specific commit", () => {
+		// In detached HEAD state, git returns "HEAD" not a branch name
+		vi.mocked(execFileSync).mockReturnValue("HEAD\n");
+		const branch = getCurrentBranch();
+		expect(branch).toBe("HEAD");
+		expect(branch).not.toMatch(/^[a-f0-9]{40}$/); // Not a commit hash
+	});
+
+	it("throws GitError when git repository is corrupted", () => {
+		const error = new Error("fatal: ref HEAD is not a symbolic ref") as Error & {
+			status: number;
+			stderr: Buffer;
+		};
+		error.status = 128;
+		error.stderr = Buffer.from("fatal: ref HEAD is not a symbolic ref");
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw error;
+		});
+		expect(() => getCurrentBranch()).toThrow(GitError);
+		expect(() => getCurrentBranch()).toThrow(/ref HEAD is not a symbolic ref/);
+	});
+});
+
+describe("getDefaultBranch edge cases", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("returns 'master' when remote is unreachable and main branch does not exist", () => {
+		vi.mocked(execFileSync)
+			.mockImplementationOnce(() => {
+				const error = new Error("fatal: could not read from remote repository") as Error & {
+					status: number;
+					stderr: Buffer;
+				};
+				error.status = 128;
+				error.stderr = Buffer.from("fatal: could not read from remote repository");
+				throw error;
+			})
+			.mockImplementationOnce(() => {
+				const error = new Error("fatal: Needed a single revision") as Error & {
+					status: number;
+					stderr: Buffer;
+				};
+				error.status = 128;
+				error.stderr = Buffer.from("fatal: Needed a single revision");
+				throw error;
+			});
+		expect(getDefaultBranch()).toBe("master");
+	});
+
+	it("returns 'main' when remote is missing but main branch exists locally", () => {
+		vi.mocked(execFileSync)
+			.mockImplementationOnce(() => {
+				throw new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref");
+			})
+			.mockReturnValueOnce("main\n");
+		expect(getDefaultBranch()).toBe("main");
+	});
+
+	it("handles network timeout when checking remote HEAD", () => {
+		vi.mocked(execFileSync)
+			.mockImplementationOnce(() => {
+				throw new Error("fatal: unable to access 'https://github.com/...': Failed to connect");
+			})
+			.mockReturnValueOnce("main\n");
+		expect(getDefaultBranch()).toBe("main");
+	});
+
+	it("handles missing origin remote entirely", () => {
+		vi.mocked(execFileSync)
+			.mockImplementationOnce(() => {
+				throw new Error("fatal: No such remote 'origin'");
+			})
+			.mockImplementationOnce(() => {
+				throw new Error("fatal: Needed a single revision");
+			});
+		expect(getDefaultBranch()).toBe("master");
+	});
+});
+
+describe("merge conflict edge cases", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("handles complex multi-file merge conflicts", () => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
+			if (Array.isArray(args) && args.includes("merge")) {
+				throw new Error("CONFLICT (content): Merge conflict in multiple files");
+			}
+			if (Array.isArray(args) && args.includes("--diff-filter=U")) {
+				return "src/file1.ts\nsrc/file2.ts\nsrc/file3.ts\nREADME.md\n";
+			}
+			if (Array.isArray(args) && args.includes("--abort")) {
+				return "";
+			}
+			return "";
+		});
+
+		const result = merge("feature-branch");
+		expect(result).toBe(false);
+	});
+
+	it("handles binary file merge conflicts", () => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
+			if (Array.isArray(args) && args.includes("merge")) {
+				throw new Error("CONFLICT (content): Merge conflict in image.png");
+			}
+			if (Array.isArray(args) && args.includes("--diff-filter=U")) {
+				return "assets/image.png\n";
+			}
+			if (Array.isArray(args) && args.includes("--abort")) {
+				return "";
+			}
+			return "";
+		});
+
+		const result = merge("feature-branch");
+		expect(result).toBe(false);
+	});
+
+	it("handles merge conflict during detached HEAD state", () => {
+		let callCount = 0;
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
+			if (Array.isArray(args)) {
+				// First call: getCurrentBranch returns HEAD
+				if (args.includes("--abbrev-ref") && args.includes("HEAD") && callCount === 0) {
+					callCount++;
+					return "HEAD\n";
+				}
+				// Merge fails
+				if (args.includes("merge")) {
+					throw new Error("CONFLICT: cannot merge in detached HEAD state");
+				}
+				if (args.includes("--abort")) {
+					return "";
+				}
+			}
+			return "";
+		});
+
+		const result = merge("feature-branch");
+		expect(result).toBe(false);
+	});
+
+	it("handles merge when branch has diverged significantly", () => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
+			if (Array.isArray(args) && args.includes("merge")) {
+				throw new Error("CONFLICT (modify/delete): file deleted in HEAD and modified in feature");
+			}
+			if (Array.isArray(args) && args.includes("--diff-filter=U")) {
+				return "deleted-but-modified.ts\n";
+			}
+			if (Array.isArray(args) && args.includes("--abort")) {
+				return "";
+			}
+			return "";
+		});
+
+		const result = merge("diverged-branch");
+		expect(result).toBe(false);
+	});
+});
+
+describe("working tree edge cases", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("handles corrupted working tree with invalid status", () => {
+		const error = new Error("fatal: index file corrupt") as Error & {
+			status: number;
+			stderr: Buffer;
+		};
+		error.status = 128;
+		error.stderr = Buffer.from("fatal: index file corrupt");
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw error;
+		});
+
+		expect(getWorkingTreeStatus()).toBe("");
+	});
+
+	it("detects corrupted index file when checking if tree is clean", () => {
+		const error = new Error("fatal: index file smaller than expected") as Error & {
+			status: number;
+			stderr: Buffer;
+		};
+		error.status = 128;
+		error.stderr = Buffer.from("fatal: index file smaller than expected");
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw error;
+		});
+
+		expect(() => isWorkingTreeClean()).toThrow(GitError);
+	});
+
+	it("handles working tree with missing .git directory", () => {
+		const error = new Error("fatal: not a git repository") as Error & {
+			status: number;
+			stderr: Buffer;
+		};
+		error.status = 128;
+		error.stderr = Buffer.from("fatal: not a git repository");
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw error;
+		});
+
+		expect(getWorkingTreeStatus()).toBe("");
+	});
+
+	it("handles status check with filesystem permission errors", () => {
+		const error = new Error("fatal: Unable to read current working directory") as Error & {
+			status: number;
+			stderr: Buffer;
+		};
+		error.status = 128;
+		error.stderr = Buffer.from("fatal: Unable to read current working directory");
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw error;
+		});
+
+		expect(getWorkingTreeStatus()).toBe("");
+	});
+
+	it("handles corrupted worktree with broken HEAD reference", () => {
+		const error = new Error("fatal: bad object HEAD") as Error & {
+			status: number;
+			stderr: Buffer;
+		};
+		error.status = 128;
+		error.stderr = Buffer.from("fatal: bad object HEAD");
+		vi.mocked(execFileSync).mockImplementation(() => {
+			throw error;
+		});
+
+		expect(getWorkingTreeStatus()).toBe("");
+	});
+});
+
+describe("rebase edge cases", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("handles rebase during detached HEAD state", () => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
+			if (Array.isArray(args) && args[0] === "rebase") {
+				throw new Error("fatal: cannot rebase in detached HEAD state");
+			}
+			if (Array.isArray(args) && args.includes("--abort")) {
+				return "";
+			}
+			return "";
+		});
+
+		const result = rebase("main");
+		expect(result).toBe(false);
+	});
+
+	it("handles rebase with corrupted repository state", () => {
+		let abortCalled = false;
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
+			if (Array.isArray(args)) {
+				// First call: rebase fails
+				if (args[0] === "rebase" && args.length === 2 && args[1] === "main") {
+					const error = new Error("fatal: bad revision") as Error & {
+						status: number;
+						stderr: Buffer;
+					};
+					error.status = 128;
+					error.stderr = Buffer.from("fatal: bad revision 'main'");
+					throw error;
+				}
+				// Second call: abort succeeds
+				if (args[0] === "rebase" && args[1] === "--abort") {
+					abortCalled = true;
+					return "";
+				}
+			}
+			return "";
+		});
+
+		const result = rebase("main");
+		expect(result).toBe(false);
+		expect(abortCalled).toBe(true);
+	});
+
+	it("handles rebase when target branch does not exist", () => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
+			if (Array.isArray(args) && args[0] === "rebase") {
+				throw new Error("fatal: invalid upstream 'nonexistent-branch'");
+			}
+			if (Array.isArray(args) && args.includes("--abort")) {
+				return "";
+			}
+			return "";
+		});
+
+		const result = rebase("nonexistent-branch");
+		expect(result).toBe(false);
+	});
+});
+
+describe("mergeWithFallback edge cases", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("handles merge conflict when remote branch is ahead by many commits", () => {
+		vi.mocked(execFileSync).mockImplementation((_cmd, args) => {
+			if (Array.isArray(args) && args.includes("merge")) {
+				throw new Error("CONFLICT: too many conflicts to resolve");
+			}
+			if (Array.isArray(args) && args.includes("--abort")) {
+				return "";
+			}
+			if (Array.isArray(args) && args.includes("--diff-filter=U")) {
+				// Simulate many conflicting files
+				const files = Array.from({ length: 20 }, (_, i) => `src/file${i}.ts`);
+				return files.join("\n");
+			}
+			return "";
+		});
+
+		const result = mergeWithFallback("feature/big-change", "Merge big feature");
+		expect(result.success).toBe(false);
+		expect(result.conflictFiles).toBeDefined();
+		expect(result.conflictFiles?.length).toBe(20);
+	});
+});
