@@ -106,7 +106,8 @@ describe("extraction-benchmark", () => {
 			const extracted = patternMatchingExtract(input);
 
 			const urls = extracted.filter((e) => e.type === "url");
-			expect(urls.some((e) => e.value.includes("nvd.nist.gov"))).toBe(true);
+			// Check exact URL to avoid incomplete substring sanitization (CodeQL js/incomplete-url-substring-sanitization)
+			expect(urls.some((e) => e.value === "https://nvd.nist.gov/vuln/detail/CVE-2020-8203")).toBe(true);
 		});
 
 		it("should extract version numbers", () => {
