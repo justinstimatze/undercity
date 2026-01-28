@@ -62,6 +62,8 @@ export interface VerificationDependencies {
 	recordPredictedFiles: (files: string[]) => void;
 	/** Record actual files modified for effectiveness tracking */
 	recordActualFilesModified: (files: string[]) => void;
+	/** Record phase timings for performance analysis */
+	recordPhaseTimings: (timings: Record<string, number>) => void;
 }
 
 /**
@@ -230,6 +232,8 @@ export async function handleVerificationSuccess(
 	// Record predicted files if available (from context building phase)
 	// Note: predictedFiles would need to be passed through state if available
 	deps.recordActualFilesModified(deps.getModifiedFiles());
+	// Record phase timings for performance analysis
+	deps.recordPhaseTimings(phaseTimings);
 	deps.completeMetricsTask(true);
 
 	// Log phase timings

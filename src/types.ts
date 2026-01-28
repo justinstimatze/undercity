@@ -739,6 +739,20 @@ export interface TaskMetrics {
 	// ============== Prompt Efficiency Tracking ==============
 	/** Initial prompt size in characters (before any retries) */
 	initialPromptSize?: number;
+	// ============== Phase Timing Tracking ==============
+	/** Time spent in each phase of task execution (in milliseconds) */
+	phaseTiming?: {
+		/** Planning phase: context gathering, plan creation, plan review */
+		planningMs?: number;
+		/** Execution phase: agent running, making changes */
+		executionMs?: number;
+		/** Verification phase: typecheck, lint, test */
+		verificationMs?: number;
+		/** Review phase: code review passes */
+		reviewMs?: number;
+		/** Merge phase: rebasing, merging to main */
+		mergeMs?: number;
+	};
 }
 
 /**

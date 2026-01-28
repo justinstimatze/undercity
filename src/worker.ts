@@ -659,6 +659,7 @@ export class TaskWorker {
 			recordInjectedLearnings: (ids) => this.metricsTracker.recordInjectedLearnings(ids),
 			recordPredictedFiles: (files) => this.metricsTracker.recordPredictedFiles(files),
 			recordActualFilesModified: (files) => this.metricsTracker.recordActualFilesModified(files),
+			recordPhaseTimings: (timings) => this.metricsTracker.recordPhaseTimings(timings),
 		};
 	}
 
@@ -1120,7 +1121,7 @@ export class TaskWorker {
 		}
 
 		// Failed after all attempts
-		return this.buildFailureResult(task, taskId, startTime);
+		return this.buildFailureResult(task, taskId, startTime, phaseTimings);
 	}
 
 	/**
@@ -1821,13 +1822,22 @@ export class TaskWorker {
 	/**
 	 * Build failure result after all attempts exhausted
 	 */
-	private buildFailureResult(task: string, taskId: string, startTime: number): TaskResult {
+	private buildFailureResult(
+		task: string,
+		taskId: string,
+		startTime: number,
+		phaseTimings?: Record<string, number>,
+	): TaskResult {
 		// Save debug info and metrics
 		this.saveFailedTaskDebug(task, taskId);
 		this.metricsTracker.recordAttempts(this.attemptRecords);
 		// Record effectiveness tracking before completing
 		this.metricsTracker.recordInjectedLearnings(this.injectedLearningIds);
 		this.metricsTracker.recordActualFilesModified(this.getModifiedFiles());
+		// Record phase timings even for failed tasks
+		if (phaseTimings) {
+			this.metricsTracker.recordPhaseTimings(phaseTimings);
+		}
 		this.metricsTracker.completeTask(false);
 		this.cleanupDirtyState();
 

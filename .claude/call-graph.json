@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-28T01:28:24.465Z",
+  "generatedAt": "2026-01-28T02:52:06.968Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -13,7 +13,7 @@
         },
         {
           "file": "worker/verification-handler.ts",
-          "line": 298,
+          "line": 302,
           "context": "slice"
         },
         {
@@ -79,7 +79,7 @@
       "calledFrom": [
         {
           "file": "worker/verification-handler.ts",
-          "line": 300,
+          "line": 304,
           "context": "if"
         }
       ]
@@ -204,7 +204,7 @@
         },
         {
           "file": "worker/verification-handler.ts",
-          "line": 329,
+          "line": 333,
           "context": "if"
         },
         {
@@ -252,7 +252,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1576,
+          "line": 1577,
           "context": "if"
         }
       ]
@@ -263,7 +263,7 @@
       "calledFrom": [
         {
           "file": "worker/verification-handler.ts",
-          "line": 388,
+          "line": 392,
           "context": "require"
         }
       ]
@@ -274,7 +274,7 @@
       "calledFrom": [
         {
           "file": "worker/verification-handler.ts",
-          "line": 172,
+          "line": 174,
           "context": "if"
         }
       ]
@@ -349,7 +349,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1457,
+          "line": 1458,
           "context": "startTask"
         },
         {
@@ -513,7 +513,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1266,
+          "line": 1267,
           "context": "info"
         }
       ]

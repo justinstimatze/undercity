@@ -109,6 +109,18 @@ export class MetricsTracker {
 	private linesChanged?: number;
 	/** Files changed count */
 	private filesChanged?: number;
+	// ============== Phase Timing Fields ==============
+	/** Time spent in each phase */
+	private phaseTiming: {
+		planningMs?: number;
+		executionMs?: number;
+		verificationMs?: number;
+		reviewMs?: number;
+		mergeMs?: number;
+	} = {};
+	/** Track phase start times for calculating durations */
+	private phaseStartTime?: number;
+	private currentPhase?: "planning" | "execution" | "verification" | "review" | "merge";
 
 	constructor(rateLimitTracker?: RateLimitTracker) {
 		this.rateLimitTracker = rateLimitTracker || new RateLimitTracker();
@@ -140,6 +152,9 @@ export class MetricsTracker {
 		this.classifierPrediction = undefined;
 		this.linesChanged = undefined;
 		this.filesChanged = undefined;
+		this.phaseTiming = {};
+		this.phaseStartTime = undefined;
+		this.currentPhase = undefined;
 	}
 
 	/**
@@ -254,6 +269,71 @@ export class MetricsTracker {
 	recordThroughput(linesChanged: number, filesChanged: number): void {
 		this.linesChanged = linesChanged;
 		this.filesChanged = filesChanged;
+	}
+
+	// ============== Phase Timing Methods ==============
+
+	/**
+	 * Start timing a phase. Automatically ends the previous phase if one is active.
+	 */
+	startPhase(phase: "planning" | "execution" | "verification" | "review" | "merge"): void {
+		// End previous phase if active
+		if (this.currentPhase && this.phaseStartTime) {
+			this.endPhase();
+		}
+		this.currentPhase = phase;
+		this.phaseStartTime = Date.now();
+	}
+
+	/**
+	 * End the current phase and record its duration
+	 */
+	endPhase(): void {
+		if (!this.currentPhase || !this.phaseStartTime) {
+			return;
+		}
+		const duration = Date.now() - this.phaseStartTime;
+		const key = `${this.currentPhase}Ms` as keyof typeof this.phaseTiming;
+		// Accumulate if phase runs multiple times (e.g., multiple verification passes)
+		this.phaseTiming[key] = (this.phaseTiming[key] || 0) + duration;
+		this.phaseStartTime = undefined;
+		this.currentPhase = undefined;
+	}
+
+	/**
+	 * Get current phase timing data
+	 */
+	getPhaseTiming(): typeof this.phaseTiming {
+		return { ...this.phaseTiming };
+	}
+
+	/**
+	 * Record phase timings from an external source (e.g., worker phaseTimings object)
+	 * Maps common phase names to the standard phaseTiming format
+	 */
+	recordPhaseTimings(timings: Record<string, number>): void {
+		// Map worker phase names to standard names
+		if (timings.contextPrep !== undefined) {
+			this.phaseTiming.planningMs = (this.phaseTiming.planningMs || 0) + timings.contextPrep;
+		}
+		if (timings.planning !== undefined) {
+			this.phaseTiming.planningMs = (this.phaseTiming.planningMs || 0) + timings.planning;
+		}
+		if (timings.agentExecution !== undefined) {
+			this.phaseTiming.executionMs = (this.phaseTiming.executionMs || 0) + timings.agentExecution;
+		}
+		if (timings.execution !== undefined) {
+			this.phaseTiming.executionMs = (this.phaseTiming.executionMs || 0) + timings.execution;
+		}
+		if (timings.verification !== undefined) {
+			this.phaseTiming.verificationMs = (this.phaseTiming.verificationMs || 0) + timings.verification;
+		}
+		if (timings.review !== undefined) {
+			this.phaseTiming.reviewMs = (this.phaseTiming.reviewMs || 0) + timings.review;
+		}
+		if (timings.merge !== undefined) {
+			this.phaseTiming.mergeMs = (this.phaseTiming.mergeMs || 0) + timings.merge;
+		}
 	}
 
 	/**
@@ -384,6 +464,8 @@ export class MetricsTracker {
 			// Throughput tracking
 			linesChanged: this.linesChanged,
 			filesChanged: this.filesChanged,
+			// Phase timing
+			phaseTiming: Object.keys(this.phaseTiming).length > 0 ? { ...this.phaseTiming } : undefined,
 		};
 
 		// Log metrics to file asynchronously, without blocking
