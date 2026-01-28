@@ -76,13 +76,13 @@ export default defineConfig({
 			reporter: ["text", "html", "json-summary"],
 			include: ["src/**/*.ts"],
 			exclude: ["src/__tests__/**", "src/index.ts", "src/cli.ts", "src/commands/**"],
-			// Thresholds commented out - enable when ready to enforce
-			// thresholds: {
-			// 	lines: 70,
-			// 	functions: 70,
-			// 	branches: 70,
-			// 	statements: 70,
-			// },
+			// Coverage thresholds enforced at 70%
+			thresholds: {
+				lines: 70,
+				functions: 70,
+				branches: 70,
+				statements: 70,
+			},
 		},
 	},
 });
