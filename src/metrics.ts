@@ -1086,3 +1086,95 @@ export async function getTokenUsageTrends(days = 30): Promise<{
 		dailyUsage,
 	};
 }
+
+/**
+ * Phase timing summary for performance analysis
+ */
+export interface PhaseTimingSummary {
+	/** Total tasks with phase timing data */
+	tasksWithData: number;
+	/** Average time in each phase (milliseconds) */
+	averageMs: {
+		planning?: number;
+		execution?: number;
+		verification?: number;
+		review?: number;
+		merge?: number;
+	};
+	/** Percentage of total time spent in each phase */
+	percentages: {
+		planning?: number;
+		execution?: number;
+		verification?: number;
+		review?: number;
+		merge?: number;
+	};
+	/** Total average task duration */
+	avgTotalMs: number;
+}
+
+/**
+ * Get phase timing summary from recent task metrics
+ *
+ * Aggregates phase timing data across tasks to show where time is spent.
+ *
+ * @param limit - Maximum number of recent tasks to analyze (default: 50)
+ * @returns Promise resolving to PhaseTimingSummary
+ *
+ * @example
+ * ```typescript
+ * const timing = await getPhaseTimingSummary();
+ * console.log(`Avg execution: ${timing.averageMs.execution}ms (${timing.percentages.execution}%)`);
+ * ```
+ */
+export async function getPhaseTimingSummary(limit = 50): Promise<PhaseTimingSummary> {
+	const metrics = await loadTaskMetrics();
+
+	// Get recent metrics with phase timing data
+	const withTiming = metrics.filter((m) => m.phaseTiming && Object.keys(m.phaseTiming).length > 0).slice(-limit);
+
+	if (withTiming.length === 0) {
+		return {
+			tasksWithData: 0,
+			averageMs: {},
+			percentages: {},
+			avgTotalMs: 0,
+		};
+	}
+
+	// Aggregate phase times
+	const totals: Record<string, number> = {};
+	const counts: Record<string, number> = {};
+
+	for (const metric of withTiming) {
+		const timing = metric.phaseTiming;
+		if (!timing) continue;
+
+		for (const [phase, ms] of Object.entries(timing)) {
+			if (typeof ms === "number" && ms > 0) {
+				totals[phase] = (totals[phase] || 0) + ms;
+				counts[phase] = (counts[phase] || 0) + 1;
+			}
+		}
+	}
+
+	// Calculate averages
+	const averageMs: Record<string, number> = {};
+	for (const phase of Object.keys(totals)) {
+		averageMs[phase] = Math.round(totals[phase] / counts[phase]);
+	}
+
+	// Calculate total and percentages
+	const totalAvgMs = Object.values(averageMs).reduce((sum, ms) => sum + ms, 0);
+	const percentages: Record<string, number> = {};
+	for (const [phase, ms] of Object.entries(averageMs)) {
+		percentages[phase] = totalAvgMs > 0 ? Math.round((ms / totalAvgMs) * 100) : 0;
+	}
+
+	return {
+		tasksWithData: withTiming.length,
+		averageMs: averageMs as PhaseTimingSummary["averageMs"],
+		percentages: percentages as PhaseTimingSummary["percentages"],
+		avgTotalMs: totalAvgMs,
+	};
+}

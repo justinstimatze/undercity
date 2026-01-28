@@ -4,6 +4,7 @@
 import chalk from "chalk";
 import { type FailureReason, getLastGrindSummary } from "../grind-events.js";
 import { loadLiveMetrics } from "../live-metrics.js";
+import { getPhaseTimingSummary, type PhaseTimingSummary } from "../metrics.js";
 
 interface PostmortemOptions {
 	last?: string;
@@ -42,6 +43,7 @@ interface PostmortemReport {
 		tasksWithGuidance: number;
 		tasksNeedingGuidance: number;
 	};
+	phaseTiming?: PhaseTimingSummary;
 }
 
 /**
@@ -297,6 +299,16 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 		// Non-critical
 	}
 
+	// Add phase timing analysis
+	try {
+		const phaseTiming = await getPhaseTimingSummary();
+		if (phaseTiming.tasksWithData > 0) {
+			report.phaseTiming = phaseTiming;
+		}
+	} catch {
+		// Non-critical
+	}
+
 	if (options.json) {
 		console.log(JSON.stringify(report, null, 2));
 		return;
@@ -344,6 +356,32 @@ export async function handlePostmortem(options: PostmortemOptions): Promise<void
 					console.log(`    ${path}: ${count}`);
 				}
 			}
+		}
+	}
+
+	// Show phase timing breakdown
+	if (report.phaseTiming && report.phaseTiming.tasksWithData > 0) {
+		console.log(chalk.bold("\nPhase Timing"));
+		console.log(`  Based on ${report.phaseTiming.tasksWithData} task(s)`);
+
+		const phases = ["planning", "execution", "verification", "review", "merge"] as const;
+		for (const phase of phases) {
+			const ms = report.phaseTiming.averageMs[phase];
+			const pct = report.phaseTiming.percentages[phase];
+			if (ms !== undefined && pct !== undefined) {
+				const label = phase.charAt(0).toUpperCase() + phase.slice(1);
+				const timeStr = ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(1)}s`;
+				const bar = "=".repeat(Math.max(1, Math.round(pct / 5)));
+				console.log(`  ${label.padEnd(12)} ${bar.padEnd(20)} ${timeStr.padStart(6)} (${pct}%)`);
+			}
+		}
+
+		if (report.phaseTiming.avgTotalMs > 0) {
+			const totalStr =
+				report.phaseTiming.avgTotalMs >= 60000
+					? `${(report.phaseTiming.avgTotalMs / 60000).toFixed(1)}m`
+					: `${(report.phaseTiming.avgTotalMs / 1000).toFixed(1)}s`;
+			console.log(`  ${"Total".padEnd(12)} ${"".padEnd(20)} ${totalStr.padStart(6)}`);
 		}
 	}
 
