@@ -7,6 +7,7 @@
 
 import { execSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
+import { checkAndFixBareRepo } from "../git.js";
 import * as output from "../output.js";
 import { execGitInDir, validateCwd, validateGitRef } from "./git-utils.js";
 
@@ -143,6 +144,11 @@ export async function runPostRebaseVerification(
 export function mergeIntoLocalMain(taskId: string, worktreePath: string, mainRepo: string, mainBranch: string): void {
 	// Validate mainBranch to prevent command-line option injection
 	const sanitizedBranch = validateGitRef(mainBranch);
+
+	// Fix bare repo if incorrectly set (can happen during worktree race conditions)
+	// This prevented 29 merges in the overnight grind of 2026-01-28
+	checkAndFixBareRepo(mainRepo);
+
 	let didStash = false;
 	try {
 		// Get the current commit SHA before detaching
