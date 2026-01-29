@@ -10,7 +10,8 @@ import type { ContextBriefing } from "../context.js";
 import { updateDecisionOutcome } from "../decision-tracker.js";
 import { clearPendingError, recordPermanentFailure } from "../error-fix-patterns.js";
 import { flagNeedsHumanInput, getHumanGuidance, shouldRequestHumanInput } from "../human-input-tracking.js";
-import { markLearningsUsed } from "../knowledge.js";
+import { addLearning, markLearningsUsed } from "../knowledge.js";
+import { sessionLogger } from "../logger.js";
 import * as output from "../output.js";
 import { recordTaskFiles } from "../task-file-patterns.js";
 import type { TieredPlanResult } from "../task-planner.js";
@@ -233,4 +234,206 @@ export function buildFailureErrorMessage(consecutiveNoWriteAttempts: number, att
 		);
 	}
 	return "Max attempts reached without passing verification";
+}
+
+// =============================================================================
+// Failure-Specific Learning Capture
+// =============================================================================
+
+const logger = sessionLogger.child({ module: "failure-recording" });
+
+/**
+ * Context for decomposition failure learning
+ */
+export interface DecompositionFailureContext {
+	taskId: string;
+	task: string;
+	attempts: number;
+	currentModel: ModelTier;
+	complexityAssessment?: ComplexityAssessment | null;
+	stateDir: string;
+}
+
+/**
+ * Record learning from decomposition/turn exhaustion failures
+ *
+ * These failures indicate the task was too complex for single-pass execution.
+ * Records patterns to help future complexity assessment and task decomposition.
+ */
+export function recordDecompositionFailureLearning(ctx: DecompositionFailureContext): void {
+	const { taskId, task, attempts, currentModel, complexityAssessment, stateDir } = ctx;
+
+	try {
+		// Extract complexity signals from the task
+		const complexitySignals: string[] = [];
+
+		if (task.toLowerCase().includes("refactor")) complexitySignals.push("refactor");
+		if (task.toLowerCase().includes("across") || task.toLowerCase().includes("all files"))
+			complexitySignals.push("multi-file");
+		if (task.toLowerCase().includes("and") && task.split(" and ").length > 2) complexitySignals.push("compound-task");
+		if (task.length > 200) complexitySignals.push("long-description");
+
+		const assessedLevel = complexityAssessment?.level || "unknown";
+		const assessedScope = complexityAssessment?.estimatedScope || "unknown";
+
+		addLearning(
+			{
+				taskId,
+				category: "gotcha",
+				keywords: ["decomposition-failure", "complexity-mismatch", ...extractTaskKeywords(task), ...complexitySignals],
+				content:
+					`Task exhausted ${attempts} attempts with ${currentModel} model without completing. ` +
+					`Complexity was assessed as "${assessedLevel}" with scope "${assessedScope}". ` +
+					`Signals: ${complexitySignals.join(", ") || "none detected"}. ` +
+					`Consider: (1) decomposing into smaller subtasks, (2) adding specific file paths, ` +
+					`(3) reducing scope to single concern.`,
+			},
+			stateDir,
+		);
+
+		logger.info(
+			{ taskId, attempts, model: currentModel, signals: complexitySignals },
+			"Recorded decomposition failure learning",
+		);
+	} catch (err) {
+		logger.warn({ err, taskId }, "Failed to record decomposition failure learning");
+	}
+}
+
+/**
+ * Context for plan rejection failure learning
+ */
+export interface PlanRejectionFailureContext {
+	taskId: string;
+	task: string;
+	rejectionReason: string;
+	planDetails?: {
+		filesToModify?: string[];
+		steps?: string[];
+		risks?: string[];
+	};
+	stateDir: string;
+}
+
+/**
+ * Record learning from plan rejection failures
+ *
+ * These failures indicate the planning phase identified issues before execution.
+ * Records the rejection patterns to improve future planning.
+ */
+export function recordPlanRejectionLearning(ctx: PlanRejectionFailureContext): void {
+	const { taskId, task, rejectionReason, planDetails, stateDir } = ctx;
+
+	try {
+		const fileCount = planDetails?.filesToModify?.length || 0;
+		const stepCount = planDetails?.steps?.length || 0;
+		const riskCount = planDetails?.risks?.length || 0;
+
+		addLearning(
+			{
+				taskId,
+				category: "gotcha",
+				keywords: ["plan-rejection", "planning-failure", ...extractTaskKeywords(task)],
+				content:
+					`Plan was rejected during review: "${rejectionReason}". ` +
+					`Plan scope: ${fileCount} files, ${stepCount} steps, ${riskCount} risks identified. ` +
+					`Task pattern to avoid or reformulate for clearer scope.`,
+			},
+			stateDir,
+		);
+
+		logger.info({ taskId, rejectionReason, fileCount, stepCount }, "Recorded plan rejection learning");
+	} catch (err) {
+		logger.warn({ err, taskId }, "Failed to record plan rejection learning");
+	}
+}
+
+/**
+ * Context for no-changes failure learning
+ */
+export interface NoChangesFailureContext {
+	taskId: string;
+	task: string;
+	attempts: number;
+	currentModel: ModelTier;
+	stateDir: string;
+}
+
+/**
+ * Record learning from no-changes failures
+ *
+ * These failures indicate the agent couldn't identify what to modify.
+ * Usually means the task is too vague or already complete.
+ */
+export function recordNoChangesFailureLearning(ctx: NoChangesFailureContext): void {
+	const { taskId, task, attempts, currentModel, stateDir } = ctx;
+
+	try {
+		// Detect vagueness patterns
+		const vaguePatterns: string[] = [];
+
+		if (!task.includes("/") && !task.includes(".ts") && !task.includes(".js")) vaguePatterns.push("no-file-reference");
+		if (task.split(" ").length < 5) vaguePatterns.push("too-short");
+		if (/\b(improve|enhance|optimize|better)\b/i.test(task) && !/\b(by|using|with|in)\b/i.test(task))
+			vaguePatterns.push("vague-verb-no-method");
+		if (/\b(the|all|every|any)\s+(code|codebase|project)\b/i.test(task)) vaguePatterns.push("overly-broad-scope");
+
+		addLearning(
+			{
+				taskId,
+				category: "gotcha",
+				keywords: ["no-changes", "vague-task", ...extractTaskKeywords(task), ...vaguePatterns],
+				content:
+					`Agent made no changes after ${attempts} attempts with ${currentModel}. ` +
+					`Vagueness indicators: ${vaguePatterns.join(", ") || "none detected"}. ` +
+					`Task may be: (1) too vague - add specific files/functions, ` +
+					`(2) already complete - verify current state, ` +
+					`(3) impossible - check if the described change is feasible.`,
+			},
+			stateDir,
+		);
+
+		logger.info({ taskId, attempts, model: currentModel, vaguePatterns }, "Recorded no-changes failure learning");
+	} catch (err) {
+		logger.warn({ err, taskId }, "Failed to record no-changes failure learning");
+	}
+}
+
+/**
+ * Extract keywords from task objective for learning correlation
+ */
+function extractTaskKeywords(task: string): string[] {
+	const actionVerbs = [
+		"add",
+		"fix",
+		"refactor",
+		"update",
+		"remove",
+		"create",
+		"implement",
+		"modify",
+		"migrate",
+		"optimize",
+		"improve",
+		"test",
+		"document",
+	];
+
+	const words = task.toLowerCase().split(/\s+/);
+	const keywords: string[] = [];
+
+	for (const word of words) {
+		const cleaned = word.replace(/[^a-z]/g, "");
+		if (cleaned.length > 2 && actionVerbs.includes(cleaned)) {
+			keywords.push(cleaned);
+		}
+	}
+
+	// Also extract potential file/module references
+	const fileMatches = task.match(/[\w-]+\.(?:ts|js|json|md)/gi);
+	if (fileMatches) {
+		keywords.push(...fileMatches.map((f) => f.toLowerCase()));
+	}
+
+	return [...new Set(keywords)];
 }

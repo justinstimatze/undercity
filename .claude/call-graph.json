@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-01-29T07:59:08.465Z",
+  "generatedAt": "2026-01-29T15:13:34.959Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -89,6 +89,21 @@
       "definedIn": "knowledge.ts",
       "calledFrom": [
         {
+          "file": "worker/failure-recording.ts",
+          "line": 279,
+          "context": "recordDecompositionFailureLearning"
+        },
+        {
+          "file": "worker/failure-recording.ts",
+          "line": 332,
+          "context": "recordPlanRejectionLearning"
+        },
+        {
+          "file": "worker/failure-recording.ts",
+          "line": 381,
+          "context": "recordNoChangesFailureLearning"
+        },
+        {
           "file": "knowledge-extractor.ts",
           "line": 494,
           "context": "for"
@@ -111,7 +126,7 @@
         },
         {
           "file": "worker/failure-recording.ts",
-          "line": 105,
+          "line": 106,
           "context": "markLearningsAsFailed"
         },
         {
@@ -225,7 +240,7 @@
         },
         {
           "file": "worker/failure-recording.ts",
-          "line": 116,
+          "line": 117,
           "context": "recordFailedTaskPattern"
         }
       ]
@@ -252,7 +267,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1587,
+          "line": 1615,
           "context": "if"
         }
       ]
@@ -285,7 +300,7 @@
       "calledFrom": [
         {
           "file": "worker/failure-recording.ts",
-          "line": 57,
+          "line": 58,
           "context": "if"
         }
       ]
@@ -349,7 +364,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1466,
+          "line": 1494,
           "context": "startTask"
         },
         {
@@ -503,7 +518,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1275,
+          "line": 1278,
           "context": "info"
         }
       ]

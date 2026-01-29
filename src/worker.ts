@@ -75,9 +75,12 @@ import {
 	buildFailureErrorMessage,
 	markLearningsAsFailed,
 	recordComplexityFailure,
+	recordDecompositionFailureLearning,
 	recordFailedTaskPattern,
+	recordNoChangesFailureLearning,
 	recordPermanentFailureWithHumanInput,
 	recordPlanFailure,
+	recordPlanRejectionLearning,
 	updateDecisionOutcomesToFailure,
 } from "./worker/failure-recording.js";
 import {
@@ -1294,6 +1297,17 @@ export class TaskWorker {
 				// Check for decomposition signal
 				if (this.executionPlan.plan.needsDecomposition?.needed) {
 					output.info(`Task needs decomposition: ${skipReason}`, { taskId });
+
+					// Record learning from decomposition requirement detected at planning time
+					recordDecompositionFailureLearning({
+						taskId,
+						task,
+						attempts: 0,
+						currentModel: this.currentModel,
+						complexityAssessment: this.complexityAssessment,
+						stateDir: this.stateDir,
+					});
+
 					return {
 						task,
 						status: "failed",
@@ -1338,6 +1352,20 @@ export class TaskWorker {
 				// Plan rejected for other reasons
 				output.warning(`Plan not approved: ${skipReason}`, { taskId });
 				const issues = this.executionPlan.review.issues?.join("; ") || "Unknown";
+
+				// Record learning from plan rejection
+				recordPlanRejectionLearning({
+					taskId,
+					task,
+					rejectionReason: issues,
+					planDetails: {
+						filesToModify: this.executionPlan.plan.filesToModify,
+						steps: this.executionPlan.plan.steps,
+						risks: this.executionPlan.plan.risks,
+					},
+					stateDir: this.stateDir,
+				});
+
 				return {
 					task,
 					status: "failed",
@@ -1897,6 +1925,28 @@ export class TaskWorker {
 			} catch {
 				// Non-critical
 			}
+		}
+
+		// Record failure-specific learnings for future task improvement
+		if (this.consecutiveNoWriteAttempts >= 2) {
+			// NO_CHANGES failure - agent couldn't identify what to modify
+			recordNoChangesFailureLearning({
+				taskId,
+				task,
+				attempts: this.attempts,
+				currentModel: this.currentModel,
+				stateDir: this.stateDir,
+			});
+		} else {
+			// Decomposition/turn exhaustion failure - task was too complex
+			recordDecompositionFailureLearning({
+				taskId,
+				task,
+				attempts: this.attempts,
+				currentModel: this.currentModel,
+				complexityAssessment: this.complexityAssessment,
+				stateDir: this.stateDir,
+			});
 		}
 
 		const errorMessage = buildFailureErrorMessage(this.consecutiveNoWriteAttempts, this.attempts);
