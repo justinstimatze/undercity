@@ -331,6 +331,85 @@ export class MetricsTracker {
 	// ============== Phase Timing Methods ==============
 
 	/**
+	 * Validates phase transition logic to ensure phases follow a logical sequence.
+	 *
+	 * Valid phase transition sequences:
+	 * - planning → execution → verification → review → merge
+	 * - Phases can be skipped (e.g., planning → execution → verification → merge)
+	 * - Phases can repeat (e.g., verification can run multiple times)
+	 * - Cannot move backwards in sequence (e.g., execution → planning is invalid)
+	 *
+	 * @param transitionType - Type of transition being validated ("start" for phaseStart, "end" for phaseEnd)
+	 * @param targetPhase - The phase being transitioned to (for start) or from (for end)
+	 * @param currentPhase - The currently active phase (if any)
+	 * @param phaseStartTime - The start time of the current phase (if any)
+	 * @throws {Error} If phase transition violates logical sequence rules
+	 *
+	 * @example
+	 * ```typescript
+	 * // Valid: moving forward in sequence
+	 * validatePhaseTransition("start", "execution", "planning", Date.now());
+	 *
+	 * // Invalid: moving backwards
+	 * validatePhaseTransition("start", "planning", "execution", Date.now()); // throws
+	 *
+	 * // Valid: ending the correct phase
+	 * validatePhaseTransition("end", "planning", "planning", Date.now());
+	 *
+	 * // Invalid: phase mismatch
+	 * validatePhaseTransition("end", "planning", "execution", Date.now()); // throws
+	 * ```
+	 */
+	private validatePhaseTransition(
+		transitionType: "start" | "end",
+		targetPhase: "planning" | "execution" | "verification" | "review" | "merge",
+		currentPhase?: "planning" | "execution" | "verification" | "review" | "merge",
+		phaseStartTime?: number,
+	): void {
+		// Define valid phase order for validation
+		const phaseOrder: Record<"planning" | "execution" | "verification" | "review" | "merge", number> = {
+			planning: 0,
+			execution: 1,
+			verification: 2,
+			review: 3,
+			merge: 4,
+		};
+
+		if (transitionType === "start") {
+			// Validate phase transition if there's a current phase
+			if (currentPhase) {
+				const currentOrder = phaseOrder[currentPhase];
+				const nextOrder = phaseOrder[targetPhase];
+
+				// Allow repeating the same phase (e.g., multiple verification passes)
+				// Allow moving forward in the sequence
+				// Disallow moving backwards (e.g., execution → planning)
+				if (nextOrder < currentOrder) {
+					throw new Error(
+						`Invalid phase transition: cannot move from "${currentPhase}" to "${targetPhase}". ` +
+							`Phases must follow logical sequence: planning → execution → verification → review → merge`,
+					);
+				}
+			}
+		} else if (transitionType === "end") {
+			// Validate that a phase is currently active
+			if (!currentPhase || !phaseStartTime) {
+				throw new Error(
+					`Cannot end phase "${targetPhase}": no phase is currently active. Call phaseStart() before calling phaseEnd().`,
+				);
+			}
+
+			// Validate that the phase being ended matches the current phase
+			if (currentPhase !== targetPhase) {
+				throw new Error(
+					`Cannot end phase "${targetPhase}": current phase is "${currentPhase}". ` +
+						`Phase mismatch detected. Ensure you end the correct phase.`,
+				);
+			}
+		}
+	}
+
+	/**
 	 * Start timing a phase. Automatically ends the previous phase if one is active.
 	 */
 	startPhase(phase: "planning" | "execution" | "verification" | "review" | "merge"): void {
@@ -383,30 +462,8 @@ export class MetricsTracker {
 	 * ```
 	 */
 	phaseStart(phase: "planning" | "execution" | "verification" | "review" | "merge"): void {
-		// Define valid phase order for validation
-		const phaseOrder: Record<"planning" | "execution" | "verification" | "review" | "merge", number> = {
-			planning: 0,
-			execution: 1,
-			verification: 2,
-			review: 3,
-			merge: 4,
-		};
-
-		// Validate phase transition if there's a current phase
-		if (this.currentPhase) {
-			const currentOrder = phaseOrder[this.currentPhase];
-			const nextOrder = phaseOrder[phase];
-
-			// Allow repeating the same phase (e.g., multiple verification passes)
-			// Allow moving forward in the sequence
-			// Disallow moving backwards (e.g., execution → planning)
-			if (nextOrder < currentOrder) {
-				throw new Error(
-					`Invalid phase transition: cannot move from "${this.currentPhase}" to "${phase}". ` +
-						`Phases must follow logical sequence: planning → execution → verification → review → merge`,
-				);
-			}
-		}
+		// Validate phase transition
+		this.validatePhaseTransition("start", phase, this.currentPhase, this.phaseStartTime);
 
 		// End previous phase if active and transitioning to a new phase
 		if (this.currentPhase && this.phaseStartTime && this.currentPhase !== phase) {
@@ -438,23 +495,11 @@ export class MetricsTracker {
 	 * ```
 	 */
 	phaseEnd(phase: "planning" | "execution" | "verification" | "review" | "merge"): void {
-		// Validate that a phase is currently active
-		if (!this.currentPhase || !this.phaseStartTime) {
-			throw new Error(
-				`Cannot end phase "${phase}": no phase is currently active. Call phaseStart() before calling phaseEnd().`,
-			);
-		}
-
-		// Validate that the phase being ended matches the current phase
-		if (this.currentPhase !== phase) {
-			throw new Error(
-				`Cannot end phase "${phase}": current phase is "${this.currentPhase}". ` +
-					`Phase mismatch detected. Ensure you end the correct phase.`,
-			);
-		}
+		// Validate phase transition
+		this.validatePhaseTransition("end", phase, this.currentPhase, this.phaseStartTime);
 
 		// Calculate duration and record
-		const duration = Date.now() - this.phaseStartTime;
+		const duration = Date.now() - (this.phaseStartTime as number);
 		const key = `${this.currentPhase}Ms` as keyof typeof this.phaseTiming;
 
 		// Accumulate if phase runs multiple times (e.g., multiple verification passes)
