@@ -685,6 +685,8 @@ export interface TaskMetrics {
 	agentTypes: AgentType[];
 	startedAt: Date;
 	completedAt: Date;
+	/** Origin/source that triggered this task */
+	source?: "pm" | "user" | "research" | "review-fix";
 	error?: string;
 	/** Individual attempt records for analyzing retry/escalation patterns */
 	attempts?: AttemptRecord[];
