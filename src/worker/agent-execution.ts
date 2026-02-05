@@ -304,10 +304,13 @@ export const DISALLOWED_GIT_PUSH_TOOLS = [
 ];
 
 /**
- * Default maxThinkingTokens for Opus extended thinking
- * Balances reasoning quality with cost control
+ * Legacy thinking token cap (no longer applied)
+ *
+ * Opus 4.6 uses adaptive thinking which self-selects reasoning depth.
+ * Hardcoded caps hinder this. On Claude Max (flat rate), removing the cap
+ * has zero cost implication. Kept for reference only.
  */
-export const DEFAULT_MAX_THINKING_TOKENS = 16000;
+export const LEGACY_MAX_THINKING_TOKENS = 16000;
 
 /**
  * Hook callback matcher structure (matches SDK's HookCallbackMatcher)
@@ -326,8 +329,8 @@ export interface QueryOptionsParams {
 	workingDirectory: string;
 	maxTurns: number;
 	stopHooks: HookCallbackMatcher[];
-	/** Whether this is an Opus model (enables maxThinkingTokens) */
-	isOpus?: boolean;
+	/** Max thinking tokens (undefined = no cap, let adaptive thinking work) */
+	maxThinkingTokens?: number;
 	/** PreToolUse hooks for security auditing */
 	preToolUseHooks?: HookCallbackMatcher[];
 	/** Use SDK systemPrompt preset (experimental) */
@@ -349,7 +352,7 @@ export function buildQueryOptions(params: QueryOptionsParams): Record<string, un
 		workingDirectory,
 		maxTurns,
 		stopHooks,
-		isOpus,
+		maxThinkingTokens,
 		preToolUseHooks,
 		useSystemPromptPreset,
 		taskContextForPrompt,
@@ -379,8 +382,7 @@ export function buildQueryOptions(params: QueryOptionsParams): Record<string, un
 		cwd: workingDirectory,
 		maxTurns,
 		disallowedTools: DISALLOWED_GIT_PUSH_TOOLS,
-		// Limit thinking tokens for Opus to control costs
-		maxThinkingTokens: isOpus ? DEFAULT_MAX_THINKING_TOKENS : undefined,
+		maxThinkingTokens,
 		systemPrompt,
 		hooks,
 	};

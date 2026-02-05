@@ -547,7 +547,7 @@ export async function runAgentLoop(
 		workingDirectory: config.workingDirectory,
 		maxTurns,
 		stopHooks,
-		isOpus: state.currentModel === "opus",
+		maxThinkingTokens: undefined, // No cap: Opus 4.6 adaptive thinking self-selects depth
 		preToolUseHooks,
 		useSystemPromptPreset: config.useSystemPromptPreset,
 		taskContextForPrompt,
