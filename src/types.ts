@@ -48,13 +48,13 @@ export type ModelTier = "sonnet" | "opus";
  * Canonical model name mapping
  * Single source of truth for model names - update here when new models release
  *
- * Current models (as of Jan 2026):
+ * Current models (as of Feb 2026):
  * - Sonnet 4.5: Balanced, excellent for coding
- * - Opus 4.5: Most capable, expensive
+ * - Opus 4.6: Most capable, adaptive thinking, 1M context window
  */
 export const MODEL_NAMES: Record<ModelTier, string> = {
 	sonnet: "claude-sonnet-4-5-20250929",
-	opus: "claude-opus-4-5-20251101",
+	opus: "claude-opus-4-6",
 } as const;
 
 /**

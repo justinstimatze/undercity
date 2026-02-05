@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import * as output from "../output.js";
+import { MODEL_NAMES } from "../types.js";
 import { execGitInDir } from "./git-utils.js";
 
 /**
@@ -28,8 +29,8 @@ export interface RebaseConfig {
  * Default rebase configuration
  */
 export const DEFAULT_REBASE_CONFIG: RebaseConfig = {
-	conflictResolutionModel: "claude-opus-4-5-20251101",
-	verificationFixModel: "claude-sonnet-4-20250514",
+	conflictResolutionModel: MODEL_NAMES.opus,
+	verificationFixModel: MODEL_NAMES.sonnet,
 	conflictResolutionMaxTurns: 10,
 	verificationFixMaxTurns: 5,
 };

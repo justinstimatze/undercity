@@ -17,6 +17,7 @@ import {
 	readConflictDetails,
 	rebaseOntoMain,
 } from "../orchestrator/rebase-helpers.js";
+import { MODEL_NAMES } from "../types.js";
 
 // Mock node:fs
 vi.mock("node:fs", () => ({
@@ -49,8 +50,8 @@ describe("orchestrator/rebase-helpers", () => {
 	describe("DEFAULT_REBASE_CONFIG", () => {
 		it("has expected default values", () => {
 			expect(DEFAULT_REBASE_CONFIG).toEqual({
-				conflictResolutionModel: "claude-opus-4-5-20251101",
-				verificationFixModel: "claude-sonnet-4-20250514",
+				conflictResolutionModel: MODEL_NAMES.opus,
+				verificationFixModel: MODEL_NAMES.sonnet,
 				conflictResolutionMaxTurns: 10,
 				verificationFixMaxTurns: 5,
 			});
@@ -327,7 +328,7 @@ const a = 2;
 			expect(query).toHaveBeenCalledWith(
 				expect.objectContaining({
 					options: expect.objectContaining({
-						model: "claude-opus-4-5-20251101",
+						model: MODEL_NAMES.opus,
 						cwd: "/worktree",
 					}),
 				}),
@@ -429,7 +430,7 @@ const a = 2;
 				expect.objectContaining({
 					prompt: expect.stringContaining("Type error in file.ts"),
 					options: expect.objectContaining({
-						model: "claude-sonnet-4-20250514",
+						model: MODEL_NAMES.sonnet,
 						maxTurns: 5,
 						cwd: "/worktree",
 					}),

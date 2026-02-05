@@ -13,12 +13,13 @@ import { findSimilarDecisions } from "./decision-tracker.js";
 import { type AddLearningResult, findRelevantLearnings, loadKnowledge } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
 import { getAllTasks, type Task } from "./task.js";
-import type {
-	ResearchConclusion,
-	ResearchOutcomeType,
-	ResearchROIAssessment,
-	ResearchROIRecommendation,
-	ResearchROISignals,
+import {
+	MODEL_NAMES,
+	type ResearchConclusion,
+	type ResearchOutcomeType,
+	type ResearchROIAssessment,
+	type ResearchROIRecommendation,
+	type ResearchROISignals,
 } from "./types.js";
 
 const logger = sessionLogger.child({ module: "research-roi" });
@@ -292,7 +293,7 @@ Respond with ONLY valid JSON (no markdown, no explanation outside JSON):
 		for await (const message of query({
 			prompt,
 			options: {
-				model: "claude-sonnet-4-5-20250929",
+				model: MODEL_NAMES.sonnet,
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
 				maxTurns: 1,
