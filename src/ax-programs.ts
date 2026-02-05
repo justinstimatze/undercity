@@ -25,6 +25,24 @@ import { sessionLogger } from "./logger.js";
 const logger = sessionLogger.child({ module: "ax-programs" });
 
 // ============================================================================
+// Prompt Repetition
+// ============================================================================
+
+/**
+ * Apply prompt repetition to improve LLM accuracy on non-reasoning calls.
+ *
+ * Based on "Prompt Repetition Improves Non-Reasoning LLMs" (Leviathan et al., 2025):
+ * Causal LLMs only allow tokens to attend to previous tokens. Repeating the input
+ * lets the second copy attend to all tokens in the first copy, achieving effective
+ * bidirectional attention. This improves accuracy without increasing output length.
+ *
+ * Applied to Ax program inputs where prompts are short and accuracy-sensitive.
+ */
+function withPromptRepetition(text: string): string {
+	return `${text}\n\nLet me repeat the task:\n${text}`;
+}
+
+// ============================================================================
 // Project Language Detection
 // ============================================================================
 
@@ -620,7 +638,7 @@ export async function checkAtomicityAx(
 		// Load program with examples from past successful runs
 		const checker = createAtomicityCheckerWithExamples(stateDir);
 
-		const result = await checker.forward(ai, { task });
+		const result = await checker.forward(ai, { task: withPromptRepetition(task) });
 
 		// Normalize model recommendation
 		const validModels = ["haiku", "sonnet", "opus"] as const;
@@ -689,7 +707,7 @@ export async function decomposeTaskAx(
 			"Running decomposition with project context",
 		);
 
-		const result = await decomposer.forward(ai, { task: fullTask, projectContext });
+		const result = await decomposer.forward(ai, { task: withPromptRepetition(fullTask), projectContext });
 
 		// Filter out question-like subtasks (these should be PM decisions, not subtasks)
 		const rawSubtasks = Array.isArray(result.subtasks) ? result.subtasks.map(String) : [];
@@ -742,7 +760,7 @@ export async function makeDecisionAx(
 		const decider = createDecisionMakerWithExamples(stateDir);
 
 		const result = await decider.forward(ai, {
-			question,
+			question: withPromptRepetition(question),
 			context,
 			options,
 			similarDecisions,
@@ -794,7 +812,7 @@ export async function checkComplexityAx(
 		// Load program with examples from past successful runs
 		const assessor = createComplexityAssessorWithExamples(stateDir);
 
-		const result = await assessor.forward(ai, { task });
+		const result = await assessor.forward(ai, { task: withPromptRepetition(task) });
 
 		// Normalize level
 		const validLevels = ["trivial", "simple", "standard", "complex", "critical"] as const;
@@ -854,7 +872,7 @@ export async function triageReviewAx(
 		// Truncate diff to avoid token limits
 		const truncatedDiff = diff.length > 8000 ? `${diff.slice(0, 8000)}\n... (truncated)` : diff;
 
-		const result = await triager.forward(ai, { task, diff: truncatedDiff });
+		const result = await triager.forward(ai, { task: withPromptRepetition(task), diff: truncatedDiff });
 
 		// Normalize risk level
 		const validRiskLevels = ["low", "medium", "high", "critical"] as const;
@@ -921,7 +939,7 @@ export async function createPlanAx(
 		const ai = createAxAI();
 		const creator = createPlanCreatorWithExamples(stateDir);
 
-		const result = await creator.forward(ai, { task, contextBriefing });
+		const result = await creator.forward(ai, { task: withPromptRepetition(task), contextBriefing });
 
 		// Filter out question-like subtasks from suggested decomposition
 		const rawSubtasks = Array.isArray(result.suggestedSubtasks) ? result.suggestedSubtasks.map(String) : [];
@@ -982,7 +1000,7 @@ export async function reviewPlanAx(
 		const ai = createAxAI();
 		const reviewer = createPlanReviewerWithExamples(stateDir);
 
-		const result = await reviewer.forward(ai, { task, plan });
+		const result = await reviewer.forward(ai, { task: withPromptRepetition(task), plan });
 
 		const output = {
 			approved: Boolean(result.approved),

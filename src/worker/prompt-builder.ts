@@ -372,6 +372,10 @@ ${ctx.lastPostMortem}
 Use this analysis to avoid repeating the same mistakes.`;
 	}
 
+	// Bookend: repeat the task objective at the end of the prompt so it can attend
+	// to all preceding context tokens. Based on "Prompt Repetition Improves
+	// Non-Reasoning LLMs" (Leviathan et al., 2025) -- placing the objective after
+	// all context gives it effective bidirectional attention in causal models.
 	const prompt = `${fullContext}TASK:
 ${ctx.task}${postMortemContext}
 RULES:
@@ -382,7 +386,9 @@ RULES:
 5. If the task requires creating new files, create them (Write tool creates parent directories)
 5. If editing existing files, read them first before editing
 6. Minimal changes only - nothing beyond task scope
-7. No questions - decide and proceed`;
+7. No questions - decide and proceed
+
+YOUR TASK (repeated for focus): ${ctx.task}`;
 
 	return {
 		prompt,
