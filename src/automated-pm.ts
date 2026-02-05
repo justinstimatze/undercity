@@ -28,6 +28,7 @@ import { constrainResearchResult } from "./pm-schemas.js";
 import { getRAGEngine } from "./rag/index.js";
 import { assessResearchROI, createResearchConclusion, gatherResearchROIContext } from "./research-roi.js";
 import { findRelevantFiles, getTaskFileStats } from "./task-file-patterns.js";
+import { getTaskType } from "./task-schema.js";
 import { filterSafeProposals } from "./task-security.js";
 import type { ResearchConclusion } from "./types.js";
 import { extractAndValidateURLs, logURLsForAudit } from "./url-validator.js";
@@ -1106,6 +1107,17 @@ function isTaskActionable(objective: string): boolean {
 		return false;
 	}
 
+	// Cross-check with execution-time classification.
+	// getTaskType() checks research keywords anywhere in the string,
+	// while the vague patterns above only check start-of-string.
+	// This prevents tasks that pass our start-of-string checks but
+	// contain research keywords that flip them to research at execution.
+	const taskType = getTaskType(objective);
+	if (taskType === "research") {
+		sessionLogger.debug({ objective }, "Rejected task that would execute as research");
+		return false;
+	}
+
 	return true;
 }
 
@@ -1276,6 +1288,14 @@ YOUR TASK:
 
 === ANTI-PATTERNS (will be filtered out) ===
 
+WRONG (research verbs - will execute as research, not code):
+- "Read src/foo.ts to understand..." (reading is not a deliverable)
+- "Search for patterns in..." (searching is not a deliverable)
+- "Examine how X works in..." (examining is not a deliverable)
+- "Find all test files..." (finding is not a deliverable)
+- "Verify pnpm-workspace.yaml uses..." (verifying is not a deliverable)
+- "Document error handling patterns..." (documenting without code changes)
+
 WRONG (too vague - will fail):
 - "Explore the test configuration" (no deliverable)
 - "Research best practices for X" (no code output)
@@ -1286,6 +1306,9 @@ WRONG (overly broad - will fail):
 - "Comprehensive security review"
 - "Refactor for DRY across the codebase"
 - "Standardize all error handling"
+
+Every task MUST produce a code change (add/modify/delete code or config files).
+Tasks that only read, search, examine, document, verify, or analyze are NOT valid.
 
 === GOOD EXAMPLES ===
 

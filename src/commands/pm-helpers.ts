@@ -7,6 +7,7 @@
 import chalk from "chalk";
 import type { TaskProposal } from "../automated-pm.js";
 import { classifyTask, hasClassificationData } from "../task-classifier.js";
+import { getTaskType } from "../task-schema.js";
 import { validateTaskObjective, validateTaskPaths } from "../task-security.js";
 
 // Re-export TaskProposal for backwards compatibility
@@ -120,6 +121,17 @@ export async function addProposalsToBoard(
 				console.log(chalk.red(`  ✗ Rejected: ${p.objective.substring(0, 50)}...`));
 				const invalidPaths = [...pathValidation.invalidDirectories, ...pathValidation.invalidFiles];
 				console.log(chalk.dim(`    Reason: Invalid paths: ${invalidPaths.join(", ")}`));
+			}
+			continue;
+		}
+
+		// Reject tasks that would execute as research (defense-in-depth)
+		const taskType = getTaskType(p.objective);
+		if (taskType === "research") {
+			rejected++;
+			if (isHuman) {
+				console.log(chalk.red(`  X Rejected (research): ${p.objective.substring(0, 50)}...`));
+				console.log(chalk.dim(`    Reason: Would execute as research task, not implementation`));
 			}
 			continue;
 		}
