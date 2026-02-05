@@ -442,6 +442,9 @@ export class TaskWorker {
 	/** Learning IDs injected into current task prompt (for tracking success) */
 	private injectedLearningIds: string[] = [];
 
+	/** Predicted files from agent loop (for effectiveness tracking) */
+	private predictedFiles: string[] = [];
+
 	/** Last agent output for knowledge extraction */
 	private lastAgentOutput: string = "";
 
@@ -642,6 +645,7 @@ export class TaskWorker {
 			currentBriefing: undefined,
 			executionPlan: null,
 			injectedLearningIds: [] as string[],
+			predictedFiles: [] as string[],
 			currentHandoffContext: undefined,
 			complexityAssessment: null,
 			reviewTriageResult: null,
@@ -711,6 +715,7 @@ export class TaskWorker {
 			currentBriefing: this.currentBriefing,
 			executionPlan: this.executionPlan,
 			injectedLearningIds: this.injectedLearningIds, // Reference
+			predictedFiles: this.predictedFiles, // Reference
 			currentHandoffContext: this.currentHandoffContext,
 			complexityAssessment: this.complexityAssessment,
 			reviewTriageResult: this.reviewTriageResult,
@@ -1067,6 +1072,7 @@ export class TaskWorker {
 
 				// Record effectiveness tracking metrics
 				if (agentLoopResult.predictedFiles) {
+					this.predictedFiles = agentLoopResult.predictedFiles;
 					this.metricsTracker.recordPredictedFiles(agentLoopResult.predictedFiles);
 				}
 				if (agentLoopResult.classifierPrediction) {

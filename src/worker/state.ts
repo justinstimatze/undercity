@@ -161,6 +161,7 @@ export interface ContextSlice {
 	currentBriefing: ContextBriefing | undefined;
 	executionPlan: TieredPlanResult | null;
 	injectedLearningIds: string[];
+	predictedFiles: string[];
 	currentHandoffContext: HandoffContext | undefined;
 }
 
@@ -248,6 +249,7 @@ export function createExecutionState(config: WorkerConfig): TaskExecutionState {
 		currentBriefing: undefined,
 		executionPlan: null,
 		injectedLearningIds: [],
+		predictedFiles: [],
 		currentHandoffContext: undefined,
 
 		// Assessment tracking

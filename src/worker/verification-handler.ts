@@ -239,8 +239,7 @@ export async function handleVerificationSuccess(
 	// Update metrics with effectiveness tracking
 	deps.recordMetricsAttempts(state.attemptRecords);
 	deps.recordInjectedLearnings(state.injectedLearningIds);
-	// Record predicted files if available (from context building phase)
-	// Note: predictedFiles would need to be passed through state if available
+	deps.recordPredictedFiles(state.predictedFiles);
 	deps.recordActualFilesModified(deps.getModifiedFiles());
 	// Record phase timings for performance analysis
 	deps.recordPhaseTimings(phaseTimings);
