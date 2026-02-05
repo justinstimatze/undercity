@@ -275,6 +275,36 @@ export async function handleVerificationSuccess(
 }
 
 /**
+ * Log verification-related errors with sanitized details
+ */
+function logVerificationError(
+	error: unknown,
+	context: {
+		taskId: string;
+		operation: string;
+		category?: string;
+		errorSignature?: string | null;
+	},
+): void {
+	const errorName = error instanceof Error ? error.name : typeof error;
+	const errorMessage = error instanceof Error ? error.message : String(error);
+	const stackFirstLine = error instanceof Error && error.stack ? error.stack.split("\n")[0] : undefined;
+
+	sessionLogger.warn(
+		{
+			taskId: context.taskId,
+			operation: context.operation,
+			category: context.category,
+			errorSignature: context.errorSignature,
+			errorType: errorName,
+			errorMessage,
+			stackFirstLine,
+		},
+		"Non-critical error in buildEnhancedFeedback",
+	);
+}
+
+/**
  * Build enhanced feedback with fix suggestions and hints
  *
  * Integrates multiple learning systems to provide rich context:
@@ -301,8 +331,12 @@ export function buildEnhancedFeedback(
 			output.debug("Found fix suggestions from previous errors", { taskId });
 			enhancedFeedback += `\n\n${fixSuggestion}`;
 		}
-	} catch {
-		// Non-critical
+	} catch (error: unknown) {
+		logVerificationError(error, {
+			taskId,
+			operation: "formatFixSuggestions",
+			category: primaryCategory,
+		});
 	}
 
 	// Add relevant knowledge about similar errors
@@ -320,8 +354,12 @@ export function buildEnhancedFeedback(
 				enhancedFeedback += `\n\n## RELEVANT KNOWLEDGE FROM PAST TASKS\n${knowledgeHints}`;
 			}
 		}
-	} catch {
-		// Non-critical - knowledge base may not be available
+	} catch (error: unknown) {
+		logVerificationError(error, {
+			taskId,
+			operation: "findRelevantLearnings",
+			category: primaryCategory,
+		});
 	}
 
 	// Add human guidance if available
@@ -332,8 +370,13 @@ export function buildEnhancedFeedback(
 				output.debug("Found human guidance for error pattern", { taskId });
 				enhancedFeedback += `\n\n${humanGuidance}`;
 			}
-		} catch {
-			// Non-critical
+		} catch (error: unknown) {
+			logVerificationError(error, {
+				taskId,
+				operation: "formatGuidanceForWorker",
+				category: primaryCategory,
+				errorSignature: pendingErrorSignature,
+			});
 		}
 	}
 
@@ -345,8 +388,11 @@ export function buildEnhancedFeedback(
 				output.debug("Found co-modification hints", { taskId, fileCount: modifiedFiles.length });
 				enhancedFeedback += `\n\n${coModHints}`;
 			}
-		} catch {
-			// Non-critical
+		} catch (error: unknown) {
+			logVerificationError(error, {
+				taskId,
+				operation: "formatCoModificationHints",
+			});
 		}
 	}
 
