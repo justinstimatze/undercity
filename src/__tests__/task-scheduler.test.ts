@@ -393,51 +393,45 @@ describe("TaskScheduler", () => {
 		}, 5000);
 
 		/**
-		 * Test scaling behavior to detect complexity class
-		 * Expected: O(n choose k) should show polynomial scaling
-		 * Would fail: O(n²) would show 4x scaling, O(n³) would show 8x
+		 * Test that parallelizable sets scale correctly with task count.
+		 * Validates output correctness at different sizes rather than timing ratios,
+		 * which are inherently flaky under varying CPU load / JIT / GC pressure.
 		 */
-		it("should demonstrate O(n choose k) scaling behavior (not O(n²))", async () => {
-			// Test with 25 tasks
+		it("should produce correct parallelizable sets at different task counts", async () => {
+			// Non-conflicting tasks: each has unique package and file
 			const tasks25: Task[] = [];
 			for (let i = 0; i < 25; i++) {
 				tasks25.push(createTestTask(`task-${i}`, `Task ${i}`, [`pkg-${i}`], [`file-${i}.ts`]));
 			}
 
-			const start25 = performance.now();
-			await scheduler.findParallelizableSets(tasks25);
-			const end25 = performance.now();
-			const duration25 = end25 - start25;
+			const sets25 = await scheduler.findParallelizableSets(tasks25);
+			// With no conflicts, we should get parallelizable sets
+			expect(sets25.length).toBeGreaterThan(0);
 
-			// Test with 50 tasks (2x the size)
 			const tasks50: Task[] = [];
 			for (let i = 0; i < 50; i++) {
 				tasks50.push(createTestTask(`task-${i}`, `Task ${i}`, [`pkg-${i}`], [`file-${i}.ts`]));
 			}
 
-			const start50 = performance.now();
-			await scheduler.findParallelizableSets(tasks50);
-			const end50 = performance.now();
-			const duration50 = end50 - start50;
+			const sets50 = await scheduler.findParallelizableSets(tasks50);
+			// More tasks with no conflicts should produce at least as many sets
+			expect(sets50.length).toBeGreaterThanOrEqual(sets25.length);
 
-			// Calculate scaling factor
-			const scalingFactor = duration50 / (duration25 || 1); // Avoid division by zero
-
-			// For O(n choose 3): C(50,3)/C(25,3) = 19,600/2,300 = ~8.5x
-			// For O(n²): 50²/25² = 4x
-			// For O(n³): 50³/25³ = 8x
-			// We expect 5x-12x for combinatorial, significantly more than O(n²)
-
-			console.log(`Scaling factor (50 tasks / 25 tasks): ${scalingFactor.toFixed(2)}x`);
-			console.log(`Duration for 25 tasks: ${duration25.toFixed(2)}ms`);
-			console.log(`Duration for 50 tasks: ${duration50.toFixed(2)}ms`);
-
-			// The key insight: scaling around 4x-10x is expected
-			// O(n²) would be exactly 4x: 50²/25² = 4x
-			// O(n choose k): C(50,3)/C(25,3) = 19,600/2,300 = ~8.5x
-			// We allow 3x-12x to account for constant factors and caching effects
-			expect(scalingFactor).toBeGreaterThan(3); // At least cubic growth
-			expect(scalingFactor).toBeLessThan(12); // Reasonable upper bound for O(n choose k)
+			// Verify no set contains conflicting tasks (same package or file)
+			for (const taskSet of sets50) {
+				const packages = new Set<string>();
+				const files = new Set<string>();
+				for (const task of taskSet.tasks) {
+					for (const pkg of task.packages ?? []) {
+						expect(packages.has(pkg)).toBe(false);
+						packages.add(pkg);
+					}
+					for (const file of task.touchedFiles ?? []) {
+						expect(files.has(file)).toBe(false);
+						files.add(file);
+					}
+				}
+			}
 		}, 10000);
 
 		/**

@@ -126,6 +126,30 @@ const createMockTask = (overrides: Partial<Task> = {}): Task => ({
 const mockTask = { id: "test" } as any;
 ```
 
+### No Timing-Based Test Assertions
+
+**CRITICAL: Never assert on wall-clock timing ratios or absolute durations in tests.** These are inherently flaky under varying CPU load, JIT warmup, GC pressure, and CI contention.
+
+```typescript
+// BAD: Flaky - depends on execution environment performance
+const ratio = duration50 / duration25;
+expect(ratio).toBeGreaterThan(3);
+expect(ratio).toBeLessThan(12);
+
+// BAD: Flaky - absolute timing varies by machine
+expect(duration).toBeLessThan(100); // ms
+
+// GOOD: Test correctness, not speed
+expect(results.length).toBeGreaterThan(0);
+expect(results).toSatisfy(validateNoConflicts);
+
+// ACCEPTABLE: Very generous upper bound as a timeout guard (5-10s)
+// Only to catch infinite loops, not to measure performance
+expect(duration).toBeLessThan(5000);
+```
+
+**If you need to validate algorithmic complexity**, test output properties that are deterministic (e.g., result count scales correctly, no conflicts in output sets) rather than comparing timing ratios between runs.
+
 ### Console Mocking (Vitest)
 
 ```typescript

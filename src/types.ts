@@ -686,7 +686,7 @@ export interface TaskMetrics {
 	startedAt: Date;
 	completedAt: Date;
 	/** Origin/source that triggered this task */
-	source?: "pm" | "user" | "research" | "review-fix";
+	source?: "pm" | "user" | "research" | "review-fix" | "codebase_gap" | "pattern_analysis" | "user_request";
 	error?: string;
 	/** Individual attempt records for analyzing retry/escalation patterns */
 	attempts?: AttemptRecord[];
@@ -698,8 +698,6 @@ export interface TaskMetrics {
 	wasEscalated?: boolean;
 	/** Starting model before any escalation */
 	startingModel?: "haiku" | "sonnet" | "opus";
-	/** Source that originated this task */
-	source?: "pm" | "user" | "research" | "codebase_gap" | "pattern_analysis";
 	// ============== Effectiveness Tracking ==============
 	/** Learning IDs that were injected into the task prompt */
 	injectedLearningIds?: string[];

@@ -128,7 +128,7 @@ export class MetricsTracker {
 	/** Whether the task was escalated */
 	private wasEscalated = false;
 	/** Source that originated this task */
-	private source?: "pm" | "user" | "research" | "codebase_gap" | "pattern_analysis";
+	private source?: "pm" | "user" | "research" | "review-fix" | "codebase_gap" | "pattern_analysis" | "user_request";
 	// ============== Effectiveness Tracking Fields ==============
 	/** Learning IDs that were injected into the task prompt */
 	private injectedLearningIds: string[] = [];
@@ -217,7 +217,7 @@ export class MetricsTracker {
 		objective: string,
 		sessionId: string,
 		startingModel?: "haiku" | "sonnet" | "opus",
-		source?: "pm" | "user" | "research" | "codebase_gap" | "pattern_analysis",
+		source?: "pm" | "user" | "research" | "review-fix" | "codebase_gap" | "pattern_analysis" | "user_request",
 	): void {
 		this.reset();
 		this.taskStartTime = new Date();
