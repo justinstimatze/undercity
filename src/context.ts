@@ -440,7 +440,7 @@ const AREA_KEYWORDS: Record<string, string[]> = {
  * Token budget limits for context modes (approximate characters, ~4 chars = 1 token)
  */
 const CONTEXT_TOKEN_BUDGETS: Record<ContextMode, number> = {
-	full: 8000, // ~2000 tokens
+	full: 16000, // ~4000 tokens - used for Opus tasks (1M context window)
 	compact: 4000, // ~1000 tokens - preferred for most tasks
 	minimal: 1500, // ~375 tokens - for simple tasks
 };
