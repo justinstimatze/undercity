@@ -241,6 +241,8 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		const taskResults: TaskResultSummary[] = [];
 		let sessionStarted = false;
 		let continuousCycle = 0;
+		let consecutiveNoProgressCycles = 0;
+		const MAX_NO_PROGRESS_CYCLES = 3;
 
 		// Main grind loop - runs once normally, loops in continuous mode
 		while (true) {
@@ -332,7 +334,13 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 					output.info("No valid tasks to process after validation");
 					break;
 				}
-				// In continuous mode, all current tasks may be invalid but new ones could be proposed
+				consecutiveNoProgressCycles++;
+				if (consecutiveNoProgressCycles >= MAX_NO_PROGRESS_CYCLES) {
+					output.warning(
+						`No progress after ${MAX_NO_PROGRESS_CYCLES} cycles (validation) - stopping to avoid wasted tokens`,
+					);
+					break;
+				}
 				continue;
 			}
 
@@ -346,6 +354,13 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			if (prioritizedTasks.length === 0) {
 				if (!config.continuous) {
 					output.info("No tasks ready after decomposition");
+					break;
+				}
+				consecutiveNoProgressCycles++;
+				if (consecutiveNoProgressCycles >= MAX_NO_PROGRESS_CYCLES) {
+					output.warning(
+						`No progress after ${MAX_NO_PROGRESS_CYCLES} cycles (decomposition) - stopping to avoid wasted tokens`,
+					);
 					break;
 				}
 				continue;
@@ -371,6 +386,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			}
 
 			// Execute tasks
+			let emergencyModeHit = false;
 			try {
 				output.info(`Running ${prioritizedTasks.length} task(s) in priority order...`);
 
@@ -406,6 +422,11 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 				const batchStartTime = Date.now();
 				const result = await execOrchestrator.runParallel(prioritizedTasks);
 				const batchDurationMs = Date.now() - batchStartTime;
+
+				// Check if emergency mode blocked execution
+				if (result.emergencyMode) {
+					emergencyModeHit = true;
+				}
 
 				// Process results
 				for (const taskResult of result.results) {
@@ -470,9 +491,31 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 				totalMerged += result.merged;
 				totalDecomposed += result.decomposed;
 				totalDurationMs += result.durationMs;
+
+				// Reset no-progress counter when tasks were actually processed
+				if (result.results.length > 0) {
+					consecutiveNoProgressCycles = 0;
+				} else {
+					consecutiveNoProgressCycles++;
+				}
 			} catch (grindError) {
 				output.error(`Grind execution failed: ${grindError}`);
 				totalFailed += prioritizedTasks.length;
+				consecutiveNoProgressCycles++;
+			}
+
+			// Too many cycles with no progress - stop to avoid burning tokens
+			if (consecutiveNoProgressCycles >= MAX_NO_PROGRESS_CYCLES) {
+				output.warning(`No progress after ${MAX_NO_PROGRESS_CYCLES} cycles - stopping to avoid wasted tokens`);
+				break;
+			}
+
+			// Emergency mode activated - stop immediately, don't loop
+			if (emergencyModeHit) {
+				output.error("Emergency mode active - stopping grind to prevent wasted work");
+				output.info("Run 'undercity emergency --status' to check status");
+				output.info("Fix the main branch, then 'undercity emergency --clear' to resume");
+				break;
 			}
 
 			// In non-continuous mode, exit after one execution cycle

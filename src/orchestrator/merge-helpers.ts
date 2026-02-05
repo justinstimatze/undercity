@@ -5,9 +5,10 @@
  * complexity in the main Orchestrator class.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { checkAndFixBareRepo } from "../git.js";
+import { sessionLogger } from "../logger.js";
 import * as output from "../output.js";
 import { execGitInDir, validateCwd, validateGitRef } from "./git-utils.js";
 
@@ -88,7 +89,50 @@ export function fetchMainIntoWorktree(
 }
 
 /**
- * Run verification after rebase with fix attempts
+ * Commit any uncommitted fix agent changes in a worktree.
+ *
+ * After the fix agent resolves post-rebase verification errors, its edits
+ * are uncommitted in the working directory. Without committing, these fixes
+ * are lost during mergeIntoLocalMain (which uses git rev-parse HEAD for
+ * the fast-forward merge). This function ensures fix changes are included
+ * in the merge.
+ */
+function commitFixChanges(taskId: string, worktreePath: string, attempt: number): boolean {
+	try {
+		const status = execFileSync("git", ["status", "--porcelain"], {
+			cwd: worktreePath,
+			encoding: "utf-8",
+		}).trim();
+
+		if (!status) {
+			return false;
+		}
+
+		// Stage and commit the fix agent's changes
+		execFileSync("git", ["add", "-A"], { cwd: worktreePath, encoding: "utf-8" });
+		execFileSync("git", ["commit", "-m", `Fix post-rebase verification issues (attempt ${attempt})`], {
+			cwd: worktreePath,
+			encoding: "utf-8",
+		});
+
+		sessionLogger.info(
+			{ taskId, attempt, changedFiles: status.split("\n").length },
+			"Committed fix agent changes to worktree branch",
+		);
+		return true;
+	} catch (commitError) {
+		sessionLogger.warn({ taskId, error: String(commitError) }, "Failed to commit fix agent changes");
+		return false;
+	}
+}
+
+/**
+ * Run verification after rebase with fix attempts.
+ *
+ * When verification fails, a fix agent is spawned to resolve the errors.
+ * If the fix agent succeeds and verification passes on retry, the fix
+ * changes are committed to the worktree branch so they're included in
+ * the subsequent merge to main.
  */
 export async function runPostRebaseVerification(
 	taskId: string,
@@ -115,6 +159,12 @@ export async function runPostRebaseVerification(
 			});
 			// Verification passed
 			lastVerifyError = null;
+
+			// If this was a retry after fix agent ran, commit the fix changes
+			// so they're included in the merge to main
+			if (attempt > 0) {
+				commitFixChanges(taskId, worktreePath, attempt);
+			}
 			break;
 		} catch (verifyError) {
 			lastVerifyError = verifyError;
