@@ -101,7 +101,7 @@ async function logMetricsToFile(metrics: TaskMetrics): Promise<void> {
  * @example
  * ```typescript
  * const tracker = new MetricsTracker();
- * tracker.startTask("task-123", "Fix login bug", "session-456", "sonnet");
+ * tracker.startTask("task-123", "Fix login bug", "session-456", "sonnet", "user");
  * tracker.recordTokenUsage(sdkMessage, "sonnet");
  * tracker.recordEscalation("sonnet", "opus");
  * const metrics = tracker.completeTask(true);
@@ -127,6 +127,8 @@ export class MetricsTracker {
 	private startingModel?: "haiku" | "sonnet" | "opus";
 	/** Whether the task was escalated */
 	private wasEscalated = false;
+	/** Source that originated this task */
+	private source?: "pm" | "user" | "research" | "codebase_gap" | "pattern_analysis";
 	// ============== Effectiveness Tracking Fields ==============
 	/** Learning IDs that were injected into the task prompt */
 	private injectedLearningIds: string[] = [];
@@ -186,6 +188,7 @@ export class MetricsTracker {
 		this.complexityLevel = undefined;
 		this.startingModel = undefined;
 		this.wasEscalated = false;
+		this.source = undefined;
 		this.injectedLearningIds = [];
 		this.predictedFiles = [];
 		this.actualFilesModified = [];
@@ -202,14 +205,27 @@ export class MetricsTracker {
 
 	/**
 	 * Start tracking a task with complexity assessment
+	 *
+	 * @param taskId - Unique task identifier
+	 * @param objective - Task objective/description
+	 * @param sessionId - Session identifier
+	 * @param startingModel - Starting model tier (before any escalation)
+	 * @param source - Source that originated this task (e.g., 'pm', 'user', 'research', 'codebase_gap', 'pattern_analysis')
 	 */
-	startTask(taskId: string, objective: string, sessionId: string, startingModel?: "haiku" | "sonnet" | "opus"): void {
+	startTask(
+		taskId: string,
+		objective: string,
+		sessionId: string,
+		startingModel?: "haiku" | "sonnet" | "opus",
+		source?: "pm" | "user" | "research" | "codebase_gap" | "pattern_analysis",
+	): void {
 		this.reset();
 		this.taskStartTime = new Date();
 		this.taskId = taskId;
 		this.sessionId = sessionId;
 		this.objective = objective;
 		this.startingModel = startingModel;
+		this.source = source;
 		// Assess complexity at start time
 		this.complexityLevel = assessComplexityFast(objective).level;
 	}
@@ -661,6 +677,7 @@ export class MetricsTracker {
 			complexityLevel: this.complexityLevel,
 			wasEscalated: this.wasEscalated,
 			startingModel: this.startingModel,
+			source: this.source,
 			// Effectiveness tracking
 			injectedLearningIds: this.injectedLearningIds.length > 0 ? [...this.injectedLearningIds] : undefined,
 			predictedFiles: this.predictedFiles.length > 0 ? [...this.predictedFiles] : undefined,

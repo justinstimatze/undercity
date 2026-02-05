@@ -698,6 +698,8 @@ export interface TaskMetrics {
 	wasEscalated?: boolean;
 	/** Starting model before any escalation */
 	startingModel?: "haiku" | "sonnet" | "opus";
+	/** Source that originated this task */
+	source?: "pm" | "user" | "research" | "codebase_gap" | "pattern_analysis";
 	// ============== Effectiveness Tracking ==============
 	/** Learning IDs that were injected into the task prompt */
 	injectedLearningIds?: string[];
