@@ -389,7 +389,7 @@ ${lens.prompt}
 
 Changes:
 \`\`\`diff
-${diffOutput.slice(0, 6000)}
+${diffOutput.slice(0, reviewModel === "opus" ? 24000 : 6000)}
 \`\`\`
 
 If you find issues, describe them specifically (file, line if possible, what's wrong).
@@ -470,7 +470,7 @@ Task that was implemented: ${task}
 
 Current changes:
 \`\`\`diff
-${diffOutput.slice(0, 8000)}
+${diffOutput.slice(0, model === "opus" ? 24000 : 8000)}
 \`\`\`
 
 Review for: bugs, edge cases, security issues, incomplete implementation, task mismatches.
