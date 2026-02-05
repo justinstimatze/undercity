@@ -384,11 +384,13 @@ Tasks routed by complexity assessment:
 - Standard complexity work
 - Cost-effective for typical development
 
-**Opus** (premium):
+**Opus 4.6** (premium):
 - Architecture changes
 - Complex debugging
 - Critical path changes
 - Security-sensitive code
+- Adaptive thinking (self-selects reasoning depth, no token cap)
+- 1M context window, 128K output tokens
 
 ## Verification Loop
 

@@ -135,8 +135,8 @@ function acquireLock(lockPath: string): boolean {
 
 ```typescript
 const MODEL_NAMES: Record<ModelTier, string> = {
-    sonnet: "claude-sonnet-4-20250514",
-    opus: "claude-opus-4-5-20251101",
+    sonnet: "claude-sonnet-4-5-20250929",
+    opus: "claude-opus-4-6",
 };
 ```
 
