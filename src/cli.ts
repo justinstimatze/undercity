@@ -141,14 +141,17 @@ function getExitCode(error: unknown): 1 | 2 {
 }
 
 // Parse and run with proper exit code mapping
-try {
-	program.parse();
-} catch (error: unknown) {
-	const exitCode = getExitCode(error);
-	const message = error instanceof Error ? error.message : String(error);
+// Use parseAsync() to handle async command handlers properly
+(async () => {
+	try {
+		await program.parseAsync();
+	} catch (error: unknown) {
+		const exitCode = getExitCode(error);
+		const message = error instanceof Error ? error.message : String(error);
 
-	// Log to stderr before exiting
-	process.stderr.write(`Error: ${message}\n`);
+		// Log to stderr before exiting
+		process.stderr.write(`Error: ${message}\n`);
 
-	process.exit(exitCode);
-}
+		process.exit(exitCode);
+	}
+})();
