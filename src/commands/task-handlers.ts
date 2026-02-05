@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as readline from "node:readline";
 import chalk from "chalk";
+import { categorizeFailure } from "../grind-events.js";
 import {
 	type IntentPredictionResult,
 	isAmbiguous,
@@ -1044,11 +1045,14 @@ interface TicketStats {
 interface LocalTriageReport {
 	totalTasks: number;
 	pendingTasks: number;
+	failedTasks: number;
 	issues: LocalTriageIssue[];
 	healthScore: number;
 	recommendations: string[];
 	/** Ticket completeness stats for pending tasks */
 	ticketStats: TicketStats;
+	/** Failed task breakdown by failure reason */
+	failureBreakdown: Record<string, number>;
 }
 
 /**
@@ -1268,22 +1272,142 @@ function analyzeTaskBoard(): LocalTriageReport {
 		}
 	}
 
+	// ==========================================================================
+	// Analyze failed tasks
+	// ==========================================================================
+	const failedTasks = items.filter((t: { status: string }) => t.status === "failed");
+	const completedTasks = items.filter((t: { status: string }) => t.status === "complete");
+	const failureBreakdown: Record<string, number> = {};
+
+	for (const failedTask of failedTasks) {
+		// Categorize failure reason
+		const failureReason = failedTask.error ? categorizeFailure(failedTask.error) : "unknown";
+		failureBreakdown[failureReason] = (failureBreakdown[failureReason] || 0) + 1;
+
+		// Check if failed task duplicates another failed task
+		for (const otherFailedTask of failedTasks) {
+			if (otherFailedTask.id === failedTask.id) continue;
+			const similarity = calculateSimilarity(failedTask.objective, otherFailedTask.objective);
+			if (similarity > 0.7) {
+				const alreadyFlagged = issues.some(
+					(issue) =>
+						issue.type === "failed_duplicate" &&
+						(issue.taskId === failedTask.id || issue.relatedTaskIds?.includes(failedTask.id)),
+				);
+				if (!alreadyFlagged) {
+					issues.push({
+						type: "failed_duplicate",
+						taskId: failedTask.id,
+						objective: failedTask.objective,
+						reason: `${Math.round(similarity * 100)}% similar to failed task: ${otherFailedTask.objective.substring(0, 50)}...`,
+						action: "remove",
+						relatedTaskIds: [otherFailedTask.id],
+					});
+				}
+				break;
+			}
+		}
+
+		// Check if failed task's objective was completed by another task
+		for (const completedTask of completedTasks) {
+			const similarity = calculateSimilarity(failedTask.objective, completedTask.objective);
+			if (similarity > 0.7) {
+				const alreadyFlagged = issues.some(
+					(issue) => issue.type === "failed_objective_completed" && issue.taskId === failedTask.id,
+				);
+				if (!alreadyFlagged) {
+					issues.push({
+						type: "failed_objective_completed",
+						taskId: failedTask.id,
+						objective: failedTask.objective,
+						reason: `${Math.round(similarity * 100)}% similar to completed task: ${completedTask.objective.substring(0, 50)}...`,
+						action: "remove",
+						relatedTaskIds: [completedTask.id],
+					});
+				}
+				break;
+			}
+		}
+
+		// Categorize failure as retriable or permanent based on failure reason
+		const retriableReasons = ["timeout", "rate_limit", "rebase_conflict", "merge_conflict"];
+		const permanentReasons = [
+			"no_changes_complete",
+			"no_changes_mismatch",
+			"planning",
+			"decomposition",
+			"max_attempts",
+		];
+
+		// Skip if already flagged as duplicate or objective completed
+		const alreadyFlagged = issues.some(
+			(issue) =>
+				(issue.type === "failed_duplicate" || issue.type === "failed_objective_completed") &&
+				issue.taskId === failedTask.id,
+		);
+		if (alreadyFlagged) continue;
+
+		if (retriableReasons.includes(failureReason)) {
+			issues.push({
+				type: "failed_retriable",
+				taskId: failedTask.id,
+				objective: failedTask.objective,
+				reason: `Transient failure (${failureReason}) - can be re-queued`,
+				action: "requeue",
+			});
+		} else if (permanentReasons.includes(failureReason)) {
+			issues.push({
+				type: "failed_permanent",
+				taskId: failedTask.id,
+				objective: failedTask.objective,
+				reason: `Permanent failure (${failureReason}) - should be pruned or reformulated`,
+				action: "remove",
+			});
+		} else {
+			// Verification failures might be retriable depending on the issue
+			const isVerificationFailure = failureReason.startsWith("verification_");
+			if (isVerificationFailure) {
+				issues.push({
+					type: "failed_retriable",
+					taskId: failedTask.id,
+					objective: failedTask.objective,
+					reason: `Verification failure (${failureReason}) - may succeed on retry`,
+					action: "requeue",
+				});
+			} else {
+				// Unknown or agent errors - flag for review
+				issues.push({
+					type: "failed_permanent",
+					taskId: failedTask.id,
+					objective: failedTask.objective,
+					reason: `Failure type: ${failureReason} - requires manual review`,
+					action: "review",
+				});
+			}
+		}
+	}
+
 	// Calculate health score
 	const issueWeight: Record<string, number> = {
 		test_cruft: 3,
 		orphaned: 3,
 		over_decomposed: 3,
+		failed_permanent: 2,
 		duplicate: 2,
 		status_bug: 2,
 		research_no_output: 2,
 		generic_error_handling: 2,
+		failed_duplicate: 2,
+		failed_objective_completed: 1,
+		failed_retriable: 1,
 		overly_granular: 1,
 		vague: 1,
 		stale: 1,
 	};
 	const totalWeight = issues.reduce((sum, issue) => sum + (issueWeight[issue.type] || 1), 0);
-	const maxWeight = items.length * 3;
-	const healthScore = Math.max(0, Math.round(100 - (totalWeight / maxWeight) * 100));
+	// Include failed tasks in max weight calculation
+	const maxWeight = (items.length + failedTasks.length) * 3;
+	const healthScore = maxWeight > 0 ? Math.max(0, Math.round(100 - (totalWeight / maxWeight) * 100)) : 100;
 
 	// Generate recommendations
 	const recommendations: string[] = [];
@@ -1293,7 +1417,18 @@ function analyzeTaskBoard(): LocalTriageReport {
 	const orphaned = issues.filter((i) => i.type === "orphaned").length;
 	const overDecomposed = issues.filter((i) => i.type === "over_decomposed").length;
 	const researchTasks = issues.filter((i) => i.type === "research_no_output").length;
+	const failedDuplicates = issues.filter((i) => i.type === "failed_duplicate").length;
+	const failedObjectiveCompleted = issues.filter((i) => i.type === "failed_objective_completed").length;
+	const failedRetriable = issues.filter((i) => i.type === "failed_retriable").length;
+	const failedPermanent = issues.filter((i) => i.type === "failed_permanent").length;
 
+	if (failedTasks.length > 0) {
+		const retriableCount = failedRetriable;
+		const permanentCount = failedPermanent + failedDuplicates + failedObjectiveCompleted;
+		recommendations.push(
+			`Review ${failedTasks.length} failed task(s) - ${retriableCount} retriable, ${permanentCount} should be pruned`,
+		);
+	}
 	if (orphaned > 0) {
 		recommendations.push(`Cancel ${orphaned} orphaned subtask(s) - parent tasks completed without them`);
 	}
@@ -1330,10 +1465,12 @@ function analyzeTaskBoard(): LocalTriageReport {
 	return {
 		totalTasks: items.length,
 		pendingTasks: pendingTasks.length,
+		failedTasks: failedTasks.length,
 		issues,
 		healthScore,
 		recommendations,
 		ticketStats,
+		failureBreakdown,
 	};
 }
 
@@ -1388,7 +1525,9 @@ export function handleTriage(options: TriageOptions): void {
 		ticketCoverage: ticketPct,
 		issueCount: {},
 		pendingTasks: report.pendingTasks,
+		failedTasks: report.failedTasks,
 		totalTasks: report.totalTasks,
+		failureBreakdown: report.failureBreakdown,
 	};
 
 	// Count issues by type
@@ -1414,7 +1553,13 @@ export function handleTriage(options: TriageOptions): void {
 	// Health score with color
 	const healthColor = report.healthScore >= 80 ? chalk.green : report.healthScore >= 50 ? chalk.yellow : chalk.red;
 	console.log(`Health Score: ${healthColor(`${report.healthScore}%`)}`);
-	console.log(`Total Tasks: ${report.totalTasks} (${report.pendingTasks} pending)`);
+	console.log(`Total Tasks: ${report.totalTasks} (${report.pendingTasks} pending, ${report.failedTasks} failed)`);
+
+	// Display failed task backlog warning
+	if (report.failedTasks > 0) {
+		const failedColor = report.failedTasks > 20 ? chalk.red : report.failedTasks > 10 ? chalk.yellow : chalk.white;
+		console.log(`Failed Task Backlog: ${failedColor(`${report.failedTasks} task(s)`)} requiring manual review`);
+	}
 
 	// Ticket completeness (ticketPct already calculated above for summary report)
 	const { ticketStats } = report;
@@ -1455,6 +1600,10 @@ export function handleTriage(options: TriageOptions): void {
 		overly_granular: "Overly Granular",
 		vague: "Vague Tasks",
 		stale: "Stale Tasks",
+		failed_duplicate: "Failed Duplicates",
+		failed_objective_completed: "Failed Objectives Already Complete",
+		failed_retriable: "Retriable Failures",
+		failed_permanent: "Permanent Failures",
 	};
 
 	for (const [type, issues] of byType) {

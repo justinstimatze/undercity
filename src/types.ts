@@ -1453,12 +1453,16 @@ export type TriageIssueType =
 	| "over_decomposed" // Too many subtasks
 	| "research_no_output" // Research task unlikely to produce code
 	| "generic_error_handling" // Generic error handling without target
-	| "needs_refinement"; // Lacks rich ticket content
+	| "needs_refinement" // Lacks rich ticket content
+	| "failed_duplicate" // Failed task duplicates another task
+	| "failed_objective_completed" // Failed task objective was achieved by other task
+	| "failed_retriable" // Failed task with transient error (can be re-queued)
+	| "failed_permanent"; // Failed task with permanent error (should be pruned)
 
 /**
  * Recommended action for a triage issue
  */
-export type TriageAction = "remove" | "merge" | "fix" | "review" | "refine";
+export type TriageAction = "remove" | "merge" | "fix" | "review" | "refine" | "requeue";
 
 /**
  * A triage issue detected on a task
@@ -1490,8 +1494,12 @@ export interface TriageReport {
 	issueCount: Partial<Record<TriageIssueType, number>>;
 	/** Total pending tasks at time of triage */
 	pendingTasks: number;
+	/** Total failed tasks at time of triage */
+	failedTasks: number;
 	/** Total tasks at time of triage */
 	totalTasks: number;
+	/** Failed task breakdown by failure reason */
+	failureBreakdown?: Record<string, number>;
 }
 
 /**
