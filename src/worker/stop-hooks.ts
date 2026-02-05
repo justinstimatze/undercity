@@ -121,12 +121,13 @@ export function createStandardStopHooks(
  * Prevents runaway exploration while giving enough runway for complex tasks.
  * - Sonnet: 35 turns (increased from 25 based on postmortem showing tasks
  *   exhausting turns despite significant work done)
- * - Opus: 35 turns
+ * - Opus: 50 turns (Opus 4.6 handles sustained agentic tasks; stop hooks
+ *   prevent runaway behavior, opus budget capped at 10% of tasks)
  */
 export function getMaxTurnsForModel(model: "haiku" | "sonnet" | "opus"): number {
 	const maxTurnsPerModel: Record<string, number> = {
 		sonnet: 35,
-		opus: 35,
+		opus: 50,
 	};
 	return maxTurnsPerModel[model] ?? 15;
 }

@@ -23,8 +23,8 @@ describe("worker/stop-hooks", () => {
 			expect(getMaxTurnsForModel("sonnet")).toBe(35);
 		});
 
-		it("returns 35 for opus", () => {
-			expect(getMaxTurnsForModel("opus")).toBe(35);
+		it("returns 50 for opus", () => {
+			expect(getMaxTurnsForModel("opus")).toBe(50);
 		});
 
 		it("returns 15 as default for haiku (not yet implemented)", () => {
