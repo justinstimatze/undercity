@@ -6,6 +6,7 @@
     "moduleResolution": "bundler",
     "target": "ES2024",
     "declaration": true,
+    "incremental": true,
     "sourceMap": true,
     "strict": true,
     "esModuleInterop": true,
