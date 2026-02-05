@@ -283,6 +283,8 @@ export function parseGrindOptions(options: GrindOptions): GrindConfig {
 		decompose: options.decompose !== false,
 		postmortem: options.postmortem !== false,
 		dryRun: options.dryRun || false,
+		continuous: options.continuous !== undefined && options.continuous !== false,
+		continuousFocus: typeof options.continuous === "string" ? options.continuous : undefined,
 		duration: options.duration,
 		taskId: options.taskId,
 		auditBash: fileConfig.auditBash,

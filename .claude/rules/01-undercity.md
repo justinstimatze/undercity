@@ -65,6 +65,8 @@ undercity complete <task-id>               # Mark task complete manually
 undercity grind                            # Process all tasks
 undercity grind -n 10                      # Process 10 tasks
 undercity grind --parallel 3               # Max 3 concurrent
+undercity grind --continuous --duration 6h # Auto-propose when board empties, stop after 6h
+undercity grind --continuous "perf"        # Continuous with topic focus for proposals
 undercity drain                            # Graceful stop: finish current, start no more
 
 # Proactive PM (research and task generation)
@@ -198,6 +200,7 @@ pnpm daemon:logs                           # View logs
 **"Tasks need more context?"** → `undercity refine` or `undercity refine --all`
 **"Board maintenance needed?"** → `undercity maintain` (autonomous triage → prune → refine)
 **"Manual board cleanup?"** → `undercity triage` → `undercity prune` → `undercity refine`
+**"Overnight autonomous run?"** → `undercity grind --continuous --duration 6h --parallel 3`
 
 ## Learning Systems Integration
 

@@ -206,18 +206,19 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 	}
 
 	// =========================================================================
-	// Phase 4: Task Validation & Preparation
+	// Phase 4-6: Task Loading, Validation, Decomposition & Execution
+	// In continuous mode, this loops: execute -> board empty -> propose -> execute
 	// =========================================================================
 
 	try {
-		// Pre-flight reconciliation
+		// Pre-flight reconciliation (once, before the loop)
 		output.info("Running pre-flight validation...");
 		const reconcileResult = await runPreflightReconciliation();
 		if (reconcileResult.duplicatesFound > 0) {
 			output.success(`Pre-flight: marked ${reconcileResult.duplicatesFound} task(s) as duplicate`);
 		}
 
-		// Verify baseline
+		// Verify baseline (once, before the loop)
 		const baselineResult = await verifyBaseline();
 		if (!baselineResult.passed) {
 			output.error("Baseline check failed - fix issues before running grind:");
@@ -226,91 +227,150 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		}
 		output.success(baselineResult.cached ? "Baseline verified (cached)" : "Baseline verified");
 
-		// Load tasks
-		const allTasks = getAllTasks();
-		let pendingTasks = allTasks
-			.filter((q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed)
-			.sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500)); // Lower number = higher priority
-
-		// Filter to specific task if requested
-		if (config.taskId) {
-			const targetTask = pendingTasks.find((t) => t.id === config.taskId);
-			if (!targetTask) {
-				const allMatch = allTasks.find((t) => t.id === config.taskId);
-				if (allMatch) {
-					output.error(`Task ${config.taskId} exists but is not pending (status: ${allMatch.status})`);
-				} else {
-					output.error(`Task not found: ${config.taskId}`);
-				}
-				return;
-			}
-			pendingTasks = [targetTask];
-			output.info(`Running specific task: ${targetTask.objective.substring(0, 60)}...`);
-		} else {
-			const remainingCount = config.maxCount > 0 ? config.maxCount - tasksProcessed : 0;
-			pendingTasks = config.maxCount > 0 ? pendingTasks.slice(0, remainingCount) : pendingTasks;
-		}
-
-		if (pendingTasks.length === 0) {
-			if (allTasks.filter((t) => t.status === "pending").length === 0) {
-				output.warning("Task board is empty - nothing to grind");
-				output.info("Generate tasks with: undercity pm --propose");
-			}
-			return;
-		}
-
-		// Validate tasks
-		const validation = await validateTasks(pendingTasks);
-		if (validation.validTasks.length === 0) {
-			output.info("No valid tasks to process after validation");
-			return;
-		}
-
-		// =========================================================================
-		// Phase 5: Decomposition & Model Assignment
-		// =========================================================================
-
-		const {
-			prioritizedTasks,
-			atomicityResults: _atomicityResults,
-			decomposedCount,
-		} = await processTasksForExecution(validation.validTasks, config);
-
-		const totalTasks = prioritizedTasks.length;
-
-		if (totalTasks === 0) {
-			output.info("No tasks ready after decomposition");
-			return;
-		}
-
-		// =========================================================================
-		// Phase 6: Execution
-		// =========================================================================
-
-		const { startGrindSession, logTaskStarted, logTaskComplete, logTaskFailed, endGrindSession } = await import(
-			"../grind-events.js"
-		);
+		const { startGrindSession, logTaskStarted, logTaskComplete, logTaskFailed, endGrindSession, logContinuousPropose } =
+			await import("../grind-events.js");
 
 		const batchId = `grind-${Date.now()}`;
-		startGrindSession({ batchId, taskCount: totalTasks + tasksProcessed, parallelism: config.parallelism });
-		startGrindProgress(totalTasks + tasksProcessed, "fixed");
-
-		// Build objective -> taskId map
-		const objectiveToTaskId = new Map<string, string>();
-		for (const task of prioritizedTasks) {
-			objectiveToTaskId.set(task.objective, task.id);
-		}
-
-		// Run tasks in global priority order
+		let totalTasksInSession = tasksProcessed;
 		let completedCount = tasksProcessed;
 		let totalSuccessful = 0;
 		let totalFailed = 0;
 		let totalMerged = 0;
-		let totalDecomposed = decomposedCount;
+		let totalDecomposed = 0;
 		let totalDurationMs = 0;
 		const taskResults: TaskResultSummary[] = [];
+		let sessionStarted = false;
+		let continuousCycle = 0;
 
-		if (prioritizedTasks.length > 0) {
+		// Main grind loop - runs once normally, loops in continuous mode
+		while (true) {
+			// Load tasks
+			const allTasks = getAllTasks();
+			let pendingTasks = allTasks
+				.filter((q) => (q.status === "pending" || q.status === "in_progress") && !q.isDecomposed)
+				.sort((a, b) => (a.priority ?? 500) - (b.priority ?? 500));
+
+			// Filter to specific task if requested (only on first cycle)
+			if (config.taskId && continuousCycle === 0) {
+				const targetTask = pendingTasks.find((t) => t.id === config.taskId);
+				if (!targetTask) {
+					const allMatch = allTasks.find((t) => t.id === config.taskId);
+					if (allMatch) {
+						output.error(`Task ${config.taskId} exists but is not pending (status: ${allMatch.status})`);
+					} else {
+						output.error(`Task not found: ${config.taskId}`);
+					}
+					break;
+				}
+				pendingTasks = [targetTask];
+				output.info(`Running specific task: ${targetTask.objective.substring(0, 60)}...`);
+			} else {
+				const remainingCount = config.maxCount > 0 ? config.maxCount - completedCount : 0;
+				pendingTasks = config.maxCount > 0 ? pendingTasks.slice(0, remainingCount) : pendingTasks;
+			}
+
+			// Check --count limit
+			if (config.maxCount > 0 && completedCount >= config.maxCount) {
+				output.info("Task count limit reached");
+				break;
+			}
+
+			// Board empty - handle continuous mode or exit
+			if (pendingTasks.length === 0) {
+				if (!config.continuous) {
+					if (continuousCycle === 0) {
+						output.warning("Task board is empty - nothing to grind");
+						output.info("Generate tasks with: undercity pm --propose");
+					}
+					break;
+				}
+
+				// Check if orchestrator is draining (duration expired)
+				if (orchestrator.isDraining()) {
+					output.info("Duration expired - stopping continuous mode");
+					break;
+				}
+
+				// Auto-propose new tasks
+				continuousCycle++;
+				output.progress(`Board empty - generating proposals (cycle ${continuousCycle})...`);
+
+				const { pmPropose } = await import("../automated-pm.js");
+				const { addProposalsToBoard } = await import("../commands/pm-helpers.js");
+
+				const proposals = await pmPropose(config.continuousFocus);
+
+				if (proposals.length === 0) {
+					output.info("PM generated no proposals - stopping continuous mode");
+					break;
+				}
+
+				const { added } = await addProposalsToBoard(proposals, false);
+				output.success(`Added ${added} task(s) to board (cycle ${continuousCycle})`);
+
+				logContinuousPropose({
+					batchId,
+					cycle: continuousCycle,
+					proposalsGenerated: proposals.length,
+					added,
+					focus: config.continuousFocus,
+				});
+
+				if (added === 0) {
+					output.info("No proposals accepted - stopping continuous mode");
+					break;
+				}
+
+				// Loop back to load newly added tasks
+				continue;
+			}
+
+			// Validate tasks
+			const validation = await validateTasks(pendingTasks);
+			if (validation.validTasks.length === 0) {
+				if (!config.continuous) {
+					output.info("No valid tasks to process after validation");
+					break;
+				}
+				// In continuous mode, all current tasks may be invalid but new ones could be proposed
+				continue;
+			}
+
+			// Decomposition & Model Assignment
+			const {
+				prioritizedTasks,
+				atomicityResults: _atomicityResults,
+				decomposedCount,
+			} = await processTasksForExecution(validation.validTasks, config);
+
+			if (prioritizedTasks.length === 0) {
+				if (!config.continuous) {
+					output.info("No tasks ready after decomposition");
+					break;
+				}
+				continue;
+			}
+
+			totalDecomposed += decomposedCount;
+			totalTasksInSession += prioritizedTasks.length;
+
+			// Start grind session on first execution cycle
+			if (!sessionStarted) {
+				startGrindSession({ batchId, taskCount: totalTasksInSession, parallelism: config.parallelism });
+				startGrindProgress(totalTasksInSession, "fixed");
+				sessionStarted = true;
+			} else {
+				// Update progress total for new tasks
+				updateGrindProgress(completedCount, totalTasksInSession);
+			}
+
+			// Build objective -> taskId map
+			const objectiveToTaskId = new Map<string, string>();
+			for (const task of prioritizedTasks) {
+				objectiveToTaskId.set(task.objective, task.id);
+			}
+
+			// Execute tasks
 			try {
 				output.info(`Running ${prioritizedTasks.length} task(s) in priority order...`);
 
@@ -325,8 +385,8 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 					});
 				}
 
-				// Create orchestrator (uses each task's recommended model)
-				const orchestrator = new Orchestrator({
+				// Create execution orchestrator
+				const execOrchestrator = new Orchestrator({
 					maxConcurrent: config.parallelism,
 					autoCommit: config.autoCommit,
 					stream: config.stream,
@@ -344,7 +404,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 				});
 
 				const batchStartTime = Date.now();
-				const result = await orchestrator.runParallel(prioritizedTasks);
+				const result = await execOrchestrator.runParallel(prioritizedTasks);
 				const batchDurationMs = Date.now() - batchStartTime;
 
 				// Process results
@@ -352,13 +412,12 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 					const taskId = objectiveToTaskId.get(taskResult.task);
 					if (!taskId) continue;
 
-					// Get the task's recommended model for logging
 					const task = prioritizedTasks.find((t) => t.objective === taskResult.task);
 					const taskModel = task?.recommendedModel || "sonnet";
 
 					if (taskResult.decomposed) {
 						completedCount++;
-						updateGrindProgress(completedCount, totalTasks + tasksProcessed);
+						updateGrindProgress(completedCount, totalTasksInSession);
 						taskResults.push({ task: taskResult.task, taskId, status: "decomposed", modifiedFiles: [] });
 						continue;
 					}
@@ -367,7 +426,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 						markTaskComplete(taskId);
 						output.taskComplete(taskId, `Task merged (${taskModel})`);
 						completedCount++;
-						updateGrindProgress(completedCount, totalTasks + tasksProcessed);
+						updateGrindProgress(completedCount, totalTasksInSession);
 
 						logTaskComplete({
 							batchId,
@@ -390,7 +449,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 						const errorMsg = taskResult.mergeError || taskResult.result?.error || "Unknown error";
 						markTaskFailed({ id: taskId, error: errorMsg });
 						completedCount++;
-						updateGrindProgress(completedCount, totalTasks + tasksProcessed);
+						updateGrindProgress(completedCount, totalTasksInSession);
 
 						logTaskFailed({
 							batchId,
@@ -415,6 +474,18 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 				output.error(`Grind execution failed: ${grindError}`);
 				totalFailed += prioritizedTasks.length;
 			}
+
+			// In non-continuous mode, exit after one execution cycle
+			if (!config.continuous) {
+				break;
+			}
+
+			// In continuous mode with --task-id, exit after running the specific task
+			if (config.taskId) {
+				break;
+			}
+
+			// Loop back to check for more tasks (including newly decomposed subtasks)
 		}
 
 		// =========================================================================
@@ -427,13 +498,15 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			clearTimeout(drainTimer);
 		}
 
-		endGrindSession({
-			batchId,
-			successful: totalSuccessful,
-			failed: totalFailed,
-			merged: totalMerged,
-			durationMs: totalDurationMs,
-		});
+		if (sessionStarted) {
+			endGrindSession({
+				batchId,
+				successful: totalSuccessful,
+				failed: totalFailed,
+				merged: totalMerged,
+				durationMs: totalDurationMs,
+			});
+		}
 
 		// Summary
 		const summaryItems = [
@@ -448,12 +521,15 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		if (totalDecomposed > 0) {
 			summaryItems.push({ label: "Decomposed", value: totalDecomposed, status: "neutral" as const });
 		}
+		if (continuousCycle > 0) {
+			summaryItems.push({ label: "Propose Cycles", value: continuousCycle, status: "neutral" as const });
+		}
 
 		output.summary("Grind Session Complete", summaryItems);
 
 		output.grindComplete({
 			batchId,
-			totalTasks: totalTasks + tasksProcessed,
+			totalTasks: totalTasksInSession,
 			successful: totalSuccessful,
 			failed: totalFailed,
 			merged: totalMerged,

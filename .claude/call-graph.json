@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-02-05T08:39:55.218Z",
+  "generatedAt": "2026-02-05T09:19:58.815Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -493,6 +493,11 @@
           "file": "commands/mixed-handlers.ts",
           "line": 1282,
           "context": "log"
+        },
+        {
+          "file": "grind/index.ts",
+          "line": 301,
+          "context": "import"
         }
       ]
     },

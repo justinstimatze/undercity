@@ -68,6 +68,7 @@ export type GrindEventType =
 	| "task_complete"
 	| "task_failed"
 	| "task_escalated"
+	| "continuous_propose"
 	| "rate_limit"
 	| "error";
 
@@ -162,6 +163,17 @@ interface RateLimitEvent extends BaseEvent {
 }
 
 /**
+ * Continuous mode auto-propose cycle
+ */
+interface ContinuousProposeEvent extends BaseEvent {
+	type: "continuous_propose";
+	cycle: number;
+	proposed: number;
+	added: number;
+	focus?: string;
+}
+
+/**
  * Error event
  */
 interface ErrorEvent extends BaseEvent {
@@ -179,6 +191,7 @@ type GrindEvent =
 	| TaskCompleteEvent
 	| TaskFailedEvent
 	| TaskEscalatedEvent
+	| ContinuousProposeEvent
 	| RateLimitEvent
 	| ErrorEvent;
 
@@ -406,6 +419,24 @@ export function logRateLimit(options: { batchId?: string; model: string; waitSec
 		batch: options.batchId,
 		model: options.model,
 		wait: options.waitSeconds,
+	});
+}
+
+export function logContinuousPropose(options: {
+	batchId?: string;
+	cycle: number;
+	proposalsGenerated: number;
+	added: number;
+	focus?: string;
+}): void {
+	writeEvent({
+		ts: new Date().toISOString(),
+		type: "continuous_propose",
+		batch: options.batchId,
+		cycle: options.cycle,
+		proposed: options.proposalsGenerated,
+		added: options.added,
+		focus: options.focus,
 	});
 }
 

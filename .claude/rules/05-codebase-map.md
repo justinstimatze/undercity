@@ -46,7 +46,7 @@
 | **file-tracker.ts** | Pre-merge file conflict detection | FileTracker |
 | **metrics.ts** | Task metrics tracking, JSONL storage | MetricsTracker, getMetricsSummary |
 | **live-metrics.ts** | Running totals for dashboard display | saveLiveMetrics, loadLiveMetrics |
-| **grind-events.ts** | Structured event logging (not metrics) | startGrindSession, logTaskComplete, etc. |
+| **grind-events.ts** | Structured event logging (not metrics) | startGrindSession, logTaskComplete, logContinuousPropose, etc. |
 | **task-decomposer.ts** | Break multi-step tasks into atomic subtasks | checkAndDecompose |
 | **plan-parser.ts** | Parse markdown plans into tasks | parsePlanFile, planToTasks |
 | **plan-link.ts** | Plan-task linkage (frontmatter metadata) | linkTasksToPlan, findLinkedPlans, getPlanStatus |

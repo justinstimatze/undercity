@@ -29,6 +29,7 @@ export interface GrindOptions {
 	maxDecompositionDepth?: string;
 	maxTier?: string;
 	dryRun?: boolean;
+	continuous?: string | boolean;
 }
 
 /**
@@ -52,6 +53,8 @@ export interface GrindConfig {
 	decompose: boolean;
 	postmortem: boolean;
 	dryRun: boolean;
+	continuous: boolean;
+	continuousFocus?: string;
 	duration?: string;
 	taskId?: string;
 	/** Enable bash command auditing via PreToolUse hooks */
