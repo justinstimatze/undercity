@@ -56,6 +56,11 @@ export default defineConfig({
 		// Performance test configuration
 		testTimeout: 30000, // 30s timeout for performance tests
 		hookTimeout: 10000,
+		// Type-level testing configuration
+		typecheck: {
+			enabled: true,
+			include: ["src/__tests__/**/*.test-d.ts"],
+		},
 		// Global setup for performance baseline
 		globalSetup: [],
 		// Environment variables for performance tests
