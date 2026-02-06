@@ -35,3 +35,4 @@ export const gitLogger = logger.child({ module: "git" });
 export const persistenceLogger = logger.child({ module: "persistence" });
 export const cacheLogger = logger.child({ module: "cache" });
 export const serverLogger = logger.child({ module: "server" });
+export const analysisLogger = logger.child({ module: "analysis" });

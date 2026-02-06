@@ -5,6 +5,7 @@
  * action handlers to avoid penalizing startup for unrelated commands.
  */
 import chalk from "chalk";
+import { analysisLogger } from "../logger.js";
 import type { CommandModule } from "./types.js";
 
 export const analysisCommands: CommandModule = {
@@ -115,7 +116,7 @@ export const analysisCommands: CommandModule = {
 				try {
 					await runBenchmark();
 				} catch (error) {
-					console.error(chalk.red("Benchmark error:"), error);
+					analysisLogger.error({ err: error }, "Benchmark error");
 					process.exit(1);
 				}
 			});
@@ -373,15 +374,14 @@ async function runBenchmark(): Promise<void> {
 					console.log(chalk.green(`✓ Task completed`));
 				} else {
 					failCount++;
-					console.error(chalk.red(`Task failed: ${task}`));
+					analysisLogger.error({ task }, "Task failed");
 					if (taskResult?.error) {
-						console.error(chalk.dim(taskResult.error));
+						analysisLogger.error({ error: taskResult.error }, "Task error details");
 					}
 				}
 			} catch (taskError) {
 				failCount++;
-				console.error(chalk.red(`Task failed: ${task}`));
-				console.error(chalk.dim(String(taskError)));
+				analysisLogger.error({ task, err: taskError }, "Task failed");
 			}
 		}
 
@@ -396,7 +396,7 @@ async function runBenchmark(): Promise<void> {
 		console.log(`Success: ${successCount}, Failed: ${failCount}`);
 		console.log(`Success Rate: ${((successCount / benchmarkTasks.length) * 100).toFixed(2)}%`);
 	} catch (error) {
-		console.error(chalk.red("Benchmark failed:"), error);
+		analysisLogger.error({ err: error }, "Benchmark failed");
 		process.exit(1);
 	}
 }
