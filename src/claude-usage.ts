@@ -27,6 +27,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type BrowserContext, chromium } from "playwright";
 import { TIMEOUT_ELEMENT_WAIT_MS, TIMEOUT_PAGE_LOAD_MS } from "./constants.js";
+import { debug, error } from "./output.js";
 
 export interface ClaudeUsage {
 	fiveHourPercent: number;
@@ -66,8 +67,12 @@ function getCachedUsage(): ClaudeUsage | null {
 		if (age < CACHE_TTL_MS && cached.success) {
 			return { ...cached, cached: true };
 		}
-	} catch {
-		// Cache corrupted or unreadable
+	} catch (err) {
+		debug("Cache read failed (non-critical)", {
+			operation: "getCachedUsage",
+			cachePath,
+			error: err instanceof Error ? err.message : String(err),
+		});
 	}
 
 	return null;
@@ -86,8 +91,12 @@ function cacheUsage(usage: ClaudeUsage): void {
 
 	try {
 		writeFileSync(cachePath, JSON.stringify(usage, null, 2));
-	} catch {
-		// Cache write failure is non-critical
+	} catch (err) {
+		debug("Cache write failed (non-critical)", {
+			operation: "cacheUsage",
+			cachePath,
+			error: err instanceof Error ? err.message : String(err),
+		});
 	}
 }
 
@@ -241,17 +250,29 @@ export async function fetchClaudeUsage(forceRefresh = false): Promise<ClaudeUsag
 		cacheUsage(result);
 
 		return result;
-	} catch (error) {
+	} catch (err) {
 		if (context) {
-			await context.close().catch(() => {});
+			await context.close().catch((closeErr) => {
+				debug("Browser context cleanup failed", {
+					operation: "fetchClaudeUsage",
+					phase: "error-recovery",
+					error: closeErr instanceof Error ? closeErr.message : String(closeErr),
+				});
+			});
 		}
+
+		error("Failed to fetch Claude usage", {
+			operation: "fetchClaudeUsage",
+			error: err instanceof Error ? err.message : String(err),
+			stack: err instanceof Error ? err.stack : undefined,
+		});
 
 		return {
 			fiveHourPercent: 0,
 			weeklyPercent: 0,
 			fetchedAt: new Date().toISOString(),
 			success: false,
-			error: `Failed to fetch usage: ${error instanceof Error ? error.message : String(error)}`,
+			error: `Failed to fetch usage: ${err instanceof Error ? err.message : String(err)}`,
 		};
 	}
 }
@@ -324,8 +345,12 @@ export async function loginToClaude(): Promise<{ success: boolean; error?: strin
 				if (page.isClosed()) {
 					break;
 				}
-			} catch {
-				// Page might be navigating, that's ok
+			} catch (err) {
+				debug("Page evaluation failed during login polling (expected during navigation)", {
+					operation: "loginToClaude",
+					phase: "login-polling",
+					error: err instanceof Error ? err.message : String(err),
+				});
 			}
 
 			await new Promise((r) => setTimeout(r, pollIntervalMs));
@@ -345,12 +370,23 @@ export async function loginToClaude(): Promise<{ success: boolean; error?: strin
 			console.log("⚠ Login not detected. You can try again with 'undercity usage --login'\n");
 			return { success: false, error: "Login not detected within timeout" };
 		}
-	} catch (error) {
+	} catch (err) {
 		if (context) {
-			await context.close().catch(() => {});
+			await context.close().catch((closeErr) => {
+				debug("Browser context cleanup failed", {
+					operation: "loginToClaude",
+					phase: "error-recovery",
+					error: closeErr instanceof Error ? closeErr.message : String(closeErr),
+				});
+			});
 		}
 
-		const errorMsg = error instanceof Error ? error.message : String(error);
+		const errorMsg = err instanceof Error ? err.message : String(err);
+		error("Login to Claude failed", {
+			operation: "loginToClaude",
+			error: errorMsg,
+			stack: err instanceof Error ? err.stack : undefined,
+		});
 		console.error(`✗ Login failed: ${errorMsg}\n`);
 		return { success: false, error: errorMsg };
 	}
