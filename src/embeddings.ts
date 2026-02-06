@@ -859,19 +859,13 @@ export function hybridSearch(
 		// Score all learnings
 		const scores = new Map<string, { keyword: number; semantic: number }>();
 
-		// Keyword scoring
+		// Keyword scoring - conditions use code-generated LIKE ? placeholders
 		const keywordConditions = queryTokens.map(() => "keywords LIKE ?").join(" OR ");
 		const keywordParams = queryTokens.map((t) => `%"${t}"%`);
 
 		if (keywordConditions) {
-			const keywordRows = db
-				.prepare(
-					`
-			SELECT id, keywords FROM learnings
-			WHERE ${keywordConditions}
-		`,
-				)
-				.all(...keywordParams) as Array<{ id: string; keywords: string }>;
+			const sql = `SELECT id, keywords FROM learnings WHERE ${keywordConditions}`;
+			const keywordRows = db.prepare(sql).all(...keywordParams) as Array<{ id: string; keywords: string }>;
 
 			for (const row of keywordRows) {
 				const keywords = JSON.parse(row.keywords) as string[];

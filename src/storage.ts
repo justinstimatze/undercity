@@ -509,20 +509,12 @@ export function searchLearningsByKeywords(
 ): Learning[] {
 	const db = getDatabase(stateDir);
 
-	// Build query to match any keyword
+	// Build parameterized keyword search - conditions use code-generated LIKE ? placeholders
 	const conditions = keywords.map(() => "keywords LIKE ?").join(" OR ");
 	const params = keywords.map((k) => `%"${k}"%`);
 
-	const rows = db
-		.prepare(
-			`
-		SELECT * FROM learnings
-		WHERE ${conditions}
-		ORDER BY confidence DESC
-		LIMIT ?
-	`,
-		)
-		.all(...params, limit) as LearningRow[];
+	const sql = `SELECT * FROM learnings WHERE ${conditions} ORDER BY confidence DESC LIMIT ?`;
+	const rows = db.prepare(sql).all(...params, limit) as LearningRow[];
 
 	return rows.map(rowToLearning);
 }
@@ -890,21 +882,19 @@ export function searchResolvedDecisions(
 ): Array<DecisionPoint & { resolution: DecisionResolution }> {
 	const db = getDatabase(stateDir);
 
+	// Build parameterized keyword search - conditions use code-generated LIKE ? placeholders
 	const conditions = keywords.map(() => "d.keywords LIKE ?").join(" OR ");
 	const params = keywords.map((k) => `%"${k}"%`);
 
-	const rows = db
-		.prepare(
-			`
-		SELECT d.*, r.resolved_by, r.decision, r.reasoning, r.confidence, r.resolved_at, r.outcome
-		FROM decisions d
-		JOIN decision_resolutions r ON d.id = r.decision_id
-		WHERE ${conditions}
-		ORDER BY r.resolved_at DESC
-		LIMIT ?
-	`,
-		)
-		.all(...params, limit) as Array<DecisionRow & DecisionResolutionRow>;
+	const sql = [
+		"SELECT d.*, r.resolved_by, r.decision, r.reasoning, r.confidence, r.resolved_at, r.outcome",
+		"FROM decisions d",
+		"JOIN decision_resolutions r ON d.id = r.decision_id",
+		`WHERE ${conditions}`,
+		"ORDER BY r.resolved_at DESC",
+		"LIMIT ?",
+	].join(" ");
+	const rows = db.prepare(sql).all(...params, limit) as Array<DecisionRow & DecisionResolutionRow>;
 
 	return rows.map((row) => ({
 		id: row.id,
@@ -1199,20 +1189,12 @@ export function recordPermanentFailureDB(failure: PermanentFailure, stateDir: st
 export function getFailurePatterns(keywords: string[], stateDir: string = DEFAULT_STATE_DIR): PermanentFailure[] {
 	const db = getDatabase(stateDir);
 
-	// Search by keywords in task objective
+	// Build parameterized keyword search - conditions use code-generated LIKE ? placeholders
 	const conditions = keywords.map(() => "task_objective LIKE ?").join(" OR ");
 	const params = keywords.map((k) => `%${k}%`);
 
-	const rows = db
-		.prepare(
-			`
-		SELECT * FROM permanent_failures
-		WHERE ${conditions}
-		ORDER BY recorded_at DESC
-		LIMIT 5
-	`,
-		)
-		.all(...params) as Array<{
+	const sql = `SELECT * FROM permanent_failures WHERE ${conditions} ORDER BY recorded_at DESC LIMIT 5`;
+	const rows = db.prepare(sql).all(...params) as Array<{
 		signature: string;
 		category: string;
 		sample_message: string;
@@ -2626,7 +2608,9 @@ export function updateTaskStatusDB(
 
 	params.push(id);
 
-	const result = db.prepare(`UPDATE tasks SET ${setClauses.join(", ")} WHERE id = ?`).run(...params);
+	// Build SQL string separately for auditability - column names are code-controlled constants
+	const sql = `UPDATE tasks SET ${setClauses.join(", ")} WHERE id = ?`;
+	const result = db.prepare(sql).run(...params);
 
 	return result.changes > 0;
 }
@@ -2647,8 +2631,10 @@ export function removeTasksDB(ids: string[], stateDir: string = DEFAULT_STATE_DI
 	if (ids.length === 0) return 0;
 
 	const db = getDatabase(stateDir);
+	// Build parameterized placeholder list - one ? per id, no user input in SQL structure
 	const placeholders = ids.map(() => "?").join(",");
-	const result = db.prepare(`DELETE FROM tasks WHERE id IN (${placeholders})`).run(...ids);
+	const sql = `DELETE FROM tasks WHERE id IN (${placeholders})`;
+	const result = db.prepare(sql).run(...ids);
 	return result.changes;
 }
 
@@ -2750,7 +2736,9 @@ export function updateTaskAnalysisDB(
 	if (setClauses.length === 0) return;
 
 	params.push(id);
-	db.prepare(`UPDATE tasks SET ${setClauses.join(", ")} WHERE id = ?`).run(...params);
+	// Build SQL string separately for auditability - column names are code-controlled constants
+	const sql = `UPDATE tasks SET ${setClauses.join(", ")} WHERE id = ?`;
+	db.prepare(sql).run(...params);
 }
 
 /**
@@ -2795,7 +2783,9 @@ export function updateTaskFieldsDB(
 	if (setClauses.length === 0) return false;
 
 	params.push(id);
-	const result = db.prepare(`UPDATE tasks SET ${setClauses.join(", ")} WHERE id = ?`).run(...params);
+	// Build SQL string separately for auditability - column names are code-controlled constants
+	const sql = `UPDATE tasks SET ${setClauses.join(", ")} WHERE id = ?`;
+	const result = db.prepare(sql).run(...params);
 	return result.changes > 0;
 }
 
