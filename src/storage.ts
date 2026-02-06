@@ -31,7 +31,7 @@ const logger = sessionLogger.child({ module: "storage" });
 
 const DEFAULT_STATE_DIR = ".undercity";
 const DB_FILENAME = "undercity.db";
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 // =============================================================================
 // Retry Configuration for Concurrent Access
@@ -389,6 +389,10 @@ function initializeSchema(db: Database.Database): void {
 		CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 		CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_id);
 		CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
+		CREATE INDEX IF NOT EXISTS idx_tasks_is_decomposed ON tasks(is_decomposed);
+		CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
+		CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id);
+		CREATE INDEX IF NOT EXISTS idx_tasks_status_priority_created ON tasks(status, priority, created_at);
 
 		-- Schema version
 		PRAGMA user_version = ${SCHEMA_VERSION};
@@ -432,6 +436,19 @@ function initializeSchema(db: Database.Database): void {
 			logger.info("Migrated tasks table: added triage columns");
 		} catch {
 			// Columns might already exist from a partial migration
+		}
+	}
+
+	// Migration from version 6 to 7: add indexes for frequently queried columns
+	if (version === 6) {
+		try {
+			db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_is_decomposed ON tasks(is_decomposed)`);
+			db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at)`);
+			db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id)`);
+			db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_status_priority_created ON tasks(status, priority, created_at)`);
+			logger.info("Migrated tasks table: added performance indexes");
+		} catch (error) {
+			logger.warn({ error }, "Failed to add performance indexes during migration");
 		}
 	}
 }
