@@ -20,6 +20,7 @@ import {
 	getKnowledgeStats,
 	type LearningCategory,
 	markLearningsUsed,
+	NO_QUALITY_THRESHOLDS,
 } from "./knowledge.js";
 import { serverLogger } from "./logger.js";
 import { knowledgeTools, type MCPTool, oracleTools } from "./mcp-tools.js";
@@ -127,7 +128,8 @@ export class MCPProtocolHandler {
 			throw new Error("Invalid params: maxResults must be a number between 1 and 20");
 		}
 
-		const learnings = findRelevantLearnings(query, maxResults, this.stateDir);
+		// MCP provides external access - bypass quality filtering to give callers full control
+		const learnings = findRelevantLearnings(query, maxResults, this.stateDir, NO_QUALITY_THRESHOLDS);
 
 		return {
 			query,

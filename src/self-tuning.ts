@@ -8,6 +8,13 @@
  * patterns. This module observes actual outcomes and adjusts routing
  * accordingly, reducing token waste on over-provisioned tasks and
  * improving success rates on under-provisioned ones.
+ *
+ * CRITICAL: Self-tuning recommendations are currently DISABLED by default.
+ * Effectiveness analysis showed -12.8% success rate delta when recommendations
+ * were followed. Until the underlying issues are fixed, recommendations are
+ * logged but not applied.
+ *
+ * To re-enable: set UNDERCITY_SELF_TUNING_ENABLED=true environment variable.
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -16,6 +23,14 @@ import type { ComplexityLevel } from "./complexity.js";
 import type { ModelTier } from "./feedback-metrics.js";
 import { analyzeMetrics, loadMetrics } from "./feedback-metrics.js";
 import { sessionLogger } from "./logger.js";
+
+/**
+ * Feature flag for self-tuning recommendations.
+ * Disabled by default due to negative effectiveness (-12.8% success delta).
+ */
+export function isSelfTuningEnabled(): boolean {
+	return process.env.UNDERCITY_SELF_TUNING_ENABLED === "true";
+}
 
 const PROFILE_FILE = ".undercity/routing-profile.json";
 
@@ -414,10 +429,12 @@ function logProfileChanges(oldProfile: RoutingProfile, newProfile: RoutingProfil
  * Get the recommended starting model for a task
  *
  * Uses learned profile if available, otherwise falls back to defaults.
+ *
+ * CRITICAL: When self-tuning is disabled (default), this function returns
+ * the default model for the complexity level without applying learned
+ * recommendations. The learned recommendation is still logged for analysis.
  */
 export function getRecommendedModel(complexity: ComplexityLevel, basePath: string = process.cwd()): ModelTier {
-	const profile = loadRoutingProfile(basePath);
-
 	// Start with default recommendation based on complexity
 	// Note: We skip haiku entirely - sonnet requires less steering and has
 	// higher first-attempt success rates, making it cheaper overall.
@@ -429,7 +446,32 @@ export function getRecommendedModel(complexity: ComplexityLevel, basePath: strin
 		critical: "opus",
 	};
 
-	let recommended = defaultModels[complexity];
+	const defaultRecommendation = defaultModels[complexity];
+
+	// If self-tuning is disabled, return default without applying learned recommendations
+	if (!isSelfTuningEnabled()) {
+		const profile = loadRoutingProfile(basePath);
+		if (profile) {
+			// Log what we WOULD have recommended for analysis purposes
+			const learnedRecommendation = getLearnedRecommendation(profile, complexity, defaultRecommendation);
+			if (learnedRecommendation !== defaultRecommendation) {
+				sessionLogger.debug(
+					{
+						complexity,
+						default: defaultRecommendation,
+						learned: learnedRecommendation,
+						reason: "self-tuning disabled",
+					},
+					"Self-tuning recommendation logged but not applied (disabled)",
+				);
+			}
+		}
+		return defaultRecommendation;
+	}
+
+	// Self-tuning is enabled - apply learned recommendations
+	const profile = loadRoutingProfile(basePath);
+	let recommended = defaultRecommendation;
 
 	// Check if we should skip to a higher tier
 	if (shouldSkipModel(profile, recommended, complexity)) {
@@ -459,6 +501,37 @@ export function getRecommendedModel(complexity: ComplexityLevel, basePath: strin
 				);
 				return escalated;
 			}
+		}
+	}
+
+	return recommended;
+}
+
+/**
+ * Get what the learned recommendation would be (without applying it).
+ * Used for logging when self-tuning is disabled.
+ */
+function getLearnedRecommendation(
+	profile: RoutingProfile,
+	complexity: ComplexityLevel,
+	defaultRecommendation: ModelTier,
+): ModelTier {
+	let recommended = defaultRecommendation;
+
+	// Check if we should skip to a higher tier
+	if (shouldSkipModel(profile, recommended, complexity)) {
+		recommended = "opus";
+	}
+
+	// Check learned success rates
+	const threshold = getThreshold(profile, recommended, complexity);
+	const comboKey = `${recommended}:${complexity}`;
+	const combo = profile.thresholds[comboKey];
+
+	if (combo && combo.minSamples > 0) {
+		const actualRate = profile.modelSuccessRates[recommended];
+		if (actualRate < threshold.minSuccessRate) {
+			return "opus";
 		}
 	}
 

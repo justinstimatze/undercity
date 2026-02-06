@@ -10,7 +10,7 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { findSimilarDecisions } from "./decision-tracker.js";
-import { type AddLearningResult, findRelevantLearnings, loadKnowledge } from "./knowledge.js";
+import { type AddLearningResult, findRelevantLearnings, loadKnowledge, NO_QUALITY_THRESHOLDS } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
 import { getAllTasks, type Task } from "./task.js";
 import {
@@ -135,7 +135,8 @@ function calculateDecisionRepetition(topic: string, stateDir: string): number {
  */
 function calculateKnowledgeSaturation(topic: string, stateDir: string): number {
 	const kb = loadKnowledge(stateDir);
-	const relevantLearnings = findRelevantLearnings(topic, 20, stateDir);
+	// Use NO_QUALITY_THRESHOLDS to count all relevant learnings for saturation assessment
+	const relevantLearnings = findRelevantLearnings(topic, 20, stateDir, NO_QUALITY_THRESHOLDS);
 
 	if (kb.learnings.length === 0) {
 		return 0; // Empty knowledge base = not saturated
@@ -198,7 +199,8 @@ export async function gatherResearchROIContext(
 	topic: string,
 	stateDir: string = ".undercity",
 ): Promise<ResearchROIContext> {
-	const existingKnowledge = findRelevantLearnings(topic, 20, stateDir).length;
+	// Use NO_QUALITY_THRESHOLDS to count all relevant learnings for ROI assessment
+	const existingKnowledge = findRelevantLearnings(topic, 20, stateDir, NO_QUALITY_THRESHOLDS).length;
 	const keywords = topic
 		.toLowerCase()
 		.split(/\s+/)

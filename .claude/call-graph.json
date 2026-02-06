@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-02-06T04:44:53.876Z",
+  "generatedAt": "2026-02-06T05:09:34.648Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -33,12 +33,12 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1250,
+          "line": 1347,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1701,
+          "line": 1809,
           "context": "info"
         },
         {
@@ -48,22 +48,22 @@
         },
         {
           "file": "research-roi.ts",
-          "line": 138,
+          "line": 139,
           "context": "calculateKnowledgeSaturation"
         },
         {
           "file": "research-roi.ts",
-          "line": 201,
+          "line": 203,
           "context": "filter"
         },
         {
           "file": "mcp-protocol.ts",
-          "line": 130,
+          "line": 132,
           "context": "if"
         },
         {
           "file": "knowledge.ts",
-          "line": 186,
+          "line": 187,
           "context": "if"
         },
         {
@@ -110,7 +110,7 @@
         },
         {
           "file": "mcp-protocol.ts",
-          "line": 190,
+          "line": 192,
           "context": "if"
         }
       ]
@@ -131,7 +131,7 @@
         },
         {
           "file": "mcp-protocol.ts",
-          "line": 251,
+          "line": 253,
           "context": "if"
         }
       ]
@@ -167,7 +167,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1702,
+          "line": 1810,
           "context": "info"
         },
         {
@@ -465,7 +465,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1559,
+          "line": 1667,
           "context": "info"
         },
         {
@@ -481,12 +481,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 1548,
+          "line": 1656,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1565,
+          "line": 1673,
           "context": "info"
         },
         {

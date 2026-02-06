@@ -55,6 +55,11 @@ const MAX_RESEARCH_FINDINGS_PER_PROPOSAL = 5;
 export const TaskProposalSourceSchema = z.enum(["research", "pattern_analysis", "codebase_gap", "user_request"]);
 
 /**
+ * Schema for validating task proposal ambition levels
+ */
+export const AmbitionLevelSchema = z.enum(["incremental", "moderate", "ambitious"]);
+
+/**
  * Schema for validating a single task proposal
  */
 export const TaskProposalSchema = z.object({
@@ -78,6 +83,9 @@ export const TaskProposalSchema = z.object({
 
 	/** Tags for categorization */
 	tags: z.array(z.string().max(MAX_TAG_LENGTH)).max(MAX_TAGS_COUNT).optional(),
+
+	/** Ambition level - affects how strictly specificity is enforced */
+	ambitionLevel: AmbitionLevelSchema.optional(),
 });
 
 export type TaskProposal = z.infer<typeof TaskProposalSchema>;
@@ -278,6 +286,10 @@ export function constrainTaskProposal(rawProposal: Partial<TaskProposal>): TaskP
 					.filter((t): t is string => typeof t === "string")
 					.slice(0, MAX_TAGS_COUNT)
 					.map((t) => t.substring(0, MAX_TAG_LENGTH))
+			: undefined,
+
+		ambitionLevel: AmbitionLevelSchema.safeParse(rawProposal.ambitionLevel).success
+			? (rawProposal.ambitionLevel as TaskProposal["ambitionLevel"])
 			: undefined,
 	};
 }

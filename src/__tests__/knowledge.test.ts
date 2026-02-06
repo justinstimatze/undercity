@@ -19,15 +19,29 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
 	addLearning,
+	DEFAULT_QUALITY_THRESHOLDS,
 	findRelevantLearnings,
 	formatLearningsForPrompt,
 	getKnowledgeStats,
 	type Learning,
 	type LearningCategory,
+	type LearningQualityThresholds,
 	loadKnowledge,
 	markLearningsUsed,
 	pruneUnusedLearnings,
 } from "../knowledge.js";
+
+/**
+ * Relaxed quality thresholds for testing.
+ * These allow learnings with default confidence (0.5) to be returned,
+ * which is necessary for testing the scoring logic separate from quality filtering.
+ */
+const TEST_QUALITY_THRESHOLDS: LearningQualityThresholds = {
+	...DEFAULT_QUALITY_THRESHOLDS,
+	minConfidence: 0.0, // Allow all confidence levels
+	minSuccessRate: 0.0, // Don't prune based on success rate
+	minUsesForRateCheck: 1000, // Effectively disable rate checking
+};
 
 describe("knowledge.ts", () => {
 	let tempDir: string;
@@ -424,7 +438,7 @@ describe("knowledge.ts", () => {
 			const finalConfidence = kb.learnings.find((l) => l.id === learning.id)?.confidence ?? 0.5;
 
 			// Query with one matching keyword: "validation" has 100% keyword overlap with 1 keyword
-			const results = findRelevantLearnings("validation check", 5, tempDir);
+			const results = findRelevantLearnings("validation check", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 			const found = results.find((l) => l.id === learning.id);
 
 			if (found) {
@@ -461,7 +475,7 @@ describe("knowledge.ts", () => {
 
 			// Query with no matching keywords should result in score near confidence * 0.3
 			// At minimum confidence 0.1: score = 0 * 0.7 + 0.1 * 0.3 = 0.03 (filtered)
-			const results = findRelevantLearnings("completely different topic", 5, tempDir);
+			const results = findRelevantLearnings("completely different topic", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 			const found = results.find((l) => l.id === learning.id);
 
 			// Should be filtered (no keywords match + low confidence = score below 0.1)
@@ -482,21 +496,21 @@ describe("knowledge.ts", () => {
 
 			// Leave at default 0.5 confidence
 			// Query with the exact keyword: score = 1.0 * 0.7 + 0.5 * 0.3 = 0.85 (well above threshold)
-			const results = findRelevantLearnings("validation", 5, tempDir);
+			const results = findRelevantLearnings("validation", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			const found = results.find((l) => l.id === learning.id);
 			expect(found).toBeDefined();
 		});
 
 		it("should handle maxResults = 0 by returning empty array", () => {
-			const results = findRelevantLearnings("zod schema validation", 0, tempDir);
+			const results = findRelevantLearnings("zod schema validation", 0, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			expect(results).toEqual([]);
 		});
 
 		it("should return all available results when maxResults exceeds available", () => {
 			// We have 4 learnings in the setup
-			const results = findRelevantLearnings("validation cache git exec", 100, tempDir);
+			const results = findRelevantLearnings("validation cache git exec", 100, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			// Should return at most 4 learnings
 			expect(results.length).toBeLessThanOrEqual(4);
@@ -518,7 +532,12 @@ describe("knowledge.ts", () => {
 			);
 
 			// Query with lots of punctuation should extract "zod" keyword
-			const results = findRelevantLearnings("How to use Zod??? for API @#$% validation???", 5, tempDir);
+			const results = findRelevantLearnings(
+				"How to use Zod??? for API @#$% validation???",
+				5,
+				tempDir,
+				TEST_QUALITY_THRESHOLDS,
+			);
 
 			// Should find the learning because "zod" keyword is extracted
 			const found = results.find((l) => l.id === learning.id);
@@ -537,7 +556,7 @@ describe("knowledge.ts", () => {
 			);
 
 			// Query with unicode characters (café, naïve, 日本語, emoji)
-			const results = findRelevantLearnings("café naïve 日本語 🚀 validation", 5, tempDir);
+			const results = findRelevantLearnings("café naïve 日本語 🚀 validation", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			// Should still extract "validation" keyword despite unicode
 			const found = results.find((l) => l.id === learning.id);
@@ -556,7 +575,7 @@ describe("knowledge.ts", () => {
 			);
 
 			// Query with numbers and special chars mixed with keywords
-			const results = findRelevantLearnings("API_2024 v1.0 @rest #endpoint test", 5, tempDir);
+			const results = findRelevantLearnings("API_2024 v1.0 @rest #endpoint test", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			// Should extract "api" keyword (case-insensitive, stripped of special chars)
 			const found = results.find((l) => l.id === learning.id);
@@ -582,7 +601,7 @@ describe("knowledge.ts", () => {
 			const longWords = Array.from({ length: 40 }, (_, i) => `word${i}`).join(" ");
 			const query = `${longWords} zod validation schema`;
 
-			const results = findRelevantLearnings(query, 5, tempDir);
+			const results = findRelevantLearnings(query, 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			// Should handle gracefully and extract top 20 keywords (including "zod")
 			const found = results.find((l) => l.id === learning.id);
@@ -613,7 +632,12 @@ describe("knowledge.ts", () => {
 			}
 
 			// Query with no matching keywords
-			const results = findRelevantLearnings("completely unrelated quantum computing blockchain", 5, tempDir);
+			const results = findRelevantLearnings(
+				"completely unrelated quantum computing blockchain",
+				5,
+				tempDir,
+				TEST_QUALITY_THRESHOLDS,
+			);
 
 			// All results should be filtered (below 0.1 threshold)
 			// The earlier learnings from beforeEach might still match, so we just verify
@@ -637,7 +661,7 @@ describe("knowledge.ts", () => {
 			);
 
 			// Search should not crash and should score based on default confidence
-			const results = findRelevantLearnings("any query", 5, tempDir);
+			const results = findRelevantLearnings("any query", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			// Learning may or may not appear depending on similarity scoring
 			// Key is that it doesn't crash
@@ -660,7 +684,7 @@ describe("knowledge.ts", () => {
 			);
 
 			// Query with only stopwords (should extract no keywords)
-			const results = findRelevantLearnings("the and or but a an is", 5, tempDir);
+			const results = findRelevantLearnings("the and or but a an is", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			// With empty objective keywords set, all learnings score (0 * 0.7) + (confidence * 0.3)
 			// At default confidence 0.5: score = 0 + 0.15 = 0.15 (above 0.1 threshold)
@@ -694,7 +718,7 @@ describe("knowledge.ts", () => {
 			);
 
 			// Initial search: both should have same score (same keywords, default confidence)
-			const results1 = findRelevantLearnings("testing", 5, tempDir);
+			const results1 = findRelevantLearnings("testing", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 			const _index1_1 = results1.findIndex((l) => l.id === learning1.id);
 			const _index2_1 = results1.findIndex((l) => l.id === learning2.id);
 
@@ -704,7 +728,7 @@ describe("knowledge.ts", () => {
 			}
 
 			// Second search: learning1 should be ranked higher due to increased confidence
-			const results2 = findRelevantLearnings("testing", 5, tempDir);
+			const results2 = findRelevantLearnings("testing", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 			const index1_2 = results2.findIndex((l) => l.id === learning1.id);
 			const index2_2 = results2.findIndex((l) => l.id === learning2.id);
 
@@ -715,7 +739,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should find learnings by keyword match", () => {
-			const results = findRelevantLearnings("Add validation to REST API", 5, tempDir);
+			const results = findRelevantLearnings("Add validation to REST API", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			expect(results.length).toBeGreaterThan(0);
 			const apiLearning = results.find((l) => l.content.includes("Zod"));
@@ -723,7 +747,7 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should score by keyword overlap", () => {
-			const results = findRelevantLearnings("Implement API validation with Zod", 5, tempDir);
+			const results = findRelevantLearnings("Implement API validation with Zod", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			// Zod learning should be highly ranked
 			expect(results[0].content).toContain("Zod");
@@ -744,14 +768,19 @@ describe("knowledge.ts", () => {
 			// Mark learning1 as used successfully to increase confidence
 			markLearningsUsed([learning1.id], true, tempDir);
 
-			const results = findRelevantLearnings("test confidence scoring", 5, tempDir);
+			const results = findRelevantLearnings("test confidence scoring", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			// The high-confidence learning should rank well
 			expect(results.length).toBeGreaterThan(0);
 		});
 
 		it("should filter out learnings below minimum score threshold", () => {
-			const results = findRelevantLearnings("Kubernetes deployment cluster quantum computing", 5, tempDir);
+			const results = findRelevantLearnings(
+				"Kubernetes deployment cluster quantum computing",
+				5,
+				tempDir,
+				TEST_QUALITY_THRESHOLDS,
+			);
 
 			// No learnings should match (completely different domain)
 			// Note: results may not be empty due to content-based scoring
@@ -759,8 +788,8 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should respect maxResults parameter", () => {
-			const results1 = findRelevantLearnings("validation cache timeout api", 2, tempDir);
-			const results2 = findRelevantLearnings("validation cache timeout api", 5, tempDir);
+			const results1 = findRelevantLearnings("validation cache timeout api", 2, tempDir, TEST_QUALITY_THRESHOLDS);
+			const results2 = findRelevantLearnings("validation cache timeout api", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			expect(results1.length).toBeLessThanOrEqual(2);
 			expect(results2.length).toBeGreaterThanOrEqual(results1.length);
@@ -781,7 +810,7 @@ describe("knowledge.ts", () => {
 		it("should handle empty knowledge base", () => {
 			const emptyDir = mkdtempSync(join(tmpdir(), "knowledge-empty-"));
 
-			const results = findRelevantLearnings("Any query", 5, emptyDir);
+			const results = findRelevantLearnings("Any query", 5, emptyDir, TEST_QUALITY_THRESHOLDS);
 
 			expect(results).toEqual([]);
 
@@ -790,7 +819,7 @@ describe("knowledge.ts", () => {
 
 		it("should extract keywords from objective correctly", () => {
 			// Query with words that should be filtered (stopwords)
-			const results = findRelevantLearnings("how to add validation for the api", 5, tempDir);
+			const results = findRelevantLearnings("how to add validation for the api", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			// Should still find Zod learning despite stopwords
 			const found = results.some((l) => l.content.includes("Zod"));
@@ -798,9 +827,9 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should handle case-insensitive matching", () => {
-			const resultsLower = findRelevantLearnings("zod validation", 5, tempDir);
-			const resultsUpper = findRelevantLearnings("ZOD VALIDATION", 5, tempDir);
-			const resultsMixed = findRelevantLearnings("ZoD VaLiDaTiOn", 5, tempDir);
+			const resultsLower = findRelevantLearnings("zod validation", 5, tempDir, TEST_QUALITY_THRESHOLDS);
+			const resultsUpper = findRelevantLearnings("ZOD VALIDATION", 5, tempDir, TEST_QUALITY_THRESHOLDS);
+			const resultsMixed = findRelevantLearnings("ZoD VaLiDaTiOn", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			expect(resultsLower.length).toBe(resultsUpper.length);
 			expect(resultsUpper.length).toBe(resultsMixed.length);
@@ -891,14 +920,28 @@ describe("knowledge.ts", () => {
 			expect(kb.learnings[0].confidence).toBeLessThanOrEqual(0.95);
 		});
 
-		it("should cap confidence at 0.1 minimum", () => {
-			// Mark as failed many times
-			for (let i = 0; i < 20; i++) {
+		it("should cap confidence at 0.1 minimum before pruning threshold", () => {
+			// Mark as failed a few times (but not enough to trigger pruning)
+			// Pruning happens at 5+ uses with <30% success rate
+			for (let i = 0; i < 4; i++) {
 				markLearningsUsed([learningId], false, tempDir);
 			}
 
 			const kb = loadKnowledge(tempDir);
+			// Learning should still exist with capped confidence
+			expect(kb.learnings.length).toBe(1);
 			expect(kb.learnings[0].confidence).toBeGreaterThanOrEqual(0.1);
+		});
+
+		it("should prune learnings with low success rate after threshold uses", () => {
+			// Mark as failed enough times to trigger pruning (5+ uses with <30% success)
+			for (let i = 0; i < 6; i++) {
+				markLearningsUsed([learningId], false, tempDir);
+			}
+
+			const kb = loadKnowledge(tempDir);
+			// Learning should be pruned due to low success rate
+			expect(kb.learnings.length).toBe(0);
 		});
 
 		it("should set lastUsedAt timestamp", () => {
@@ -1413,7 +1456,7 @@ describe("knowledge.ts", () => {
 
 			// 2. Worker queries relevant learnings for new task
 			const taskObjective = "Add validation to new API endpoint";
-			const relevant = findRelevantLearnings(taskObjective, 5, tempDir);
+			const relevant = findRelevantLearnings(taskObjective, 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			expect(relevant.length).toBeGreaterThan(0);
 			expect(relevant.some((l) => l.id === learning1.id)).toBe(true);
@@ -1486,7 +1529,7 @@ describe("knowledge.ts", () => {
 			expect(learning.keywords).toEqual([]);
 
 			// Should not break retrieval
-			const results = findRelevantLearnings("any query", 5, tempDir);
+			const results = findRelevantLearnings("any query", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 			// May or may not find it depending on similarity scoring
 			expect(Array.isArray(results)).toBe(true);
 		});
@@ -1595,7 +1638,7 @@ describe("knowledge.ts", () => {
 			);
 
 			// Empty objective should not crash
-			const results = findRelevantLearnings("", 5, tempDir);
+			const results = findRelevantLearnings("", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 			expect(Array.isArray(results)).toBe(true);
 		});
 
@@ -1656,7 +1699,7 @@ describe("knowledge.ts", () => {
 			);
 
 			// New task: Add order endpoint
-			const relevant = findRelevantLearnings("Add order endpoint with validation", 5, tempDir);
+			const relevant = findRelevantLearnings("Add order endpoint with validation", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 
 			expect(relevant.length).toBeGreaterThan(0);
 
@@ -1695,7 +1738,7 @@ describe("knowledge.ts", () => {
 
 			// Use this learning in subsequent tasks
 			for (let i = 0; i < 3; i++) {
-				const results = findRelevantLearnings("Fix TypeScript import errors", 5, tempDir);
+				const results = findRelevantLearnings("Fix TypeScript import errors", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 				expect(results.length).toBeGreaterThan(0);
 
 				markLearningsUsed(
@@ -1727,7 +1770,7 @@ describe("knowledge.ts", () => {
 			);
 
 			// Search for cache-related tasks
-			const results = findRelevantLearnings("Implement query result caching", 5, tempDir);
+			const results = findRelevantLearnings("Implement query result caching", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 			expect(results.some((l) => l.id === result.learning.id)).toBe(true);
 		});
 	});

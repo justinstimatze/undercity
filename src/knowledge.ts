@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { dirname, join } from "node:path";
 import { withFileLock } from "./file-lock.js";
 import { validateKnowledgeBase } from "./knowledge-validator.js";
+import { sessionLogger } from "./logger.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
 const KNOWLEDGE_FILE = "knowledge.json";
@@ -401,19 +402,98 @@ function calculateSimilarity(a: string, b: string): number {
 }
 
 /**
+ * Configuration for learning quality filtering.
+ * Learnings that don't meet these thresholds are not injected.
+ */
+export interface LearningQualityThresholds {
+	/** Minimum confidence score (0-1) required for injection. Default: 0.7 */
+	minConfidence: number;
+	/** Minimum successful uses required. Default: 0 (allow new learnings) */
+	minSuccessfulUses: number;
+	/** Minimum success rate (successCount/usedCount) when usedCount > minUsesForRateCheck. Default: 0.3 */
+	minSuccessRate: number;
+	/** Minimum uses before success rate is checked. Default: 5 */
+	minUsesForRateCheck: number;
+}
+
+/**
+ * Default thresholds for learning quality.
+ * These are tuned based on effectiveness analysis showing that
+ * low-confidence learnings hurt more than they help.
+ */
+export const DEFAULT_QUALITY_THRESHOLDS: LearningQualityThresholds = {
+	minConfidence: 0.7,
+	minSuccessfulUses: 0, // Allow new learnings to prove themselves
+	minSuccessRate: 0.3, // Prune learnings that fail >70% of the time
+	minUsesForRateCheck: 5, // Only check rate after enough uses
+};
+
+/**
+ * Thresholds that allow all learnings through without quality filtering.
+ * Use for MCP tools and other contexts where external callers want full access.
+ */
+export const NO_QUALITY_THRESHOLDS: LearningQualityThresholds = {
+	minConfidence: 0,
+	minSuccessfulUses: 0,
+	minSuccessRate: 0,
+	minUsesForRateCheck: Number.MAX_SAFE_INTEGER, // Never check rate
+};
+
+/**
+ * Check if a learning meets quality thresholds for injection.
+ *
+ * @param learning - The learning to check
+ * @param thresholds - Quality thresholds (defaults to DEFAULT_QUALITY_THRESHOLDS)
+ * @returns true if learning should be injected
+ */
+export function meetsQualityThreshold(
+	learning: Learning,
+	thresholds: LearningQualityThresholds = DEFAULT_QUALITY_THRESHOLDS,
+): boolean {
+	// Check minimum confidence
+	if (learning.confidence < thresholds.minConfidence) {
+		return false;
+	}
+
+	// Check minimum successful uses (allows new learnings by default)
+	if (learning.successCount < thresholds.minSuccessfulUses) {
+		return false;
+	}
+
+	// Check success rate only if learning has been used enough times
+	if (learning.usedCount >= thresholds.minUsesForRateCheck) {
+		const successRate = learning.successCount / learning.usedCount;
+		if (successRate < thresholds.minSuccessRate) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/**
  * Find relevant learnings for a task objective.
  *
  * Called from:
  * - worker.ts:2483 (context building before execution)
  * - task-planner.ts:373 (planning context gathering)
  * - automated-pm.ts:92 (PM decision context)
+ *
+ * @param objective - Task objective to find relevant learnings for
+ * @param maxResults - Maximum number of learnings to return (default: 5)
+ * @param stateDir - State directory (default: ".undercity")
+ * @param thresholds - Quality thresholds for filtering (default: DEFAULT_QUALITY_THRESHOLDS)
  */
 export function findRelevantLearnings(
 	objective: string,
 	maxResults: number = 5,
 	stateDir: string = DEFAULT_STATE_DIR,
+	thresholds: LearningQualityThresholds = DEFAULT_QUALITY_THRESHOLDS,
 ): Learning[] {
 	const kb = loadKnowledge(stateDir);
+
+	// Pre-filter learnings by quality threshold to avoid injecting harmful learnings
+	const qualityLearnings = kb.learnings.filter((l) => meetsQualityThreshold(l, thresholds));
 
 	// Try hybrid search (keyword + semantic) if embeddings module available
 	try {
@@ -436,8 +516,8 @@ export function findRelevantLearnings(
 			);
 
 			if (results.length > 0) {
-				// Map back to Learning objects
-				const learningMap = new Map(kb.learnings.map((l) => [l.id, l]));
+				// Map back to Learning objects, filtering by quality
+				const learningMap = new Map(qualityLearnings.map((l) => [l.id, l]));
 				const found = results
 					.map((r) => learningMap.get(r.learningId))
 					.filter((l): l is Learning => l !== undefined)
@@ -452,11 +532,11 @@ export function findRelevantLearnings(
 		// Embeddings not available, fall back to keyword-only
 	}
 
-	// Fallback: keyword-only scoring
+	// Fallback: keyword-only scoring (on quality-filtered learnings)
 	const objectiveKeywords = new Set(extractKeywords(objective));
 
 	// Score each learning by keyword overlap and confidence
-	const scored = kb.learnings.map((learning) => {
+	const scored = qualityLearnings.map((learning) => {
 		const learningKeywords = new Set(learning.keywords);
 		const overlap = [...objectiveKeywords].filter((kw) => learningKeywords.has(kw)).length;
 		const keywordScore = overlap / Math.max(objectiveKeywords.size, 1);
@@ -478,6 +558,12 @@ export function findRelevantLearnings(
 /**
  * Mark learnings as used for a task.
  * Updates usage count and adjusts confidence based on task success.
+ * Also prunes learnings that have consistently low success rates.
+ *
+ * This implements the learning quality feedback mechanism:
+ * - Boost confidence on success (+0.02, max 0.95)
+ * - Reduce confidence on failure (-0.05, min 0.1)
+ * - Prune learnings with <30% success rate after 5+ uses
  *
  * Called from:
  * - worker.ts:1720 (after task completion)
@@ -487,12 +573,15 @@ export function markLearningsUsed(
 	taskSuccess: boolean,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): void {
+	if (learningIds.length === 0) return;
+
 	const knowledgePath = getKnowledgePath(stateDir);
 
 	withFileLock(knowledgePath, () => {
 		// Re-read inside lock to get fresh state
 		const kb = loadKnowledge(stateDir);
 		const now = new Date().toISOString();
+		const prunedIds: string[] = [];
 
 		for (const learning of kb.learnings) {
 			if (learningIds.includes(learning.id)) {
@@ -502,12 +591,34 @@ export function markLearningsUsed(
 				if (taskSuccess) {
 					learning.successCount++;
 					// Increase confidence on successful use (max 0.95)
-					learning.confidence = Math.min(0.95, learning.confidence + 0.05);
+					learning.confidence = Math.min(0.95, learning.confidence + 0.02);
 				} else {
 					// Decrease confidence on failed use (min 0.1)
-					learning.confidence = Math.max(0.1, learning.confidence - 0.1);
+					learning.confidence = Math.max(0.1, learning.confidence - 0.05);
+				}
+
+				// Check if learning should be pruned (low success rate after enough uses)
+				if (learning.usedCount >= DEFAULT_QUALITY_THRESHOLDS.minUsesForRateCheck) {
+					const successRate = learning.successCount / learning.usedCount;
+					if (successRate < DEFAULT_QUALITY_THRESHOLDS.minSuccessRate) {
+						prunedIds.push(learning.id);
+						sessionLogger.info(
+							{
+								learningId: learning.id,
+								successRate: Math.round(successRate * 100),
+								usedCount: learning.usedCount,
+								content: learning.content.substring(0, 50),
+							},
+							"Pruning learning due to low success rate",
+						);
+					}
 				}
 			}
+		}
+
+		// Remove pruned learnings
+		if (prunedIds.length > 0) {
+			kb.learnings = kb.learnings.filter((l) => !prunedIds.includes(l.id));
 		}
 
 		saveKnowledge(kb, stateDir);
