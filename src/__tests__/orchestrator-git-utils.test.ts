@@ -6,7 +6,7 @@
 
 import { existsSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { execGitInDir, execInDir, validateCwd, validateGitRef } from "../orchestrator/git-utils.js";
+import { execGitInDir, validateCwd, validateGitRef } from "../orchestrator/git-utils.js";
 
 // Mock node:fs
 vi.mock("node:fs", () => ({
@@ -16,7 +16,6 @@ vi.mock("node:fs", () => ({
 // Mock node:child_process
 vi.mock("node:child_process", () => ({
 	execFileSync: vi.fn(),
-	execSync: vi.fn(),
 }));
 
 describe("orchestrator/git-utils", () => {
@@ -118,28 +117,6 @@ describe("orchestrator/git-utils", () => {
 			const result = execGitInDir(["log"], "/valid/path");
 
 			expect(result).toBe("output with whitespace");
-		});
-	});
-
-	describe("execInDir", () => {
-		it("validates cwd before executing", async () => {
-			vi.mocked(existsSync).mockReturnValue(false);
-
-			expect(() => execInDir("echo test", "/nonexistent")).toThrow("path does not exist");
-		});
-
-		it("calls execSync with command", async () => {
-			const { execSync } = await import("node:child_process");
-			vi.mocked(existsSync).mockReturnValue(true);
-			vi.mocked(execSync).mockReturnValue("output\n");
-
-			const result = execInDir("pnpm test", "/valid/path");
-
-			expect(execSync).toHaveBeenCalledWith(
-				"pnpm test",
-				expect.objectContaining({ cwd: "/valid/path", encoding: "utf-8" }),
-			);
-			expect(result).toBe("output");
 		});
 	});
 });

@@ -23,7 +23,6 @@ vi.mock("node:fs", () => ({
 // Mock node:child_process
 vi.mock("node:child_process", () => ({
 	execFileSync: vi.fn(),
-	execSync: vi.fn(),
 }));
 
 // Mock output
@@ -157,22 +156,26 @@ describe("orchestrator/merge-helpers", () => {
 
 	describe("runPostRebaseVerification", () => {
 		it("runs typecheck and test", async () => {
-			const { execSync } = await import("node:child_process");
-			vi.mocked(execSync).mockReturnValue("");
+			const { execFileSync } = await import("node:child_process");
+			vi.mocked(execFileSync).mockReturnValue("");
 
 			const attemptFix = vi.fn();
 			await runPostRebaseVerification("task-123", "/worktree", attemptFix);
 
-			expect(execSync).toHaveBeenCalledWith("pnpm typecheck", expect.objectContaining({ cwd: "/worktree" }));
-			expect(execSync).toHaveBeenCalledWith("pnpm test --run", expect.objectContaining({ cwd: "/worktree" }));
+			expect(execFileSync).toHaveBeenCalledWith("pnpm", ["typecheck"], expect.objectContaining({ cwd: "/worktree" }));
+			expect(execFileSync).toHaveBeenCalledWith(
+				"pnpm",
+				["test", "--run"],
+				expect.objectContaining({ cwd: "/worktree" }),
+			);
 			expect(attemptFix).not.toHaveBeenCalled();
 		});
 
 		it("attempts fix on verification failure", async () => {
-			const { execSync } = await import("node:child_process");
+			const { execFileSync } = await import("node:child_process");
 			const outputMock = await import("../output.js");
 			let callCount = 0;
-			vi.mocked(execSync).mockImplementation(() => {
+			vi.mocked(execFileSync).mockImplementation(() => {
 				callCount++;
 				if (callCount <= 2) {
 					// First typecheck + test fail
@@ -189,8 +192,8 @@ describe("orchestrator/merge-helpers", () => {
 		});
 
 		it("throws after max fix attempts", async () => {
-			const { execSync } = await import("node:child_process");
-			vi.mocked(execSync).mockImplementation(() => {
+			const { execFileSync } = await import("node:child_process");
+			vi.mocked(execFileSync).mockImplementation(() => {
 				throw new Error("Persistent error");
 			});
 
@@ -201,14 +204,14 @@ describe("orchestrator/merge-helpers", () => {
 		});
 
 		it("sets UNDERCITY_VERIFICATION env for tests", async () => {
-			const { execSync } = await import("node:child_process");
-			vi.mocked(execSync).mockReturnValue("");
+			const { execFileSync } = await import("node:child_process");
+			vi.mocked(execFileSync).mockReturnValue("");
 
 			await runPostRebaseVerification("task-123", "/worktree", vi.fn());
 
 			// Check that test command was called with UNDERCITY_VERIFICATION
-			const testCall = vi.mocked(execSync).mock.calls.find((call) => call[0] === "pnpm test --run");
-			expect(testCall?.[1]?.env?.UNDERCITY_VERIFICATION).toBe("true");
+			const testCall = vi.mocked(execFileSync).mock.calls.find((call) => call[0] === "pnpm" && call[1]?.[0] === "test");
+			expect(testCall?.[2]?.env?.UNDERCITY_VERIFICATION).toBe("true");
 		});
 	});
 

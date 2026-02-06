@@ -5,7 +5,7 @@
  * These are kept separate from the main git.ts to avoid circular dependencies.
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { isAbsolute, normalize } from "node:path";
 
@@ -39,14 +39,6 @@ export function validateCwd(cwd: string): string {
 export function execGitInDir(args: string[], cwd: string): string {
 	const validatedCwd = validateCwd(cwd);
 	return execFileSync("git", args, { cwd: validatedCwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
-}
-
-/**
- * Run a shell command in a specific directory (use only for trusted commands)
- */
-export function execInDir(command: string, cwd: string): string {
-	const validatedCwd = validateCwd(cwd);
-	return execSync(command, { cwd: validatedCwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
 }
 
 /**

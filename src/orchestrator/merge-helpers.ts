@@ -5,7 +5,7 @@
  * complexity in the main Orchestrator class.
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { checkAndFixBareRepo } from "../git.js";
 import { sessionLogger } from "../logger.js";
@@ -145,13 +145,13 @@ export async function runPostRebaseVerification(
 	for (let attempt = 0; attempt <= maxMergeFixAttempts; attempt++) {
 		try {
 			output.progress(`Running verification for ${taskId}${attempt > 0 ? ` (fix attempt ${attempt})` : ""}...`);
-			execSync("pnpm typecheck", {
+			execFileSync("pnpm", ["typecheck"], {
 				cwd: worktreePath,
 				encoding: "utf-8",
 				stdio: ["pipe", "pipe", "pipe"],
 			});
 			// Set UNDERCITY_VERIFICATION to skip integration tests during merge verification
-			execSync("pnpm test --run", {
+			execFileSync("pnpm", ["test", "--run"], {
 				cwd: worktreePath,
 				encoding: "utf-8",
 				stdio: ["pipe", "pipe", "pipe"],
