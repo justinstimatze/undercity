@@ -11,7 +11,7 @@
  * - State tracking for active worktrees
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
@@ -309,7 +309,7 @@ export class WorktreeManager {
 			// Install dependencies in the worktree so verification can run
 			gitLogger.info({ sessionId, worktreePath }, "Installing dependencies in worktree");
 			try {
-				execSync("pnpm install --frozen-lockfile", {
+				execFileSync("pnpm", ["install", "--frozen-lockfile"], {
 					cwd: worktreePath,
 					encoding: "utf-8",
 					stdio: ["pipe", "pipe", "pipe"],
@@ -331,7 +331,7 @@ export class WorktreeManager {
 				const undercityDest = `${worktreePath}/.undercity`;
 				// Only copy if source exists and dest doesn't
 				if (existsSync(undercitySource) && !existsSync(undercityDest)) {
-					execSync(`cp -r "${undercitySource}" "${undercityDest}"`, {
+					execFileSync("cp", ["-r", undercitySource, undercityDest], {
 						encoding: "utf-8",
 						stdio: ["pipe", "pipe", "pipe"],
 					});
@@ -369,7 +369,7 @@ export class WorktreeManager {
 				const huskySource = `${this.repoRoot}/.husky`;
 				const huskyDest = `${worktreePath}/.husky`;
 				if (existsSync(huskySource) && !existsSync(huskyDest)) {
-					execSync(`ln -s "${huskySource}" "${huskyDest}"`, {
+					execFileSync("ln", ["-s", huskySource, huskyDest], {
 						cwd: worktreePath,
 						encoding: "utf-8",
 						stdio: ["pipe", "pipe", "pipe"],
@@ -387,11 +387,7 @@ export class WorktreeManager {
 			// Use --worktree flag to set config only for this worktree (not shared with main repo)
 			gitLogger.info({ sessionId }, "Blocking direct pushes from worktree");
 			try {
-				execSync('git config --worktree remote.origin.pushurl "PUSH_BLOCKED_USE_ORCHESTRATOR"', {
-					cwd: worktreePath,
-					encoding: "utf-8",
-					stdio: ["pipe", "pipe", "pipe"],
-				});
+				execGit(["config", "--worktree", "remote.origin.pushurl", "PUSH_BLOCKED_USE_ORCHESTRATOR"], worktreePath);
 			} catch (blockError) {
 				gitLogger.warn(
 					{ sessionId, error: String(blockError) },
