@@ -59,7 +59,7 @@ export default defineConfig({
 		// Type-level testing configuration
 		typecheck: {
 			enabled: true,
-			include: ["src/__tests__/**/*.test-d.ts"],
+			include: ["src/__tests__/**/*.test-d.ts", "src/*.test-d.ts"],
 		},
 		// Global setup for performance baseline
 		globalSetup: [],
