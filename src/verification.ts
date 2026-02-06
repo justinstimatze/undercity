@@ -23,6 +23,14 @@ import {
 } from "./constants.js";
 import { sessionLogger } from "./logger.js";
 import { Persistence } from "./persistence.js";
+import {
+	validateGitDiffOutput,
+	validateGitStatusOutput,
+	validateLintOutput,
+	validateSpellCheckOutput,
+	validateTestOutput,
+	validateTypecheckOutput,
+} from "./validation.js";
 
 const logger = sessionLogger.child({ module: "verification" });
 
@@ -192,21 +200,28 @@ export async function verifyWork(opts: VerifyWorkOptions = {}): Promise<Verifica
 	if (!skipOptionalChecks) {
 		try {
 			// Only run spell check on typescript and markdown files
-			execSync(`${commands.spell} 2>&1`, { encoding: "utf-8", cwd, timeout: TIMEOUT_LINT_FIX_MS });
+			const rawOutput = execSync(`${commands.spell} 2>&1`, { encoding: "utf-8", cwd, timeout: TIMEOUT_LINT_FIX_MS });
+			validateSpellCheckOutput(rawOutput);
 			feedbackParts.push("✓ Spell check passed");
 		} catch (error: unknown) {
 			// Spell errors are non-blocking - just log a warning
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
-			const spellingErrors = output.split("\n").filter((line) => line.includes("spelling error"));
-			const errorCount = spellingErrors.length;
-			// Only mark as failed if there are actual spelling errors to fix
-			if (errorCount > 0) {
-				spellPassed = false;
-				logger.warn({ errorCount, errors: spellingErrors.slice(0, 5) }, "Spelling issues detected (non-blocking)");
-				feedbackParts.push(`⚠ Spelling issues (${errorCount}) - non-blocking`);
-			} else {
-				// Spell command failed but no actionable errors - treat as passed
-				feedbackParts.push("✓ Spell check passed");
+			try {
+				const validatedOutput = validateSpellCheckOutput(output);
+				const spellingErrors = validatedOutput.split("\n").filter((line) => line.includes("spelling error"));
+				const errorCount = spellingErrors.length;
+				// Only mark as failed if there are actual spelling errors to fix
+				if (errorCount > 0) {
+					spellPassed = false;
+					logger.warn({ errorCount, errors: spellingErrors.slice(0, 5) }, "Spelling issues detected (non-blocking)");
+					feedbackParts.push(`⚠ Spelling issues (${errorCount}) - non-blocking`);
+				} else {
+					// Spell command failed but no actionable errors - treat as passed
+					feedbackParts.push("✓ Spell check passed");
+				}
+			} catch (_validationError: unknown) {
+				// Validation failed - treat as command error, not spelling errors
+				feedbackParts.push("✓ Spell check passed (output validation failed)");
 			}
 		}
 	}
@@ -262,13 +277,15 @@ export async function verifyWork(opts: VerifyWorkOptions = {}): Promise<Verifica
 			encoding: "utf-8",
 			cwd,
 		});
+		diffStat = validateGitDiffOutput(diffStat);
 
 		// Also check for untracked files (new files) - git diff misses these!
 		const statusOutput = execSync("git status --porcelain 2>/dev/null || true", {
 			encoding: "utf-8",
 			cwd,
 		});
-		untrackedFiles = statusOutput
+		const validatedStatus = validateGitStatusOutput(statusOutput);
+		untrackedFiles = validatedStatus
 			.split("\n")
 			.filter((line) => line.startsWith("??"))
 			.map((line) => line.slice(3).trim())
@@ -279,10 +296,11 @@ export async function verifyWork(opts: VerifyWorkOptions = {}): Promise<Verifica
 			try {
 				// Compare HEAD to baseCommit if provided, otherwise fall back to HEAD~1
 				const compareRef = baseCommitOpt || "HEAD~1";
-				diffStat = execSync(`git diff --stat ${compareRef} HEAD 2>/dev/null || true`, {
+				const committedDiff = execSync(`git diff --stat ${compareRef} HEAD 2>/dev/null || true`, {
 					encoding: "utf-8",
 					cwd,
 				});
+				diffStat = validateGitDiffOutput(committedDiff);
 			} catch (_error: unknown) {
 				// Ignore errors (e.g., no parent commit or invalid base)
 			}
@@ -307,7 +325,8 @@ export async function verifyWork(opts: VerifyWorkOptions = {}): Promise<Verifica
 			encoding: "utf-8",
 			cwd,
 		});
-		changedFiles = [...diffNames.trim().split("\n").filter(Boolean), ...untrackedFiles];
+		const validatedDiffNames = validateGitDiffOutput(diffNames);
+		changedFiles = [...validatedDiffNames.trim().split("\n").filter(Boolean), ...untrackedFiles];
 	} catch (_error: unknown) {
 		issues.push("No changes detected");
 		feedbackParts.push("ERROR: No file changes were made. The task may not have been completed.");
@@ -341,21 +360,28 @@ export async function verifyWork(opts: VerifyWorkOptions = {}): Promise<Verifica
 			passed = false;
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 
-			// Parse into structured errors (more compact than raw output)
-			const structuredErrors = parseTypeScriptErrors(output);
-			taskIssues.push(`Typecheck failed (${structuredErrors.length} errors)`);
+			try {
+				const validatedOutput = validateTypecheckOutput(output);
+				// Parse into structured errors (more compact than raw output)
+				const structuredErrors = parseTypeScriptErrors(validatedOutput);
+				taskIssues.push(`Typecheck failed (${structuredErrors.length} errors)`);
 
-			// Format errors with suggestions
-			const formattedErrors = formatErrorsForAgent(structuredErrors);
-			feedback.push(`✗ TYPECHECK FAILED:\n${formattedErrors}`);
+				// Format errors with suggestions
+				const formattedErrors = formatErrorsForAgent(structuredErrors);
+				feedback.push(`✗ TYPECHECK FAILED:\n${formattedErrors}`);
 
-			// Check cache for previous fixes
-			const cache = getCache();
-			for (const err of structuredErrors.slice(0, 3)) {
-				const similarFixes = cache.findSimilarFixes(err.message);
-				if (similarFixes.length > 0) {
-					feedback.push(`  💡 Similar error was fixed before: ${similarFixes[0].fix.slice(0, 50)}...`);
+				// Check cache for previous fixes
+				const cache = getCache();
+				for (const err of structuredErrors.slice(0, 3)) {
+					const similarFixes = cache.findSimilarFixes(err.message);
+					if (similarFixes.length > 0) {
+						feedback.push(`  💡 Similar error was fixed before: ${similarFixes[0].fix.slice(0, 50)}...`);
+					}
 				}
+			} catch (_validationError: unknown) {
+				// Validation failed - treat as generic typecheck failure
+				taskIssues.push("Typecheck failed (output validation error)");
+				feedback.push(`✗ TYPECHECK FAILED:\n${String(output).slice(0, 500)}`);
 			}
 		}
 		return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
@@ -379,16 +405,23 @@ export async function verifyWork(opts: VerifyWorkOptions = {}): Promise<Verifica
 			passed = false;
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 
-			// Count lint issues
-			const issueCount = (output.match(/✖|error|warning/gi) || []).length;
-			taskIssues.push(`Lint issues (${issueCount})`);
+			try {
+				const validatedOutput = validateLintOutput(output);
+				// Count lint issues
+				const issueCount = (validatedOutput.match(/✖|error|warning/gi) || []).length;
+				taskIssues.push(`Lint issues (${issueCount})`);
 
-			// Extract first few issues
-			const lines = output
-				.split("\n")
-				.filter((l) => l.includes("error") || l.includes("warning"))
-				.slice(0, 3);
-			feedback.push(`⚠ LINT ISSUES:\n${lines.join("\n")}`);
+				// Extract first few issues
+				const lines = validatedOutput
+					.split("\n")
+					.filter((l) => l.includes("error") || l.includes("warning"))
+					.slice(0, 3);
+				feedback.push(`⚠ LINT ISSUES:\n${lines.join("\n")}`);
+			} catch (_validationError: unknown) {
+				// Validation failed - treat as generic lint failure
+				taskIssues.push("Lint issues (output validation error)");
+				feedback.push(`⚠ LINT ISSUES:\n${String(output).slice(0, 500)}`);
+			}
 		}
 		return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
 	};
@@ -447,33 +480,46 @@ export async function verifyWork(opts: VerifyWorkOptions = {}): Promise<Verifica
 		} catch (error: unknown) {
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
 
-			// Check if failure is due to no test files existing - treat as pass
-			// vitest: "No test files found, exiting with code 1" or just exits with nothing
-			// jest: "No tests found"
-			// Also check for empty output which vitest sometimes does
-			if (
-				output.includes("No test files found") ||
-				output.includes("No tests found") ||
-				output.includes("no test files") ||
-				(output.trim().length < 50 && !output.includes("FAIL") && !output.includes("Error"))
-			) {
-				feedback.push("✓ Tests passed (no test files)");
-				return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
+			try {
+				const validatedOutput = validateTestOutput(output);
+
+				// Check if failure is due to no test files existing - treat as pass
+				// vitest: "No test files found, exiting with code 1" or just exits with nothing
+				// jest: "No tests found"
+				// Also check for empty output which vitest sometimes does
+				if (
+					validatedOutput.includes("No test files found") ||
+					validatedOutput.includes("No tests found") ||
+					validatedOutput.includes("no test files") ||
+					(validatedOutput.trim().length < 50 &&
+						!validatedOutput.includes("FAIL") &&
+						!validatedOutput.includes("Error"))
+				) {
+					feedback.push("✓ Tests passed (no test files)");
+					return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
+				}
+
+				passed = false;
+
+				// Extract failed test info
+				const failedMatch = validatedOutput.match(/(\d+) failed/);
+				const failedCount = failedMatch ? failedMatch[1] : "some";
+				taskIssues.push(`Tests failed (${failedCount})`);
+
+				// Find the FAIL lines
+				const failLines = validatedOutput
+					.split("\n")
+					.filter((l) => l.includes("FAIL") || l.includes("AssertionError"))
+					.slice(0, 3);
+				feedback.push(`✗ TESTS FAILED:\n${failLines.join("\n")}`);
+			} catch (_validationError: unknown) {
+				// Validation failed (truncated or malformed output)
+				passed = false;
+				taskIssues.push("Tests failed (output validation error)");
+				feedback.push(
+					`✗ TESTS FAILED:\nOutput validation error - tests may have been truncated or terminated\n${String(output).slice(0, 300)}`,
+				);
 			}
-
-			passed = false;
-
-			// Extract failed test info
-			const failedMatch = output.match(/(\d+) failed/);
-			const failedCount = failedMatch ? failedMatch[1] : "some";
-			taskIssues.push(`Tests failed (${failedCount})`);
-
-			// Find the FAIL lines
-			const failLines = output
-				.split("\n")
-				.filter((l) => l.includes("FAIL") || l.includes("AssertionError"))
-				.slice(0, 3);
-			feedback.push(`✗ TESTS FAILED:\n${failLines.join("\n")}`);
 		}
 		return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
 	};
