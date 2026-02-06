@@ -923,8 +923,8 @@ export class Orchestrator {
 			// Refresh actual usage from claude.ai at start of each batch
 			await this.refreshActualUsage();
 
-			const { batch, deferred } = this.buildNextBatch(remaining, this.maxConcurrent);
-			if (batch.length === 0) break; // safety valve
+			const batch = remaining.slice(0, this.maxConcurrent);
+			const deferred = remaining.slice(this.maxConcurrent);
 
 			batchNum++;
 			const totalBatches = batchNum + Math.ceil(deferred.length / this.maxConcurrent);
@@ -957,39 +957,6 @@ export class Orchestrator {
 		}
 
 		return results;
-	}
-
-	/**
-	 * Build the next batch ensuring at most one sibling per parent.
-	 * Tasks without a parent are always eligible.
-	 * Siblings of an already-batched task are deferred to the next batch.
-	 */
-	private buildNextBatch(remainingTasks: string[], maxSize: number): { batch: string[]; deferred: string[] } {
-		const batch: string[] = [];
-		const deferred: string[] = [];
-		const parentIdsInBatch = new Set<string>();
-
-		for (const task of remainingTasks) {
-			if (batch.length >= maxSize) {
-				deferred.push(task);
-				continue;
-			}
-
-			const parentId = this.parentIds.get(task);
-			if (!parentId) {
-				// No parent - always eligible
-				batch.push(task);
-			} else if (!parentIdsInBatch.has(parentId)) {
-				// First sibling from this parent - add to batch
-				parentIdsInBatch.add(parentId);
-				batch.push(task);
-			} else {
-				// Another sibling already in batch - defer
-				deferred.push(task);
-			}
-		}
-
-		return { batch, deferred };
 	}
 
 	/**
@@ -1440,23 +1407,52 @@ export class Orchestrator {
 
 		output.section(`Merging ${orderedTasks.length} successful branches`);
 
-		for (const taskResult of orderedTasks) {
-			try {
-				const { existsSync } = await import("node:fs");
-				const worktreeExists = existsSync(taskResult.worktreePath);
-				if (this.verbose) {
-					output.debug(`Worktree exists: ${worktreeExists} at ${taskResult.worktreePath}`);
+		const MAX_MERGE_RETRIES = 3;
+		let pendingMerges = [...orderedTasks];
+
+		for (let pass = 0; pass < MAX_MERGE_RETRIES && pendingMerges.length > 0; pass++) {
+			if (pass > 0) {
+				output.section(`Merge retry pass ${pass + 1}: retrying ${pendingMerges.length} failed merge(s)`);
+			}
+
+			const failedThisPass: ParallelTaskResult[] = [];
+			let mergedThisPass = 0;
+
+			for (const taskResult of pendingMerges) {
+				try {
+					const { existsSync } = await import("node:fs");
+					const worktreeExists = existsSync(taskResult.worktreePath);
+					if (this.verbose) {
+						output.debug(`Worktree exists: ${worktreeExists} at ${taskResult.worktreePath}`);
+					}
+					if (!worktreeExists) {
+						throw new Error(`Worktree directory missing: ${taskResult.worktreePath}`);
+					}
+					await this.mergeBranch(taskResult.branch, taskResult.taskId, taskResult.worktreePath);
+					taskResult.merged = true;
+					taskResult.mergeError = undefined;
+					this.updateTaskStatus(taskResult.taskId, "merged");
+					output.success(`Merged: ${taskResult.taskId}`);
+					mergedThisPass++;
+				} catch (err) {
+					taskResult.mergeError = String(err);
+					failedThisPass.push(taskResult);
 				}
-				if (!worktreeExists) {
-					throw new Error(`Worktree directory missing: ${taskResult.worktreePath}`);
+			}
+
+			// Only retry if at least one succeeded this pass (conflict landscape changed)
+			if (failedThisPass.length > 0 && mergedThisPass > 0) {
+				sessionLogger.info(
+					{ pass: pass + 1, merged: mergedThisPass, failed: failedThisPass.length },
+					"Merge pass complete, retrying failed merges",
+				);
+				pendingMerges = failedThisPass;
+			} else {
+				// No progress or all succeeded - log final failures and stop
+				for (const failed of failedThisPass) {
+					output.error(`Merge failed: ${failed.taskId}`, { error: failed.mergeError });
 				}
-				await this.mergeBranch(taskResult.branch, taskResult.taskId, taskResult.worktreePath);
-				taskResult.merged = true;
-				this.updateTaskStatus(taskResult.taskId, "merged");
-				output.success(`Merged: ${taskResult.taskId}`);
-			} catch (err) {
-				taskResult.mergeError = String(err);
-				output.error(`Merge failed: ${taskResult.taskId}`, { error: String(err) });
+				break;
 			}
 		}
 

@@ -2,7 +2,6 @@
  * Tests for subtask isolation improvements:
  * - mergeOverlappingSubtasks (task-decomposer.ts)
  * - getSiblingTasks / getParentTask (task.ts)
- * - buildNextBatch (orchestrator.ts, tested indirectly)
  */
 
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -167,106 +166,5 @@ describe("getSiblingTasks and getParentTask", () => {
 	it("getParentTask should return undefined for non-existent task", () => {
 		const parent = getParentTask("nonexistent-id", tasksPath);
 		expect(parent).toBeUndefined();
-	});
-});
-
-describe("buildNextBatch logic", () => {
-	// We test the batching logic by simulating what buildNextBatch does,
-	// since it's a private method. The logic is simple enough to verify directly.
-	function buildNextBatch(
-		remainingTasks: string[],
-		maxSize: number,
-		parentIds: Map<string, string>,
-	): { batch: string[]; deferred: string[] } {
-		const batch: string[] = [];
-		const deferred: string[] = [];
-		const parentIdsInBatch = new Set<string>();
-
-		for (const task of remainingTasks) {
-			if (batch.length >= maxSize) {
-				deferred.push(task);
-				continue;
-			}
-
-			const parentId = parentIds.get(task);
-			if (!parentId) {
-				batch.push(task);
-			} else if (!parentIdsInBatch.has(parentId)) {
-				parentIdsInBatch.add(parentId);
-				batch.push(task);
-			} else {
-				deferred.push(task);
-			}
-		}
-
-		return { batch, deferred };
-	}
-
-	it("should batch all tasks when no siblings", () => {
-		const parentIds = new Map<string, string>();
-		const { batch, deferred } = buildNextBatch(["a", "b", "c"], 5, parentIds);
-		expect(batch).toEqual(["a", "b", "c"]);
-		expect(deferred).toEqual([]);
-	});
-
-	it("should allow one sibling per parent per batch", () => {
-		const parentIds = new Map([
-			["a", "parent-1"],
-			["b", "parent-1"],
-			["c", "parent-1"],
-		]);
-		const { batch, deferred } = buildNextBatch(["a", "b", "c"], 5, parentIds);
-		expect(batch).toEqual(["a"]);
-		expect(deferred).toEqual(["b", "c"]);
-	});
-
-	it("should mix independent tasks with siblings", () => {
-		const parentIds = new Map([
-			["sub1-a", "parent-1"],
-			["sub1-b", "parent-1"],
-			["sub2-a", "parent-2"],
-			["sub2-b", "parent-2"],
-		]);
-		const tasks = ["sub1-a", "standalone", "sub2-a", "sub1-b", "sub2-b"];
-		const { batch, deferred } = buildNextBatch(tasks, 5, parentIds);
-		expect(batch).toEqual(["sub1-a", "standalone", "sub2-a"]);
-		expect(deferred).toEqual(["sub1-b", "sub2-b"]);
-	});
-
-	it("should respect maxSize even with eligible tasks", () => {
-		const parentIds = new Map<string, string>();
-		const { batch, deferred } = buildNextBatch(["a", "b", "c", "d"], 2, parentIds);
-		expect(batch).toEqual(["a", "b"]);
-		expect(deferred).toEqual(["c", "d"]);
-	});
-
-	it("should handle empty input", () => {
-		const parentIds = new Map<string, string>();
-		const { batch, deferred } = buildNextBatch([], 5, parentIds);
-		expect(batch).toEqual([]);
-		expect(deferred).toEqual([]);
-	});
-
-	it("should process all siblings across multiple batches", () => {
-		const parentIds = new Map([
-			["a", "parent-1"],
-			["b", "parent-1"],
-			["c", "parent-1"],
-		]);
-
-		// First batch: takes only one
-		const result1 = buildNextBatch(["a", "b", "c"], 5, parentIds);
-		expect(result1.batch).toEqual(["a"]);
-		expect(result1.deferred).toEqual(["b", "c"]);
-
-		// Second batch from deferred: takes next one
-		const result2 = buildNextBatch(result1.deferred, 5, parentIds);
-		expect(result2.batch).toEqual(["b"]);
-		expect(result2.deferred).toEqual(["c"]);
-
-		// Third batch: last one
-		const result3 = buildNextBatch(result2.deferred, 5, parentIds);
-		expect(result3.batch).toEqual(["c"]);
-		expect(result3.deferred).toEqual([]);
 	});
 });
