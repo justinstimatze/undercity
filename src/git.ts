@@ -5,7 +5,7 @@
  * MergeQueue has been extracted to merge-queue.ts for better separation of concerns.
  */
 
-import { execFileSync, execSync, spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { gitLogger } from "./logger.js";
 import type { CodebaseFingerprint } from "./types.js";
@@ -109,7 +109,7 @@ export function resolveRepositoryPath(basePath: string, relativePath: string): s
  */
 export function isInsideGitRepo(path: string): boolean {
 	try {
-		execSync(`git -C "${path}" rev-parse --is-inside-work-tree`, {
+		execFileSync("git", ["-C", path, "rev-parse", "--is-inside-work-tree"], {
 			encoding: "utf-8",
 			stdio: ["pipe", "pipe", "pipe"],
 		});
@@ -135,12 +135,12 @@ export function shallowCloneRepository(repoUrl: string, targetDir: string, branc
 	args.push(repoUrl, targetDir);
 
 	try {
-		execSync(args.join(" "), {
+		execFileSync("git", args, {
 			encoding: "utf-8",
 			stdio: "inherit",
 		});
 	} catch (error) {
-		throw new GitError(`Failed to clone repository: ${String(error)}`, args.join(" "));
+		throw new GitError(`Failed to clone repository: ${String(error)}`, `git ${args.join(" ")}`);
 	}
 }
 
@@ -151,7 +151,7 @@ export function shallowCloneRepository(repoUrl: string, targetDir: string, branc
  */
 export function getRepositoryUrl(path: string): string | null {
 	try {
-		const url = execSync(`git -C "${path}" config --get remote.origin.url`, {
+		const url = execFileSync("git", ["-C", path, "config", "--get", "remote.origin.url"], {
 			encoding: "utf-8",
 			stdio: ["pipe", "pipe", "pipe"],
 		}).trim();
