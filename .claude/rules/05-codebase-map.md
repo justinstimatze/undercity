@@ -43,6 +43,7 @@
 | **git.ts** | Git operations, branch management, fingerprinting | getCurrentBranch, rebase, merge, execGit |
 | **merge-queue.ts** | Serial merge pipeline (extracted from git.ts) | MergeQueue |
 | **rate-limit.ts** | 429 handling, exponential backoff | RateLimitTracker |
+| **file-lock.ts** | File locking for JSON state files (knowledge, ledger) | withFileLock, withFileLockAsync |
 | **file-tracker.ts** | Pre-merge file conflict detection | FileTracker |
 | **metrics.ts** | Task metrics tracking, JSONL storage | MetricsTracker, getMetricsSummary |
 | **live-metrics.ts** | Running totals for dashboard display | saveLiveMetrics, loadLiveMetrics |
@@ -51,6 +52,7 @@
 | **plan-parser.ts** | Parse markdown plans into tasks | parsePlanFile, planToTasks |
 | **plan-link.ts** | Plan-task linkage (frontmatter metadata) | linkTasksToPlan, findLinkedPlans, getPlanStatus |
 | **ticket-loader.ts** | Load rich tickets from YAML/JSON/MD files | loadTicketFromFile, isTicketFile, TicketFileSchema |
+| **concurrency.ts** | Semaphore-based batch concurrency limiter | runWithConcurrency |
 | **complexity.ts** | Assess task complexity | assessComplexityFast |
 | **persistence.ts** | State management, file I/O for `.undercity/*` | Persistence |
 | **dashboard.ts** | TUI (blessed-based) | launchDashboard |
@@ -108,6 +110,8 @@
 - Isolate tasks in git worktrees → `worktree-manager.ts`
 - Merge branches serially → `merge-queue.ts` (MergeQueue class)
 - Handle rate limits → `rate-limit.ts`
+- Lock JSON state files for concurrent access → `file-lock.ts` (withFileLock, withFileLockAsync)
+- Run batched async operations with concurrency limit → `concurrency.ts` (runWithConcurrency)
 - Check file conflicts → `file-tracker.ts`
 - Track task metrics → `metrics.ts` (MetricsTracker)
 - Track live token usage → `live-metrics.ts`

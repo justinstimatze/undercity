@@ -5,6 +5,7 @@
  * maintainability and testability.
  */
 
+import { sanitizeContent } from "../content-sanitizer.js";
 import type { ContextBriefing } from "../context.js";
 import { generateToolsPrompt } from "../efficiency-tools.js";
 import { formatPatternsAsRules, getFailureWarningsForTask } from "../error-fix-patterns.js";
@@ -229,29 +230,46 @@ The file MUST be created at ${outputPath} for this task to succeed.`;
 }
 
 /**
+ * Sanitize a ticket field value.
+ * Ticket content may come from external sources (file imports, PM generation)
+ * so we sanitize to prevent prompt injection.
+ */
+function sanitizeTicketField(value: string, fieldName: string): string {
+	const result = sanitizeContent(value, `ticket-${fieldName}`);
+	return result.blocked ? "" : result.content;
+}
+
+/**
  * Format ticket content as context for the agent prompt.
  * Converts the structured ticket into readable markdown sections.
+ * Ticket fields are sanitized to prevent prompt injection from external sources.
  */
 export function formatTicketContext(ticket: TicketContent): string {
 	const parts: string[] = [];
 
 	if (ticket.description) {
-		parts.push(`## Task Description\n${ticket.description}`);
+		parts.push(`## Task Description\n${sanitizeTicketField(ticket.description, "description")}`);
 	}
 	if (ticket.acceptanceCriteria?.length) {
-		parts.push(`## Acceptance Criteria\n${ticket.acceptanceCriteria.map((c) => `- [ ] ${c}`).join("\n")}`);
+		const sanitized = ticket.acceptanceCriteria.map((c) => sanitizeTicketField(c, "criteria")).filter(Boolean);
+		if (sanitized.length > 0) {
+			parts.push(`## Acceptance Criteria\n${sanitized.map((c) => `- [ ] ${c}`).join("\n")}`);
+		}
 	}
 	if (ticket.testPlan) {
-		parts.push(`## Test Plan\n${ticket.testPlan}`);
+		parts.push(`## Test Plan\n${sanitizeTicketField(ticket.testPlan, "testPlan")}`);
 	}
 	if (ticket.implementationNotes) {
-		parts.push(`## Implementation Notes\n${ticket.implementationNotes}`);
+		parts.push(`## Implementation Notes\n${sanitizeTicketField(ticket.implementationNotes, "notes")}`);
 	}
 	if (ticket.rationale) {
-		parts.push(`## Why This Matters\n${ticket.rationale}`);
+		parts.push(`## Why This Matters\n${sanitizeTicketField(ticket.rationale, "rationale")}`);
 	}
 	if (ticket.researchFindings?.length) {
-		parts.push(`## Research Findings\n${ticket.researchFindings.map((f) => `- ${f}`).join("\n")}`);
+		const sanitized = ticket.researchFindings.map((f) => sanitizeTicketField(f, "research")).filter(Boolean);
+		if (sanitized.length > 0) {
+			parts.push(`## Research Findings\n${sanitized.map((f) => `- ${f}`).join("\n")}`);
+		}
 	}
 
 	return parts.join("\n\n");

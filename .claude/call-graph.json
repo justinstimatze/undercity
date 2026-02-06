@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-02-05T19:43:01.481Z",
+  "generatedAt": "2026-02-06T02:29:54.316Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -18,12 +18,12 @@
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 128,
+          "line": 129,
           "context": "unknown"
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 302,
+          "line": 320,
           "context": "if"
         },
         {
@@ -63,7 +63,7 @@
         },
         {
           "file": "knowledge.ts",
-          "line": 185,
+          "line": 186,
           "context": "if"
         },
         {
@@ -147,7 +147,7 @@
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 323,
+          "line": 341,
           "context": "if"
         },
         {
@@ -203,7 +203,7 @@
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 325,
+          "line": 343,
           "context": "if"
         }
       ]
@@ -224,7 +224,7 @@
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 332,
+          "line": 350,
           "context": "if"
         }
       ]
@@ -267,7 +267,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1621,
+          "line": 1631,
           "context": "if"
         }
       ]
@@ -316,7 +316,7 @@
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 310,
+          "line": 328,
           "context": "if"
         }
       ]
@@ -348,7 +348,7 @@
         },
         {
           "file": "capability-ledger.ts",
-          "line": 331,
+          "line": 332,
           "context": "if"
         }
       ]
@@ -364,12 +364,12 @@
         },
         {
           "file": "worker.ts",
-          "line": 1500,
+          "line": 1510,
           "context": "startTask"
         },
         {
           "file": "capability-ledger.ts",
-          "line": 431,
+          "line": 432,
           "context": "if"
         }
       ]
@@ -523,7 +523,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1284,
+          "line": 1294,
           "context": "info"
         }
       ]

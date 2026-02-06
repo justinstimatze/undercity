@@ -31,6 +31,7 @@ import {
 	assessComplexityQuantitative,
 	type ComplexityAssessment,
 } from "./complexity.js";
+import { sanitizeContent } from "./content-sanitizer.js";
 import { type ContextBriefing, type ContextMode, prepareContext } from "./context.js";
 import { tryAutoRemediate } from "./error-fix-patterns.js";
 import { createAndCheckout } from "./git.js";
@@ -945,21 +946,30 @@ export class TaskWorker {
 		if (ctx.decisions && ctx.decisions.length > 0) {
 			lines.push("Key decisions/constraints established:");
 			for (const decision of ctx.decisions) {
-				lines.push(`  - ${decision}`);
+				const sanitized = sanitizeContent(decision, "handoff-decision");
+				if (!sanitized.blocked) {
+					lines.push(`  - ${sanitized.content}`);
+				}
 			}
 			lines.push("");
 		}
 
 		if (ctx.codeContext) {
-			lines.push("Relevant code context:");
-			lines.push(ctx.codeContext);
-			lines.push("");
+			const sanitized = sanitizeContent(ctx.codeContext, "handoff-code-context");
+			if (!sanitized.blocked) {
+				lines.push("Relevant code context:");
+				lines.push(sanitized.content);
+				lines.push("");
+			}
 		}
 
 		if (ctx.notes) {
-			lines.push("Notes from caller:");
-			lines.push(ctx.notes);
-			lines.push("");
+			const sanitized = sanitizeContent(ctx.notes, "handoff-notes");
+			if (!sanitized.blocked) {
+				lines.push("Notes from caller:");
+				lines.push(sanitized.content);
+				lines.push("");
+			}
 		}
 
 		// Add last attempt context for retry tasks

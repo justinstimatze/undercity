@@ -9,6 +9,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { withFileLock } from "./file-lock.js";
 import type { ModelChoice } from "./types.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
@@ -619,47 +620,52 @@ export function updateLedger(taskResult: TaskResult, stateDir: string = DEFAULT_
 		throw new TypeError(`Invalid stateDir parameter: expected string, got ${typeof stateDir}`);
 	}
 
-	const ledger = loadLedger(stateDir);
-	const keywords = extractKeywords(taskResult.objective);
+	const ledgerPath = getLedgerPath(stateDir);
 
-	// Update stats for each keyword found
-	for (const keyword of keywords) {
-		if (!ledger.patterns[keyword]) {
-			ledger.patterns[keyword] = createEmptyPatternStats(keyword);
+	withFileLock(ledgerPath, () => {
+		// Re-read inside lock to get fresh state
+		const ledger = loadLedger(stateDir);
+		const keywords = extractKeywords(taskResult.objective);
+
+		// Update stats for each keyword found
+		for (const keyword of keywords) {
+			if (!ledger.patterns[keyword]) {
+				ledger.patterns[keyword] = createEmptyPatternStats(keyword);
+			}
+
+			const patternStats = ledger.patterns[keyword];
+			const modelStats = patternStats.byModel[taskResult.model];
+
+			// Ensure new fields exist (migration for old ledgers)
+			modelStats.totalTokens ??= 0;
+			modelStats.totalDurationMs ??= 0;
+			modelStats.totalRetries ??= 0;
+
+			modelStats.attempts++;
+			if (taskResult.success) {
+				modelStats.successes++;
+			}
+			if (taskResult.escalated) {
+				modelStats.escalations++;
+			}
+
+			// Record cost metrics
+			if (taskResult.tokenCost !== undefined) {
+				modelStats.totalTokens += taskResult.tokenCost;
+			}
+			if (taskResult.durationMs !== undefined) {
+				modelStats.totalDurationMs += taskResult.durationMs;
+			}
+			if (taskResult.attempts !== undefined) {
+				modelStats.totalRetries += taskResult.attempts;
+			}
+
+			patternStats.lastSeen = new Date();
 		}
 
-		const patternStats = ledger.patterns[keyword];
-		const modelStats = patternStats.byModel[taskResult.model];
-
-		// Ensure new fields exist (migration for old ledgers)
-		modelStats.totalTokens ??= 0;
-		modelStats.totalDurationMs ??= 0;
-		modelStats.totalRetries ??= 0;
-
-		modelStats.attempts++;
-		if (taskResult.success) {
-			modelStats.successes++;
-		}
-		if (taskResult.escalated) {
-			modelStats.escalations++;
-		}
-
-		// Record cost metrics
-		if (taskResult.tokenCost !== undefined) {
-			modelStats.totalTokens += taskResult.tokenCost;
-		}
-		if (taskResult.durationMs !== undefined) {
-			modelStats.totalDurationMs += taskResult.durationMs;
-		}
-		if (taskResult.attempts !== undefined) {
-			modelStats.totalRetries += taskResult.attempts;
-		}
-
-		patternStats.lastSeen = new Date();
-	}
-
-	ledger.totalEntries++;
-	saveLedger(ledger, stateDir);
+		ledger.totalEntries++;
+		saveLedger(ledger, stateDir);
+	});
 }
 
 /**

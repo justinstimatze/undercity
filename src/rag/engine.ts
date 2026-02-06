@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { glob } from "glob";
+import { runWithConcurrency } from "../concurrency.js";
 import { sessionLogger } from "../logger.js";
 import { type Chunker, createChunker } from "./chunker.js";
 import {
@@ -272,7 +273,7 @@ export class RAGEngine {
 	}
 
 	/**
-	 * Index a directory
+	 * Index a directory with concurrency-limited parallel processing
 	 */
 	private async indexDirectory(dirPath: string, source: string, recursive: boolean): Promise<IndexResult[]> {
 		const pattern = recursive ? "**/*" : "*";
@@ -282,14 +283,9 @@ export class RAGEngine {
 			absolute: true,
 		});
 
-		const results: IndexResult[] = [];
-
-		for (const file of files) {
-			const result = await this.indexSingleFile(file, source);
-			if (result) {
-				results.push(result);
-			}
-		}
+		const tasks = files.map((file) => () => this.indexSingleFile(file, source));
+		const allResults = await runWithConcurrency(tasks, 5);
+		const results = allResults.filter((r): r is IndexResult => r !== null);
 
 		logger.info({ dirPath, filesIndexed: results.length, recursive }, "Directory indexed");
 

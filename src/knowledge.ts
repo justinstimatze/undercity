@@ -10,6 +10,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { withFileLock } from "./file-lock.js";
 import { validateKnowledgeBase } from "./knowledge-validator.js";
 
 const DEFAULT_STATE_DIR = ".undercity";
@@ -328,57 +329,62 @@ export function addLearning(
 	learning: Omit<Learning, "id" | "createdAt" | "usedCount" | "successCount" | "confidence">,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): AddLearningResult {
-	const kb = loadKnowledge(stateDir);
+	const knowledgePath = getKnowledgePath(stateDir);
 
-	const newLearning: Learning = {
-		...learning,
-		id: generateLearningId(),
-		confidence: 0.5, // Start at 50% confidence
-		usedCount: 0,
-		successCount: 0,
-		createdAt: new Date().toISOString(),
-	};
+	return withFileLock(knowledgePath, () => {
+		// Re-read inside lock to get fresh state
+		const kb = loadKnowledge(stateDir);
 
-	// Check for duplicates (similar content) and calculate novelty
-	const similarities: { id: string; score: number }[] = [];
-	for (const existing of kb.learnings) {
-		const similarity = calculateSimilarity(existing.content, newLearning.content);
-		if (similarity > 0.5) {
-			// Track moderately similar learnings
-			similarities.push({ id: existing.id, score: similarity });
-		}
-	}
-
-	// Sort by similarity descending
-	similarities.sort((a, b) => b.score - a.score);
-
-	// Check if there's a high-similarity match (duplicate)
-	const highSimilarity = similarities.filter((s) => s.score > 0.8);
-	if (highSimilarity.length > 0) {
-		// This is a duplicate - don't add
-		const maxSimilarity = highSimilarity[0].score;
-		const existingLearning = kb.learnings.find((l) => l.id === highSimilarity[0].id);
-		return {
-			learning: existingLearning || newLearning,
-			added: false,
-			noveltyScore: 1 - maxSimilarity,
-			similarTo: highSimilarity.map((s) => s.id),
+		const newLearning: Learning = {
+			...learning,
+			id: generateLearningId(),
+			confidence: 0.5, // Start at 50% confidence
+			usedCount: 0,
+			successCount: 0,
+			createdAt: new Date().toISOString(),
 		};
-	}
 
-	// Calculate novelty score based on how different this is from existing learnings
-	const noveltyScore = similarities.length > 0 ? 1 - similarities[0].score : 1.0;
+		// Check for duplicates (similar content) and calculate novelty
+		const similarities: { id: string; score: number }[] = [];
+		for (const existing of kb.learnings) {
+			const similarity = calculateSimilarity(existing.content, newLearning.content);
+			if (similarity > 0.5) {
+				// Track moderately similar learnings
+				similarities.push({ id: existing.id, score: similarity });
+			}
+		}
 
-	// Add the new learning
-	kb.learnings.push(newLearning);
-	saveKnowledge(kb, stateDir);
+		// Sort by similarity descending
+		similarities.sort((a, b) => b.score - a.score);
 
-	return {
-		learning: newLearning,
-		added: true,
-		noveltyScore,
-		similarTo: similarities.length > 0 ? similarities.slice(0, 3).map((s) => s.id) : undefined,
-	};
+		// Check if there's a high-similarity match (duplicate)
+		const highSimilarity = similarities.filter((s) => s.score > 0.8);
+		if (highSimilarity.length > 0) {
+			// This is a duplicate - don't add
+			const maxSimilarity = highSimilarity[0].score;
+			const existingLearning = kb.learnings.find((l) => l.id === highSimilarity[0].id);
+			return {
+				learning: existingLearning || newLearning,
+				added: false,
+				noveltyScore: 1 - maxSimilarity,
+				similarTo: highSimilarity.map((s) => s.id),
+			};
+		}
+
+		// Calculate novelty score based on how different this is from existing learnings
+		const noveltyScore = similarities.length > 0 ? 1 - similarities[0].score : 1.0;
+
+		// Add the new learning
+		kb.learnings.push(newLearning);
+		saveKnowledge(kb, stateDir);
+
+		return {
+			learning: newLearning,
+			added: true,
+			noveltyScore,
+			similarTo: similarities.length > 0 ? similarities.slice(0, 3).map((s) => s.id) : undefined,
+		};
+	});
 }
 
 /**
@@ -481,26 +487,31 @@ export function markLearningsUsed(
 	taskSuccess: boolean,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): void {
-	const kb = loadKnowledge(stateDir);
-	const now = new Date().toISOString();
+	const knowledgePath = getKnowledgePath(stateDir);
 
-	for (const learning of kb.learnings) {
-		if (learningIds.includes(learning.id)) {
-			learning.usedCount++;
-			learning.lastUsedAt = now;
+	withFileLock(knowledgePath, () => {
+		// Re-read inside lock to get fresh state
+		const kb = loadKnowledge(stateDir);
+		const now = new Date().toISOString();
 
-			if (taskSuccess) {
-				learning.successCount++;
-				// Increase confidence on successful use (max 0.95)
-				learning.confidence = Math.min(0.95, learning.confidence + 0.05);
-			} else {
-				// Decrease confidence on failed use (min 0.1)
-				learning.confidence = Math.max(0.1, learning.confidence - 0.1);
+		for (const learning of kb.learnings) {
+			if (learningIds.includes(learning.id)) {
+				learning.usedCount++;
+				learning.lastUsedAt = now;
+
+				if (taskSuccess) {
+					learning.successCount++;
+					// Increase confidence on successful use (max 0.95)
+					learning.confidence = Math.min(0.95, learning.confidence + 0.05);
+				} else {
+					// Decrease confidence on failed use (min 0.1)
+					learning.confidence = Math.max(0.1, learning.confidence - 0.1);
+				}
 			}
 		}
-	}
 
-	saveKnowledge(kb, stateDir);
+		saveKnowledge(kb, stateDir);
+	});
 }
 
 /**
