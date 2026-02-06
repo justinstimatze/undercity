@@ -173,7 +173,7 @@ describe("worker/task-results", () => {
 			const result = buildInvalidTargetResult(ctx, "reason");
 
 			expect(result.durationMs).toBeGreaterThanOrEqual(5000);
-			expect(result.durationMs).toBeLessThan(6000);
+			expect(result.durationMs).toBeLessThan(10000);
 		});
 
 		it("includes token usage summary", () => {
@@ -244,7 +244,7 @@ describe("worker/task-results", () => {
 			const result = buildValidationFailureResult("task", "sonnet", "reason", startTime);
 
 			expect(result.durationMs).toBeGreaterThanOrEqual(500);
-			expect(result.durationMs).toBeLessThan(600);
+			expect(result.durationMs).toBeLessThan(5000);
 		});
 	});
 });

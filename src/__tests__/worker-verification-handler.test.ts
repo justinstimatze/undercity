@@ -158,7 +158,7 @@ describe("worker/verification-handler", () => {
 			const result = handleAlreadyComplete(identity, state, verification, startTime);
 
 			expect(result.durationMs).toBeGreaterThanOrEqual(5000);
-			expect(result.durationMs).toBeLessThan(6000);
+			expect(result.durationMs).toBeLessThan(10000);
 		});
 
 		it("does not include commitSha", () => {

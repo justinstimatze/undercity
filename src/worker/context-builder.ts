@@ -12,7 +12,7 @@ import { classifyTask, hasClassificationData } from "../task-classifier.js";
 import { findRelevantFiles, formatCoModificationHints, formatFileSuggestionsForPrompt } from "../task-file-patterns.js";
 import { formatExecutionPlanAsContext, type TieredPlanResult } from "../task-planner.js";
 import type { TicketContent } from "../types.js";
-import { checkTaskMayBeComplete, formatTicketContext } from "./prompt-builder.js";
+import { formatTicketContext } from "./prompt-builder.js";
 import { getFewShotExample } from "./task-helpers.js";
 
 /**
@@ -166,12 +166,6 @@ export async function buildImplementationContext(config: ContextBuildConfig): Pr
 		if (coModHints) {
 			sections.push(coModHints);
 		}
-	}
-
-	// Check if task might already be complete (pre-flight check)
-	const alreadyDoneHint = checkTaskMayBeComplete(task, config.workingDirectory);
-	if (alreadyDoneHint) {
-		sections.push(`⚠️ PRE-FLIGHT CHECK:\n${alreadyDoneHint}`);
 	}
 
 	// Add execution plan from planning phase (if available)

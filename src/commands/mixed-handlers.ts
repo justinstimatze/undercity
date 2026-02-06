@@ -3,9 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { getConfigSource, loadConfig } from "../config.js";
-import { type OracleCard, UndercityOracle } from "../oracle.js";
+import type { OracleCard } from "../oracle.js";
 import * as output from "../output.js";
-import { Persistence } from "../persistence.js";
 import { checkDaemonRunning, type DaemonStatus, displayDaemonStatus, executeDaemonAction } from "./daemon-helpers.js";
 import {
 	type HumanInputContext,
@@ -32,13 +31,14 @@ import {
 	type TaskProposal,
 } from "./pm-helpers.js";
 
-// Re-export grind module
-export { type GrindOptions, handleGrind } from "../grind/index.js";
+// GrindOptions type re-exported for mixed.ts (no runtime cost)
+export type { GrindOptions } from "../grind/index.js";
+
+// handleGrind lazy-loaded at call site to avoid pulling in grind module (~2.4MB cascade)
+// at startup. Callers should use: const { handleGrind } = await import("../grind/index.js");
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// Note: GrindOptions and handleGrind are re-exported from ../grind/index.js above
 
 // Type definitions for command options
 export interface InitOptions {
@@ -236,10 +236,11 @@ function generateCommands(
 /**
  * Handle the init command
  */
-export function handleInit(options: InitOptions): void {
+export async function handleInit(options: InitOptions): Promise<void> {
 	console.log(chalk.bold("Initializing Undercity"));
 
 	// Initialize .undercity directory
+	const { Persistence } = await import("../persistence.js");
 	const persistence = new Persistence(options.directory);
 	const undercityDir = options.directory || ".undercity";
 	persistence.initializeUndercity(options.directory);
@@ -416,7 +417,8 @@ export function handleSetup(): void {
 /**
  * Handle the oracle command
  */
-export function handleOracle(situation: string | undefined, options: OracleOptions): void {
+export async function handleOracle(situation: string | undefined, options: OracleOptions): Promise<void> {
+	const { UndercityOracle } = await import("../oracle.js");
 	const oracle = new UndercityOracle();
 
 	if (options.allCategories) {

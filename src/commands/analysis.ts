@@ -1,9 +1,10 @@
 /**
  * Analysis and metrics commands
+ *
+ * Heavy imports (Orchestrator, metrics-dashboard) are lazy-loaded in
+ * action handlers to avoid penalizing startup for unrelated commands.
  */
 import chalk from "chalk";
-import { launchMetricsDashboard } from "../metrics-dashboard.js";
-import { Orchestrator } from "../orchestrator.js";
 import type { CommandModule } from "./types.js";
 
 export const analysisCommands: CommandModule = {
@@ -124,7 +125,8 @@ export const analysisCommands: CommandModule = {
 			.command("metrics-dashboard")
 			.alias("md")
 			.description("Launch interactive metrics dashboard with token usage, success rates, and cost tracking")
-			.action(() => {
+			.action(async () => {
+				const { launchMetricsDashboard } = await import("../metrics-dashboard.js");
 				launchMetricsDashboard();
 			});
 
@@ -341,9 +343,10 @@ async function runBenchmark(): Promise<void> {
 		"Logging: Implement structured logging with detailed tracing",
 	];
 
-	console.log(chalk.cyan("🚀 Starting Undercity Benchmark"));
+	console.log(chalk.cyan("Starting Undercity Benchmark"));
 	console.log(chalk.dim("Running standard set of performance tasks"));
 
+	const { Orchestrator } = await import("../orchestrator.js");
 	const orchestrator = new Orchestrator({
 		startingModel: "sonnet",
 		maxConcurrent: 2,

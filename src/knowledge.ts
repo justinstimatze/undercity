@@ -18,6 +18,13 @@ const DEFAULT_STATE_DIR = ".undercity";
 const KNOWLEDGE_FILE = "knowledge.json";
 
 /**
+ * Maximum number of learnings before consolidation triggers.
+ * When exceeded, similar low-value learnings are merged together
+ * rather than deleted, preserving knowledge that may still be relevant.
+ */
+const MAX_LEARNINGS = 500;
+
+/**
  * Categories of learnings
  */
 export type LearningCategory = "pattern" | "gotcha" | "preference" | "fact";
@@ -309,6 +316,98 @@ function extractKeywords(text: string): string[] {
 }
 
 /**
+ * Consolidate knowledge base when it exceeds MAX_LEARNINGS.
+ *
+ * Strategy: merge the most similar low-value learnings together rather than
+ * deleting by age, since old knowledge can still be valuable. Preserves
+ * high-confidence and frequently-used learnings untouched.
+ *
+ * A "low-value" learning is one with confidence < 0.7 AND usedCount < 3.
+ * Among those, find pairs with >0.5 similarity and merge them: keep the
+ * higher-confidence one, append the other's unique keywords, and bump its
+ * confidence slightly to reflect the consolidation.
+ */
+function consolidateKnowledge(kb: KnowledgeBase): void {
+	const target = Math.floor(MAX_LEARNINGS * 0.8); // Consolidate down to 80% of cap
+
+	// Phase 1: Identify low-value learnings eligible for consolidation
+	const highValue: Learning[] = [];
+	const lowValue: Learning[] = [];
+
+	for (const l of kb.learnings) {
+		if (l.confidence >= 0.7 || l.usedCount >= 3) {
+			highValue.push(l);
+		} else {
+			lowValue.push(l);
+		}
+	}
+
+	// If high-value alone fits, just drop the lowest-confidence low-value entries
+	if (highValue.length >= target) {
+		// Keep all high-value, keep best low-value up to target
+		lowValue.sort((a, b) => b.confidence - a.confidence);
+		const keepCount = Math.max(0, target - highValue.length);
+		kb.learnings = [...highValue, ...lowValue.slice(0, keepCount)];
+		sessionLogger.info(
+			{ before: highValue.length + lowValue.length, after: kb.learnings.length },
+			"Consolidated knowledge (trimmed low-value entries)",
+		);
+		return;
+	}
+
+	// Phase 2: Merge similar low-value learnings
+	// Sort by confidence ascending so we merge the weakest first
+	lowValue.sort((a, b) => a.confidence - b.confidence);
+	const merged = new Set<string>();
+	const survivors: Learning[] = [];
+
+	for (let i = 0; i < lowValue.length; i++) {
+		if (merged.has(lowValue[i].id)) continue;
+
+		let current = lowValue[i];
+
+		// Try to find a merge partner among remaining low-value learnings
+		for (let j = i + 1; j < lowValue.length; j++) {
+			if (merged.has(lowValue[j].id)) continue;
+
+			const similarity = calculateSimilarity(current.content, lowValue[j].content);
+			if (similarity > 0.5) {
+				// Merge: keep current, absorb the other's unique keywords
+				const otherKeywords = lowValue[j].keywords.filter((k) => !current.keywords.includes(k));
+				current = {
+					...current,
+					keywords: [...current.keywords, ...otherKeywords].slice(0, 20),
+					usedCount: current.usedCount + lowValue[j].usedCount,
+					successCount: current.successCount + lowValue[j].successCount,
+					confidence: Math.min(0.7, current.confidence + 0.05),
+				};
+				merged.add(lowValue[j].id);
+			}
+		}
+
+		survivors.push(current);
+	}
+
+	kb.learnings = [...highValue, ...survivors];
+
+	// If still over target, trim the weakest survivors
+	if (kb.learnings.length > target) {
+		kb.learnings.sort((a, b) => {
+			// Score: confidence * 0.5 + (usedCount > 0 ? 0.3 : 0) + (successCount > 0 ? 0.2 : 0)
+			const scoreA = a.confidence * 0.5 + (a.usedCount > 0 ? 0.3 : 0) + (a.successCount > 0 ? 0.2 : 0);
+			const scoreB = b.confidence * 0.5 + (b.usedCount > 0 ? 0.3 : 0) + (b.successCount > 0 ? 0.2 : 0);
+			return scoreB - scoreA;
+		});
+		kb.learnings = kb.learnings.slice(0, target);
+	}
+
+	sessionLogger.info(
+		{ before: highValue.length + lowValue.length, after: kb.learnings.length, mergedCount: merged.size },
+		"Consolidated knowledge (merged similar entries)",
+	);
+}
+
+/**
  * Result of adding a learning to the knowledge base
  */
 export interface AddLearningResult {
@@ -377,6 +476,12 @@ export function addLearning(
 
 		// Add the new learning
 		kb.learnings.push(newLearning);
+
+		// Consolidate if over cap to prevent unbounded growth
+		if (kb.learnings.length > MAX_LEARNINGS) {
+			consolidateKnowledge(kb);
+		}
+
 		saveKnowledge(kb, stateDir);
 
 		return {

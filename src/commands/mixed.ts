@@ -15,7 +15,6 @@ import {
 	handleDrain,
 	handleDspyReadiness,
 	handleEmergency,
-	handleGrind,
 	handleHumanInput,
 	handleIndex,
 	handleInit,
@@ -69,7 +68,10 @@ export const mixedCommands: CommandModule = {
 			.option("--push", "Push to remote after successful merge (default: off)")
 			.option("--duration <time>", "Auto-drain after duration (e.g., 6h, 30m)")
 			.option("--no-postmortem", "Skip post-mortem analysis (runs by default)")
-			.action((options: GrindOptions) => handleGrind(options));
+			.action(async (options: GrindOptions) => {
+				const { handleGrind } = await import("../grind/index.js");
+				return handleGrind(options);
+			});
 
 		// Usage command - fetch Claude Max usage from claude.ai
 		program

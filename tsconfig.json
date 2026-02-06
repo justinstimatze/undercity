@@ -5,9 +5,9 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "target": "ES2024",
-    "declaration": true,
+    "declaration": false,
     "incremental": true,
-    "sourceMap": true,
+    "sourceMap": false,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -17,8 +17,6 @@
   "include": ["src/**/*"],
   "exclude": [
     "dist/",
-    "**/*.test.*",
-    "src/loadout-manager.ts",
-    "src/loadout-scoring.ts"
+    "**/*.test.*"
   ]
 }

@@ -14,6 +14,8 @@ import { join } from "node:path";
 import {
 	hasTaskFileData,
 	loadTaskFileStoreFromDB,
+	pruneStaleCoModificationsDB,
+	pruneStaleKeywordCorrelationsDB,
 	recordTaskFile as recordTaskFileDB,
 	updateCoModification as updateCoModificationDB,
 	updateKeywordCorrelation as updateKeywordCorrelationDB,
@@ -390,6 +392,15 @@ export function recordTaskFiles(
 	// Update co-modification patterns (only for successful tasks with multiple files)
 	if (success && normalizedFiles.length >= 2) {
 		updateCoModificationDB(normalizedFiles, stateDir);
+	}
+
+	// Periodic pruning: remove stale patterns (90+ days old, <2 occurrences)
+	// Runs on every record but the DB queries are fast (indexed)
+	try {
+		pruneStaleKeywordCorrelationsDB(90, 2, stateDir);
+		pruneStaleCoModificationsDB(90, 2, stateDir);
+	} catch {
+		// Non-critical - continue without pruning
 	}
 }
 

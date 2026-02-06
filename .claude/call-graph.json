@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-02-06T07:46:08.055Z",
+  "generatedAt": "2026-02-06T08:40:56.046Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -18,13 +18,8 @@
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 129,
+          "line": 101,
           "context": "unknown"
-        },
-        {
-          "file": "worker/prompt-builder.ts",
-          "line": 320,
-          "context": "if"
         },
         {
           "file": "automated-pm.ts",
@@ -43,7 +38,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1246,
+          "line": 1248,
           "context": "if"
         },
         {
@@ -63,7 +58,7 @@
         },
         {
           "file": "knowledge.ts",
-          "line": 187,
+          "line": 194,
           "context": "if"
         },
         {
@@ -146,11 +141,6 @@
           "context": "if"
         },
         {
-          "file": "worker/prompt-builder.ts",
-          "line": 341,
-          "context": "if"
-        },
-        {
           "file": "orchestrator.ts",
           "line": 1720,
           "context": "for"
@@ -172,12 +162,12 @@
         },
         {
           "file": "task-file-patterns.ts",
-          "line": 483,
+          "line": 494,
           "context": "formatFileSuggestionsForPrompt"
         },
         {
           "file": "task-file-patterns.ts",
-          "line": 656,
+          "line": 667,
           "context": "if"
         },
         {
@@ -200,11 +190,6 @@
           "file": "worker/context-builder.ts",
           "line": 158,
           "context": "if"
-        },
-        {
-          "file": "worker/prompt-builder.ts",
-          "line": 343,
-          "context": "if"
         }
       ]
     },
@@ -220,11 +205,6 @@
         {
           "file": "worker/verification-handler.ts",
           "line": 410,
-          "context": "if"
-        },
-        {
-          "file": "worker/prompt-builder.ts",
-          "line": 350,
           "context": "if"
         }
       ]
@@ -251,12 +231,12 @@
       "calledFrom": [
         {
           "file": "task-file-patterns.ts",
-          "line": 533,
+          "line": 544,
           "context": "for"
         },
         {
           "file": "task-file-patterns.ts",
-          "line": 656,
+          "line": 667,
           "context": "if"
         }
       ]
@@ -267,7 +247,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1656,
+          "line": 1615,
           "context": "if"
         }
       ]
@@ -289,7 +269,7 @@
       "calledFrom": [
         {
           "file": "error-fix-patterns.ts",
-          "line": 290,
+          "line": 291,
           "context": "if"
         },
         {
@@ -305,7 +285,7 @@
       "calledFrom": [
         {
           "file": "error-fix-patterns.ts",
-          "line": 290,
+          "line": 291,
           "context": "if"
         },
         {
@@ -322,11 +302,6 @@
         {
           "file": "worker/context-builder.ts",
           "line": 109,
-          "context": "if"
-        },
-        {
-          "file": "worker/prompt-builder.ts",
-          "line": 328,
           "context": "if"
         }
       ]
@@ -374,7 +349,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1533,
+          "line": 1492,
           "context": "startTask"
         },
         {
@@ -416,7 +391,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1112,
+          "line": 1114,
           "context": "if"
         }
       ]
@@ -427,12 +402,12 @@
       "calledFrom": [
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1135,
+          "line": 1137,
           "context": "log"
         },
         {
           "file": "commands/analysis.ts",
-          "line": 276,
+          "line": 278,
           "context": "if"
         }
       ]
@@ -480,7 +455,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1275,
+          "line": 1277,
           "context": "log"
         }
       ]
@@ -501,7 +476,7 @@
         },
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1282,
+          "line": 1284,
           "context": "log"
         },
         {
@@ -517,7 +492,7 @@
       "calledFrom": [
         {
           "file": "commands/mixed-handlers.ts",
-          "line": 1292,
+          "line": 1294,
           "context": "log"
         },
         {
@@ -533,7 +508,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1317,
+          "line": 1276,
           "context": "info"
         }
       ]

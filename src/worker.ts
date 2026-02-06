@@ -214,47 +214,6 @@ function validateTaskTargets(task: string, cwd: string): TaskValidationResult {
 }
 
 /**
- * Check if a task might already be complete by scanning recent commits
- * Returns a hint if likely done, undefined otherwise
- */
-function _checkTaskMayBeComplete(task: string, cwd: string): string | undefined {
-	try {
-		// Extract keywords from task
-		const keywords = task
-			.toLowerCase()
-			.replace(/[[\]]/g, "")
-			.split(/\s+/)
-			.filter(
-				(word) =>
-					word.length > 3 && !["task", "this", "that", "with", "from", "should", "make", "ensure"].includes(word),
-			);
-
-		if (keywords.length === 0) return undefined;
-
-		// Check last 20 commits
-		const commits = execSync("git log --oneline -20", { cwd, encoding: "utf-8" })
-			.trim()
-			.split("\n")
-			.map((line) => {
-				const [sha, ...rest] = line.split(" ");
-				return { sha, message: rest.join(" ").toLowerCase() };
-			});
-
-		for (const commit of commits) {
-			const matches = keywords.filter((kw) => commit.message.includes(kw)).length;
-			const matchRatio = matches / keywords.length;
-
-			if (matchRatio > 0.5 && matches >= 2) {
-				return `Recent commit ${commit.sha} may have already addressed this: "${commit.message}". Verify before making changes.`;
-			}
-		}
-	} catch {
-		// Non-critical - continue without hint
-	}
-	return undefined;
-}
-
-/**
  * Task status for tracking
  */
 type TaskStatus = "pending" | "running" | "verifying" | "complete" | "failed" | "escalated";

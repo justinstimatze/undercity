@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { TicketContent } from "../types.js";
-import { buildContextSections, formatTicketContext, type PromptBuildContext } from "../worker/prompt-builder.js";
+import { formatTicketContext } from "../worker/prompt-builder.js";
 
 describe("prompt-builder ticket functionality", () => {
 	describe("formatTicketContext", () => {
@@ -129,83 +129,6 @@ describe("prompt-builder ticket functionality", () => {
 			const result = formatTicketContext(ticket);
 			// Source is metadata, not displayed in context
 			expect(result).toBe("");
-		});
-	});
-
-	describe("buildContextSections with ticket", () => {
-		const baseContext: PromptBuildContext = {
-			task: "Test task",
-			workingDirectory: "/tmp/test",
-			stateDir: "/tmp/test/.undercity",
-			attempts: 1,
-			isMetaTask: false,
-			isResearchTask: false,
-			metaType: null,
-			errorHistory: [],
-			consecutiveNoWriteAttempts: 0,
-		};
-
-		it("should include ticket context in output", () => {
-			const ctx: PromptBuildContext = {
-				...baseContext,
-				ticket: {
-					description: "Test description",
-					acceptanceCriteria: ["Criterion 1"],
-				},
-			};
-
-			const result = buildContextSections(ctx);
-
-			expect(result.contextSection).toContain("# Task Ticket");
-			expect(result.contextSection).toContain("## Task Description");
-			expect(result.contextSection).toContain("Test description");
-			expect(result.contextSection).toContain("## Acceptance Criteria");
-		});
-
-		it("should not include ticket section for empty ticket", () => {
-			const ctx: PromptBuildContext = {
-				...baseContext,
-				ticket: {},
-			};
-
-			const result = buildContextSections(ctx);
-
-			// Empty ticket shouldn't add Task Ticket header
-			expect(result.contextSection).not.toContain("# Task Ticket");
-		});
-
-		it("should place ticket early in context", () => {
-			const ctx: PromptBuildContext = {
-				...baseContext,
-				ticket: {
-					description: "Test description",
-				},
-				handoffContext: "Handoff context here",
-			};
-
-			const result = buildContextSections(ctx);
-
-			// Ticket should appear before handoff context
-			const ticketIndex = result.contextSection.indexOf("# Task Ticket");
-			const handoffIndex = result.contextSection.indexOf("Handoff context here");
-
-			expect(ticketIndex).toBeGreaterThan(-1);
-			expect(handoffIndex).toBeGreaterThan(-1);
-			expect(ticketIndex).toBeLessThan(handoffIndex);
-		});
-
-		it("should separate ticket from other sections with divider", () => {
-			const ctx: PromptBuildContext = {
-				...baseContext,
-				ticket: {
-					description: "Test description",
-				},
-			};
-
-			const result = buildContextSections(ctx);
-
-			// Should have --- divider after ticket section
-			expect(result.contextSection).toContain("---");
 		});
 	});
 });

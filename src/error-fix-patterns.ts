@@ -21,6 +21,7 @@ import {
 	loadErrorFixStoreFromDB,
 	pruneOldErrorPatternsDB,
 	pruneOldPendingErrorsDB,
+	pruneOldPermanentFailuresDB,
 	recordPermanentFailureDB,
 	removePendingErrorDB,
 	updateFixAutoApplyStatsDB,
@@ -509,6 +510,13 @@ export function recordPermanentFailure(
 		actualStateDir,
 	);
 	removePendingErrorDB(opts.taskId, actualStateDir);
+
+	// Cap permanent failures at 500 entries (FIFO)
+	try {
+		pruneOldPermanentFailuresDB(500, actualStateDir);
+	} catch {
+		// Non-critical
+	}
 
 	return signature;
 }

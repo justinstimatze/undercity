@@ -1416,6 +1416,84 @@ export function pruneOldErrorPatternsDB(
 	return result.changes;
 }
 
+/**
+ * Cap permanent_failures table at maxCount entries (FIFO).
+ * Keeps most recent entries, deletes oldest beyond the limit.
+ */
+export function pruneOldPermanentFailuresDB(maxCount: number = 500, stateDir: string = DEFAULT_STATE_DIR): number {
+	const db = getDatabase(stateDir);
+
+	const count = (db.prepare("SELECT COUNT(*) as count FROM permanent_failures").get() as { count: number }).count;
+	if (count <= maxCount) return 0;
+
+	const result = db
+		.prepare(
+			`
+		DELETE FROM permanent_failures
+		WHERE id NOT IN (
+			SELECT id FROM permanent_failures
+			ORDER BY recorded_at DESC
+			LIMIT ?
+		)
+	`,
+		)
+		.run(maxCount);
+
+	return result.changes;
+}
+
+/**
+ * Cap keyword_correlations table by removing stale entries.
+ * Deletes entries not updated in the last maxAgeDays with fewer than minTasks tasks.
+ */
+export function pruneStaleKeywordCorrelationsDB(
+	maxAgeDays: number = 90,
+	minTasks: number = 2,
+	stateDir: string = DEFAULT_STATE_DIR,
+): number {
+	const db = getDatabase(stateDir);
+
+	const cutoffDate = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
+
+	const result = db
+		.prepare(
+			`
+		DELETE FROM keyword_correlations
+		WHERE last_updated < ?
+		AND task_count < ?
+	`,
+		)
+		.run(cutoffDate, minTasks);
+
+	return result.changes;
+}
+
+/**
+ * Cap co_modifications table by removing stale entries.
+ * Deletes entries not updated in the last maxAgeDays with fewer than minMods modifications.
+ */
+export function pruneStaleCoModificationsDB(
+	maxAgeDays: number = 90,
+	minMods: number = 2,
+	stateDir: string = DEFAULT_STATE_DIR,
+): number {
+	const db = getDatabase(stateDir);
+
+	const cutoffDate = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
+
+	const result = db
+		.prepare(
+			`
+		DELETE FROM co_modifications
+		WHERE last_updated < ?
+		AND modification_count < ?
+	`,
+		)
+		.run(cutoffDate, minMods);
+
+	return result.changes;
+}
+
 // =============================================================================
 // Full Store Loading (for migration from JSON)
 // =============================================================================

@@ -506,7 +506,7 @@ export function handleImportPlan(file: string, options: ImportPlanOptions): void
  * Combines import-plan + grind for seamless workflow.
  */
 export async function handleDispatch(file: string, options: DispatchOptions): Promise<void> {
-	const { handleGrind } = await import("./mixed-handlers.js");
+	const { handleGrind } = await import("../grind/index.js");
 
 	// Step 1: Import the plan
 	console.log(chalk.cyan("Step 1: Importing plan..."));
