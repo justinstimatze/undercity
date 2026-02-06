@@ -26,13 +26,13 @@ const DEFAULT_STATE_DIR = ".undercity";
 // =============================================================================
 
 /** Maximum number of retry attempts for transient failures */
-const MAX_RETRIES = 3;
+export const MAX_RETRIES = 3;
 
 /** Initial delay for exponential backoff (ms) */
-const INITIAL_DELAY_MS = 100;
+export const INITIAL_DELAY_MS = 100;
 
 /** Maximum delay for exponential backoff (ms) */
-const MAX_DELAY_MS = 5000;
+export const MAX_DELAY_MS = 5000;
 
 /**
  * Sleep utility for retry delays
@@ -47,7 +47,7 @@ function sleep(ms: number): Promise<void> {
  * @param attempt - Current attempt number (0-indexed)
  * @returns Delay in milliseconds
  */
-function calculateBackoffDelay(attempt: number): number {
+export function calculateBackoffDelay(attempt: number): number {
 	const exponentialDelay = INITIAL_DELAY_MS * 2 ** attempt;
 	const cappedDelay = Math.min(exponentialDelay, MAX_DELAY_MS);
 	// Add 10% jitter to prevent thundering herd
@@ -60,7 +60,7 @@ function calculateBackoffDelay(attempt: number): number {
  * @param error - The error to check
  * @returns true if the error is transient
  */
-function isTransientError(error: unknown): boolean {
+export function isTransientError(error: unknown): boolean {
 	if (error instanceof Error) {
 		const message = error.message.toLowerCase();
 		// SQLite busy/locked errors are transient

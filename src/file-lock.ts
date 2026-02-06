@@ -56,7 +56,7 @@ const DEFAULT_OPTIONS: FileLockOptions = {
  *
  * @param ms - Milliseconds to sleep
  */
-function sleepSync(ms: number): void {
+export function sleepSync(ms: number): void {
 	const end = Date.now() + ms;
 	while (Date.now() < end) {
 		// Busy wait

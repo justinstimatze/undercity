@@ -11,7 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { KnowledgeError } from "./errors.js";
-import { withFileLock } from "./file-lock.js";
+import { sleepSync, withFileLock } from "./file-lock.js";
 import { validateKnowledgeBase } from "./knowledge-validator.js";
 import { sessionLogger } from "./logger.js";
 
@@ -647,40 +647,93 @@ export function findRelevantLearnings(
 	const qualityLearnings = kb.learnings.filter((l) => meetsQualityThreshold(l, thresholds));
 
 	// Try hybrid search (keyword + semantic) if embeddings module available
+	// Dynamic import to avoid circular dependencies
+	let hybridSearch: typeof import("./embeddings.js").hybridSearch | undefined;
+	let getEmbeddingStats: typeof import("./embeddings.js").getEmbeddingStats | undefined;
+	let isTransientError: typeof import("./embeddings.js").isTransientError | undefined;
+	let calculateBackoffDelay: typeof import("./embeddings.js").calculateBackoffDelay | undefined;
+	let MAX_RETRIES: typeof import("./embeddings.js").MAX_RETRIES | undefined;
+
 	try {
-		// Dynamic import to avoid circular dependencies
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		const { hybridSearch, getEmbeddingStats } = require("./embeddings.js") as typeof import("./embeddings.js");
+		const embeddings = require("./embeddings.js") as typeof import("./embeddings.js");
+		hybridSearch = embeddings.hybridSearch;
+		getEmbeddingStats = embeddings.getEmbeddingStats;
+		isTransientError = embeddings.isTransientError;
+		calculateBackoffDelay = embeddings.calculateBackoffDelay;
+		MAX_RETRIES = embeddings.MAX_RETRIES;
+	} catch {
+		// Embeddings module not available, fall back to keyword-only
+		// (Handled below by checking if hybridSearch is undefined)
+	}
+
+	// Only attempt hybrid search if module loaded successfully
+	if (hybridSearch && getEmbeddingStats && isTransientError && calculateBackoffDelay && MAX_RETRIES) {
 		const stats = getEmbeddingStats(stateDir);
 
 		// Only use semantic search if we have enough embeddings
 		if (stats.embeddedCount >= 3) {
-			const results = hybridSearch(
-				objective,
-				{
-					limit: maxResults * 2, // Get more, then filter
-					keywordWeight: 0.4,
-					semanticWeight: 0.6,
-					minScore: 0.05,
-				},
-				stateDir,
-			);
+			// Retry loop for hybridSearch with exponential backoff
+			let _lastError: unknown;
+			for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+				try {
+					const results = hybridSearch(
+						objective,
+						{
+							limit: maxResults * 2, // Get more, then filter
+							keywordWeight: 0.4,
+							semanticWeight: 0.6,
+							minScore: 0.05,
+						},
+						stateDir,
+					);
 
-			if (results.length > 0) {
-				// Map back to Learning objects, filtering by quality
-				const learningMap = new Map(qualityLearnings.map((l) => [l.id, l]));
-				const found = results
-					.map((r) => learningMap.get(r.learningId))
-					.filter((l): l is Learning => l !== undefined)
-					.slice(0, maxResults);
+					if (results.length > 0) {
+						// Map back to Learning objects, filtering by quality
+						const learningMap = new Map(qualityLearnings.map((l) => [l.id, l]));
+						const found = results
+							.map((r) => learningMap.get(r.learningId))
+							.filter((l): l is Learning => l !== undefined)
+							.slice(0, maxResults);
 
-				if (found.length > 0) {
-					return found;
+						if (found.length > 0) {
+							return found;
+						}
+					}
+
+					// Search succeeded but returned no results - break retry loop
+					break;
+				} catch (error: unknown) {
+					_lastError = error;
+
+					// Don't retry non-transient errors
+					if (!isTransientError(error)) {
+						sessionLogger.warn(
+							{ error: String(error), objective },
+							"Non-transient error in hybridSearch, falling back to keyword search",
+						);
+						break;
+					}
+
+					// Last attempt failed
+					if (attempt === MAX_RETRIES - 1) {
+						sessionLogger.warn(
+							{ error: String(error), attempts: MAX_RETRIES, objective },
+							"hybridSearch failed after all retry attempts, falling back to keyword search",
+						);
+						break;
+					}
+
+					const delayMs = calculateBackoffDelay(attempt);
+					sessionLogger.warn(
+						{ error: String(error), attempt: attempt + 1, delayMs, objective },
+						"Transient error in hybridSearch, retrying",
+					);
+
+					sleepSync(delayMs);
 				}
 			}
 		}
-	} catch {
-		// Embeddings not available, fall back to keyword-only
 	}
 
 	// Fallback: keyword-only scoring (on quality-filtered learnings)
