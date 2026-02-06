@@ -16,7 +16,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
+import { EmbeddingError } from "../errors.js";
 import {
 	addLearning,
 	DEFAULT_QUALITY_THRESHOLDS,
@@ -1667,6 +1667,110 @@ describe("knowledge.ts", () => {
 
 			const kb = loadKnowledge(tempDir);
 			expect(kb.learnings[0].structured).toBeUndefined();
+		});
+	});
+
+	// ==========================================================================
+	// Embedding Failure Graceful Degradation Tests
+	// ==========================================================================
+
+	describe("Embedding failure graceful degradation", () => {
+		it("should fall back to keyword-only search when hybridSearch throws EmbeddingError", () => {
+			// Add some learnings
+			const { learning } = addLearning(
+				{
+					taskId: "task-fallback-1",
+					category: "pattern",
+					content: "Use Zod schemas for validation",
+					keywords: ["zod", "validation", "schema"],
+				},
+				tempDir,
+			);
+
+			// Mock the embeddings module to throw EmbeddingError
+			const mockEmbeddings = {
+				hybridSearch: () => {
+					throw new EmbeddingError("Embedding model unavailable", "hybridSearch");
+				},
+				getEmbeddingStats: () => ({ embeddedCount: 10 }), // Pretend we have embeddings
+			};
+
+			// Replace the require call with our mock
+			const Module = require("node:module");
+			const originalRequire = Module.prototype.require;
+			Module.prototype.require = function (id: string) {
+				if (id === "./embeddings.js") {
+					return mockEmbeddings;
+				}
+				return originalRequire.apply(this, arguments);
+			};
+
+			try {
+				// This should not crash, but fall back to keyword-only search
+				const results = findRelevantLearnings("validation schema", 5, tempDir, TEST_QUALITY_THRESHOLDS);
+
+				// Should still find our learning via keyword fallback
+				expect(Array.isArray(results)).toBe(true);
+				const found = results.find((l) => l.id === learning.id);
+				expect(found).toBeDefined();
+			} finally {
+				// Restore original require
+				Module.prototype.require = originalRequire;
+			}
+		});
+
+		it("should handle EmbeddingError during getEmbeddingStats", () => {
+			// Add some learnings
+			const { learning } = addLearning(
+				{
+					taskId: "task-fallback-2",
+					category: "fact",
+					content: "Test graceful degradation",
+					keywords: ["test", "graceful"],
+				},
+				tempDir,
+			);
+
+			// Mock the embeddings module to throw during stats check
+			const mockEmbeddings = {
+				hybridSearch: () => [],
+				getEmbeddingStats: () => {
+					throw new EmbeddingError("Cannot read embedding statistics", "getEmbeddingStats");
+				},
+			};
+
+			// Replace the require call with our mock
+			const Module = require("node:module");
+			const originalRequire = Module.prototype.require;
+			Module.prototype.require = function (id: string) {
+				if (id === "./embeddings.js") {
+					return mockEmbeddings;
+				}
+				return originalRequire.apply(this, arguments);
+			};
+
+			try {
+				// Should not crash, should fall back to keyword-only
+				const results = findRelevantLearnings("test graceful", 5, tempDir, TEST_QUALITY_THRESHOLDS);
+
+				// Should find our learning via keyword fallback
+				expect(Array.isArray(results)).toBe(true);
+				const found = results.find((l) => l.id === learning.id);
+				expect(found).toBeDefined();
+			} finally {
+				// Restore original require
+				Module.prototype.require = originalRequire;
+			}
+		});
+
+		it("should preserve error operation parameter in EmbeddingError", () => {
+			// This test verifies that EmbeddingError preserves debugging context
+			const error = new EmbeddingError("Model inference failed", "embed");
+			expect(error.message).toBe("Model inference failed");
+			expect(error.operation).toBe("embed");
+
+			const error2 = new EmbeddingError("Batch processing failed", "embedBatch");
+			expect(error2.operation).toBe("embedBatch");
 		});
 	});
 
