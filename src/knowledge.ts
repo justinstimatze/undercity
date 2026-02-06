@@ -623,6 +623,38 @@ export function meetsQualityThreshold(
 }
 
 /**
+ * Keyword-only search fallback function that performs text matching without embeddings.
+ * Used when embedding generation fails or embeddings are unavailable.
+ *
+ * @param objective - Task objective to search for
+ * @param qualityLearnings - Pre-filtered learnings that meet quality thresholds
+ * @param maxResults - Maximum number of results to return
+ * @returns Array of relevant learnings sorted by keyword match score
+ */
+function keywordOnlySearch(objective: string, qualityLearnings: Learning[], maxResults: number): Learning[] {
+	const objectiveKeywords = new Set(extractKeywords(objective));
+
+	// Score each learning by keyword overlap and confidence
+	const scored = qualityLearnings.map((learning) => {
+		const learningKeywords = new Set(learning.keywords);
+		const overlap = [...objectiveKeywords].filter((kw) => learningKeywords.has(kw)).length;
+		const keywordScore = overlap / Math.max(objectiveKeywords.size, 1);
+
+		// Combined score: 70% keyword match, 30% confidence
+		const score = keywordScore * 0.7 + learning.confidence * 0.3;
+
+		return { learning, score };
+	});
+
+	// Filter to minimum score and sort by score
+	return scored
+		.filter((item) => item.score > 0.1)
+		.sort((a, b) => b.score - a.score)
+		.slice(0, maxResults)
+		.map((item) => item.learning);
+}
+
+/**
  * Find relevant learnings for a task objective.
  *
  * Called from:
@@ -737,26 +769,7 @@ export function findRelevantLearnings(
 	}
 
 	// Fallback: keyword-only scoring (on quality-filtered learnings)
-	const objectiveKeywords = new Set(extractKeywords(objective));
-
-	// Score each learning by keyword overlap and confidence
-	const scored = qualityLearnings.map((learning) => {
-		const learningKeywords = new Set(learning.keywords);
-		const overlap = [...objectiveKeywords].filter((kw) => learningKeywords.has(kw)).length;
-		const keywordScore = overlap / Math.max(objectiveKeywords.size, 1);
-
-		// Combined score: 70% keyword match, 30% confidence
-		const score = keywordScore * 0.7 + learning.confidence * 0.3;
-
-		return { learning, score };
-	});
-
-	// Filter to minimum score and sort by score
-	return scored
-		.filter((item) => item.score > 0.1)
-		.sort((a, b) => b.score - a.score)
-		.slice(0, maxResults)
-		.map((item) => item.learning);
+	return keywordOnlySearch(objective, qualityLearnings, maxResults);
 }
 
 /**
