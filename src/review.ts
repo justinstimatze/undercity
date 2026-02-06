@@ -107,7 +107,9 @@ export async function runEscalatingReview(
 		}
 	};
 
-	// Filter tiers based on maxReviewTier cap
+	// INVARIANT: Review tier capped by task complexity. Simple tasks max at sonnet
+	// to save tokens; complex/critical tasks can escalate to opus.
+	// See: .claude/adrs/0006-review-tier-capping.md
 	const allTiers: ModelTier[] = ["sonnet", "sonnet", "opus"];
 	const maxTierIndex = allTiers.indexOf(maxReviewTier);
 	const tiers = allTiers.slice(0, maxTierIndex + 1);

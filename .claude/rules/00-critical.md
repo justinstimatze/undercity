@@ -25,16 +25,19 @@ These rules are non-negotiable.
 - Adding new persistence files → Update "Persistence Files" table
 
 **Update `.claude/rules/05-codebase-map.md` when:**
-- Adding new source files → Add to "File → Purpose" table
-- Adding new exported functions → Add to "Task → File Mapping" section
+- Adding new source files → Add to "Module Inventory" or "Task → File Mapping"
 - Adding new state files → Add to "State Files" table
-- Changing file responsibilities → Update file descriptions
+- Changing file responsibilities → Update module descriptions
+
+**Update `.claude/adrs/` when:**
+- Making an architectural decision → Create new ADR (see `.claude/adrs/README.md` for format)
+- Changing an existing architectural decision → Update the relevant ADR status
 
 **Checklist after implementation:**
 1. Did you add a new command? → Update 01-undercity.md
 2. Did you add a new file? → Update 05-codebase-map.md
-3. Did you add new exported functions? → Update 05-codebase-map.md
-4. Did you change how a feature works? → Update relevant rule file
+3. Did you change how a feature works? → Update relevant rule file
+4. Did you make an architectural decision? → Create/update ADR
 
 **Why**: Stale documentation causes agents to make incorrect assumptions and miss available tools.
 

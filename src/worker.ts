@@ -17,6 +17,11 @@
  * - Adaptive escalation (start cheap, escalate if needed)
  * - Use Opus for judgment, cheaper models for execution
  * - Can run unattended for hours
+ *
+ * INVARIANT: Worker never pushes to remote. Only orchestrator controls merges.
+ * INVARIANT: Verification runs externally, not inside agent loop. Agent claims
+ * of completion are never trusted without external verifyWork() confirmation.
+ * See: .claude/adrs/0003-external-verification.md
  */
 
 import { execFileSync, execSync } from "node:child_process";
@@ -1568,6 +1573,8 @@ export class TaskWorker {
 		this.saveCheckpoint("verifying");
 		output.workerPhase(taskId, "verifying");
 		const verifyStart = Date.now();
+		// INVARIANT: Verification is external to agent loop - agent cannot claim
+		// success without this independent check. See: .claude/adrs/0003-external-verification.md
 		const verification = await verifyWork({
 			runTypecheck: this.runTypecheck,
 			runTests: this.runTests,

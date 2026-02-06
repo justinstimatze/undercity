@@ -1,30 +1,6 @@
 # Code Style Guidelines
 
-## TypeScript
-
-### Type Safety
-
-Never use `any` types. See `00-critical.md` for details.
-
-**Type inference:**
-```typescript
-// Let TypeScript infer when it can
-const item = items.find((i) => i.id === targetId);
-
-// Use explicit types when needed for clarity
-const processItem = (item: ItemType): Result => { ... };
-```
-
-**Type assertions (when absolutely necessary):**
-```typescript
-// Use double assertion for safety
-value as unknown as TargetType
-
-// Add comments explaining why
-// Avoid `as any` - it's almost never right
-```
-
-### Zod Schema Patterns
+## Zod Schema Patterns
 
 **Discriminated unions:**
 ```typescript
@@ -52,103 +28,57 @@ const configSchema = z.object({
 
 ## Environment Variables
 
-**Plain `KEY=value` format in `.env` files:**
-```bash
-# BAD
-export API_KEY=secret123
-
-# GOOD
-API_KEY=secret123
-```
-
-**Why**: Docker Compose and many tools don't support `export` prefix.
-
-**Loading in shell:**
-```bash
-set -a; source .env; set +a
-```
+Plain `KEY=value` in `.env` files (no `export` prefix). Load in shell: `set -a; source .env; set +a`.
 
 ## Structured Logging
 
-**Prefer structured data over template literals:**
+Prefer structured data over template literals:
 ```typescript
-// BAD: Template literals
+// BAD
 console.log(`Processing ${taskId} for user ${userId}`);
 
-// GOOD: Structured data
+// GOOD
 console.log("Processing task", { taskId, userId });
 ```
 
-**Security:**
-- Never log passwords, tokens, or API keys
-- Mask PII: `user@example.com` → `us***@example.com`
-- Be cautious with request/response bodies
+Never log passwords, tokens, or API keys.
 
 ## Shell Command Safety
 
-**Use `execFileSync` over `execSync` when including variables:**
+Use `execFileSync` over `execSync` when including variables:
 ```typescript
-// BAD: Shell injection risk with user input
+// BAD: Shell injection risk
 execSync(`git commit -m "${userInput}"`, { cwd });
 
 // GOOD: No shell interpretation
 execFileSync("git", ["commit", "-m", userInput], { cwd });
 ```
 
-**When `execSync` is acceptable:**
-- Command requires shell features (pipes, redirects, `||`, `&&`)
-- All interpolated values are trusted internal values (numbers, controlled paths)
-- Values are properly escaped
-
-CodeQL runs on PRs and will catch shell injection from user input.
+`execSync` acceptable when: command needs shell features (pipes, `||`, `&&`) and all values are trusted.
 
 ## Code Quality Targets
 
-- Cyclomatic complexity: ≤10 per function
-- Lines of code: ≤60 per function
-- Nesting depth: ≤3 levels
+- Cyclomatic complexity: <=10 per function
+- Lines of code: <=60 per function
+- Nesting depth: <=3 levels
 - Prefer early returns to reduce nesting
 
 ## Testing
 
 ### Mock Strategy
 
-**Use focused mock factories instead of `any`:**
+Use focused mock factories instead of `any`:
 ```typescript
-// GOOD: Type-safe mock factory
 const createMockTask = (overrides: Partial<Task> = {}): Task => ({
   id: "test-task-1",
   status: "pending",
   ...overrides,
 });
-
-// BAD: Lazy any casting
-const mockTask = { id: "test" } as any;
 ```
 
 ### No Timing-Based Test Assertions
 
-**CRITICAL: Never assert on wall-clock timing ratios or absolute durations in tests.** These are inherently flaky under varying CPU load, JIT warmup, GC pressure, and CI contention.
-
-```typescript
-// BAD: Flaky - depends on execution environment performance
-const ratio = duration50 / duration25;
-expect(ratio).toBeGreaterThan(3);
-expect(ratio).toBeLessThan(12);
-
-// BAD: Flaky - absolute timing varies by machine
-expect(duration).toBeLessThan(100); // ms
-
-// GOOD: Test correctness, not speed
-expect(results.length).toBeGreaterThan(0);
-expect(results).toSatisfy(validateNoConflicts);
-
-// ACCEPTABLE: Very generous upper bound as a timeout guard (5-10s)
-// Only to catch infinite loops, not to measure performance
-expect(duration).toBeLessThan(5000);
-```
-
-**If you need to validate algorithmic complexity**, test output properties that are deterministic (e.g., result count scales correctly, no conflicts in output sets) rather than comparing timing ratios between runs.
+Never assert on wall-clock timing ratios or absolute durations. Test correctness, not speed. Only acceptable: generous upper bounds (5-10s) as timeout guards.
 
 ### Console Mocking (Vitest)
 
@@ -161,10 +91,5 @@ beforeEach(() => {
 
 afterEach(() => {
   consoleInfoSpy.mockRestore();
-});
-
-it("logs when processing", () => {
-  doSomething();
-  expect(consoleInfoSpy).toHaveBeenCalledWith("Expected message", expect.any(Object));
 });
 ```

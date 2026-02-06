@@ -492,7 +492,8 @@ export async function verifyWork(
 		return { passed, feedback, issues: taskIssues, duration: Date.now() - start };
 	};
 
-	// Run all three checks in parallel
+	// INVARIANT: Typecheck, lint, and tests run in parallel for ~3x speedup.
+	// Each check is independent; all errors collected regardless of individual failures.
 	const [typecheckResult, lintResult, testsResult] = await Promise.all([
 		runTypecheckTask(),
 		runLintTask(),

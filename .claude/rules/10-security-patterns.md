@@ -1,233 +1,107 @@
+---
+paths:
+  - src/automated-pm.ts
+  - src/worker/prompt-builder.ts
+  - src/content-sanitizer.ts
+  - src/task-security.ts
+  - src/url-validator.ts
+  - src/commands/**
+---
+
 # Security Patterns
 
-Critical security patterns to prevent common vulnerabilities in this codebase.
+Critical security patterns for this codebase.
 
 ## ReDoS Prevention
 
-**CRITICAL**: Avoid nested quantifiers in regex patterns that process untrusted input.
+Avoid nested quantifiers in regex patterns that process untrusted input.
 
 ```typescript
-// BAD: Polynomial backtracking with nested quantifiers
-/(?:[\w.-]+\/)*[\w.-]+\.[\w]+/g  // Can cause ReDoS
+// BAD: Polynomial backtracking
+/(?:[\w.-]+\/)*[\w.-]+\.[\w]+/g
 
-// GOOD: Split-based approach avoids regex backtracking
+// GOOD: Split-based approach
 const tokens = input.split(/\s+/);
 for (const token of tokens) {
-    if (/^[.\w~/-]+$/.test(token)) {  // Simple character class, no backtracking
-        // process token
-    }
+    if (/^[.\w~/-]+$/.test(token)) { /* process */ }
 }
-
-// GOOD: Limit quantifiers to prevent catastrophic backtracking
-/[\w.-]{1,100}/  // Bounded repetition
 ```
 
-**Warning signs (avoid these patterns on untrusted input):**
-- `(a+)+` - nested quantifiers
-- `(a|b)*` - alternation inside quantifier
-- `.*.*` - overlapping greedy quantifiers
-- `(\w+)*` - capturing group with quantifier
+Warning signs: `(a+)+`, `(a|b)*`, `.*.*`, `(\w+)*` on untrusted input.
 
-### File-Matching Regexes (Common Pitfall)
+### File-Matching Regexes
 
-**CRITICAL**: Every regex that matches file paths or filenames MUST use bounded quantifiers. Unbounded `[\w-]+` or `[\w.-]+` on task objectives (user input) triggers CodeQL `js/polynomial-redos`.
+Every regex matching file paths/filenames MUST use bounded quantifiers. Unbounded `[\w-]+` on task objectives triggers CodeQL `js/polynomial-redos`.
 
 ```typescript
-// BAD: Unbounded character classes
-/[\w-]+\.(?:ts|js|json|md)/g          // [\w-]+ is unbounded
-/[\w-]+\/[\w.-]+\.[\w]+/g             // Three unbounded quantifiers
-/\b(src\/[\w/-]+\.(?:ts|tsx))\b/g     // [\w/-]+ is unbounded
+// BAD: Unbounded
+/[\w-]+\.(?:ts|js|json|md)/g
 
-// GOOD: Bounded character classes
-/[\w-]{1,100}\.(?:ts|js|json|md)/g    // Bounded to 100 chars
-/[\w-]{1,100}\/[\w.-]{1,100}\.[\w]{1,20}/g  // All bounded
-/\b(src\/[\w/-]{1,200}\.(?:ts|tsx))\b/g      // Path segments bounded
+// GOOD: Bounded
+/[\w-]{1,100}\.(?:ts|js|json|md)/g
 ```
 
-**Rule of thumb**: Any `[...]+` or `[...]*` matching user-provided text needs `{1,N}` bounds. Use 100 for filenames, 200 for paths, 20 for extensions.
+Bounds: `{1,100}` filenames, `{1,200}` paths, `{1,20}` extensions.
 
 ## Command Injection Prevention
 
-**CRITICAL**: Use `execFileSync` over `execSync` for external commands.
+Use `execFileSync` over `execSync` for external commands:
 
 ```typescript
-// BAD: Shell interpretation allows injection
+// BAD: Shell injection risk
 execSync(`git commit -m "${userInput}"`);
 
-// GOOD: execFileSync passes args directly, no shell
+// GOOD: No shell interpretation
 execFileSync("git", ["commit", "-m", userInput]);
 ```
 
-**When using validated input with exec functions:**
+Validation functions should RETURN the validated value for static analyzer tracking:
 
 ```typescript
-// Validation functions should RETURN the validated value
-// This helps static analyzers track data flow sanitization
 export function validateGitRef(ref: string): string {
     if (!/^[\w./-]+$/.test(ref)) {
         throw new Error(`Invalid git ref: ${ref}`);
     }
-    return ref;  // Return validated value
+    return ref;
 }
-
-// Use returned value to make sanitization explicit
-const sanitizedRef = validateGitRef(userInput);
-execFileSync("git", ["checkout", sanitizedRef]);
 ```
 
-## Stack Trace Exposure Prevention
+## URL Validation
 
-**CRITICAL**: Never expose error details or stack traces to HTTP clients.
+Never use substring checks to validate URLs:
 
 ```typescript
-// BAD: Leaks internal error details
-catch (err) {
-    res.json({ error: err.message });  // Message might contain paths/traces
-}
+// BAD: Bypassable
+if (url.includes("example.com")) { ... }
 
-// GOOD: Generic error for clients, detailed logging server-side
-catch (err) {
-    logger.error({ err }, "Request failed");  // Full details in logs
-    res.json({ error: "Internal server error" });  // Generic to client
-}
+// GOOD: Parse and check exact host
+const host = new URL(url).host;
+if (host === "example.com" || host.endsWith(".example.com")) { ... }
 ```
 
-**Exception**: Development mode can show detailed errors, but never in production.
+In tests: use exact URL match, not substring checks (CodeQL flags `js/incomplete-url-substring-sanitization`).
 
-## Prototype Pollution Prevention
-
-**CRITICAL**: Use pnpm overrides for vulnerable transitive dependencies.
-
-```json
-{
-  "pnpm": {
-    "overrides": {
-      "lodash": ">=4.17.21",
-      "xml2js": ">=0.5.0"
-    }
-  }
-}
-```
-
-**Check Dependabot alerts regularly** and add overrides for vulnerable packages.
-
-## Input Validation Patterns
-
-### Allowlist over Blocklist
+## Path Traversal Prevention
 
 ```typescript
-// BAD: Blocklist (can be bypassed)
-if (input.includes("..") || input.includes("~")) {
-    throw new Error("Invalid path");
-}
-
-// GOOD: Allowlist (explicitly permit safe patterns)
-if (!/^[\w./-]+$/.test(input)) {
-    throw new Error("Invalid path");
-}
-```
-
-### Path Traversal Prevention
-
-```typescript
-import { normalize, isAbsolute, resolve } from "node:path";
-
 function validatePath(basePath: string, userPath: string): string {
-    const normalized = normalize(userPath);
-    const resolved = resolve(basePath, normalized);
-
-    // Ensure resolved path is within base directory
+    const resolved = resolve(basePath, normalize(userPath));
     if (!resolved.startsWith(basePath)) {
         throw new Error("Path traversal detected");
     }
-
     return resolved;
 }
 ```
 
-### URL Validation
+## HTTP Error Responses
 
-**CRITICAL**: Never use substring checks to validate URLs.
+Never expose error details or stack traces to clients. Log details server-side, return generic messages.
 
-```typescript
-// BAD: Substring can appear anywhere in URL
-if (url.includes("example.com")) {
-    // Bypassed by: http://evil.com/example.com
-    // Bypassed by: http://evil.com?x=example.com
-    // Bypassed by: http://example.com.evil.com
-}
+## Security Scanning
 
-// BAD: Even checking parsed host with includes is vulnerable
-const host = new URL(url).host;
-if (host.includes("example.com")) {
-    // Bypassed by: http://example.com.evil.com
-}
-
-// GOOD: Parse URL and check exact host match
-const host = new URL(url).host;
-if (host === "example.com" || host.endsWith(".example.com")) {
-    // Safe: only matches example.com and subdomains
-}
-
-// GOOD: Allowlist of valid hosts
-const ALLOWED_HOSTS = ["example.com", "api.example.com", "cdn.example.com"];
-const host = new URL(url).host;
-if (ALLOWED_HOSTS.includes(host)) {
-    // Safe: explicit allowlist
-}
+```bash
+pnpm security        # Pre-commit scan (gitleaks + semgrep)
+pnpm security:full   # Full codebase scan
 ```
 
-**In tests**: Use exact URL match when asserting URL values:
-```typescript
-// BAD: Substring check (CodeQL flags this)
-expect(urls.some((u) => u.includes("example.com"))).toBe(true);
-
-// GOOD: Exact match
-expect(urls.some((u) => u === "https://example.com/path")).toBe(true);
-```
-
-## Security Checklist
-
-Before merging code that handles:
-
-**User input:**
-- [ ] Input validated with allowlist pattern
-- [ ] No regex with nested quantifiers
-- [ ] Sanitization functions return validated value
-- [ ] URL checks use parsed host, not substring match
-
-**External commands:**
-- [ ] Using `execFileSync` not `execSync`
-- [ ] Arguments passed as array, not string interpolation
-- [ ] User input validated before passing to commands
-
-**HTTP responses:**
-- [ ] No stack traces in error responses
-- [ ] No internal paths exposed
-- [ ] Generic error messages for 5xx errors
-
-**Dependencies:**
-- [ ] No known vulnerabilities (check Dependabot)
-- [ ] Overrides added for vulnerable transitive deps
-- [ ] Native modules use prebuilt binaries where possible
-
-## CodeQL Integration
-
-This repo runs CodeQL on PRs. Common alerts and fixes:
-
-| Alert | Fix |
-|-------|-----|
-| `js/polynomial-redos` | Rewrite regex or use split-based approach |
-| `js/command-line-injection` | Use execFileSync with array args |
-| `js/second-order-command-line-injection` | Return validated value from sanitizer |
-| `js/stack-trace-exposure` | Use generic error messages |
-| `js/prototype-polluting-assignment` | Validate object keys before assignment |
-| `js/incomplete-url-substring-sanitization` | Parse URL and check exact host or use allowlist |
-
-## Semgrep Rules
-
-Local security scanning runs via `pnpm security`. Rules catch:
-- Command injection patterns
-- ReDoS-prone regexes
-- Hardcoded secrets
-- Unsafe deserialization
+Required tools: gitleaks (secrets), semgrep (static analysis). Pre-commit hook runs both.

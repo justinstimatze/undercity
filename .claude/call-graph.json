@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-02-06T05:09:34.648Z",
+  "generatedAt": "2026-02-06T07:46:08.055Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -121,7 +121,7 @@
       "calledFrom": [
         {
           "file": "worker/success-recording.ts",
-          "line": 33,
+          "line": 36,
           "context": "if"
         },
         {
@@ -152,7 +152,7 @@
         },
         {
           "file": "orchestrator.ts",
-          "line": 1718,
+          "line": 1720,
           "context": "for"
         },
         {
@@ -235,7 +235,7 @@
       "calledFrom": [
         {
           "file": "worker/success-recording.ts",
-          "line": 47,
+          "line": 50,
           "context": "recordSuccessfulTaskPattern"
         },
         {
@@ -267,7 +267,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1649,
+          "line": 1656,
           "context": "if"
         }
       ]
@@ -288,6 +288,11 @@
       "definedIn": "error-fix-patterns.ts",
       "calledFrom": [
         {
+          "file": "error-fix-patterns.ts",
+          "line": 290,
+          "context": "if"
+        },
+        {
           "file": "worker/verification-handler.ts",
           "line": 176,
           "context": "if"
@@ -298,6 +303,11 @@
       "function": "recordPermanentFailure",
       "definedIn": "error-fix-patterns.ts",
       "calledFrom": [
+        {
+          "file": "error-fix-patterns.ts",
+          "line": 290,
+          "context": "if"
+        },
         {
           "file": "worker/failure-recording.ts",
           "line": 58,
@@ -327,7 +337,7 @@
       "calledFrom": [
         {
           "file": "worker/success-recording.ts",
-          "line": 28,
+          "line": 31,
           "context": "unknown"
         },
         {
@@ -343,7 +353,7 @@
       "calledFrom": [
         {
           "file": "orchestrator.ts",
-          "line": 1202,
+          "line": 1204,
           "context": "if"
         },
         {
@@ -364,7 +374,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1528,
+          "line": 1533,
           "context": "startTask"
         },
         {
@@ -523,7 +533,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1312,
+          "line": 1317,
           "context": "info"
         }
       ]

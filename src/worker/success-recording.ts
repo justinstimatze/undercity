@@ -16,7 +16,10 @@ import { recordTaskFiles } from "../task-file-patterns.js";
 import type { TieredPlanResult } from "../task-planner.js";
 
 /**
- * Extract and store learnings from successful task
+ * Extract and store learnings from successful task.
+ *
+ * INVARIANT: agentOutput contains combined agent + review output for complete
+ * learning extraction. Both execution insights and review feedback are captured.
  */
 export async function recordKnowledgeLearnings(
 	taskId: string,

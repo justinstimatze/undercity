@@ -990,6 +990,8 @@ export class Orchestrator {
 			}
 
 			try {
+				// INVARIANT: Each task gets an isolated worktree. No two tasks share
+				// a working directory. See: .claude/adrs/0001-worktree-isolation.md
 				const worktreeInfo = this.worktreeManager.createWorktree(taskId);
 				const workerName = nameFromId(taskId);
 				preparedTasks.push({

@@ -286,6 +286,11 @@ export function loadErrorFixStore(stateDir: string = DEFAULT_STATE_DIR): ErrorFi
  * Record a verification error (before fix attempt).
  * Call this when verification fails.
  *
+ * INVARIANT: Error states follow a three-state lifecycle:
+ *   pending (this fn) -> recordSuccessfulFix() OR recordPermanentFailure()
+ * Transitions are one-way. Success stores the fix patch for future reuse.
+ * See: .claude/adrs/0007-three-state-error-learning.md
+ *
  * Called from:
  * - worker.ts:1815 (handleVerificationFailure)
  */

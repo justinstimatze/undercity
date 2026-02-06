@@ -1033,6 +1033,9 @@ export class MergeQueue {
 	 *
 	 * @returns Array of processed items with their final statuses
 	 */
+	// INVARIANT: Merges are serial, not parallel. Parallel merges cause stale-base
+	// race conditions where both tasks rebase against outdated main HEAD.
+	// See: .claude/adrs/0002-serial-merge-queue.md
 	async processAll(): Promise<MergeQueueItem[]> {
 		const results: MergeQueueItem[] = [];
 		let hadSuccess = false;
