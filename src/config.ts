@@ -76,6 +76,10 @@ export interface UndercityRc {
 	// Experimental options
 	/** Use SDK systemPrompt preset with claude_code (default: false) */
 	useSystemPromptPreset?: boolean;
+	/** Enable 1M context window beta for Opus/Sonnet (default: true) */
+	useExtendedContext?: boolean;
+	/** Maximum budget per task in USD (default: undefined = no cap) */
+	maxBudgetPerTask?: number;
 
 	// Legacy session options
 	autoApprove?: boolean;
@@ -103,6 +107,8 @@ const DEFAULT_CONFIG: Required<UndercityRc> = {
 	maxOpusReviewPasses: 6,
 	auditBash: false,
 	useSystemPromptPreset: false,
+	useExtendedContext: true,
+	maxBudgetPerTask: 0,
 	autoApprove: false,
 	maxRetries: 3,
 };
@@ -159,6 +165,7 @@ function validateConfig(raw: unknown, filePath: string): UndercityRc | null {
 		"push",
 		"auditBash",
 		"useSystemPromptPreset",
+		"useExtendedContext",
 	];
 
 	for (const key of booleanKeys) {
@@ -179,6 +186,7 @@ function validateConfig(raw: unknown, filePath: string): UndercityRc | null {
 		{ key: "maxReviewPassesPerTier", min: 1, max: 10 },
 		{ key: "maxOpusReviewPasses", min: 1, max: 20 },
 		{ key: "maxRetries", min: 0, max: 10 },
+		{ key: "maxBudgetPerTask", min: 0, max: 1000 },
 	];
 
 	for (const { key, min, max } of numberKeys) {

@@ -65,6 +65,9 @@ export interface AgentLoopConfig {
 	readonly auditBash: boolean;
 	readonly useSystemPromptPreset: boolean;
 	readonly maxWritesPerFile: number;
+	readonly useExtendedContext: boolean;
+	readonly fallbackModel?: string;
+	readonly maxBudgetUsd?: number;
 }
 
 // =============================================================================
@@ -551,6 +554,9 @@ export async function runAgentLoop(
 		preToolUseHooks,
 		useSystemPromptPreset: config.useSystemPromptPreset,
 		taskContextForPrompt,
+		useExtendedContext: config.useExtendedContext,
+		fallbackModel: config.fallbackModel,
+		maxBudgetUsd: config.maxBudgetUsd,
 	});
 
 	// Build query params

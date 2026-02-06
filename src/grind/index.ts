@@ -155,6 +155,8 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		maxTier: config.maxTier,
 		auditBash: config.auditBash,
 		useSystemPromptPreset: config.useSystemPromptPreset,
+		useExtendedContext: config.useExtendedContext,
+		maxBudgetPerTask: config.maxBudgetPerTask,
 	});
 
 	// Set up auto-drain timer if duration specified
@@ -417,6 +419,8 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 					maxTier: config.maxTier,
 					auditBash: config.auditBash,
 					useSystemPromptPreset: config.useSystemPromptPreset,
+					useExtendedContext: config.useExtendedContext,
+					maxBudgetPerTask: config.maxBudgetPerTask,
 				});
 
 				const batchStartTime = Date.now();

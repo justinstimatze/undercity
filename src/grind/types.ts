@@ -61,6 +61,10 @@ export interface GrindConfig {
 	auditBash: boolean;
 	/** Use SDK systemPrompt preset with claude_code */
 	useSystemPromptPreset: boolean;
+	/** Enable 1M context window beta */
+	useExtendedContext: boolean;
+	/** Maximum budget per task in USD (0 = no cap) */
+	maxBudgetPerTask: number;
 }
 
 /**

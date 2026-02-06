@@ -84,9 +84,13 @@ vi.mock("../content-sanitizer.js", () => ({
 }));
 
 // Mock pm-schemas
-vi.mock("../pm-schemas.js", () => ({
-	constrainResearchResult: vi.fn((result: unknown) => result),
-}));
+vi.mock("../pm-schemas.js", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../pm-schemas.js")>();
+	return {
+		...actual,
+		constrainResearchResult: vi.fn((result: unknown) => result),
+	};
+});
 
 // Mock research-roi
 vi.mock("../research-roi.js", () => ({

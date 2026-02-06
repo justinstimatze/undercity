@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-02-06T04:11:54.317Z",
+  "generatedAt": "2026-02-06T04:44:53.876Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -33,12 +33,12 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1227,
+          "line": 1250,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1668,
+          "line": 1701,
           "context": "info"
         },
         {
@@ -68,7 +68,7 @@
         },
         {
           "file": "task-planner.ts",
-          "line": 382,
+          "line": 401,
           "context": "gatherPlanningContext"
         }
       ]
@@ -105,7 +105,7 @@
         },
         {
           "file": "knowledge-extractor.ts",
-          "line": 494,
+          "line": 510,
           "context": "for"
         },
         {
@@ -152,7 +152,7 @@
         },
         {
           "file": "orchestrator.ts",
-          "line": 1705,
+          "line": 1718,
           "context": "for"
         },
         {
@@ -167,7 +167,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1669,
+          "line": 1702,
           "context": "info"
         },
         {
@@ -182,7 +182,7 @@
         },
         {
           "file": "task-planner.ts",
-          "line": 378,
+          "line": 397,
           "context": "gatherPlanningContext"
         },
         {
@@ -267,7 +267,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1631,
+          "line": 1649,
           "context": "if"
         }
       ]
@@ -332,7 +332,7 @@
         },
         {
           "file": "knowledge-extractor.ts",
-          "line": 562,
+          "line": 578,
           "context": "push"
         }
       ]
@@ -343,7 +343,7 @@
       "calledFrom": [
         {
           "file": "orchestrator.ts",
-          "line": 1189,
+          "line": 1202,
           "context": "if"
         },
         {
@@ -364,7 +364,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1510,
+          "line": 1528,
           "context": "startTask"
         },
         {
@@ -380,7 +380,7 @@
       "calledFrom": [
         {
           "file": "worker/agent-execution.ts",
-          "line": 444,
+          "line": 462,
           "context": "for"
         },
         {
@@ -433,7 +433,7 @@
       "calledFrom": [
         {
           "file": "task-planner.ts",
-          "line": 876,
+          "line": 922,
           "context": "join"
         }
       ]
@@ -465,7 +465,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1526,
+          "line": 1559,
           "context": "info"
         },
         {
@@ -481,12 +481,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 1515,
+          "line": 1548,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1532,
+          "line": 1565,
           "context": "info"
         },
         {
@@ -496,7 +496,7 @@
         },
         {
           "file": "grind/index.ts",
-          "line": 303,
+          "line": 305,
           "context": "import"
         }
       ]
@@ -523,7 +523,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1294,
+          "line": 1312,
           "context": "info"
         }
       ]

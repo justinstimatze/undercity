@@ -289,5 +289,7 @@ export function parseGrindOptions(options: GrindOptions): GrindConfig {
 		taskId: options.taskId,
 		auditBash: fileConfig.auditBash,
 		useSystemPromptPreset: fileConfig.useSystemPromptPreset,
+		useExtendedContext: fileConfig.useExtendedContext,
+		maxBudgetPerTask: fileConfig.maxBudgetPerTask,
 	};
 }

@@ -187,7 +187,12 @@ export function logSlowMessageGap(message: Record<string, unknown>, timing: Mess
  * - error_max_budget_usd: Hit budget limit (not applicable for Claude Max)
  * - error_during_execution: Error during agent execution
  */
-export type ResultSubtype = "success" | "error_max_turns" | "error_max_budget_usd" | "error_during_execution";
+export type ResultSubtype =
+	| "success"
+	| "error_max_turns"
+	| "error_max_budget_usd"
+	| "error_during_execution"
+	| "error_max_structured_output_retries";
 
 /**
  * Result message data extracted from SDK response
@@ -304,15 +309,6 @@ export const DISALLOWED_GIT_PUSH_TOOLS = [
 ];
 
 /**
- * Legacy thinking token cap (no longer applied)
- *
- * Opus 4.6 uses adaptive thinking which self-selects reasoning depth.
- * Hardcoded caps hinder this. On Claude Max (flat rate), removing the cap
- * has zero cost implication. Kept for reference only.
- */
-export const LEGACY_MAX_THINKING_TOKENS = 16000;
-
-/**
  * Hook callback matcher structure (matches SDK's HookCallbackMatcher)
  */
 export interface HookCallbackMatcher {
@@ -337,6 +333,14 @@ export interface QueryOptionsParams {
 	useSystemPromptPreset?: boolean;
 	/** Task context to append to system prompt when using preset */
 	taskContextForPrompt?: string;
+	/** Enable 1M context window beta */
+	useExtendedContext?: boolean;
+	/** Fallback model when primary is unavailable */
+	fallbackModel?: string;
+	/** Per-query cost cap in USD */
+	maxBudgetUsd?: number;
+	/** Structured output format (JSON Schema) */
+	outputFormat?: { type: "json_schema"; schema: Record<string, unknown> };
 }
 
 /**
@@ -356,6 +360,10 @@ export function buildQueryOptions(params: QueryOptionsParams): Record<string, un
 		preToolUseHooks,
 		useSystemPromptPreset,
 		taskContextForPrompt,
+		useExtendedContext,
+		fallbackModel,
+		maxBudgetUsd,
+		outputFormat,
 	} = params;
 
 	// Build hooks object only if we have any hooks
@@ -374,6 +382,12 @@ export function buildQueryOptions(params: QueryOptionsParams): Record<string, un
 		? { type: "preset", preset: "claude_code", append: taskContextForPrompt }
 		: undefined;
 
+	// Build betas array for extended context window
+	const betas = useExtendedContext ? (["context-1m-2025-08-07"] as const) : undefined;
+
+	// Only include maxBudgetUsd if it's a positive number
+	const effectiveBudget = maxBudgetUsd && maxBudgetUsd > 0 ? maxBudgetUsd : undefined;
+
 	return {
 		model: modelName,
 		permissionMode: "bypassPermissions",
@@ -385,6 +399,10 @@ export function buildQueryOptions(params: QueryOptionsParams): Record<string, un
 		maxThinkingTokens,
 		systemPrompt,
 		hooks,
+		betas,
+		fallbackModel,
+		maxBudgetUsd: effectiveBudget,
+		outputFormat,
 	};
 }
 

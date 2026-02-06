@@ -81,6 +81,7 @@
 | **effectiveness-analysis.ts** | Analyze learning systems effectiveness | analyzeEffectiveness, formatEffectivenessReport |
 | **feedback-metrics.ts** | Historical metrics analysis, success rates | analyzeMetrics, suggestModelTier, analyzeTaskPatterns |
 | **self-tuning.ts** | Learned routing profile from historical data | loadRoutingProfile, computeOptimalThresholds, maybeUpdateProfile |
+| **structured-output-schemas.ts** | Zod schemas + JSON Schema for SDK structured output | extractStructuredOutput, *JSONSchema constants |
 | **knowledge.ts** | Knowledge compounding (learnings from tasks) | loadKnowledge, addLearning, findRelevantLearnings |
 | **knowledge-extractor.ts** | Extract learnings from task completions | extractLearnings |
 | **mcp-tools.ts** | MCP tool definitions for knowledge access | knowledgeTools, knowledgeSearchTool |

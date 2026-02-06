@@ -13,6 +13,11 @@ import type { Learning, LearningCategory } from "./knowledge.js";
 import { addLearning } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
 import { getRAGEngine } from "./rag/index.js";
+import {
+	ExtractedLearningsJSONSchema,
+	ExtractedLearningsSchema,
+	extractStructuredOutput,
+} from "./structured-output-schemas.js";
 import { MODEL_NAMES } from "./types.js";
 
 /**
@@ -431,29 +436,40 @@ async function extractLearningsWithModel(text: string): Promise<ExtractedLearnin
 
 	try {
 		let result = "";
+		let structuredOutput: unknown = null;
 		for await (const message of query({
 			prompt,
 			options: {
 				model: MODEL_NAMES.sonnet,
 				maxTurns: 1,
 				permissionMode: "bypassPermissions",
+				outputFormat: ExtractedLearningsJSONSchema,
 			},
 		})) {
 			if (message.type === "result" && message.subtype === "success") {
 				result = message.result;
+				structuredOutput = (message as Record<string, unknown>).structured_output;
 			}
 		}
 
-		// Parse the JSON response
-		const jsonMatch = result.match(/\[[\s\S]*\]/);
-		if (!jsonMatch) {
-			sessionLogger.debug("Model extraction returned no JSON array");
-			return [];
-		}
+		// Try structured output first, then fall back to regex extraction
+		const validated = extractStructuredOutput(structuredOutput, ExtractedLearningsSchema);
+		let parsed: ModelExtractedLearning[];
 
-		const parsed = JSON.parse(jsonMatch[0]) as ModelExtractedLearning[];
-		if (!Array.isArray(parsed)) {
-			return [];
+		if (validated) {
+			parsed = validated;
+		} else {
+			// Fallback: regex extraction from text result
+			const jsonMatch = result.match(/\[[\s\S]*\]/);
+			if (!jsonMatch) {
+				sessionLogger.debug("Model extraction returned no JSON array");
+				return [];
+			}
+			const rawParsed = JSON.parse(jsonMatch[0]) as ModelExtractedLearning[];
+			if (!Array.isArray(rawParsed)) {
+				return [];
+			}
+			parsed = rawParsed;
 		}
 
 		// Convert to ExtractedLearning format

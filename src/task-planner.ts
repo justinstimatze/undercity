@@ -30,6 +30,15 @@ import { quickDecision } from "./automated-pm.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { findRelevantLearnings, formatLearningsCompact } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
+import {
+	DecompositionSubtasksJSONSchema,
+	DecompositionSubtasksSchema,
+	ExecutionPlanJSONSchema,
+	ExecutionPlanSchema,
+	extractStructuredOutput,
+	PlanReviewJSONSchema,
+	PlanReviewSchema,
+} from "./structured-output-schemas.js";
 import { findRelevantFiles } from "./task-file-patterns.js";
 import {
 	buildAlreadyCompleteResult,
@@ -321,6 +330,7 @@ Respond with ONLY a JSON array of subtask descriptions:
 
 	try {
 		let result = "";
+		let structuredOutput: unknown = null;
 		for await (const message of query({
 			prompt,
 			options: {
@@ -329,14 +339,23 @@ Respond with ONLY a JSON array of subtask descriptions:
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
 				cwd,
+				outputFormat: DecompositionSubtasksJSONSchema,
 			},
 		})) {
 			if (message.type === "result" && message.subtype === "success") {
 				result = message.result;
+				structuredOutput = (message as Record<string, unknown>).structured_output;
 			}
 		}
 
-		// Parse JSON array from response
+		// Try structured output first
+		const validated = extractStructuredOutput(structuredOutput, DecompositionSubtasksSchema);
+		if (validated && validated.length > 0 && validated.every((s) => typeof s === "string")) {
+			logger.info({ model, count: validated.length }, "Got decomposition subtasks (structured)");
+			return validated;
+		}
+
+		// Fallback: parse JSON array from text response
 		const match = result.match(/\[[\s\S]*?\]/);
 		if (match) {
 			const subtasks = JSON.parse(match[0]) as string[];
@@ -486,6 +505,7 @@ RULES:
 	logger.debug({ task: task.substring(0, 50), model }, "Creating execution plan");
 
 	let planJson = "";
+	let structuredOutput: unknown = null;
 
 	for await (const message of query({
 		prompt,
@@ -495,14 +515,22 @@ RULES:
 			allowDangerouslySkipPermissions: true,
 			maxTurns: 10,
 			cwd,
+			outputFormat: ExecutionPlanJSONSchema,
 		},
 	})) {
 		if (message.type === "result" && message.subtype === "success") {
 			planJson = message.result;
+			structuredOutput = (message as Record<string, unknown>).structured_output;
 		}
 	}
 
-	// Extract JSON from response
+	// Try structured output first
+	const validated = extractStructuredOutput(structuredOutput, ExecutionPlanSchema);
+	if (validated) {
+		return validated as ExecutionPlan;
+	}
+
+	// Fallback: extract JSON from markdown code fence
 	const jsonMatch = planJson.match(/```json\s*([\s\S]*?)\s*```/);
 	if (jsonMatch) {
 		try {
@@ -609,6 +637,7 @@ Address ALL issues raised by the reviewer. If a file doesn't exist, either remov
 	logger.debug({ task: task.substring(0, 50), model, iteration: "revision" }, "Revising execution plan");
 
 	let planJson = "";
+	let structuredOutput: unknown = null;
 
 	for await (const message of query({
 		prompt,
@@ -618,14 +647,22 @@ Address ALL issues raised by the reviewer. If a file doesn't exist, either remov
 			allowDangerouslySkipPermissions: true,
 			maxTurns: 10,
 			cwd,
+			outputFormat: ExecutionPlanJSONSchema,
 		},
 	})) {
 		if (message.type === "result" && message.subtype === "success") {
 			planJson = message.result;
+			structuredOutput = (message as Record<string, unknown>).structured_output;
 		}
 	}
 
-	// Extract JSON from response
+	// Try structured output first
+	const validated = extractStructuredOutput(structuredOutput, ExecutionPlanSchema);
+	if (validated) {
+		return validated as ExecutionPlan;
+	}
+
+	// Fallback: extract JSON from markdown code fence
 	const jsonMatch = planJson.match(/```json\s*([\s\S]*?)\s*```/);
 	if (jsonMatch) {
 		try {
@@ -782,6 +819,7 @@ IMPORTANT: You MUST output a JSON response. Do not output an empty response.`;
 	logger.debug({ task: task.substring(0, 50), model, retryCount }, "Reviewing execution plan");
 
 	let reviewJson = "";
+	let structuredOutput: unknown = null;
 	let messageCount = 0;
 	let lastError: string | undefined;
 
@@ -793,6 +831,7 @@ IMPORTANT: You MUST output a JSON response. Do not output an empty response.`;
 			allowDangerouslySkipPermissions: true,
 			maxTurns: 15, // Increased from 5 - agent needs time to process plan
 			cwd,
+			outputFormat: PlanReviewJSONSchema,
 		},
 	})) {
 		messageCount++;
@@ -806,11 +845,18 @@ IMPORTANT: You MUST output a JSON response. Do not output an empty response.`;
 
 		if (message.type === "result" && message.subtype === "success") {
 			reviewJson = message.result;
+			structuredOutput = msg.structured_output;
 			logger.debug({ messageCount, resultLength: reviewJson?.length || 0 }, "Plan review received result");
 		}
 	}
 
-	// Parse the review response using extracted pure function
+	// Try structured output first
+	const validatedReview = extractStructuredOutput(structuredOutput, PlanReviewSchema);
+	if (validatedReview) {
+		return validatedReview as PlanReview;
+	}
+
+	// Fallback: parse the review response using extracted pure function
 	const parseResult = parsePlanReview(reviewJson);
 
 	if (parseResult.success) {

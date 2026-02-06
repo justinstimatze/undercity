@@ -115,6 +115,9 @@ export interface ParallelSoloOptions {
 	auditBash?: boolean; // Enable bash command auditing via PreToolUse hooks
 	// Experimental options
 	useSystemPromptPreset?: boolean; // Use SDK systemPrompt preset with claude_code
+	// SDK options
+	useExtendedContext?: boolean; // Enable 1M context window beta
+	maxBudgetPerTask?: number; // Per-task cost cap in USD (0 = no cap)
 }
 
 /**
@@ -247,6 +250,10 @@ export class Orchestrator {
 	private auditBash: boolean;
 	/** Use SDK systemPrompt preset with claude_code */
 	private useSystemPromptPreset: boolean;
+	/** Enable 1M context window beta */
+	private useExtendedContext: boolean;
+	/** Per-task cost cap in USD */
+	private maxBudgetPerTask: number;
 
 	constructor(options: ParallelSoloOptions = {}) {
 		this.maxConcurrent = options.maxConcurrent ?? 3;
@@ -277,6 +284,8 @@ export class Orchestrator {
 		// Security and experimental options
 		this.auditBash = options.auditBash ?? false;
 		this.useSystemPromptPreset = options.useSystemPromptPreset ?? false;
+		this.useExtendedContext = options.useExtendedContext ?? true;
+		this.maxBudgetPerTask = options.maxBudgetPerTask ?? 0;
 
 		// CRITICAL: Capture repo root at CLI invocation time to avoid wrong repo issues
 		// When undercity is installed globally and run from another project, process.cwd()
@@ -530,6 +539,8 @@ export class Orchestrator {
 				maxTier: this.maxTier,
 				auditBash: this.auditBash,
 				useSystemPromptPreset: this.useSystemPromptPreset,
+				useExtendedContext: this.useExtendedContext,
+				maxBudgetPerTask: this.maxBudgetPerTask,
 				// No workingDirectory - runs in current directory
 			});
 
@@ -1094,6 +1105,8 @@ export class Orchestrator {
 				maxTier: this.maxTier,
 				auditBash: this.auditBash,
 				useSystemPromptPreset: this.useSystemPromptPreset,
+				useExtendedContext: this.useExtendedContext,
+				maxBudgetPerTask: this.maxBudgetPerTask,
 			});
 
 			const assignment: TaskAssignment = {

@@ -365,6 +365,16 @@ export interface SoloOptions {
 	 * Default: false
 	 */
 	useSystemPromptPreset?: boolean;
+	/**
+	 * Enable 1M context window beta for Opus/Sonnet.
+	 * Default: true
+	 */
+	useExtendedContext?: boolean;
+	/**
+	 * Maximum budget per task in USD (0 = no cap).
+	 * Default: 0
+	 */
+	maxBudgetPerTask?: number;
 }
 
 /**
@@ -392,6 +402,8 @@ export class TaskWorker {
 	private maxTier: ModelTier;
 	private auditBash: boolean;
 	private useSystemPromptPreset: boolean;
+	private useExtendedContext: boolean;
+	private maxBudgetPerTask: number;
 
 	private currentModel: ModelTier;
 	private attempts: number = 0;
@@ -541,6 +553,9 @@ export class TaskWorker {
 		this.auditBash = options.auditBash ?? false;
 		// SDK systemPrompt preset (experimental)
 		this.useSystemPromptPreset = options.useSystemPromptPreset ?? false;
+		// SDK options
+		this.useExtendedContext = options.useExtendedContext ?? true;
+		this.maxBudgetPerTask = options.maxBudgetPerTask ?? 0;
 		this.currentModel = this.startingModel;
 		this.metricsTracker = new MetricsTracker();
 	}
@@ -734,6 +749,9 @@ export class TaskWorker {
 			auditBash: this.auditBash,
 			useSystemPromptPreset: this.useSystemPromptPreset,
 			maxWritesPerFile: TaskWorker.MAX_WRITES_PER_FILE,
+			useExtendedContext: this.useExtendedContext,
+			fallbackModel: this.currentModel === "opus" ? MODEL_NAMES.sonnet : undefined,
+			maxBudgetUsd: this.maxBudgetPerTask > 0 ? this.maxBudgetPerTask : undefined,
 		};
 	}
 
