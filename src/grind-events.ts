@@ -13,22 +13,11 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { WorktreeError } from "./worktree-manager.js";
+import { ValidationError, WorktreeError } from "./errors.js";
 
 const UNDERCITY_DIR = ".undercity";
 const EVENTS_FILE = "grind-events.jsonl";
 const MAX_EVENTS = 1000;
-
-/**
- * Validation error for invalid input or state
- */
-export class ValidationError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "ValidationError";
-		Object.setPrototypeOf(this, ValidationError.prototype);
-	}
-}
 
 /**
  * Failure reasons - categorized for easy filtering
@@ -736,7 +725,7 @@ export function logRateLimitHit(options: { batchId?: string; model: string; deta
  * @example
  * // Log a ValidationError
  * if (!isValid(input)) {
- *   const error = new ValidationError('Invalid input format');
+ *   const error = new ValidationError('Invalid input format', 'input');
  *   logError(error, { input, source: 'user' });
  * }
  */

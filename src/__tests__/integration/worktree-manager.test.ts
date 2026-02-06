@@ -13,8 +13,9 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { WorktreeError } from "../../errors.js";
 import { nameFromId } from "../../names.js";
-import { WorktreeError, WorktreeManager } from "../../worktree-manager.js";
+import { WorktreeManager } from "../../worktree-manager.js";
 
 // Skip git operation tests in coverage mode or during verification
 const isCoverage = process.env.npm_lifecycle_event?.includes("coverage");
