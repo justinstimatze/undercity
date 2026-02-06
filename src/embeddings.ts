@@ -13,6 +13,7 @@
  * Future: Can be upgraded to use real embedding models when available.
  */
 
+import { EmbeddingError } from "./errors.js";
 import { sessionLogger } from "./logger.js";
 import { getDatabase } from "./storage.js";
 
@@ -480,18 +481,19 @@ function serializeVector(vec: SparseVector): Buffer {
 	try {
 		// Validate input vector
 		if (!vec || typeof vec !== "object") {
-			throw new Error("Invalid vector: must be an object");
+			throw new EmbeddingError("Invalid vector: must be an object", "serialize-vector");
 		}
 		if (!Array.isArray(vec.indices) || !Array.isArray(vec.values)) {
-			throw new Error("Invalid vector: indices and values must be arrays");
+			throw new EmbeddingError("Invalid vector: indices and values must be arrays", "serialize-vector");
 		}
 		if (vec.indices.length !== vec.values.length) {
-			throw new Error(
+			throw new EmbeddingError(
 				`Invalid vector: indices length (${vec.indices.length}) must match values length (${vec.values.length})`,
+				"serialize-vector",
 			);
 		}
 		if (typeof vec.magnitude !== "number" || !Number.isFinite(vec.magnitude)) {
-			throw new Error("Invalid vector: magnitude must be a finite number");
+			throw new EmbeddingError("Invalid vector: magnitude must be a finite number", "serialize-vector");
 		}
 
 		// Format: [count (4 bytes)] [indices...] [values...] [magnitude (8 bytes)]
@@ -501,7 +503,10 @@ function serializeVector(vec: SparseVector): Buffer {
 		// Check for reasonable buffer size (prevent memory issues)
 		const MAX_BUFFER_SIZE = 100 * 1024 * 1024; // 100MB
 		if (bufferSize > MAX_BUFFER_SIZE) {
-			throw new Error(`Vector too large: buffer size ${bufferSize} exceeds maximum ${MAX_BUFFER_SIZE}`);
+			throw new EmbeddingError(
+				`Vector too large: buffer size ${bufferSize} exceeds maximum ${MAX_BUFFER_SIZE}`,
+				"serialize-vector",
+			);
 		}
 
 		const buffer = Buffer.alloc(bufferSize);
@@ -511,11 +516,17 @@ function serializeVector(vec: SparseVector): Buffer {
 		offset += 4;
 
 		for (const idx of vec.indices) {
+			if (!Number.isFinite(idx)) {
+				throw new EmbeddingError("Vector contains non-finite index value", "serialize-vector");
+			}
 			buffer.writeUInt32LE(idx, offset);
 			offset += 4;
 		}
 
 		for (const val of vec.values) {
+			if (!Number.isFinite(val)) {
+				throw new EmbeddingError("Vector contains non-finite value", "serialize-vector");
+			}
 			buffer.writeDoubleLE(val, offset);
 			offset += 8;
 		}
@@ -545,12 +556,12 @@ function deserializeVector(buffer: Buffer): SparseVector {
 	try {
 		// Validate buffer
 		if (!buffer || !Buffer.isBuffer(buffer)) {
-			throw new Error("Invalid buffer: must be a Buffer instance");
+			throw new EmbeddingError("Invalid buffer: must be a Buffer instance", "deserialize-vector");
 		}
 
 		// Minimum size: count (4) + magnitude (8) = 12 bytes
 		if (buffer.length < 12) {
-			throw new Error(`Buffer too small: ${buffer.length} bytes, minimum 12 required`);
+			throw new EmbeddingError(`Buffer too small: ${buffer.length} bytes, minimum 12 required`, "deserialize-vector");
 		}
 
 		let offset = 0;
@@ -560,7 +571,10 @@ function deserializeVector(buffer: Buffer): SparseVector {
 		// Validate expected buffer size
 		const expectedSize = 4 + count * 4 + count * 8 + 8;
 		if (buffer.length !== expectedSize) {
-			throw new Error(`Buffer size mismatch: expected ${expectedSize}, got ${buffer.length}`);
+			throw new EmbeddingError(
+				`Buffer size mismatch: expected ${expectedSize}, got ${buffer.length}`,
+				"deserialize-vector",
+			);
 		}
 
 		const indices: number[] = [];
@@ -579,7 +593,7 @@ function deserializeVector(buffer: Buffer): SparseVector {
 
 		// Validate deserialized data
 		if (!Number.isFinite(magnitude)) {
-			throw new Error("Deserialized magnitude is not finite");
+			throw new EmbeddingError("Deserialized magnitude is not finite", "deserialize-vector");
 		}
 
 		return { indices, values, magnitude };

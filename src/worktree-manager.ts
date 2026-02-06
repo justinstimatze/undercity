@@ -55,7 +55,7 @@ function getRepoRoot(explicitRoot?: string): string {
 		const absoluteRoot = resolve(explicitRoot);
 		try {
 			if (!statSync(absoluteRoot).isDirectory()) {
-				throw new Error("Not a valid directory");
+				throw new WorktreeError("Not a valid directory", "root-validation", 1);
 			}
 			return absoluteRoot;
 		} catch (_dirError) {

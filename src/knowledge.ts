@@ -10,6 +10,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { KnowledgeError } from "./errors.js";
 import { withFileLock } from "./file-lock.js";
 import { validateKnowledgeBase } from "./knowledge-validator.js";
 import { sessionLogger } from "./logger.js";
@@ -203,7 +204,7 @@ function saveKnowledge(kb: KnowledgeBase, stateDir: string = DEFAULT_STATE_DIR):
 			.filter((i) => i.severity === "error")
 			.map((i) => `${i.path}: ${i.message}`)
 			.join("; ");
-		throw new Error(`Cannot save invalid knowledge base: ${errorMessage}`);
+		throw new KnowledgeError(`Cannot save invalid knowledge base: ${errorMessage}`, "save-validation");
 	}
 
 	try {

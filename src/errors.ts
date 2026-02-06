@@ -215,3 +215,58 @@ export class WorktreeError extends AppError {
 		Object.setPrototypeOf(this, WorktreeError.prototype);
 	}
 }
+
+/**
+ * Knowledge graph operation error
+ *
+ * Thrown when knowledge base operations fail (save, load, validation, etc.).
+ * Includes the operation type for debugging context.
+ *
+ * @param message - Error message describing the knowledge operation failure
+ * @param operation - Optional operation type (e.g., 'save-validation', 'load')
+ *
+ * @example
+ * ```typescript
+ * const validationResult = validateKnowledgeBase(kb);
+ * if (!validationResult.valid) {
+ *   throw new KnowledgeError('Cannot save invalid knowledge base', 'save-validation');
+ * }
+ * ```
+ */
+export class KnowledgeError extends AppError {
+	constructor(
+		message: string,
+		public readonly operation?: string,
+	) {
+		super(message, "KNOWLEDGE_ERROR");
+		this.name = "KnowledgeError";
+		Object.setPrototypeOf(this, KnowledgeError.prototype);
+	}
+}
+
+/**
+ * Vector embedding operation error
+ *
+ * Thrown when embedding operations fail (serialize, deserialize, vectorization, etc.).
+ * Includes the operation type for debugging context.
+ *
+ * @param message - Error message describing the embedding failure
+ * @param operation - Operation type (e.g., 'serialize-vector', 'deserialize-vector')
+ *
+ * @example
+ * ```typescript
+ * if (!vec || typeof vec !== 'object') {
+ *   throw new EmbeddingError('Invalid vector: must be an object', 'serialize-vector');
+ * }
+ * ```
+ */
+export class EmbeddingError extends AppError {
+	constructor(
+		message: string,
+		public readonly operation: string,
+	) {
+		super(message, "EMBEDDING_ERROR");
+		this.name = "EmbeddingError";
+		Object.setPrototypeOf(this, EmbeddingError.prototype);
+	}
+}
