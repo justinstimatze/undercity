@@ -1591,7 +1591,8 @@ export async function reconcileTasks(options: { lookbackCommits?: number; dryRun
 			.split(/\s+/)
 			.filter((word) => word.length > 3 && !["task", "this", "that", "with", "from", "should"].includes(word));
 
-		const fileHints = task.objective.match(/[\w-]+\/[\w.-]+\.[\w]+/g) || [];
+		// Bounded quantifiers prevent ReDoS (CodeQL js/polynomial-redos)
+		const fileHints = task.objective.match(/[\w-]{1,100}\/[\w.-]{1,100}\.[\w]{1,20}/g) || [];
 
 		for (const commit of commits) {
 			const commitLower = commit.message.toLowerCase();

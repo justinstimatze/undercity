@@ -430,7 +430,8 @@ function extractTaskKeywords(task: string): string[] {
 	}
 
 	// Also extract potential file/module references
-	const fileMatches = task.match(/[\w-]+\.(?:ts|js|json|md)/gi);
+	// Bounded quantifier prevents ReDoS (CodeQL js/polynomial-redos)
+	const fileMatches = task.match(/[\w-]{1,100}\.(?:ts|js|json|md)/gi);
 	if (fileMatches) {
 		keywords.push(...fileMatches.map((f) => f.toLowerCase()));
 	}

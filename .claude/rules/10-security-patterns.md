@@ -28,6 +28,24 @@ for (const token of tokens) {
 - `.*.*` - overlapping greedy quantifiers
 - `(\w+)*` - capturing group with quantifier
 
+### File-Matching Regexes (Common Pitfall)
+
+**CRITICAL**: Every regex that matches file paths or filenames MUST use bounded quantifiers. Unbounded `[\w-]+` or `[\w.-]+` on task objectives (user input) triggers CodeQL `js/polynomial-redos`.
+
+```typescript
+// BAD: Unbounded character classes
+/[\w-]+\.(?:ts|js|json|md)/g          // [\w-]+ is unbounded
+/[\w-]+\/[\w.-]+\.[\w]+/g             // Three unbounded quantifiers
+/\b(src\/[\w/-]+\.(?:ts|tsx))\b/g     // [\w/-]+ is unbounded
+
+// GOOD: Bounded character classes
+/[\w-]{1,100}\.(?:ts|js|json|md)/g    // Bounded to 100 chars
+/[\w-]{1,100}\/[\w.-]{1,100}\.[\w]{1,20}/g  // All bounded
+/\b(src\/[\w/-]{1,200}\.(?:ts|tsx))\b/g      // Path segments bounded
+```
+
+**Rule of thumb**: Any `[...]+` or `[...]*` matching user-provided text needs `{1,N}` bounds. Use 100 for filenames, 200 for paths, 20 for extensions.
+
 ## Command Injection Prevention
 
 **CRITICAL**: Use `execFileSync` over `execSync` for external commands.

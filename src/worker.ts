@@ -125,8 +125,8 @@ import {
  */
 function extractExplicitFiles(task: string): string[] {
 	const filePatterns = [
-		/\b([\w-]+\.(?:ts|tsx|js|jsx|py|md|json))\b/g, // filename.ext
-		/\b(src\/[\w/-]+\.(?:ts|tsx|js|jsx))\b/g, // src/path/file.ts
+		/\b([\w-]{1,100}\.(?:ts|tsx|js|jsx|py|md|json))\b/g, // filename.ext
+		/\b(src\/[\w/-]{1,200}\.(?:ts|tsx|js|jsx))\b/g, // src/path/file.ts
 	];
 
 	const files: string[] = [];
