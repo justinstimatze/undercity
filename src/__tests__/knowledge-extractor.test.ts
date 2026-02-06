@@ -198,6 +198,32 @@ describe("knowledge-extractor", () => {
 			expect(mockIndexContent).not.toHaveBeenCalled();
 		});
 
+		it("should reject low-quality learnings before storage", async () => {
+			// Intentionally poor-quality learnings that should be filtered
+			const badTexts = [
+				"I found that stuff.", // Too generic and short
+				"It turns out things.", // Too vague
+				"I noticed something.", // Too generic
+			];
+
+			for (const text of badTexts) {
+				const stored = await extractAndStoreLearnings(`task-bad-${badTexts.indexOf(text)}`, text, stateDir);
+				// These should be rejected by quality assessment
+				expect(stored).toHaveLength(0);
+			}
+		});
+
+		it("should store high-quality learnings with initial confidence", async () => {
+			const text =
+				"I discovered that the validation module in src/validators.ts uses Zod schemas for type-safe validation.";
+			const stored = await extractAndStoreLearnings("task-quality-test", text, stateDir);
+
+			expect(stored).toHaveLength(1);
+			// Initial confidence should be above default 0.5 due to quality indicators
+			expect(stored[0].confidence).toBeGreaterThan(0.5);
+			expect(stored[0].confidence).toBeLessThanOrEqual(0.8);
+		});
+
 		it("should index multiple learnings to RAG", async () => {
 			const text = `
 				I found that the API uses GraphQL for queries.

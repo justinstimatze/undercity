@@ -348,6 +348,54 @@ async function _pLimit<T>(concurrency: number, tasks: (() => Promise<T>)[]): Pro
 }
 
 /**
+ * Assess quality of an extracted learning before storage.
+ *
+ * Checks for common quality issues:
+ * - Too generic or vague content
+ * - Overly trivial observations
+ * - Contradictory or confusing statements
+ * - Potential security concerns (leaked credentials, paths)
+ *
+ * @param learning - The extracted learning to assess
+ * @returns Quality score (0-1), where >= 0.5 is acceptable
+ */
+function assessLearningQuality(learning: ExtractedLearning): number {
+	let score = 0.6; // Start slightly above threshold
+
+	// Positive indicators (boost score)
+	const hasFileReference = learning.structured?.file !== undefined;
+	const hasRichKeywords = learning.keywords.length >= 5;
+	const hasSpecificTerms = /\b(function|class|method|file|error|fix|issue|pattern|uses?|requires?)\b/i.test(
+		learning.content,
+	);
+
+	if (hasFileReference) score += 0.1;
+	if (hasRichKeywords) score += 0.1;
+	if (hasSpecificTerms) score += 0.05;
+
+	// Negative indicators (reduce score)
+	// Only penalize if content is BOTH generic AND short
+	const tooGeneric = learning.content.length < 25 && /\b(things?|stuff|something|everything)\b/i.test(learning.content);
+	// Very short content with few keywords
+	const tooVague = learning.content.length < 20 && learning.keywords.length < 2;
+	// Empty or meaningless content (just the extraction pattern phrase)
+	const trivial = /^(I (found|noticed|see) that|It turns out|The reason is)\s*\.?$/i.test(learning.content);
+
+	if (tooGeneric) score -= 0.3;
+	if (tooVague) score -= 0.3;
+	if (trivial) score -= 0.5;
+
+	// Security concerns (severely penalize)
+	const hasCredentials = /\b(password|secret|token|key|credential|api[_-]?key)\s*[:=]/i.test(learning.content);
+	const hasAbsolutePath = /\/(home|root|users?)\//i.test(learning.content);
+
+	if (hasCredentials) score -= 0.5;
+	if (hasAbsolutePath) score -= 0.2;
+
+	return Math.max(0, Math.min(1, score));
+}
+
+/**
  * Extract learnings from agent conversation text
  */
 export function extractLearnings(text: string): ExtractedLearning[] {
@@ -385,7 +433,11 @@ export function extractLearnings(text: string): ExtractedLearning[] {
 		}
 	}
 
-	return learnings;
+	// Filter by quality assessment before returning
+	return learnings.filter((learning) => {
+		const quality = assessLearningQuality(learning);
+		return quality >= 0.5;
+	});
 }
 
 /**
@@ -473,8 +525,8 @@ async function extractLearningsWithModel(text: string): Promise<ExtractedLearnin
 			parsed = rawParsed;
 		}
 
-		// Convert to ExtractedLearning format
-		return parsed
+		// Convert to ExtractedLearning format and filter by quality
+		const extracted = parsed
 			.filter((l) => l.category && l.content && l.content.length >= MIN_CONTENT_LENGTH)
 			.map((l) => ({
 				category: l.category,
@@ -482,6 +534,12 @@ async function extractLearningsWithModel(text: string): Promise<ExtractedLearnin
 				keywords: extractKeywords(l.content),
 				structured: l.file ? { file: l.file } : undefined,
 			}));
+
+		// Filter by quality assessment before returning
+		return extracted.filter((learning) => {
+			const quality = assessLearningQuality(learning);
+			return quality >= 0.5;
+		});
 	} catch (error) {
 		sessionLogger.debug({ error: String(error) }, "Model-based extraction failed, falling back to patterns");
 		return [];
@@ -489,8 +547,11 @@ async function extractLearningsWithModel(text: string): Promise<ExtractedLearnin
 }
 
 /**
- * Extract and store learnings from a completed task
- * Uses model-based extraction with pattern matching fallback
+ * Extract and store learnings from a completed task.
+ * Uses model-based extraction with pattern matching fallback.
+ *
+ * Quality assessment runs BEFORE storage to prevent low-quality learnings
+ * from entering the knowledge base and polluting future prompts.
  */
 export async function extractAndStoreLearnings(
 	taskId: string,
@@ -506,8 +567,22 @@ export async function extractAndStoreLearnings(
 	}
 
 	const stored: Learning[] = [];
+	const rejected: Array<{ content: string; quality: number }> = [];
 
 	for (const learning of extracted) {
+		// Calculate initial confidence based on quality indicators
+		const qualityScore = assessLearningQuality(learning);
+
+		// Filter out low-quality learnings before storage
+		if (qualityScore < 0.5) {
+			rejected.push({ content: learning.content.substring(0, 50), quality: qualityScore });
+			continue;
+		}
+
+		// Map quality score (0.5-1.0) to confidence (0.5-0.8)
+		// Leave room for confidence to grow with successful reuse
+		const initialConfidence = 0.5 + (qualityScore - 0.5) * 0.6;
+
 		const result = addLearning(
 			{
 				taskId,
@@ -515,11 +590,21 @@ export async function extractAndStoreLearnings(
 				content: learning.content,
 				keywords: learning.keywords,
 				structured: learning.structured,
+				initialConfidence,
 			},
 			stateDir,
 		);
 		// addLearning returns AddLearningResult, access the learning property
-		stored.push(result.learning);
+		if (result.added) {
+			stored.push(result.learning);
+		}
+	}
+
+	if (rejected.length > 0) {
+		sessionLogger.debug(
+			{ taskId, count: rejected.length, samples: rejected.slice(0, 3) },
+			"Rejected low-quality learnings",
+		);
 	}
 
 	if (stored.length > 0) {

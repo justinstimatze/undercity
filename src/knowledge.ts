@@ -458,11 +458,17 @@ export interface AddLearningResult {
 }
 
 /**
- * Add a new learning to the knowledge base
- * Returns novelty information for ROI assessment
+ * Add a new learning to the knowledge base.
+ * Returns novelty information for ROI assessment.
+ *
+ * @param learning - Learning data with optional initialConfidence
+ * @param stateDir - State directory (default: ".undercity")
+ * @returns Result indicating whether learning was added and novelty score
  */
 export function addLearning(
-	learning: Omit<Learning, "id" | "createdAt" | "usedCount" | "successCount" | "confidence">,
+	learning: Omit<Learning, "id" | "createdAt" | "usedCount" | "successCount" | "confidence"> & {
+		initialConfidence?: number;
+	},
 	stateDir: string = DEFAULT_STATE_DIR,
 ): AddLearningResult {
 	const knowledgePath = getKnowledgePath(stateDir);
@@ -471,10 +477,13 @@ export function addLearning(
 		// Re-read inside lock to get fresh state
 		const kb = loadKnowledge(stateDir);
 
+		// Extract initialConfidence if provided, default to 0.5 for backward compatibility
+		const { initialConfidence = 0.5, ...learningData } = learning;
+
 		const newLearning: Learning = {
-			...learning,
+			...learningData,
 			id: generateLearningId(),
-			confidence: 0.5, // Start at 50% confidence
+			confidence: initialConfidence,
 			usedCount: 0,
 			successCount: 0,
 			createdAt: new Date().toISOString(),
