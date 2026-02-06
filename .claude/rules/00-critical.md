@@ -51,6 +51,9 @@ git commit -m "Add feature" && git push
 # GOOD - commit, then wait for user to push
 git commit -m "Add feature"
 # Stop here - user will push when ready
+
+# When user requests push, use pnpm push (watches CI, auto-adds fix task on failure)
+pnpm push
 ```
 
 ### No Bulk Staging

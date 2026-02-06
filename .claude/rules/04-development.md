@@ -91,10 +91,9 @@ Pre-commit hook runs both tools automatically. Security is mandatory given under
 
 ```bash
 pnpm push            # Push and watch CI, auto-add fix task on failure
-git push             # Standard push (no CI monitoring)
 ```
 
-`pnpm push` wraps `git push` to:
+**Always use `pnpm push` instead of `git push`.** It wraps `git push` to:
 1. Push to remote
 2. Watch CI status until completion
 3. On failure: auto-add high-priority task to fix CI
