@@ -94,8 +94,11 @@ describe("knowledge.ts", () => {
 		});
 
 		it("should return default when file is corrupted", () => {
-			// We can't directly write corrupted JSON with mocks, so we verify the error path
-			// by checking that it returns a default structure
+			// Write actually corrupted JSON to the knowledge.json file
+			const path = join(tempDir, "knowledge.json");
+			writeFileSync(path, "{invalid json content}", "utf-8");
+
+			// Should return default KB instead of crashing
 			const kb = loadKnowledge(tempDir);
 			expect(kb.learnings).toEqual([]);
 			expect(kb.version).toBe("1.0");

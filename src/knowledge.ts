@@ -113,14 +113,20 @@ export function loadKnowledge(stateDir: string = DEFAULT_STATE_DIR): KnowledgeBa
 
 	try {
 		const content = readFileSync(path, "utf-8");
-		const parsed = JSON.parse(content);
 
-		// Validate structure using validator
-		const validationResult = validateKnowledgeBase(parsed);
-
-		if (!validationResult.valid) {
-			// Log validation issues but continue with default KB
-			console.warn("Knowledge base validation failed, using default:", validationResult.issues[0]?.message);
+		// Nested try-catch for JSON.parse errors specifically
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(content);
+		} catch (parseError) {
+			// Log parse failure with file path and error details
+			sessionLogger.warn(
+				{
+					path,
+					error: parseError instanceof Error ? parseError.message : String(parseError),
+				},
+				"Failed to parse knowledge.json, returning default knowledge base",
+			);
 			return {
 				learnings: [],
 				version: "1.0",
@@ -128,16 +134,46 @@ export function loadKnowledge(stateDir: string = DEFAULT_STATE_DIR): KnowledgeBa
 			};
 		}
 
-		// Ensure version and lastUpdated exist for backward compatibility
-		if (!parsed.version) {
-			parsed.version = "1.0";
-		}
-		if (!parsed.lastUpdated) {
-			parsed.lastUpdated = new Date().toISOString();
+		// Validate structure using validator
+		const validationResult = validateKnowledgeBase(parsed);
+
+		if (!validationResult.valid) {
+			// Log validation issues but continue with default KB
+			sessionLogger.warn(
+				{
+					path,
+					issue: validationResult.issues[0]?.message,
+				},
+				"Knowledge base validation failed, using default",
+			);
+			return {
+				learnings: [],
+				version: "1.0",
+				lastUpdated: new Date().toISOString(),
+			};
 		}
 
-		return parsed as KnowledgeBase;
-	} catch {
+		// After validation passes, we know it's a valid KnowledgeBase structure
+		const kb = parsed as KnowledgeBase;
+
+		// Ensure version and lastUpdated exist for backward compatibility
+		if (!kb.version) {
+			kb.version = "1.0";
+		}
+		if (!kb.lastUpdated) {
+			kb.lastUpdated = new Date().toISOString();
+		}
+
+		return kb;
+	} catch (fileError) {
+		// Handle file read errors (ENOENT, EACCES, etc.)
+		sessionLogger.warn(
+			{
+				path,
+				error: fileError instanceof Error ? fileError.message : String(fileError),
+			},
+			"Failed to read knowledge file, returning default knowledge base",
+		);
 		return {
 			learnings: [],
 			version: "1.0",
