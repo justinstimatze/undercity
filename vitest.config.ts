@@ -89,10 +89,5 @@ export default defineConfig({
 				statements: 70,
 			},
 		},
-		// Type testing configuration for .test-d.ts files
-		typecheck: {
-			enabled: true,
-			include: ["src/__tests__/**/*.test-d.ts"],
-		},
 	},
 });
