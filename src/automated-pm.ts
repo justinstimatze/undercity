@@ -1375,6 +1375,29 @@ export async function pmPropose(
 	// Gather system health context for self-aware task generation
 	const grindSummary = getLastGrindSummary();
 	const effectivenessReport = analyzeEffectiveness(stateDir);
+
+	// Health check: Reject proposal generation when system health is too low
+	if (grindSummary) {
+		const total = grindSummary.ok + grindSummary.fail;
+		if (total > 0) {
+			const successRate = (grindSummary.ok / total) * 100;
+			const MIN_SUCCESS_RATE_THRESHOLD = 40;
+
+			if (successRate < MIN_SUCCESS_RATE_THRESHOLD) {
+				sessionLogger.warn(
+					{
+						successRate: successRate.toFixed(1),
+						threshold: MIN_SUCCESS_RATE_THRESHOLD,
+						ok: grindSummary.ok,
+						fail: grindSummary.fail,
+					},
+					"PM proposal generation rejected due to low system health - success rate below threshold",
+				);
+				return [];
+			}
+		}
+	}
+
 	const systemHealthContext = buildSystemHealthContext(grindSummary, effectivenessReport);
 
 	const focusPrompt = focus ? `\nFOCUS AREA: ${focus}` : "";
