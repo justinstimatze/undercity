@@ -43,10 +43,11 @@ vi.mock("node:fs", () => ({
 // Mock child_process
 vi.mock("node:child_process", () => ({
 	execSync: vi.fn(),
+	execFileSync: vi.fn(),
 }));
 
 // Import after mocking
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import {
 	compressContext,
 	formatErrorsForAgent,
@@ -56,7 +57,8 @@ import {
 	parseTypeScriptErrors,
 } from "../cache.js";
 
-const mockExecSync = vi.mocked(execSync);
+const _mockExecSync = vi.mocked(execSync);
+const mockExecFileSync = vi.mocked(execFileSync);
 
 describe("cache.ts", () => {
 	beforeEach(() => {
@@ -317,48 +319,82 @@ src/b.ts:5:10 lint/rule2
 
 	describe("getChangedContext", () => {
 		it("returns empty string when no files changed", () => {
-			mockExecSync.mockReturnValue("");
+			mockExecFileSync.mockReturnValue("");
 			const result = getChangedContext([], "/test");
 			expect(result).toBe("");
 		});
 
 		it("formats git diff output", () => {
-			mockExecSync.mockReturnValue(`--- a/file.ts
-+++ b/file.ts
+			mockExecFileSync.mockReturnValue(`--- a/src/file.ts
++++ b/src/file.ts
 @@ -1,3 +1,3 @@
  const x = 1;
 -const y = 2;
 +const y = 3;`);
 
-			const result = getChangedContext(["file.ts"], "/test");
+			const result = getChangedContext(["src/file.ts"], "/test");
 
-			expect(result).toContain("### file.ts");
+			expect(result).toContain("### src/file.ts");
 			expect(result).toContain("```diff");
 		});
 
 		it("limits to 5 files", () => {
-			mockExecSync.mockReturnValue("diff content");
-			const files = Array.from({ length: 10 }, (_, i) => `file${i}.ts`);
+			mockExecFileSync.mockReturnValue("diff content");
+			const files = Array.from({ length: 10 }, (_, i) => `src/file${i}.ts`);
 
 			getChangedContext(files, "/test");
 
-			// Should only call execSync 5 times (one per file, max 5)
-			expect(mockExecSync).toHaveBeenCalledTimes(5);
+			// Should only call execFileSync 5 times (one per file, max 5)
+			expect(mockExecFileSync).toHaveBeenCalledTimes(5);
 		});
 
 		it("handles errors gracefully", () => {
-			mockExecSync.mockImplementation(() => {
+			mockExecFileSync.mockImplementation(() => {
 				throw new Error("Git error");
 			});
 
-			const result = getChangedContext(["file.ts"], "/test");
+			const result = getChangedContext(["src/file.ts"], "/test");
 			expect(result).toBe("");
 		});
 
 		it("skips files with no diff", () => {
-			mockExecSync.mockReturnValue("");
-			const result = getChangedContext(["file.ts"], "/test");
+			mockExecFileSync.mockReturnValue("");
+			const result = getChangedContext(["src/file.ts"], "/test");
 			expect(result).toBe("");
+		});
+
+		it("rejects file paths with shell metacharacters", () => {
+			mockExecFileSync.mockReturnValue("diff content");
+
+			// These should be rejected by validation
+			const maliciousPaths = [
+				"$(rm -rf /)",
+				"`evil-command`",
+				"file; rm -rf /",
+				"file | cat /etc/passwd",
+				"file && evil",
+			];
+
+			for (const badPath of maliciousPaths) {
+				const result = getChangedContext([badPath], "/test");
+				expect(result).toBe("");
+			}
+
+			// execFileSync should never be called with malicious paths
+			expect(mockExecFileSync).not.toHaveBeenCalled();
+		});
+
+		it("accepts valid file paths", () => {
+			mockExecFileSync.mockReturnValue("diff content");
+
+			const validPaths = ["src/file.ts", "test/file-name.test.ts", "components/Button_v2.tsx"];
+
+			for (const validPath of validPaths) {
+				getChangedContext([validPath], "/test");
+			}
+
+			// Should call execFileSync for each valid path
+			expect(mockExecFileSync).toHaveBeenCalledTimes(validPaths.length);
 		});
 	});
 

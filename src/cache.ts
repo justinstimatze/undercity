@@ -9,10 +9,11 @@
  * All caching is local - no LLM tokens consumed.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { z } from "zod";
 import { TIMEOUT_GIT_CMD_MS, TIMEOUT_HEAVY_CMD_MS } from "./constants.js";
 
 /**
@@ -46,6 +47,29 @@ interface ErrorFix {
 }
 
 /**
+ * Zod schema for ErrorFix validation
+ */
+const errorFixSchema = z.object({
+	errorPattern: z.string(),
+	file: z.string(),
+	fix: z.string(),
+	success: z.boolean(),
+});
+
+/**
+ * Validate file path to prevent shell injection
+ * Allows: alphanumeric, dots, slashes, hyphens, underscores
+ * Rejects: shell metacharacters ($, backticks, semicolons, pipes, etc.)
+ */
+function isValidFilePath(filePath: string): boolean {
+	// Allow common file path characters, reject shell metacharacters
+	const safePattern = /^[a-zA-Z0-9._/-]+$/;
+	const dangerousChars = /[$`;&|<>(){}]/;
+
+	return safePattern.test(filePath) && !dangerousChars.test(filePath);
+}
+
+/**
  * In-memory cache store
  */
 class ContextCache {
@@ -71,8 +95,26 @@ class ContextCache {
 		try {
 			const fixesPath = path.join(this.cacheDir, "error-fixes.json");
 			if (fs.existsSync(fixesPath)) {
-				const data = JSON.parse(fs.readFileSync(fixesPath, "utf-8"));
-				this.errorFixes = new Map(Object.entries(data));
+				const rawData = JSON.parse(fs.readFileSync(fixesPath, "utf-8"));
+
+				// Validate the deserialized data structure
+				const validatedEntries = new Map<string, ErrorFix[]>();
+				for (const [key, value] of Object.entries(rawData)) {
+					if (Array.isArray(value)) {
+						const validFixes = value
+							.map((item) => {
+								const result = errorFixSchema.safeParse(item);
+								return result.success ? result.data : null;
+							})
+							.filter((item): item is ErrorFix => item !== null);
+
+						if (validFixes.length > 0) {
+							validatedEntries.set(key, validFixes);
+						}
+					}
+				}
+
+				this.errorFixes = validatedEntries;
 			}
 		} catch {
 			// Cache load failed, start fresh
@@ -277,9 +319,14 @@ export function getChangedContext(files: string[], cwd: string = process.cwd()):
 	const changes: string[] = [];
 
 	for (const file of files.slice(0, 5)) {
+		// Validate file path to prevent shell injection
+		if (!isValidFilePath(file)) {
+			continue;
+		}
+
 		try {
-			// Get unified diff (3 lines of context)
-			const diff = execSync(`git diff -U3 HEAD -- "${file}" 2>/dev/null || true`, {
+			// Use execFileSync to avoid shell interpretation
+			const diff = execFileSync("git", ["diff", "-U3", "HEAD", "--", file], {
 				encoding: "utf-8",
 				cwd,
 				timeout: TIMEOUT_GIT_CMD_MS,
@@ -289,7 +336,7 @@ export function getChangedContext(files: string[], cwd: string = process.cwd()):
 				changes.push(`### ${file}\n\`\`\`diff\n${diff.slice(0, 1000)}\n\`\`\``);
 			}
 		} catch {
-			// Skip files that fail
+			// Skip files that fail (non-existent files, git errors, etc.)
 		}
 	}
 
