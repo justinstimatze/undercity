@@ -2540,6 +2540,17 @@ export function getTasksByStatusDB(status: TaskStatus, stateDir: string = DEFAUL
 }
 
 /**
+ * Get tasks by parent ID (all subtasks of a given parent)
+ */
+export function getTasksByParentIdDB(parentId: string, stateDir: string = DEFAULT_STATE_DIR): TaskRecord[] {
+	const db = getDatabase(stateDir);
+	const rows = db
+		.prepare("SELECT * FROM tasks WHERE parent_id = ? ORDER BY priority ASC, created_at ASC")
+		.all(parentId) as TaskRow[];
+	return rows.map(rowToTask);
+}
+
+/**
  * Get pending tasks that are ready to execute (not decomposed, dependencies met)
  */
 export function getReadyTasksDB(limit: number = 10, stateDir: string = DEFAULT_STATE_DIR): TaskRecord[] {

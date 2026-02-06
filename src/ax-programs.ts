@@ -366,6 +366,12 @@ LANGUAGE RULES:
 - If projectContext says "rust" → use ONLY .rs
 - VIOLATION: Using wrong language extensions = TASK FAILURE
 
+FILE ISOLATION (CRITICAL):
+- Each subtask MUST target DIFFERENT files. NO two subtasks may modify the same file.
+- If two operations need the same file, COMBINE them into ONE subtask.
+- List ALL files each subtask will modify in the objective.
+- VIOLATION: Two subtasks targeting the same file = GUARANTEED MERGE CONFLICT FAILURE
+
 SUBTASK RULES:
 1. Each subtask should modify 1 file (2-3 max for tightly coupled changes)
 2. INCLUDE FILE PATH in each objective: "In src/auth.ts, add validation..."

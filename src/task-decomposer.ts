@@ -60,6 +60,87 @@ const ACTIONABLE_PATTERNS = [
 const logger = sessionLogger.child({ module: "task-decomposer" });
 
 /**
+ * Merge subtasks that target overlapping files into a single subtask.
+ * Prevents parallel merge conflicts by ensuring file isolation between subtasks.
+ */
+export function mergeOverlappingSubtasks(subtasks: Subtask[]): Subtask[] {
+	if (subtasks.length <= 1) return subtasks;
+
+	// Build file-to-subtask-index map
+	const fileToIndices = new Map<string, number[]>();
+	for (let i = 0; i < subtasks.length; i++) {
+		const files = subtasks[i].estimatedFiles ?? [];
+		for (const file of files) {
+			const normalized = file.toLowerCase();
+			const existing = fileToIndices.get(normalized) ?? [];
+			existing.push(i);
+			fileToIndices.set(normalized, existing);
+		}
+	}
+
+	// Build merge groups using union-find approach
+	const parent = subtasks.map((_, i) => i);
+	function find(x: number): number {
+		if (parent[x] !== x) parent[x] = find(parent[x]);
+		return parent[x];
+	}
+	function union(a: number, b: number): void {
+		const ra = find(a);
+		const rb = find(b);
+		if (ra !== rb) parent[rb] = ra;
+	}
+
+	for (const indices of fileToIndices.values()) {
+		for (let i = 1; i < indices.length; i++) {
+			union(indices[0], indices[i]);
+		}
+	}
+
+	// Group subtasks by their root
+	const groups = new Map<number, number[]>();
+	for (let i = 0; i < subtasks.length; i++) {
+		const root = find(i);
+		const group = groups.get(root) ?? [];
+		group.push(i);
+		groups.set(root, group);
+	}
+
+	// Build merged subtasks
+	const merged: Subtask[] = [];
+	for (const indices of groups.values()) {
+		if (indices.length === 1) {
+			merged.push(subtasks[indices[0]]);
+			continue;
+		}
+
+		// Merge multiple subtasks into one
+		const parts = indices.map((i) => subtasks[i]);
+		const combinedObjective = parts.map((s) => s.objective).join(" AND ");
+		const allFiles = [...new Set(parts.flatMap((s) => s.estimatedFiles ?? []))];
+		const minOrder = Math.min(...parts.map((s) => s.order));
+
+		logger.info(
+			{
+				mergedCount: parts.length,
+				files: allFiles,
+				objectives: parts.map((s) => s.objective.substring(0, 40)),
+			},
+			"Merged overlapping subtasks to prevent file conflicts",
+		);
+
+		merged.push({
+			objective: combinedObjective,
+			estimatedFiles: allFiles,
+			order: minOrder,
+		});
+	}
+
+	// Re-sort by order
+	merged.sort((a, b) => a.order - b.order);
+	return merged;
+}
+
+/**
  * Result of atomicity check
  */
 export interface AtomicityCheckResult {
@@ -254,8 +335,11 @@ export async function decomposeTask(
 		};
 	}
 
+	// Merge subtasks that target overlapping files
+	const mergedSubtasks = mergeOverlappingSubtasks(validation.valid);
+
 	// Re-number the valid subtasks
-	const subtasks = validation.valid.map((s, idx) => ({
+	const subtasks = mergedSubtasks.map((s, idx) => ({
 		...s,
 		order: idx + 1,
 	}));

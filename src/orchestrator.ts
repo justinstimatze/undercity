@@ -68,6 +68,8 @@ import {
 	addTask,
 	findSimilarInProgressTask,
 	getAllTasks,
+	getParentTask,
+	getSiblingTasks,
 	type HandoffContext,
 	type Task,
 	updateTaskTicket,
@@ -911,30 +913,27 @@ export class Orchestrator {
 	 */
 	private async processBatches(tasks: string[], batchId: string, mainBranch: string): Promise<ParallelTaskResult[]> {
 		const results: ParallelTaskResult[] = [];
-		const totalBatches = Math.ceil(tasks.length / this.maxConcurrent);
 
 		startHealthMonitoring(this.healthMonitorState, this.healthMonitorConfig, this.buildHealthMonitorDeps());
 
-		for (let batchStart = 0; batchStart < tasks.length; batchStart += this.maxConcurrent) {
+		let remaining = [...tasks];
+		let batchNum = 0;
+
+		while (remaining.length > 0 && !this.draining) {
 			// Refresh actual usage from claude.ai at start of each batch
 			await this.refreshActualUsage();
 
-			// Check for drain signal before starting new batch
-			if (this.draining) {
-				const remaining = tasks.length - batchStart;
-				output.progress(`Drain: skipping ${remaining} remaining tasks`);
-				break;
-			}
+			const { batch, deferred } = this.buildNextBatch(remaining, this.maxConcurrent);
+			if (batch.length === 0) break; // safety valve
 
-			const batchEnd = Math.min(batchStart + this.maxConcurrent, tasks.length);
-			const batchTasks = tasks.slice(batchStart, batchEnd);
-			const batchNum = Math.floor(batchStart / this.maxConcurrent) + 1;
+			batchNum++;
+			const totalBatches = batchNum + Math.ceil(deferred.length / this.maxConcurrent);
 
-			output.section(`Batch ${batchNum}/${totalBatches}: Processing ${batchTasks.length} tasks`);
+			output.section(`Batch ${batchNum}/~${totalBatches}: Processing ${batch.length} tasks`);
 
-			const preparedTasks = await this.scheduleBatchTasks(batchTasks, results);
+			const preparedTasks = await this.scheduleBatchTasks(batch, results);
 
-			if (batchStart === 0 && preparedTasks.length > 0) {
+			if (batchNum === 1 && preparedTasks.length > 0) {
 				this.initializeBatch(batchId, preparedTasks);
 				output.debug(`Batch initialized: ${batchId}`);
 			} else if (preparedTasks.length > 0) {
@@ -943,6 +942,12 @@ export class Orchestrator {
 
 			const batchResults = await this.executeBatchWorkers(preparedTasks, mainBranch);
 			results.push(...batchResults);
+
+			remaining = deferred;
+		}
+
+		if (this.draining && remaining.length > 0) {
+			output.progress(`Drain: skipping ${remaining.length} remaining tasks`);
 		}
 
 		// If we drained, invoke the callback
@@ -952,6 +957,39 @@ export class Orchestrator {
 		}
 
 		return results;
+	}
+
+	/**
+	 * Build the next batch ensuring at most one sibling per parent.
+	 * Tasks without a parent are always eligible.
+	 * Siblings of an already-batched task are deferred to the next batch.
+	 */
+	private buildNextBatch(remainingTasks: string[], maxSize: number): { batch: string[]; deferred: string[] } {
+		const batch: string[] = [];
+		const deferred: string[] = [];
+		const parentIdsInBatch = new Set<string>();
+
+		for (const task of remainingTasks) {
+			if (batch.length >= maxSize) {
+				deferred.push(task);
+				continue;
+			}
+
+			const parentId = this.parentIds.get(task);
+			if (!parentId) {
+				// No parent - always eligible
+				batch.push(task);
+			} else if (!parentIdsInBatch.has(parentId)) {
+				// First sibling from this parent - add to batch
+				parentIdsInBatch.add(parentId);
+				batch.push(task);
+			} else {
+				// Another sibling already in batch - defer
+				deferred.push(task);
+			}
+		}
+
+		return { batch, deferred };
 	}
 
 	/**
@@ -1127,13 +1165,70 @@ export class Orchestrator {
 			writeTaskAssignment(assignment);
 			this.recoveredCheckpoints.delete(task);
 
-			const handoffContext = this.handoffContexts.get(task);
+			let handoffContext = this.handoffContexts.get(task);
 			const ticket = this.tickets.get(task);
+
+			// Inject sibling context for decomposed subtasks
+			const parentId = this.parentIds.get(task);
+			if (parentId) {
+				const siblingContext = this.buildSiblingContext(task, parentId);
+				if (siblingContext) {
+					handoffContext = {
+						...handoffContext,
+						notes: [handoffContext?.notes, siblingContext].filter(Boolean).join("\n\n"),
+					};
+				}
+			}
+
 			const result = await worker.runTask(task, handoffContext, ticket);
 
 			return this.processWorkerResult(task, taskId, worktreePath, branch, result, mainBranch, variant);
 		} catch (err) {
 			return this.handleWorkerError(task, taskId, worktreePath, branch, err);
+		}
+	}
+
+	/**
+	 * Build sibling context string for decomposed subtasks.
+	 * Tells the worker about its parent goal, sibling tasks, and file boundaries.
+	 */
+	private buildSiblingContext(task: string, parentId: string): string | undefined {
+		try {
+			const boardTaskId = this.originalTaskIds.get(task);
+			if (!boardTaskId) return undefined;
+
+			const parentTask = getParentTask(boardTaskId);
+			const siblings = getSiblingTasks(boardTaskId);
+			if (siblings.length === 0 && !parentTask) return undefined;
+
+			const lines: string[] = ["# Decomposition Context", ""];
+			lines.push("You are working on a SUBTASK of a larger goal.");
+
+			if (parentTask) {
+				lines.push(`PARENT TASK: ${parentTask.objective}`);
+			}
+
+			if (siblings.length > 0) {
+				lines.push("", "SIBLING SUBTASKS (do NOT touch their files):");
+				for (const sibling of siblings) {
+					const status = sibling.status === "complete" ? "complete" : sibling.status;
+					const files = sibling.estimatedFiles?.join(", ") ?? "unknown";
+					lines.push(`- [${status}] "${sibling.objective.substring(0, 80)}" (files: ${files})`);
+				}
+			}
+
+			lines.push(
+				"",
+				"RULES:",
+				"- Only modify files assigned to YOUR subtask",
+				"- Do NOT modify files listed under other siblings",
+				"- If you need changes in a sibling's file, note it in a comment and move on",
+			);
+
+			return lines.join("\n");
+		} catch (error) {
+			sessionLogger.debug({ error: String(error), parentId }, "Failed to build sibling context");
+			return undefined;
 		}
 	}
 

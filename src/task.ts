@@ -20,6 +20,7 @@ import {
 	getReadyTasksDB,
 	getTaskBoardSummaryDB,
 	getTaskByIdDB,
+	getTasksByParentIdDB,
 	getTasksByStatusDB,
 	insertTask,
 	markTaskDecomposedDB,
@@ -1430,6 +1431,33 @@ export function getTaskById(paramsOrTaskId: GetTaskByIdParams | string, pathPara
 	const taskId = typeof paramsOrTaskId === "object" ? paramsOrTaskId.taskId : paramsOrTaskId;
 	const record = getTaskByIdDB(taskId, stateDir);
 	return record ? recordToTask(record) : undefined;
+}
+
+/**
+ * Get sibling tasks (other subtasks of the same parent)
+ * Returns empty array if the task has no parent.
+ */
+export function getSiblingTasks(taskId: string, path?: string): Task[] {
+	const stateDir = getStateDirFromPath(path);
+	const task = getTaskByIdDB(taskId, stateDir);
+	if (!task?.parentId) return [];
+
+	return getTasksByParentIdDB(task.parentId, stateDir)
+		.filter((t) => t.id !== taskId)
+		.map(recordToTask);
+}
+
+/**
+ * Get the parent task of a subtask
+ * Returns undefined if the task has no parent.
+ */
+export function getParentTask(taskId: string, path?: string): Task | undefined {
+	const stateDir = getStateDirFromPath(path);
+	const task = getTaskByIdDB(taskId, stateDir);
+	if (!task?.parentId) return undefined;
+
+	const parent = getTaskByIdDB(task.parentId, stateDir);
+	return parent ? recordToTask(parent) : undefined;
 }
 
 /**

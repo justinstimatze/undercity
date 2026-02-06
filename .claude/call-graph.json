@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-02-06T09:16:40.910Z",
+  "generatedAt": "2026-02-06T18:42:14.956Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -33,7 +33,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1810,
+          "line": 1833,
           "context": "info"
         },
         {
@@ -58,7 +58,7 @@
         },
         {
           "file": "knowledge.ts",
-          "line": 194,
+          "line": 230,
           "context": "if"
         },
         {
@@ -100,8 +100,8 @@
         },
         {
           "file": "knowledge-extractor.ts",
-          "line": 511,
-          "context": "for"
+          "line": 586,
+          "context": "push"
         },
         {
           "file": "mcp-protocol.ts",
@@ -142,7 +142,7 @@
         },
         {
           "file": "orchestrator.ts",
-          "line": 1720,
+          "line": 1815,
           "context": "for"
         },
         {
@@ -157,7 +157,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1811,
+          "line": 1834,
           "context": "info"
         },
         {
@@ -317,7 +317,7 @@
         },
         {
           "file": "knowledge-extractor.ts",
-          "line": 579,
+          "line": 664,
           "context": "push"
         }
       ]
@@ -328,7 +328,7 @@
       "calledFrom": [
         {
           "file": "orchestrator.ts",
-          "line": 1204,
+          "line": 1299,
           "context": "if"
         },
         {
@@ -450,7 +450,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1668,
+          "line": 1691,
           "context": "info"
         },
         {
@@ -466,12 +466,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 1657,
+          "line": 1680,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1674,
+          "line": 1697,
           "context": "info"
         },
         {
