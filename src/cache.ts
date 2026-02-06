@@ -9,7 +9,7 @@
  * All caching is local - no LLM tokens consumed.
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -250,10 +250,11 @@ class ContextCache {
 
 		try {
 			// Use grep to find all imports quickly
-			const result = execSync(`grep -r "^import.*from" --include="*.ts" --include="*.tsx" . 2>/dev/null || true`, {
+			const result = execFileSync("grep", ["-r", "^import.*from", "--include=*.ts", "--include=*.tsx", "."], {
 				encoding: "utf-8",
 				cwd,
 				timeout: TIMEOUT_HEAVY_CMD_MS,
+				stdio: ["pipe", "pipe", "ignore"], // Suppress stderr
 			});
 
 			const lines = result.split("\n").filter(Boolean);
@@ -267,7 +268,7 @@ class ContextCache {
 				}
 			}
 		} catch {
-			// Graph building failed, non-fatal
+			// Graph building failed, non-fatal (grep returns non-zero when no matches)
 		}
 
 		return this.importGraph;

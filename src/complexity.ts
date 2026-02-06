@@ -14,7 +14,7 @@
  * | LLM fallback | low-confidence fast assessment → Haiku analysis  |
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { checkComplexityAx } from "./ax-programs.js";
@@ -225,28 +225,39 @@ export function getFileMetrics(files: string[], repoRoot: string = process.cwd()
 		// Get git history for this file
 		try {
 			// Commits in last 90 days
-			const commitCount = execSync(`git log --oneline --since="90 days ago" -- "${file}" 2>/dev/null | wc -l`, {
+			const commitOutput = execFileSync("git", ["log", "--oneline", "--since=90 days ago", "--", file], {
 				encoding: "utf-8",
 				cwd: repoRoot,
-			}).trim();
-			fm.recentCommits = parseInt(commitCount, 10) || 0;
+				timeout: TIMEOUT_GIT_CMD_MS,
+				stdio: ["pipe", "pipe", "ignore"], // Suppress stderr
+			});
+			const commitLines = commitOutput.split("\n").filter(Boolean);
+			fm.recentCommits = commitLines.length;
 
 			// Bug fix commits (contain "fix" in message)
-			const fixCount = execSync(
-				`git log --oneline --since="90 days ago" --grep="fix" -i -- "${file}" 2>/dev/null | wc -l`,
-				{ encoding: "utf-8", cwd: repoRoot },
-			).trim();
-			fm.bugFixes = parseInt(fixCount, 10) || 0;
+			const fixOutput = execFileSync(
+				"git",
+				["log", "--oneline", "--since=90 days ago", "--grep=fix", "-i", "--", file],
+				{
+					encoding: "utf-8",
+					cwd: repoRoot,
+					timeout: TIMEOUT_GIT_CMD_MS,
+					stdio: ["pipe", "pipe", "ignore"], // Suppress stderr
+				},
+			);
+			const fixLines = fixOutput.split("\n").filter(Boolean);
+			fm.bugFixes = fixLines.length;
 		} catch {
 			// Git command failed
 		}
 
 		// Try to get CodeScene health score
 		try {
-			const csOutput = execSync(`cs check "${fullPath}" 2>/dev/null || true`, {
+			const csOutput = execFileSync("cs", ["check", fullPath], {
 				encoding: "utf-8",
 				cwd: repoRoot,
 				timeout: TIMEOUT_GIT_CMD_MS,
+				stdio: ["pipe", "pipe", "ignore"], // Suppress stderr
 			});
 			const healthMatch = csOutput.match(/Code Health:\s*(\d+(?:\.\d+)?)/i);
 			if (healthMatch) {

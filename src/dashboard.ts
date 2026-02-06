@@ -5,7 +5,7 @@
  * Shows ONLY real data. No fake animations.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import blessed from "blessed";
@@ -37,11 +37,17 @@ function tailFile(filePath: string, lines: number = 10): string[] {
 // Check for active worktrees
 function getActiveWorktrees(): string[] {
 	try {
-		const result = execSync("git worktree list --porcelain 2>/dev/null | grep '^worktree' | cut -d' ' -f2", {
+		const result = execFileSync("git", ["worktree", "list", "--porcelain"], {
 			encoding: "utf-8",
-		}).trim();
-		const trees = result.split("\n").filter(Boolean);
-		return trees.filter((t) => t.includes("undercity-wt-"));
+			stdio: ["pipe", "pipe", "ignore"], // Suppress stderr
+		});
+		// Parse porcelain format: lines starting with "worktree " contain the path
+		const trees = result
+			.split("\n")
+			.filter((line) => line.startsWith("worktree "))
+			.map((line) => line.substring(9)) // Remove "worktree " prefix
+			.filter((path) => path.includes("undercity-wt-"));
+		return trees;
 	} catch {
 		return [];
 	}
@@ -214,15 +220,17 @@ export function launchDashboard(): void {
 
 	function getWorkers(): WorkerInfo[] {
 		try {
-			const ps = execSync("pgrep -f 'undercity.*grind' 2>/dev/null || true", {
+			const ps = execFileSync("pgrep", ["-f", "undercity.*grind"], {
 				encoding: "utf-8",
+				stdio: ["pipe", "pipe", "ignore"], // Suppress stderr
 			}).trim();
 
 			if (!ps) return [];
 
 			const grindPid = ps.split("\n")[0];
-			const pstree = execSync(`pstree -p ${grindPid} 2>/dev/null || true`, {
+			const pstree = execFileSync("pstree", ["-p", grindPid], {
 				encoding: "utf-8",
+				stdio: ["pipe", "pipe", "ignore"], // Suppress stderr
 			});
 
 			const workers: WorkerInfo[] = [];
@@ -248,7 +256,11 @@ export function launchDashboard(): void {
 
 	function getCommits(): string[] {
 		try {
-			return execSync("git log --oneline -6 2>/dev/null", { encoding: "utf-8" }).trim().split("\n").filter(Boolean);
+			const output = execFileSync("git", ["log", "--oneline", "-6"], {
+				encoding: "utf-8",
+				stdio: ["pipe", "pipe", "ignore"], // Suppress stderr
+			});
+			return output.trim().split("\n").filter(Boolean);
 		} catch {
 			return [];
 		}
