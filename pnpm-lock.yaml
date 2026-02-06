@@ -16,7 +16,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.19
-        version: 0.2.19(zod@4.3.5)
+        version: 0.2.19(zod@4.3.6)
       '@anthropic-ai/tokenizer':
         specifier: ^0.0.4
         version: 0.0.4
@@ -25,7 +25,7 @@ importers:
         version: 16.0.13
       '@themaximalist/embeddings.js':
         specifier: ^0.1.3
-        version: 0.1.3(@xenova/transformers@2.17.2)(zod@4.3.5)
+        version: 0.1.3(@xenova/transformers@2.17.2)(zod@4.3.6)
       '@xenova/transformers':
         specifier: ^2.17.2
         version: 2.17.2
@@ -66,8 +66,8 @@ importers:
         specifier: ^2.8.2
         version: 2.8.2
       zod:
-        specifier: ^4.3.5
-        version: 4.3.5
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.3.12
@@ -2385,14 +2385,14 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
-  zod@4.3.5:
-    resolution: {integrity: sha512-k7Nwx6vuWx1IJ9Bjuf4Zt1PEllcwe7cls3VNzm4CQ1/hgtFUK2bRNG3rvnpPUhFjmqJKAKtjV576KnUkHocg/g==}
+  zod@4.3.6:
+    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
 snapshots:
 
-  '@anthropic-ai/claude-agent-sdk@0.2.19(zod@4.3.5)':
+  '@anthropic-ai/claude-agent-sdk@0.2.19(zod@4.3.6)':
     dependencies:
-      zod: 4.3.5
+      zod: 4.3.6
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.33.5
       '@img/sharp-darwin-x64': 0.33.5
@@ -2985,10 +2985,10 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@themaximalist/embeddings.js@0.1.3(@xenova/transformers@2.17.2)(zod@4.3.5)':
+  '@themaximalist/embeddings.js@0.1.3(@xenova/transformers@2.17.2)(zod@4.3.6)':
     dependencies:
       node-fetch: 3.3.2
-      openai: 4.104.0(zod@4.3.5)
+      openai: 4.104.0(zod@4.3.6)
     optionalDependencies:
       '@xenova/transformers': 2.17.2
     transitivePeerDependencies:
@@ -3944,7 +3944,7 @@ snapshots:
       onnxruntime-common: 1.14.0
       platform: 1.3.6
 
-  openai@4.104.0(zod@4.3.5):
+  openai@4.104.0(zod@4.3.6):
     dependencies:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.13
@@ -3954,7 +3954,7 @@ snapshots:
       formdata-node: 4.4.1
       node-fetch: 2.7.0
     optionalDependencies:
-      zod: 4.3.5
+      zod: 4.3.6
     transitivePeerDependencies:
       - encoding
 
@@ -4556,4 +4556,4 @@ snapshots:
 
   yaml@2.8.2: {}
 
-  zod@4.3.5: {}
+  zod@4.3.6: {}
