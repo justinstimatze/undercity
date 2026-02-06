@@ -2335,6 +2335,222 @@ Be concise and specific. Focus on actionable insights.`;
 	}
 
 	/**
+	 * Get list of staged files (files that will be committed)
+	 */
+	private getStagedFiles(): string[] {
+		try {
+			const result = execFileSync("git", ["diff", "--cached", "--name-only"], {
+				encoding: "utf-8",
+				cwd: this.workingDirectory,
+			}).trim();
+			if (!result) return [];
+			return result.split("\n").filter((f) => f.length > 0);
+		} catch {
+			return [];
+		}
+	}
+
+	/**
+	 * Derive conventional commit type from task objective
+	 */
+	private deriveCommitType(task: string): string {
+		const lower = task.toLowerCase();
+
+		// Check for research task prefix first
+		if (/\[research\]/i.test(task)) return "research";
+
+		// Check for test-related tasks first (higher priority than feat)
+		// Matches: "Add test", "Add tests", "Add unit test", "Write test", etc.
+		if (/^(add|write|improve|create)\s+(\w+\s+)*tests?\b/i.test(task)) return "test";
+		if (/^test\s/i.test(task)) return "test";
+
+		// Check for docs-related tasks
+		if (/^(add|update)\s+(\w+\s+)*docs?\b/i.test(task)) return "docs";
+		if (/^(add|update)\s+(\w+\s+)*documentation\b/i.test(task)) return "docs";
+
+		// Check for performance tasks
+		if (/^improve\s+performance/i.test(task)) return "perf";
+
+		// Then check for action verbs at start of task
+		if (/^(add|create|implement|introduce|build)\s/i.test(task)) return "feat";
+		if (/^(fix|repair|resolve|correct|patch)\s/i.test(task)) return "fix";
+		if (/^(refactor|extract|reorganize|simplify|restructure|clean)\s/i.test(task)) return "refactor";
+		if (/^(doc|document)\s/i.test(task)) return "docs";
+		if (/^(perf|optimize|speed)\s/i.test(task)) return "perf";
+		if (/^(style|format|lint)\s/i.test(task)) return "style";
+
+		// Check for keywords anywhere in task
+		if (lower.includes("fix") || lower.includes("bug") || lower.includes("error")) return "fix";
+		if (lower.includes("test")) return "test";
+		if (lower.includes("refactor")) return "refactor";
+		if (lower.includes("document") || lower.includes("readme") || lower.includes("docs")) return "docs";
+
+		// Default to chore for updates/changes
+		return "chore";
+	}
+
+	/**
+	 * Derive scope from modified files
+	 */
+	private deriveScope(files: string[]): string {
+		if (files.length === 0) return "";
+
+		if (files.length === 1) {
+			// Single file: use filename without extension
+			const basename = files[0].split("/").pop() || "";
+			return basename.replace(/\.[^.]+$/, "");
+		}
+
+		// Multiple files: try to find common directory or pattern
+		const dirs = files.map((f) => {
+			const parts = f.split("/");
+			// Remove filename, keep directory path
+			return parts.slice(0, -1).join("/");
+		});
+
+		// Find common prefix among directories
+		const commonDir = this.findCommonPathPrefix(dirs.filter((d) => d.length > 0));
+		if (commonDir) {
+			// Use the last component of the common directory
+			const lastPart = commonDir.split("/").pop();
+			if (lastPart && lastPart !== "src") {
+				return lastPart;
+			}
+		}
+
+		// If all files are in the same immediate directory, use that
+		const immediateDirs = new Set(dirs);
+		if (immediateDirs.size === 1) {
+			const dir = [...immediateDirs][0];
+			const lastPart = dir.split("/").pop();
+			if (lastPart && lastPart !== "src") {
+				return lastPart;
+			}
+		}
+
+		// Fallback: if files share a common base name pattern, use that
+		const basenames = files.map((f) => {
+			const name = f.split("/").pop() || "";
+			return name.replace(/\.[^.]+$/, "");
+		});
+		const commonBasename = this.findCommonStringPrefix(basenames);
+		if (commonBasename.length >= 3) {
+			return commonBasename.replace(/-$/, ""); // Remove trailing hyphen
+		}
+
+		return "";
+	}
+
+	/**
+	 * Find common prefix among path strings
+	 */
+	private findCommonPathPrefix(paths: string[]): string {
+		if (paths.length === 0) return "";
+		if (paths.length === 1) return paths[0];
+
+		const parts = paths.map((p) => p.split("/"));
+		const minLen = Math.min(...parts.map((p) => p.length));
+		const common: string[] = [];
+
+		for (let i = 0; i < minLen; i++) {
+			const segment = parts[0][i];
+			if (parts.every((p) => p[i] === segment)) {
+				common.push(segment);
+			} else {
+				break;
+			}
+		}
+
+		return common.join("/");
+	}
+
+	/**
+	 * Find common string prefix among strings
+	 */
+	private findCommonStringPrefix(strings: string[]): string {
+		if (strings.length === 0) return "";
+		if (strings.length === 1) return strings[0];
+
+		const minLen = Math.min(...strings.map((s) => s.length));
+		let common = "";
+
+		for (let i = 0; i < minLen; i++) {
+			const char = strings[0][i];
+			if (strings.every((s) => s[i] === char)) {
+				common += char;
+			} else {
+				break;
+			}
+		}
+
+		return common;
+	}
+
+	/**
+	 * Extract a short description from the task objective
+	 */
+	private extractShortDescription(task: string): string {
+		// Remove [bracket] prefixes (like [research], [meta:triage], etc.)
+		let desc = task.replace(/^\[[^\]]+\]\s*/g, "");
+
+		// Remove leading "Task:" or similar prefixes
+		desc = desc.replace(/^(Task|Goal|Objective|TODO):\s*/i, "");
+
+		// Trim whitespace
+		desc = desc.trim();
+
+		// Capitalize first letter
+		if (desc.length > 0) {
+			desc = desc.charAt(0).toUpperCase() + desc.slice(1);
+		}
+
+		return desc;
+	}
+
+	/**
+	 * Build commit subject line (first line of commit message)
+	 */
+	private buildCommitSubject(type: string, scope: string, task: string): string {
+		const prefix = scope ? `${type}(${scope}):` : `${type}:`;
+		const shortDesc = this.extractShortDescription(task);
+
+		// Git convention: subject line should be ~72 chars max
+		const maxDescLen = 72 - prefix.length - 1; // -1 for space after prefix
+		const truncatedDesc = shortDesc.length > maxDescLen ? `${shortDesc.substring(0, maxDescLen - 3)}...` : shortDesc;
+
+		return `${prefix} ${truncatedDesc}`;
+	}
+
+	/**
+	 * Build full commit message with subject, body, and footer
+	 */
+	private buildCommitMessage(task: string, files: string[]): string {
+		const commitType = this.deriveCommitType(task);
+		const scope = this.deriveScope(files);
+		const subject = this.buildCommitSubject(commitType, scope, task);
+
+		const parts: string[] = [subject];
+
+		// Add body if task was truncated in subject
+		const shortDesc = this.extractShortDescription(task);
+		if (shortDesc.length > 72 - (scope ? `${commitType}(${scope}): `.length : `${commitType}: `.length)) {
+			parts.push(""); // Empty line before body
+			parts.push(shortDesc);
+		}
+
+		// Add files footer if we have files
+		if (files.length > 0 && files.length <= 10) {
+			parts.push(""); // Empty line before footer
+			parts.push(`Files: ${files.join(", ")}`);
+		} else if (files.length > 10) {
+			parts.push(""); // Empty line before footer
+			parts.push(`Files: ${files.slice(0, 10).join(", ")} (+${files.length - 10} more)`);
+		}
+
+		return parts.join("\n");
+	}
+
+	/**
 	 * Commit the work
 	 */
 	private async commitWork(task: string): Promise<string> {
@@ -2376,9 +2592,11 @@ Be concise and specific. Focus on actionable insights.`;
 				// Ignore errors from untracked file handling
 			}
 
-			// Create commit message
-			const shortTask = task.substring(0, 50) + (task.length > 50 ? "..." : "");
-			const commitMessage = shortTask;
+			// Get staged files for scope derivation and footer
+			const stagedFiles = this.getStagedFiles();
+
+			// Build commit message with conventional commit format
+			const commitMessage = this.buildCommitMessage(task, stagedFiles);
 
 			// Commit (skip hooks - we already did verification)
 			execFileSync("git", ["commit", "--no-verify", "-m", commitMessage], {
@@ -2388,7 +2606,7 @@ Be concise and specific. Focus on actionable insights.`;
 			// Get commit SHA
 			const sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf-8", cwd: this.workingDirectory }).trim();
 
-			this.log("Committed work", { sha, task: shortTask });
+			this.log("Committed work", { sha, message: commitMessage.split("\n")[0] });
 			return sha;
 		} catch (error) {
 			this.log("Commit failed", { error: String(error) });
