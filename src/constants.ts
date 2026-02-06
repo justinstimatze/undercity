@@ -55,3 +55,10 @@ export const MAX_TURNS_PLANNING = 10;
 
 /** Complex planning requiring extended exploration */
 export const MAX_TURNS_EXTENDED_PLANNING = 15;
+
+// ---------------------------------------------------------------------------
+// Merge and orchestration
+// ---------------------------------------------------------------------------
+
+/** Maximum attempts to merge a branch before giving up */
+export const MAX_MERGE_RETRIES = 3;
