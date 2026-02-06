@@ -186,11 +186,36 @@ export async function handleVerificationSuccess(
 			// Mark human guidance as successful if it was used
 			try {
 				markGuidanceUsed(state.pendingErrorSignature, true, config.stateDir);
-			} catch {
-				// Non-critical
+			} catch (error: unknown) {
+				const errorName = error instanceof Error ? error.name : typeof error;
+				const errorMessage = error instanceof Error ? error.message : String(error);
+				const stackFirstLine = error instanceof Error && error.stack ? error.stack.split("\n")[0] : undefined;
+				sessionLogger.warn(
+					{
+						taskId: identity.taskId,
+						operation: "markGuidanceUsed",
+						errorSignature: state.pendingErrorSignature,
+						errorType: errorName,
+						errorMessage,
+						stackFirstLine,
+					},
+					"Non-critical error in handleVerificationSuccess",
+				);
 			}
-		} catch {
-			// Non-critical
+		} catch (error: unknown) {
+			const errorName = error instanceof Error ? error.name : typeof error;
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			const stackFirstLine = error instanceof Error && error.stack ? error.stack.split("\n")[0] : undefined;
+			sessionLogger.warn(
+				{
+					taskId: identity.taskId,
+					operation: "recordSuccessfulFix",
+					errorType: errorName,
+					errorMessage,
+					stackFirstLine,
+				},
+				"Non-critical error in handleVerificationSuccess",
+			);
 		}
 	}
 
@@ -446,8 +471,21 @@ export function recordVerificationFailure(
 		const { recordPendingError } = require("../error-fix-patterns.js");
 		errorSignature = recordPendingError(identity.taskId, primaryCategory, errorMessage, deps.getModifiedFiles());
 		state.filesBeforeAttempt = deps.getModifiedFiles();
-	} catch {
-		// Non-critical
+	} catch (error: unknown) {
+		const errorName = error instanceof Error ? error.name : typeof error;
+		const errorMessage_local = error instanceof Error ? error.message : String(error);
+		const stackFirstLine = error instanceof Error && error.stack ? error.stack.split("\n")[0] : undefined;
+		sessionLogger.warn(
+			{
+				taskId: identity.taskId,
+				operation: "recordPendingError",
+				category: primaryCategory,
+				errorType: errorName,
+				errorMessage: errorMessage_local,
+				stackFirstLine,
+			},
+			"Non-critical error in recordVerificationFailure",
+		);
 	}
 
 	// Build enhanced feedback
