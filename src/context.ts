@@ -375,9 +375,13 @@ export function getContextLimit(agentType: AgentType): number {
 // - File analysis: Identify relevant files
 // ============================================================================
 
-import { execFileSync, execSync } from "node:child_process";
+import { exec, execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { promisify } from "node:util";
+
+const execAsync = promisify(exec);
+
 import { getASTIndex } from "./ast-index.js";
 import { sessionLogger } from "./logger.js";
 import { extractFunctionSignaturesWithTypes, getTypeDefinition } from "./ts-analysis.js";
@@ -523,7 +527,7 @@ export async function prepareContext(
 			// Find related files IN PARALLEL - each search term spawns its own process
 			const fileSearchPromises = searchTerms.slice(0, 5).map(async (term) => {
 				if (term.match(/\.(ts|tsx|js|jsx)$/)) {
-					return { type: "explicit" as const, files: findFilesByName(term, repoRoot) };
+					return { type: "explicit" as const, files: await findFilesByName(term, repoRoot) };
 				}
 				return { type: "searched" as const, files: findFilesWithTerm(term, repoRoot) };
 			});
@@ -582,7 +586,7 @@ export async function prepareContext(
 
 		// 6. Add related patterns (only in full mode to save tokens)
 		if (mode === "full") {
-			const relatedPatternsResult = findRelatedPatterns(task, repoRoot);
+			const relatedPatternsResult = await findRelatedPatterns(task, repoRoot);
 			briefing.relatedPatterns.push(...relatedPatternsResult.slice(0, 5));
 		}
 
@@ -702,18 +706,18 @@ function extractSearchTerms(task: string): string[] {
 /**
  * Find files by name pattern (includes untracked files)
  */
-function findFilesByName(pattern: string, cwd: string): string[] {
+async function findFilesByName(pattern: string, cwd: string): Promise<string[]> {
 	try {
 		// Remove extension for broader matching
 		const baseName = pattern.replace(/\.(ts|tsx|js|jsx)$/, "");
 
 		// Use find instead of git ls-files to include untracked files
-		const result = execSync(
+		const { stdout } = await execAsync(
 			`find . -name "*.ts" -o -name "*.tsx" 2>/dev/null | grep -v node_modules | grep -i "${baseName}" | head -10 || true`,
 			{ encoding: "utf-8", cwd, timeout: TIMEOUT_FILE_SEARCH_MS },
 		);
 
-		return result
+		return stdout
 			.trim()
 			.split("\n")
 			.filter(Boolean)
@@ -756,7 +760,7 @@ async function findWithAstGrep(task: string, cwd: string): Promise<string[]> {
 
 	try {
 		// Check if ast-grep is available
-		execSync("which ast-grep", { encoding: "utf-8", timeout: TIMEOUT_TOOL_CHECK_MS });
+		await execAsync("which ast-grep", { encoding: "utf-8", timeout: TIMEOUT_TOOL_CHECK_MS });
 	} catch {
 		// ast-grep not installed, skip
 		return patterns;
@@ -765,20 +769,20 @@ async function findWithAstGrep(task: string, cwd: string): Promise<string[]> {
 	try {
 		// If task mentions functions, find function declarations
 		if (taskLower.match(/function|handler|method/)) {
-			const result = execSync(
+			const { stdout } = await execAsync(
 				`ast-grep --lang typescript -p 'function $NAME($$$PARAMS)' --json 2>/dev/null | head -c 2000 || true`,
 				{ encoding: "utf-8", cwd, timeout: TIMEOUT_GIT_CMD_MS },
 			);
-			if (result.trim()) {
+			if (stdout.trim()) {
 				try {
-					const matches = JSON.parse(result);
+					const matches = JSON.parse(stdout);
 					const names = matches.slice(0, 5).map((m: { text: string }) => m.text?.slice(0, 50) || "");
 					patterns.push(`Functions: ${names.filter(Boolean).join(", ")}`);
 				} catch (parseError: unknown) {
 					// ast-grep may return malformed JSON if output is truncated or corrupted
 					const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
 					sessionLogger.debug(
-						{ error: errorMsg, outputSample: result.slice(0, 100) },
+						{ error: errorMsg, outputSample: stdout.slice(0, 100) },
 						"Failed to parse ast-grep JSON output for function detection",
 					);
 				}
@@ -787,23 +791,26 @@ async function findWithAstGrep(task: string, cwd: string): Promise<string[]> {
 
 		// If task mentions routes, find route definitions
 		if (taskLower.match(/route|endpoint|api/)) {
-			const result = execSync(
+			const { stdout } = await execAsync(
 				`ast-grep --lang typescript -p 'router.$METHOD($$$)' --json 2>/dev/null | head -c 2000 || true`,
 				{ encoding: "utf-8", cwd, timeout: TIMEOUT_GIT_CMD_MS },
 			);
-			if (result.trim()) {
+			if (stdout.trim()) {
 				patterns.push("Found router definitions - check express-server/src/routes/");
 			}
 		}
 
 		// If task mentions hooks, find hook usage
 		if (taskLower.match(/hook|useState|useEffect/)) {
-			const result = execSync(`ast-grep --lang tsx -p 'use$HOOK($$$)' --json 2>/dev/null | head -c 2000 || true`, {
-				encoding: "utf-8",
-				cwd,
-				timeout: TIMEOUT_GIT_CMD_MS,
-			});
-			if (result.trim()) {
+			const { stdout } = await execAsync(
+				`ast-grep --lang tsx -p 'use$HOOK($$$)' --json 2>/dev/null | head -c 2000 || true`,
+				{
+					encoding: "utf-8",
+					cwd,
+					timeout: TIMEOUT_GIT_CMD_MS,
+				},
+			);
+			if (stdout.trim()) {
 				patterns.push("Found React hooks - check next-client/src/");
 			}
 		}
@@ -870,20 +877,20 @@ function extractFunctionSignatures(file: string, cwd: string): string[] {
 /**
  * Find related patterns - how similar things are done
  */
-function findRelatedPatterns(task: string, cwd: string): string[] {
+async function findRelatedPatterns(task: string, cwd: string): Promise<string[]> {
 	const patterns: string[] = [];
 	const taskLower = task.toLowerCase();
 
 	// If adding a route, find existing route patterns
 	if (taskLower.includes("route") || taskLower.includes("endpoint") || taskLower.includes("api")) {
 		try {
-			const routeFiles = execSync('git grep -l "router\\." -- "*.ts" 2>/dev/null | head -3 || true', {
+			const { stdout } = await execAsync('git grep -l "router\\." -- "*.ts" 2>/dev/null | head -3 || true', {
 				encoding: "utf-8",
 				cwd,
 				timeout: TIMEOUT_FILE_SEARCH_MS,
 			});
-			if (routeFiles.trim()) {
-				patterns.push(`Route patterns in: ${routeFiles.trim().replace(/\n/g, ", ")}`);
+			if (stdout.trim()) {
+				patterns.push(`Route patterns in: ${stdout.trim().replace(/\n/g, ", ")}`);
 			}
 		} catch {
 			/* ignore */
@@ -893,7 +900,7 @@ function findRelatedPatterns(task: string, cwd: string): string[] {
 	// If adding a component, find existing component patterns
 	if (taskLower.includes("component") || taskLower.includes("modal") || taskLower.includes("button")) {
 		try {
-			const componentDirs = execSync(
+			const { stdout } = await execAsync(
 				"find next-client/src/components -type d -maxdepth 2 2>/dev/null | head -5 || true",
 				{
 					encoding: "utf-8",
@@ -901,8 +908,8 @@ function findRelatedPatterns(task: string, cwd: string): string[] {
 					timeout: TIMEOUT_FILE_SEARCH_MS,
 				},
 			);
-			if (componentDirs.trim()) {
-				patterns.push(`Component patterns in: ${componentDirs.trim().replace(/\n/g, ", ")}`);
+			if (stdout.trim()) {
+				patterns.push(`Component patterns in: ${stdout.trim().replace(/\n/g, ", ")}`);
 			}
 		} catch {
 			/* ignore */
@@ -912,13 +919,13 @@ function findRelatedPatterns(task: string, cwd: string): string[] {
 	// If adding tests, find existing test patterns
 	if (taskLower.includes("test")) {
 		try {
-			const testFiles = execSync('git ls-files "*.test.ts" | head -3 || true', {
+			const { stdout } = await execAsync('git ls-files "*.test.ts" | head -3 || true', {
 				encoding: "utf-8",
 				cwd,
 				timeout: TIMEOUT_FILE_SEARCH_MS,
 			});
-			if (testFiles.trim()) {
-				patterns.push(`Test patterns in: ${testFiles.trim().replace(/\n/g, ", ")}`);
+			if (stdout.trim()) {
+				patterns.push(`Test patterns in: ${stdout.trim().replace(/\n/g, ", ")}`);
 			}
 		} catch {
 			/* ignore */
