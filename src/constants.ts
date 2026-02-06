@@ -62,3 +62,19 @@ export const MAX_TURNS_EXTENDED_PLANNING = 15;
 
 /** Maximum attempts to merge a branch before giving up */
 export const MAX_MERGE_RETRIES = 3;
+
+// ---------------------------------------------------------------------------
+// File lock retry configuration
+// ---------------------------------------------------------------------------
+
+/** Maximum retry attempts for file lock acquisition */
+export const MAX_FILE_LOCK_RETRIES = 5;
+
+/** Minimum delay between lock retries (milliseconds) */
+export const FILE_LOCK_MIN_DELAY_MS = 50;
+
+/** Maximum delay between lock retries (milliseconds) */
+export const FILE_LOCK_MAX_DELAY_MS = 1000;
+
+/** Exponential backoff multiplier for lock retries */
+export const FILE_LOCK_BACKOFF_FACTOR = 2;

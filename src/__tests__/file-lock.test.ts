@@ -7,6 +7,7 @@
 
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { lockSync, unlockSync } from "proper-lockfile";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { withFileLock, withFileLockAsync } from "../file-lock.js";
 
@@ -57,6 +58,112 @@ describe("withFileLock", () => {
 		// Should proceed without crashing (graceful fallback)
 		const result = withFileLock(nonExistent, () => "fallback");
 		expect(result).toBe("fallback");
+	});
+
+	it("retries lock acquisition with exponential backoff", () => {
+		// Acquire lock externally and hold it throughout
+		lockSync(testFile, { realpath: false });
+
+		const startTime = Date.now();
+
+		try {
+			// withFileLock will retry several times before giving up
+			const result = withFileLock(
+				testFile,
+				() => {
+					return "completed-after-retries";
+				},
+				{ maxRetries: 2, minDelayMs: 50, maxDelayMs: 300 },
+			);
+
+			const elapsed = Date.now() - startTime;
+
+			// Should complete (via fallback after retries exhausted)
+			expect(result).toBe("completed-after-retries");
+
+			// Should have tried multiple times: initial + 2 retries = 3 attempts
+			// Each retry has ~50ms, ~100ms delays = ~150ms minimum
+			expect(elapsed).toBeGreaterThan(100);
+		} finally {
+			unlockSync(testFile, { realpath: false });
+		}
+	});
+
+	it("falls back to no lock after max retries exceeded", () => {
+		// Acquire lock externally and hold it
+		lockSync(testFile, { realpath: false });
+
+		try {
+			// withFileLock should eventually give up and proceed without lock
+			const result = withFileLock(
+				testFile,
+				() => {
+					return "fallback-after-retries";
+				},
+				{ maxRetries: 2, minDelayMs: 20, maxDelayMs: 100 },
+			);
+
+			expect(result).toBe("fallback-after-retries");
+		} finally {
+			unlockSync(testFile, { realpath: false });
+		}
+	});
+
+	it("uses exponential backoff timing", () => {
+		// Acquire lock externally
+		lockSync(testFile, { realpath: false });
+
+		const delays: number[] = [];
+		const startTime = Date.now();
+		const lastCheckpoint = startTime;
+
+		try {
+			withFileLock(
+				testFile,
+				() => {
+					// Track when we finally execute (after all retries fail)
+					const now = Date.now();
+					delays.push(now - lastCheckpoint);
+					return "done";
+				},
+				{
+					maxRetries: 3,
+					minDelayMs: 50,
+					maxDelayMs: 500,
+					exponentialFactor: 2,
+				},
+			);
+		} finally {
+			unlockSync(testFile, { realpath: false });
+		}
+
+		// Should have attempted 4 times (initial + 3 retries)
+		// Total time should reflect exponential backoff: ~50 + ~100 + ~200 = ~350ms minimum
+		const totalElapsed = Date.now() - startTime;
+		expect(totalElapsed).toBeGreaterThan(300); // Account for jitter
+	});
+
+	it("respects custom retry configuration", () => {
+		lockSync(testFile, { realpath: false });
+
+		const startTime = Date.now();
+
+		try {
+			withFileLock(testFile, () => "custom-config", {
+				maxRetries: 1, // Only 1 retry
+				minDelayMs: 100,
+				maxDelayMs: 200,
+			});
+		} finally {
+			unlockSync(testFile, { realpath: false });
+		}
+
+		const elapsed = Date.now() - startTime;
+
+		// Should have tried 2 times total (initial + 1 retry) with ~100ms delay
+		// Total time should be at least 100ms
+		expect(elapsed).toBeGreaterThan(90);
+		expect(elapsed).toBeLessThan(300); // Should not take too long with just 1 retry
 	});
 });
 
