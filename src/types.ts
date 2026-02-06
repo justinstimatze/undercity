@@ -845,6 +845,25 @@ export interface WorktreeInfo {
 }
 
 /**
+ * Inter-worktree message for coordination between workers
+ * Messages are written to .undercity/messages/<id>.json in each worktree
+ */
+export interface Message {
+	/** Unique message identifier (timestamp + random suffix) */
+	id: string;
+	/** Sender session ID */
+	from: string;
+	/** Target session ID (or 'broadcast' for broadcasts) */
+	to: string;
+	/** Message type for routing/handling */
+	type: string;
+	/** Message payload (typed as unknown for extensibility) */
+	payload: unknown;
+	/** When the message was created */
+	timestamp: Date;
+}
+
+/**
  * State tracking for git worktrees
  */
 export interface WorktreeState {

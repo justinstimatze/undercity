@@ -12,13 +12,13 @@
  */
 
 import { execFileSync, execSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
-import { WorktreeError } from "./errors.js";
+import { ValidationError, WorktreeError } from "./errors.js";
 import { gitLogger } from "./logger.js";
 import { nameFromId } from "./names.js";
-import type { WorktreeInfo } from "./types.js";
+import type { Message, WorktreeInfo } from "./types.js";
 
 // Re-export error classes for backward compatibility
 export { AppError, DatabaseError, TimeoutError, ValidationError, WorktreeError } from "./errors.js";
@@ -633,5 +633,132 @@ export class WorktreeManager {
 		} catch (error) {
 			gitLogger.error({ error: String(error) }, "Failed to cleanup worktrees directory");
 		}
+	}
+
+	/**
+	 * Send a message to a specific worktree
+	 *
+	 * Writes a message JSON file to the target worktree's .undercity/messages/ directory.
+	 * Messages are best-effort delivery only - no acknowledgment mechanism is provided.
+	 * The caller is responsible for message cleanup (no automatic TTL).
+	 *
+	 * @param targetSessionId - The session ID of the target worktree
+	 * @param type - Message type for routing/handling (e.g., 'config_update', 'task_cancel')
+	 * @param payload - Message payload (any JSON-serializable data)
+	 * @returns true if message was written successfully, false otherwise
+	 * @throws {ValidationError} If targetSessionId is empty or invalid
+	 * @throws {WorktreeError} If message directory creation fails
+	 *
+	 * @example
+	 * ```typescript
+	 * const manager = new WorktreeManager();
+	 * const success = manager.sendMessage('task-abc123', 'config_update', {
+	 *   timeout: 30000,
+	 *   retries: 3
+	 * });
+	 * if (success) {
+	 *   console.log('Message delivered');
+	 * }
+	 * ```
+	 */
+	sendMessage(targetSessionId: string, type: string, payload: unknown): boolean {
+		// Validate inputs
+		if (!targetSessionId || typeof targetSessionId !== "string" || targetSessionId.trim() === "") {
+			throw new ValidationError("Target session ID must be a non-empty string", "targetSessionId");
+		}
+
+		if (!type || typeof type !== "string" || type.trim() === "") {
+			throw new ValidationError("Message type must be a non-empty string", "type");
+		}
+
+		// Check if target worktree exists
+		const worktreePath = this.getWorktreePath(targetSessionId);
+		if (!this.hasWorktree(targetSessionId)) {
+			gitLogger.warn({ targetSessionId, worktreePath }, "Target worktree does not exist, skipping message delivery");
+			return false;
+		}
+
+		// Generate unique message ID (timestamp + random suffix)
+		const messageId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+		const message: Message = {
+			id: messageId,
+			from: "orchestrator",
+			to: targetSessionId,
+			type,
+			payload,
+			timestamp: new Date(),
+		};
+
+		// Ensure .undercity/messages/ directory exists
+		const messagesDir = join(worktreePath, ".undercity", "messages");
+		try {
+			if (!existsSync(messagesDir)) {
+				mkdirSync(messagesDir, { recursive: true });
+			}
+		} catch (error) {
+			throw new WorktreeError(`Failed to create messages directory: ${String(error)}`, "mkdir");
+		}
+
+		// Write message file
+		const messagePath = join(messagesDir, `${messageId}.json`);
+		try {
+			writeFileSync(messagePath, JSON.stringify(message, null, 2), { encoding: "utf-8" });
+			gitLogger.info({ targetSessionId, messageId, type, messagePath }, "Message sent to worktree");
+			return true;
+		} catch (error) {
+			gitLogger.error({ targetSessionId, messageId, type, error: String(error) }, "Failed to write message file");
+			return false;
+		}
+	}
+
+	/**
+	 * Broadcast a message to all active worktrees
+	 *
+	 * Sends the same message to all currently active worktrees by calling sendMessage
+	 * for each worktree. This is a convenience method for orchestrator-wide announcements.
+	 *
+	 * @param type - Message type for routing/handling (e.g., 'shutdown', 'config_update')
+	 * @param payload - Message payload (any JSON-serializable data)
+	 * @returns Number of worktrees that successfully received the message
+	 * @throws {ValidationError} If type is empty or invalid
+	 *
+	 * @example
+	 * ```typescript
+	 * const manager = new WorktreeManager();
+	 * const delivered = manager.broadcastMessage('shutdown', {
+	 *   reason: 'System maintenance',
+	 *   gracePeriodMs: 5000
+	 * });
+	 * console.log(`Message delivered to ${delivered} worktrees`);
+	 * ```
+	 */
+	broadcastMessage(type: string, payload: unknown): number {
+		// Validate inputs
+		if (!type || typeof type !== "string" || type.trim() === "") {
+			throw new ValidationError("Message type must be a non-empty string", "type");
+		}
+
+		const activeWorktrees = this.getActiveSessionWorktrees();
+
+		if (activeWorktrees.length === 0) {
+			gitLogger.info({ type }, "No active worktrees to broadcast to");
+			return 0;
+		}
+
+		let successCount = 0;
+		for (const worktree of activeWorktrees) {
+			const success = this.sendMessage(worktree.sessionId, type, payload);
+			if (success) {
+				successCount++;
+			}
+		}
+
+		gitLogger.info(
+			{ type, totalWorktrees: activeWorktrees.length, successCount },
+			"Broadcast message sent to all active worktrees",
+		);
+
+		return successCount;
 	}
 }
