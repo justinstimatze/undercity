@@ -9,6 +9,7 @@
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { MAX_TURNS_SINGLE } from "./constants.js";
 import { sessionLogger } from "./logger.js";
 import type { ExtractionSample, ExtractionType, GroundTruthItem } from "./test-data/extraction-samples.js";
 import { MODEL_NAMES } from "./types.js";
@@ -357,7 +358,7 @@ export async function modelBasedExtract(
 			prompt,
 			options: {
 				model: MODEL_NAMES[config.model],
-				maxTurns: 1,
+				maxTurns: MAX_TURNS_SINGLE,
 				permissionMode: "bypassPermissions",
 			},
 		})) {

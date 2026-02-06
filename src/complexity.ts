@@ -18,6 +18,7 @@ import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { checkComplexityAx } from "./ax-programs.js";
+import { TIMEOUT_GIT_CMD_MS } from "./constants.js";
 import { sessionLogger } from "./logger.js";
 import type { ModelTier } from "./types.js";
 
@@ -245,7 +246,7 @@ export function getFileMetrics(files: string[], repoRoot: string = process.cwd()
 			const csOutput = execSync(`cs check "${fullPath}" 2>/dev/null || true`, {
 				encoding: "utf-8",
 				cwd: repoRoot,
-				timeout: 5000,
+				timeout: TIMEOUT_GIT_CMD_MS,
 			});
 			const healthMatch = csOutput.match(/Code Health:\s*(\d+(?:\.\d+)?)/i);
 			if (healthMatch) {

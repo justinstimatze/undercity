@@ -11,6 +11,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeDecisionAx } from "./ax-programs.js";
+import { MAX_TURNS_EXTENDED_PLANNING, MAX_TURNS_PLANNING, MAX_TURNS_SINGLE } from "./constants.js";
 import { sanitizeContent, wrapUntrustedContent } from "./content-sanitizer.js";
 import {
 	type ConfidenceLevel,
@@ -975,7 +976,7 @@ Be specific and actionable. Focus on practical improvements, not theoretical ide
 				model: MODEL_NAMES.sonnet,
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
-				maxTurns: 10,
+				maxTurns: MAX_TURNS_PLANNING,
 				cwd,
 				outputFormat: PMResearchResultJSONSchema,
 			},
@@ -1467,7 +1468,7 @@ Generate 4-5 proposals with the required ambition distribution.`;
 				model: MODEL_NAMES.sonnet,
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
-				maxTurns: 15,
+				maxTurns: MAX_TURNS_EXTENDED_PLANNING,
 				cwd,
 				outputFormat: TaskProposalsJSONSchema,
 			},
@@ -1881,7 +1882,7 @@ Be specific to THIS codebase. Avoid generic advice.`;
 				model: MODEL_NAMES.sonnet,
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
-				maxTurns: 1,
+				maxTurns: MAX_TURNS_SINGLE,
 				systemPrompt: "You are a precise JSON generator. Output ONLY valid JSON, no markdown formatting.",
 				outputFormat: PMRefineOutputJSONSchema,
 			},

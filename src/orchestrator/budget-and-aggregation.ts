@@ -217,12 +217,12 @@ export interface BatchDecision {
 /**
  * Decide whether to continue batch processing after draining signal
  *
- * @param draining - Whether drain signal has been received
+ * @param isDraining - Whether drain signal has been received
  * @param tasksRemaining - Number of tasks remaining to process
  * @returns Decision on whether to continue
  */
-export function shouldContinueBatchProcessing(draining: boolean, tasksRemaining: number): BatchDecision {
-	if (draining) {
+export function shouldContinueBatchProcessing(isDraining: boolean, tasksRemaining: number): BatchDecision {
+	if (isDraining) {
 		return {
 			continueProcessing: false,
 			reason: `Drain: skipping ${tasksRemaining} remaining tasks`,

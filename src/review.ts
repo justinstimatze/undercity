@@ -10,6 +10,7 @@
 import { execSync } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
+import { MAX_TURNS_REVIEW, MAX_TURNS_SINGLE } from "./constants.js";
 import { sessionLogger } from "./logger.js";
 import { MODEL_NAMES, type ModelTier } from "./types.js";
 import { verifyWork } from "./verification.js";
@@ -143,7 +144,7 @@ export async function runEscalatingReview(
 					console.log(chalk.dim(`    - ${issue.slice(0, 80)}`));
 					allIssuesFound.push(issue);
 				}
-				const verification = await verifyWork(runTypecheck, runTests, workingDirectory);
+				const verification = await verifyWork({ runTypecheck, runTests, workingDirectory });
 				if (!verification.passed) {
 					return {
 						converged: false,
@@ -208,7 +209,7 @@ export async function runEscalatingReview(
 
 		// Verify once at end of tier if any changes were made
 		if (tierMadeChanges) {
-			const verification = await verifyWork(runTypecheck, runTests, workingDirectory);
+			const verification = await verifyWork({ runTypecheck, runTests, workingDirectory });
 			if (!verification.passed) {
 				console.log(chalk.red(`  [${tier}] Verification failed after fixes`));
 				return {
@@ -402,7 +403,7 @@ If nothing notable for this lens, respond with exactly: "Nothing notable."`;
 			for await (const message of query({
 				prompt: reviewPrompt,
 				options: {
-					maxTurns: 1,
+					maxTurns: MAX_TURNS_SINGLE,
 					model: MODEL_NAMES[reviewModel],
 					permissionMode: "bypassPermissions",
 					allowDangerouslySkipPermissions: true,
@@ -490,7 +491,7 @@ After reviewing:
 		for await (const message of query({
 			prompt: reviewPrompt,
 			options: {
-				maxTurns: 5, // Give it enough turns to review AND fix
+				maxTurns: MAX_TURNS_REVIEW, // Give it enough turns to review AND fix
 				model: modelId,
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,

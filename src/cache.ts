@@ -13,6 +13,7 @@ import { execSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { TIMEOUT_GIT_CMD_MS, TIMEOUT_HEAVY_CMD_MS } from "./constants.js";
 
 /**
  * Cache entry with hash and timestamp
@@ -159,10 +160,10 @@ class ContextCache {
 	/**
 	 * Record a successful error fix
 	 */
-	recordErrorFix(errorPattern: string, file: string, fix: string, success: boolean): void {
+	recordErrorFix(errorPattern: string, file: string, fix: string, wasSuccessful: boolean): void {
 		const key = this.normalizeErrorPattern(errorPattern);
 		const fixes = this.errorFixes.get(key) || [];
-		fixes.push({ errorPattern, file, fix, success });
+		fixes.push({ errorPattern, file, fix, success: wasSuccessful });
 		this.errorFixes.set(key, fixes);
 		this.savePersistentCache();
 	}
@@ -210,7 +211,7 @@ class ContextCache {
 			const result = execSync(`grep -r "^import.*from" --include="*.ts" --include="*.tsx" . 2>/dev/null || true`, {
 				encoding: "utf-8",
 				cwd,
-				timeout: 10000,
+				timeout: TIMEOUT_HEAVY_CMD_MS,
 			});
 
 			const lines = result.split("\n").filter(Boolean);
@@ -281,7 +282,7 @@ export function getChangedContext(files: string[], cwd: string = process.cwd()):
 			const diff = execSync(`git diff -U3 HEAD -- "${file}" 2>/dev/null || true`, {
 				encoding: "utf-8",
 				cwd,
-				timeout: 5000,
+				timeout: TIMEOUT_GIT_CMD_MS,
 			});
 
 			if (diff.trim()) {

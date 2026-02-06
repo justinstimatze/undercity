@@ -80,7 +80,7 @@ export function displayDaemonStatus(status: DaemonStatus): void {
 /**
  * Display daemon action result
  */
-export function displayDaemonActionResult(action: string, success: boolean, message?: string): void {
+export function displayDaemonActionResult(action: string, wasSuccessful: boolean, message?: string): void {
 	const messages: Record<string, { success: string; color: typeof chalk.green }> = {
 		stop: { success: "Daemon stopped", color: chalk.green },
 		pause: { success: "Grind paused", color: chalk.yellow },
@@ -89,7 +89,7 @@ export function displayDaemonActionResult(action: string, success: boolean, mess
 	};
 
 	const config = messages[action];
-	if (config && success) {
+	if (config && wasSuccessful) {
 		console.log(config.color(message || config.success));
 	}
 }

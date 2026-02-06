@@ -12,6 +12,7 @@
 
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { TIMEOUT_LINT_FIX_MS } from "./constants.js";
 import { sessionLogger } from "./logger.js";
 
 const logger = sessionLogger.child({ module: "fast-path" });
@@ -69,7 +70,7 @@ function runAstGrep(
 		const cmd = `ast-grep --pattern '${pattern}' --rewrite '${replacement}' --lang ${language} ${fileArgs} --update-all 2>&1`;
 
 		logger.debug({ cmd, cwd }, "Running ast-grep");
-		const output = execSync(cmd, { cwd, encoding: "utf-8", timeout: 30000 });
+		const output = execSync(cmd, { cwd, encoding: "utf-8", timeout: TIMEOUT_LINT_FIX_MS });
 
 		// Parse output to find changed files
 		const changedFiles: string[] = [];

@@ -295,7 +295,7 @@ describe("verification.ts", () => {
 		it("should return passing result when all checks succeed", async () => {
 			mockSuccessfulRun();
 
-			const result = await verifyWork(true, true, "/test/dir");
+			const result = await verifyWork({ runTypecheck: true, runTests: true, workingDirectory: "/test/dir" });
 
 			expect(result.passed).toBe(true);
 			expect(result.typecheckPassed).toBe(true);
@@ -312,7 +312,7 @@ describe("verification.ts", () => {
 				"git diff --stat": " 5 files changed, 100 insertions(+), 25 deletions(-)",
 			});
 
-			const result = await verifyWork(true, true, "/test/dir");
+			const result = await verifyWork({ runTypecheck: true, runTests: true, workingDirectory: "/test/dir" });
 
 			expect(result.filesChanged).toBe(5);
 			expect(result.linesChanged).toBe(125); // 100 + 25
@@ -324,7 +324,7 @@ describe("verification.ts", () => {
 				"git status --porcelain": "?? src/newfile.ts\n?? src/another.ts",
 			});
 
-			const result = await verifyWork(true, true, "/test/dir");
+			const result = await verifyWork({ runTypecheck: true, runTests: true, workingDirectory: "/test/dir" });
 
 			// 1 from diff + 2 untracked
 			expect(result.filesChanged).toBe(3);
@@ -350,7 +350,7 @@ describe("verification.ts", () => {
 				return "";
 			});
 
-			const result = await verifyWork(true, false, "/test/dir");
+			const result = await verifyWork({ runTypecheck: true, runTests: false, workingDirectory: "/test/dir" });
 
 			expect(result.spellPassed).toBe(false);
 			expect(result.passed).toBe(true); // Spell is non-blocking
@@ -380,7 +380,7 @@ describe("verification.ts", () => {
 				return "";
 			});
 
-			const result = await verifyWork(true, false, "/test/dir");
+			const result = await verifyWork({ runTypecheck: true, runTests: false, workingDirectory: "/test/dir" });
 
 			expect(result.typecheckPassed).toBe(false);
 			expect(result.passed).toBe(false);
@@ -414,7 +414,7 @@ describe("verification.ts", () => {
 				return "";
 			});
 
-			const result = await verifyWork(true, false, "/test/dir");
+			const result = await verifyWork({ runTypecheck: true, runTests: false, workingDirectory: "/test/dir" });
 
 			expect(result.lintPassed).toBe(false);
 			expect(result.passed).toBe(false); // Lint is blocking
@@ -450,7 +450,7 @@ describe("verification.ts", () => {
 				return "";
 			});
 
-			const result = await verifyWork(true, true, "/test/dir");
+			const result = await verifyWork({ runTypecheck: true, runTests: true, workingDirectory: "/test/dir" });
 
 			expect(result.testsPassed).toBe(false);
 			expect(result.passed).toBe(false); // Tests are blocking
@@ -461,7 +461,7 @@ describe("verification.ts", () => {
 		it("should skip typecheck when runTypecheck is false", async () => {
 			mockSuccessfulRun();
 
-			const result = await verifyWork(false, false, "/test/dir");
+			const result = await verifyWork({ runTypecheck: false, runTests: false, workingDirectory: "/test/dir" });
 
 			expect(result.typecheckPassed).toBe(true);
 			// Typecheck should not be in the feedback when skipped
@@ -472,7 +472,7 @@ describe("verification.ts", () => {
 		it("should skip tests when runTests is false", async () => {
 			mockSuccessfulRun();
 
-			const result = await verifyWork(true, false, "/test/dir");
+			const result = await verifyWork({ runTypecheck: true, runTests: false, workingDirectory: "/test/dir" });
 
 			expect(result.testsPassed).toBe(true);
 			const testCalls = mockExecSync.mock.calls.filter((call) => String(call[0]).includes("pnpm test"));
@@ -497,7 +497,7 @@ describe("verification.ts", () => {
 				return "";
 			});
 
-			const result = await verifyWork(false, false, "/test/dir");
+			const result = await verifyWork({ runTypecheck: false, runTests: false, workingDirectory: "/test/dir" });
 
 			expect(result.filesChanged).toBe(0);
 			expect(result.passed).toBe(false); // No changes = fail
@@ -515,7 +515,7 @@ describe("verification.ts", () => {
 				return "";
 			});
 
-			const result = await verifyWork(false, false, "/test/dir");
+			const result = await verifyWork({ runTypecheck: false, runTests: false, workingDirectory: "/test/dir" });
 
 			expect(result.filesChanged).toBe(0);
 			expect(result.passed).toBe(false);
@@ -547,7 +547,7 @@ describe("verification.ts", () => {
 				return "";
 			});
 
-			const result = await verifyWork(false, false, "/test/dir");
+			const result = await verifyWork({ runTypecheck: false, runTests: false, workingDirectory: "/test/dir" });
 
 			expect(checkedCommittedChanges).toBe(true);
 			expect(result.filesChanged).toBe(3);
@@ -577,7 +577,12 @@ describe("verification.ts", () => {
 				return "";
 			});
 
-			const result = await verifyWork(false, false, "/test/dir", "abc123");
+			const result = await verifyWork({
+				runTypecheck: false,
+				runTests: false,
+				workingDirectory: "/test/dir",
+				baseCommit: "abc123",
+			});
 
 			expect(usedBaseCommit).toBe(true);
 			expect(result.filesChanged).toBe(2);
@@ -610,7 +615,7 @@ describe("verification.ts", () => {
 				return "";
 			});
 
-			const result = await verifyWork(true, false, "/test/dir");
+			const result = await verifyWork({ runTypecheck: true, runTests: false, workingDirectory: "/test/dir" });
 
 			expect(result.codeHealthPassed).toBe(false);
 			expect(result.issues).toContain("Code health issues detected");
@@ -641,7 +646,7 @@ describe("verification.ts", () => {
 				return "";
 			});
 
-			const _result = await verifyWork(true, false, "/test/dir");
+			const _result = await verifyWork({ runTypecheck: true, runTests: false, workingDirectory: "/test/dir" });
 
 			// quality:check should not be called for test-only changes
 			const qualityCalls = mockExecSync.mock.calls.filter((call) => String(call[0]).includes("pnpm quality:check"));
@@ -653,7 +658,7 @@ describe("verification.ts", () => {
 				"git diff --name-only": "src/file.test.ts",
 			});
 
-			await verifyWork(true, true, "/test/dir");
+			await verifyWork({ runTypecheck: true, runTests: true, workingDirectory: "/test/dir" });
 
 			// Tests should not run when only test files changed (no source files)
 			const testCalls = mockExecSync.mock.calls.filter((call) => String(call[0]).includes("pnpm test"));
@@ -665,7 +670,7 @@ describe("verification.ts", () => {
 				"git diff --stat": " 1 file changed, 10 insertions(+)",
 			});
 
-			const result = await verifyWork(true, false, "/test/dir");
+			const result = await verifyWork({ runTypecheck: true, runTests: false, workingDirectory: "/test/dir" });
 
 			expect(result.filesChanged).toBe(1);
 		});
@@ -676,7 +681,7 @@ describe("verification.ts", () => {
 				"git status --porcelain": "?? src/file.ts\n?? README.md\n?? image.png",
 			});
 
-			const result = await verifyWork(false, false, "/test/dir");
+			const result = await verifyWork({ runTypecheck: false, runTests: false, workingDirectory: "/test/dir" });
 
 			// Only .ts files should be counted from untracked
 			expect(result.filesChanged).toBe(1);

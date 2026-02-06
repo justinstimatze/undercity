@@ -387,21 +387,21 @@ export function workerAttempt(
  */
 export function workerVerification(
 	taskId: string,
-	passed: boolean,
+	isPassed: boolean,
 	issues?: string[],
 	data?: Record<string, unknown>,
 ): void {
 	// In compact mode, only emit failures
-	if (globalConfig.compact && globalConfig.mode === "agent" && passed) {
+	if (globalConfig.compact && globalConfig.mode === "agent" && isPassed) {
 		return;
 	}
 
-	const message = passed ? "Verification passed" : `Verification failed: ${issues?.join(", ") || "unknown"}`;
+	const message = isPassed ? "Verification passed" : `Verification failed: ${issues?.join(", ") || "unknown"}`;
 	outputEvent({
 		type: "worker_verification",
 		message,
 		timestamp: now(),
-		data: { taskId, passed, issues, ...data },
+		data: { taskId, passed: isPassed, issues, ...data },
 	});
 }
 

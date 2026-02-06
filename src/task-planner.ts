@@ -27,6 +27,7 @@ import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { getASTIndex } from "./ast-index.js";
 import { quickDecision } from "./automated-pm.js";
+import { MAX_TURNS_EXTENDED_PLANNING, MAX_TURNS_PLANNING, MAX_TURNS_SINGLE } from "./constants.js";
 import { type ContextBriefing, prepareContext } from "./context.js";
 import { findRelevantLearnings, formatLearningsCompact } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
@@ -148,7 +149,7 @@ After exploring, respond with ONLY this JSON (no other text):
 Start by exploring the codebase, then provide your plan.`,
 			options: {
 				model: MODEL_NAMES.sonnet,
-				maxTurns: 15,
+				maxTurns: MAX_TURNS_EXTENDED_PLANNING,
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
 				cwd: workingDirectory,
@@ -335,7 +336,7 @@ Respond with ONLY a JSON array of subtask descriptions:
 			prompt,
 			options: {
 				model: MODEL_NAMES[model],
-				maxTurns: 1,
+				maxTurns: MAX_TURNS_SINGLE,
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
 				cwd,
@@ -513,7 +514,7 @@ RULES:
 			model: MODEL_NAMES[model],
 			permissionMode: "bypassPermissions",
 			allowDangerouslySkipPermissions: true,
-			maxTurns: 10,
+			maxTurns: MAX_TURNS_PLANNING,
 			cwd,
 			outputFormat: ExecutionPlanJSONSchema,
 		},
@@ -645,7 +646,7 @@ Address ALL issues raised by the reviewer. If a file doesn't exist, either remov
 			model: MODEL_NAMES[model],
 			permissionMode: "bypassPermissions",
 			allowDangerouslySkipPermissions: true,
-			maxTurns: 10,
+			maxTurns: MAX_TURNS_PLANNING,
 			cwd,
 			outputFormat: ExecutionPlanJSONSchema,
 		},
@@ -829,7 +830,7 @@ IMPORTANT: You MUST output a JSON response. Do not output an empty response.`;
 			model: MODEL_NAMES[model],
 			permissionMode: "bypassPermissions",
 			allowDangerouslySkipPermissions: true,
-			maxTurns: 15, // Increased from 5 - agent needs time to process plan
+			maxTurns: MAX_TURNS_EXTENDED_PLANNING, // Increased from 5 - agent needs time to process plan
 			cwd,
 			outputFormat: PlanReviewJSONSchema,
 		},

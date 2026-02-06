@@ -457,13 +457,13 @@ async function buildPrompt(
 
 	if (state.isCurrentTaskResearch) {
 		// Research task prompt with learning context
-		const result = await buildResearchPrompt(
-			context.task,
-			state.attempts,
-			state.lastFeedback,
-			state.consecutiveNoWriteAttempts,
-			config.stateDir,
-		);
+		const result = await buildResearchPrompt({
+			task: context.task,
+			attempts: state.attempts,
+			lastFeedback: state.lastFeedback,
+			consecutiveNoWriteAttempts: state.consecutiveNoWriteAttempts,
+			stateDir: config.stateDir,
+		});
 		return { prompt: result.prompt, injectedLearningIds: result.injectedLearningIds };
 	}
 

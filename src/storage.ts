@@ -530,7 +530,11 @@ export function searchLearningsByKeywords(
 /**
  * Update learning usage stats
  */
-export function updateLearningUsage(learningId: string, success: boolean, stateDir: string = DEFAULT_STATE_DIR): void {
+export function updateLearningUsage(
+	learningId: string,
+	wasSuccessful: boolean,
+	stateDir: string = DEFAULT_STATE_DIR,
+): void {
 	const db = getDatabase(stateDir);
 
 	const stmt = db.prepare(`
@@ -545,7 +549,7 @@ export function updateLearningUsage(learningId: string, success: boolean, stateD
 		WHERE id = ?
 	`);
 
-	stmt.run(success ? 1 : 0, success ? 1 : 0, new Date().toISOString(), learningId);
+	stmt.run(wasSuccessful ? 1 : 0, wasSuccessful ? 1 : 0, new Date().toISOString(), learningId);
 }
 
 /**
@@ -1015,7 +1019,7 @@ export function recordTaskFile(record: TaskFileRecord, stateDir: string = DEFAUL
 export function updateKeywordCorrelation(
 	keyword: string,
 	files: string[],
-	success: boolean,
+	wasSuccessful: boolean,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): void {
 	const db = getDatabase(stateDir);
@@ -1043,7 +1047,7 @@ export function updateKeywordCorrelation(
 	`);
 
 	const now = new Date().toISOString();
-	stmt.run(keyword, JSON.stringify(currentFiles), success ? 1 : 0, now, success ? 1 : 0);
+	stmt.run(keyword, JSON.stringify(currentFiles), wasSuccessful ? 1 : 0, now, wasSuccessful ? 1 : 0);
 }
 
 /**
@@ -1351,13 +1355,13 @@ export function incrementFixSuccessDB(signature: string, stateDir: string = DEFA
  */
 export function updateFixAutoApplyStatsDB(
 	signature: string,
-	success: boolean,
+	wasSuccessful: boolean,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): void {
 	const db = getDatabase(stateDir);
 
 	// Update the most recent fix for this signature
-	if (success) {
+	if (wasSuccessful) {
 		db.prepare(
 			`
 			UPDATE error_fixes SET success_count = success_count + 1

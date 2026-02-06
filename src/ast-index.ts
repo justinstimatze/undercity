@@ -11,6 +11,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Project, type SourceFile, SyntaxKind } from "ts-morph";
+import { TIMEOUT_GIT_CMD_MS } from "./constants.js";
 import { sessionLogger } from "./logger.js";
 
 const INDEX_VERSION = "1.0";
@@ -185,7 +186,7 @@ export class ASTIndexManager {
 			return execFileSync("git", ["rev-parse", "HEAD"], {
 				cwd: this.repoRoot,
 				encoding: "utf-8",
-				timeout: 5000,
+				timeout: TIMEOUT_GIT_CMD_MS,
 			}).trim();
 		} catch {
 			return undefined;

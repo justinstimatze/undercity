@@ -11,7 +11,7 @@
 | **Learning** | `knowledge.ts`, `task-file-patterns.ts`, `error-fix-patterns.ts`, `capability-ledger.ts`, `decision-tracker.ts` | Knowledge compounding, patterns |
 | **PM** | `automated-pm.ts`, `task-classifier.ts` | Decision resolution, task generation |
 | **RAG** | `rag/{engine,database,hybrid-search,embedder,chunker}.ts` | Vector + FTS5 semantic search |
-| **Infrastructure** | `storage.ts`, `task.ts`, `persistence.ts`, `verification.ts`, `review.ts`, `config.ts`, `types.ts`, `output.ts`, `logger.ts` | Storage, verification, config, types |
+| **Infrastructure** | `storage.ts`, `task.ts`, `persistence.ts`, `verification.ts`, `review.ts`, `config.ts`, `constants.ts`, `types.ts`, `output.ts`, `logger.ts` | Storage, verification, config, constants, types |
 | **Analysis** | `metrics.ts`, `feedback-metrics.ts`, `self-tuning.ts`, `effectiveness-analysis.ts`, `experiment.ts` | Metrics, routing, A/B testing |
 
 ## Task -> File Mapping

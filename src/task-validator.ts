@@ -9,6 +9,7 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { TIMEOUT_GIT_CMD_MS } from "./constants.js";
 
 export interface ValidationIssue {
 	type:
@@ -355,7 +356,7 @@ function findSimilarFiles(filename: string, repoRoot: string): string[] {
 		const output = execSync(`git ls-files`, {
 			cwd: repoRoot,
 			encoding: "utf-8",
-			timeout: 5000,
+			timeout: TIMEOUT_GIT_CMD_MS,
 		});
 
 		const allFiles = output.split("\n").filter(Boolean);

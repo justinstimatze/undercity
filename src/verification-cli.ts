@@ -11,7 +11,7 @@
 import { verifyWork } from "./verification.js";
 
 async function main() {
-	const result = await verifyWork(true, true, process.cwd());
+	const result = await verifyWork({ runTypecheck: true, runTests: true, workingDirectory: process.cwd() });
 
 	// Print feedback
 	console.log(result.feedback);

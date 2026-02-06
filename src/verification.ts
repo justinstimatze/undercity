@@ -15,6 +15,12 @@
 
 import { execSync } from "node:child_process";
 import { formatErrorsForAgent, getCache, parseTypeScriptErrors } from "./cache.js";
+import {
+	TIMEOUT_BUILD_STEP_MS,
+	TIMEOUT_HEAVY_CMD_MS,
+	TIMEOUT_LINT_FIX_MS,
+	TIMEOUT_TEST_SUITE_MS,
+} from "./constants.js";
 import { sessionLogger } from "./logger.js";
 import { Persistence } from "./persistence.js";
 
@@ -127,27 +133,7 @@ export interface VerifyWorkOptions {
 	bailOnTestFailure?: boolean;
 }
 
-export async function verifyWork(
-	runTypecheckOrOptions: boolean | VerifyWorkOptions = true,
-	runTests: boolean = true,
-	workingDirectory: string = process.cwd(),
-	baseCommit?: string,
-	profile: boolean = false,
-): Promise<VerificationResult> {
-	// Support both positional args (legacy) and options object
-	let opts: VerifyWorkOptions;
-	if (typeof runTypecheckOrOptions === "object") {
-		opts = runTypecheckOrOptions;
-	} else {
-		opts = {
-			runTypecheck: runTypecheckOrOptions,
-			runTests,
-			workingDirectory,
-			baseCommit,
-			profile,
-		};
-	}
-
+export async function verifyWork(opts: VerifyWorkOptions = {}): Promise<VerificationResult> {
 	const runTypecheck = opts.runTypecheck ?? true;
 	const runTestsOpt = opts.runTests ?? true;
 	const cwd = opts.workingDirectory ?? process.cwd();
@@ -175,7 +161,7 @@ export async function verifyWork(
 	let stepStart = Date.now();
 	if (!skipAutoFix) {
 		try {
-			execSync("pnpm check:fix 2>&1", { encoding: "utf-8", cwd, timeout: 30000 });
+			execSync("pnpm check:fix 2>&1", { encoding: "utf-8", cwd, timeout: TIMEOUT_LINT_FIX_MS });
 			feedbackParts.push("✓ Auto-fixed lint/format issues");
 		} catch (_error: unknown) {
 			// check:fix may not be available in all projects, continue
@@ -187,7 +173,7 @@ export async function verifyWork(
 	stepStart = Date.now();
 	if (!skipOptionalChecks) {
 		try {
-			execSync("bash ./scripts/security-scan.sh 2>&1", { encoding: "utf-8", cwd, timeout: 30000 });
+			execSync("bash ./scripts/security-scan.sh 2>&1", { encoding: "utf-8", cwd, timeout: TIMEOUT_LINT_FIX_MS });
 			feedbackParts.push("✓ Security scan passed");
 		} catch (error: unknown) {
 			const output = error instanceof Error && "stdout" in error ? String(error.stdout) : String(error);
@@ -206,7 +192,7 @@ export async function verifyWork(
 	if (!skipOptionalChecks) {
 		try {
 			// Only run spell check on typescript and markdown files
-			execSync(`${commands.spell} 2>&1`, { encoding: "utf-8", cwd, timeout: 30000 });
+			execSync(`${commands.spell} 2>&1`, { encoding: "utf-8", cwd, timeout: TIMEOUT_LINT_FIX_MS });
 			feedbackParts.push("✓ Spell check passed");
 		} catch (error: unknown) {
 			// Spell errors are non-blocking - just log a warning
@@ -235,7 +221,7 @@ export async function verifyWork(
 			execSync("pnpm exec tsx src/knowledge-validation-cli.ts 2>&1", {
 				encoding: "utf-8",
 				cwd,
-				timeout: 10000,
+				timeout: TIMEOUT_HEAVY_CMD_MS,
 			});
 			feedbackParts.push("✓ Knowledge validation passed");
 		} catch (error: unknown) {
@@ -349,7 +335,7 @@ export async function verifyWork(
 		}
 
 		try {
-			execSync(`${commands.typecheck} 2>&1`, { encoding: "utf-8", cwd, timeout: 60000 });
+			execSync(`${commands.typecheck} 2>&1`, { encoding: "utf-8", cwd, timeout: TIMEOUT_BUILD_STEP_MS });
 			feedback.push("✓ Typecheck passed");
 		} catch (error: unknown) {
 			passed = false;
@@ -387,7 +373,7 @@ export async function verifyWork(
 		let passed = true;
 
 		try {
-			execSync(`${commands.lint} 2>&1`, { encoding: "utf-8", cwd, timeout: 60000 });
+			execSync(`${commands.lint} 2>&1`, { encoding: "utf-8", cwd, timeout: TIMEOUT_BUILD_STEP_MS });
 			feedback.push("✓ Lint passed");
 		} catch (error: unknown) {
 			passed = false;
@@ -454,7 +440,7 @@ export async function verifyWork(
 			execSync(`${testCommand} 2>&1`, {
 				encoding: "utf-8",
 				cwd,
-				timeout: 120000,
+				timeout: TIMEOUT_TEST_SUITE_MS,
 				env: { ...process.env, UNDERCITY_VERIFICATION: "true" },
 			});
 			feedback.push("✓ Tests passed");
@@ -532,7 +518,7 @@ export async function verifyWork(
 	stepStart = Date.now();
 	let buildPassed = true;
 	try {
-		execSync("pnpm build 2>&1", { encoding: "utf-8", cwd, timeout: 60000 });
+		execSync("pnpm build 2>&1", { encoding: "utf-8", cwd, timeout: TIMEOUT_BUILD_STEP_MS });
 		feedbackParts.push("✓ Build passed");
 	} catch (error: unknown) {
 		buildPassed = false;
@@ -558,7 +544,7 @@ export async function verifyWork(
 					const result = execSync(`${commands.qualityCheck} 2>&1 || true`, {
 						encoding: "utf-8",
 						cwd,
-						timeout: 30000,
+						timeout: TIMEOUT_LINT_FIX_MS,
 					});
 
 					// Check for code health issues
@@ -612,7 +598,7 @@ export async function verifyWork(
 		issues,
 		feedback,
 		hasWarnings,
-		timing: profile ? timing : undefined,
+		timing: profileOpt ? timing : undefined,
 	};
 }
 
@@ -799,7 +785,7 @@ export async function verifyBaseline(cwd: string = process.cwd()): Promise<Basel
 	let passed = true;
 
 	try {
-		execSync(`${commands.typecheck} 2>&1`, { encoding: "utf-8", cwd, timeout: 60000 });
+		execSync(`${commands.typecheck} 2>&1`, { encoding: "utf-8", cwd, timeout: TIMEOUT_BUILD_STEP_MS });
 		feedbackParts.push("✓ Typecheck passed");
 	} catch (error: unknown) {
 		passed = false;

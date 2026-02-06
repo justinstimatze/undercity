@@ -9,6 +9,7 @@
  */
 
 import { execSync } from "node:child_process";
+import { TIMEOUT_GIT_CMD_MS } from "./constants.js";
 import { sessionLogger } from "./logger.js";
 
 const logger = sessionLogger.child({ module: "efficiency-tools" });
@@ -109,7 +110,7 @@ const TOOLS: EfficiencyTool[] = [
  */
 function isToolAvailable(tool: EfficiencyTool): boolean {
 	try {
-		execSync(tool.checkCommand, { stdio: "pipe", timeout: 5000 });
+		execSync(tool.checkCommand, { stdio: "pipe", timeout: TIMEOUT_GIT_CMD_MS });
 		return true;
 	} catch {
 		return false;

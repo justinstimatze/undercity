@@ -36,6 +36,7 @@ import {
 	assessComplexityQuantitative,
 	type ComplexityAssessment,
 } from "./complexity.js";
+import { MAX_TURNS_SINGLE } from "./constants.js";
 import { sanitizeContent } from "./content-sanitizer.js";
 import { type ContextBriefing, type ContextMode, prepareContext } from "./context.js";
 import { tryAutoRemediate } from "./error-fix-patterns.js";
@@ -2016,7 +2017,7 @@ Be concise and specific. Focus on actionable insights.`;
 					model: MODEL_NAMES.sonnet,
 					permissionMode: "bypassPermissions",
 					allowDangerouslySkipPermissions: true,
-					maxTurns: 1, // Single response, no tool use needed
+					maxTurns: MAX_TURNS_SINGLE, // Single response, no tool use needed
 					settingSources: ["project"], // Load disallowedTools from settings
 				},
 			})) {

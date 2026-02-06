@@ -12,6 +12,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { TIMEOUT_HEAVY_CMD_MS } from "./constants.js";
 import {
 	addErrorFix,
 	addPendingErrorDB,
@@ -349,7 +350,7 @@ function captureGitDiff(files: string[], workingDirectory: string, baseCommit?: 
 		const diff = execFileSync("git", args, {
 			encoding: "utf-8",
 			cwd: workingDirectory,
-			timeout: 10000,
+			timeout: TIMEOUT_HEAVY_CMD_MS,
 		});
 
 		// Limit diff size to prevent bloated storage (max 10KB)
@@ -621,7 +622,7 @@ export function tryAutoRemediate(
 			input: bestFix.patchData,
 			cwd: workingDirectory,
 			encoding: "utf-8",
-			timeout: 10000,
+			timeout: TIMEOUT_HEAVY_CMD_MS,
 		});
 
 		// Patch would apply cleanly, so apply it for real
@@ -629,7 +630,7 @@ export function tryAutoRemediate(
 			input: bestFix.patchData,
 			cwd: workingDirectory,
 			encoding: "utf-8",
-			timeout: 10000,
+			timeout: TIMEOUT_HEAVY_CMD_MS,
 		});
 
 		// Update success tracking
@@ -657,9 +658,9 @@ export function tryAutoRemediate(
 /**
  * Update auto-apply statistics for a pattern
  */
-function updateAutoApplyStats(signature: string, success: boolean, stateDir: string = DEFAULT_STATE_DIR): void {
+function updateAutoApplyStats(signature: string, wasSuccessful: boolean, stateDir: string = DEFAULT_STATE_DIR): void {
 	try {
-		updateFixAutoApplyStatsDB(signature, success, stateDir);
+		updateFixAutoApplyStatsDB(signature, wasSuccessful, stateDir);
 	} catch {
 		// Silent failure - stats update is non-critical
 	}

@@ -471,11 +471,11 @@ export function restoreFromCheckpoint(state: TaskExecutionState, checkpoint: Tas
 }
 
 /** Record attempt result */
-export function recordAttempt(state: TaskExecutionState, success: boolean, durationMs: number): void {
+export function recordAttempt(state: TaskExecutionState, wasSuccessful: boolean, durationMs: number): void {
 	state.attemptRecords.push({
 		model: state.currentModel,
 		durationMs,
-		success,
+		success: wasSuccessful,
 	});
 }
 

@@ -9,6 +9,8 @@
     "incremental": true,
     "sourceMap": false,
     "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitReturns": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,

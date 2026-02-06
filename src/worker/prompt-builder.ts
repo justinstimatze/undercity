@@ -74,16 +74,19 @@ export interface ResearchPromptResult {
 	injectedLearningIds: string[];
 }
 
+export interface BuildResearchPromptOptions {
+	task: string;
+	attempts: number;
+	lastFeedback?: string;
+	consecutiveNoWriteAttempts?: number;
+	stateDir?: string;
+}
+
 /**
  * Build prompt for research tasks with learning context injection
  */
-export async function buildResearchPrompt(
-	task: string,
-	attempts: number,
-	lastFeedback?: string,
-	consecutiveNoWriteAttempts?: number,
-	stateDir?: string,
-): Promise<ResearchPromptResult> {
+export async function buildResearchPrompt(opts: BuildResearchPromptOptions): Promise<ResearchPromptResult> {
+	const { task, attempts, lastFeedback, consecutiveNoWriteAttempts, stateDir } = opts;
 	const objectiveWithoutPrefix = task.replace(/^\[research\]\s*/i, "");
 	const sections: string[] = [];
 	let injectedLearningIds: string[] = [];

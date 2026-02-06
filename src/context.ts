@@ -12,6 +12,7 @@
  * - Reviewer: Review requirements (~3K chars)
  */
 
+import { TIMEOUT_FILE_SEARCH_MS, TIMEOUT_GIT_CMD_MS, TIMEOUT_TOOL_CHECK_MS } from "./constants.js";
 import type { AgentType } from "./types.js";
 
 /**
@@ -709,7 +710,7 @@ function findFilesByName(pattern: string, cwd: string): string[] {
 		// Use find instead of git ls-files to include untracked files
 		const result = execSync(
 			`find . -name "*.ts" -o -name "*.tsx" 2>/dev/null | grep -v node_modules | grep -i "${baseName}" | head -10 || true`,
-			{ encoding: "utf-8", cwd, timeout: 3000 },
+			{ encoding: "utf-8", cwd, timeout: TIMEOUT_FILE_SEARCH_MS },
 		);
 
 		return result
@@ -732,7 +733,7 @@ function findFilesWithTerm(term: string, cwd: string): string[] {
 		const result = execFileSync("git", ["grep", "-l", term, "--", "*.ts", "*.tsx"], {
 			encoding: "utf-8",
 			cwd,
-			timeout: 5000,
+			timeout: TIMEOUT_GIT_CMD_MS,
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 
@@ -755,7 +756,7 @@ async function findWithAstGrep(task: string, cwd: string): Promise<string[]> {
 
 	try {
 		// Check if ast-grep is available
-		execSync("which ast-grep", { encoding: "utf-8", timeout: 1000 });
+		execSync("which ast-grep", { encoding: "utf-8", timeout: TIMEOUT_TOOL_CHECK_MS });
 	} catch {
 		// ast-grep not installed, skip
 		return patterns;
@@ -766,7 +767,7 @@ async function findWithAstGrep(task: string, cwd: string): Promise<string[]> {
 		if (taskLower.match(/function|handler|method/)) {
 			const result = execSync(
 				`ast-grep --lang typescript -p 'function $NAME($$$PARAMS)' --json 2>/dev/null | head -c 2000 || true`,
-				{ encoding: "utf-8", cwd, timeout: 5000 },
+				{ encoding: "utf-8", cwd, timeout: TIMEOUT_GIT_CMD_MS },
 			);
 			if (result.trim()) {
 				try {
@@ -788,7 +789,7 @@ async function findWithAstGrep(task: string, cwd: string): Promise<string[]> {
 		if (taskLower.match(/route|endpoint|api/)) {
 			const result = execSync(
 				`ast-grep --lang typescript -p 'router.$METHOD($$$)' --json 2>/dev/null | head -c 2000 || true`,
-				{ encoding: "utf-8", cwd, timeout: 5000 },
+				{ encoding: "utf-8", cwd, timeout: TIMEOUT_GIT_CMD_MS },
 			);
 			if (result.trim()) {
 				patterns.push("Found router definitions - check express-server/src/routes/");
@@ -800,7 +801,7 @@ async function findWithAstGrep(task: string, cwd: string): Promise<string[]> {
 			const result = execSync(`ast-grep --lang tsx -p 'use$HOOK($$$)' --json 2>/dev/null | head -c 2000 || true`, {
 				encoding: "utf-8",
 				cwd,
-				timeout: 5000,
+				timeout: TIMEOUT_GIT_CMD_MS,
 			});
 			if (result.trim()) {
 				patterns.push("Found React hooks - check next-client/src/");
@@ -879,7 +880,7 @@ function findRelatedPatterns(task: string, cwd: string): string[] {
 			const routeFiles = execSync('git grep -l "router\\." -- "*.ts" 2>/dev/null | head -3 || true', {
 				encoding: "utf-8",
 				cwd,
-				timeout: 3000,
+				timeout: TIMEOUT_FILE_SEARCH_MS,
 			});
 			if (routeFiles.trim()) {
 				patterns.push(`Route patterns in: ${routeFiles.trim().replace(/\n/g, ", ")}`);
@@ -897,7 +898,7 @@ function findRelatedPatterns(task: string, cwd: string): string[] {
 				{
 					encoding: "utf-8",
 					cwd,
-					timeout: 3000,
+					timeout: TIMEOUT_FILE_SEARCH_MS,
 				},
 			);
 			if (componentDirs.trim()) {
@@ -914,7 +915,7 @@ function findRelatedPatterns(task: string, cwd: string): string[] {
 			const testFiles = execSync('git ls-files "*.test.ts" | head -3 || true', {
 				encoding: "utf-8",
 				cwd,
-				timeout: 3000,
+				timeout: TIMEOUT_FILE_SEARCH_MS,
 			});
 			if (testFiles.trim()) {
 				patterns.push(`Test patterns in: ${testFiles.trim().replace(/\n/g, ", ")}`);

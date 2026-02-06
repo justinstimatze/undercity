@@ -9,6 +9,7 @@
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { MAX_TURNS_SINGLE } from "./constants.js";
 import type { Learning, LearningCategory } from "./knowledge.js";
 import { addLearning } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
@@ -441,7 +442,7 @@ async function extractLearningsWithModel(text: string): Promise<ExtractedLearnin
 			prompt,
 			options: {
 				model: MODEL_NAMES.sonnet,
-				maxTurns: 1,
+				maxTurns: MAX_TURNS_SINGLE,
 				permissionMode: "bypassPermissions",
 				outputFormat: ExtractedLearningsJSONSchema,
 			},

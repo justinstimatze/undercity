@@ -164,12 +164,16 @@ export function saveHumanGuidance(
 /**
  * Mark that human guidance was used (successfully or not)
  */
-export function markGuidanceUsed(errorSignature: string, success: boolean, stateDir: string = DEFAULT_STATE_DIR): void {
+export function markGuidanceUsed(
+	errorSignature: string,
+	wasSuccessful: boolean,
+	stateDir: string = DEFAULT_STATE_DIR,
+): void {
 	try {
 		initHumanInputTables(stateDir);
 		const db = getDatabase(stateDir);
 
-		if (success) {
+		if (wasSuccessful) {
 			db.prepare(
 				`
 				UPDATE human_guidance

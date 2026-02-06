@@ -26,6 +26,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type BrowserContext, chromium } from "playwright";
+import { TIMEOUT_ELEMENT_WAIT_MS, TIMEOUT_PAGE_LOAD_MS } from "./constants.js";
 
 export interface ClaudeUsage {
 	fiveHourPercent: number;
@@ -138,7 +139,7 @@ export async function fetchClaudeUsage(forceRefresh = false): Promise<ClaudeUsag
 		const page = await context.newPage();
 
 		// Navigate to usage page
-		await page.goto(USAGE_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
+		await page.goto(USAGE_URL, { waitUntil: "domcontentloaded", timeout: TIMEOUT_PAGE_LOAD_MS });
 		// Give the page a moment to render dynamic content
 		await page.waitForTimeout(3000);
 
@@ -159,7 +160,7 @@ export async function fetchClaudeUsage(forceRefresh = false): Promise<ClaudeUsag
 		// Wait for usage data to load
 		await page
 			.waitForSelector('[data-testid="usage-meter"], .usage-meter, [class*="usage"]', {
-				timeout: 10000,
+				timeout: TIMEOUT_ELEMENT_WAIT_MS,
 			})
 			.catch(() => {
 				// Selector might vary, continue to try extraction
@@ -297,7 +298,7 @@ export async function loginToClaude(): Promise<{ success: boolean; error?: strin
 
 		// Navigate to usage page (will redirect to login if needed)
 		console.log("Opening claude.ai/settings/usage...");
-		await page.goto(USAGE_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
+		await page.goto(USAGE_URL, { waitUntil: "domcontentloaded", timeout: TIMEOUT_PAGE_LOAD_MS });
 
 		// Poll for successful login - check every 2 seconds for up to 5 minutes
 		const maxWaitMs = 5 * 60 * 1000;

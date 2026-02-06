@@ -364,7 +364,7 @@ export function recordTaskFiles(
 	taskId: string,
 	taskDescription: string,
 	filesModified: string[],
-	success: boolean,
+	wasSuccessful: boolean,
 	stateDir: string = DEFAULT_STATE_DIR,
 ): void {
 	const keywords = extractTaskKeywords(taskDescription);
@@ -377,7 +377,7 @@ export function recordTaskFiles(
 			taskId,
 			objective: taskDescription,
 			filesModified: normalizedFiles,
-			success,
+			success: wasSuccessful,
 			keywords,
 			recordedAt,
 		},
@@ -386,11 +386,11 @@ export function recordTaskFiles(
 
 	// Update keyword correlations
 	for (const keyword of keywords) {
-		updateKeywordCorrelationDB(keyword, normalizedFiles, success, stateDir);
+		updateKeywordCorrelationDB(keyword, normalizedFiles, wasSuccessful, stateDir);
 	}
 
 	// Update co-modification patterns (only for successful tasks with multiple files)
-	if (success && normalizedFiles.length >= 2) {
+	if (wasSuccessful && normalizedFiles.length >= 2) {
 		updateCoModificationDB(normalizedFiles, stateDir);
 	}
 

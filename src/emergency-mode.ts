@@ -211,11 +211,11 @@ export function recordFixWorkerSpawned(taskId: string, stateDir: string = STATE_
 /**
  * Record that fix worker has completed
  */
-export function recordFixWorkerCompleted(success: boolean, stateDir: string = STATE_DIR): void {
+export function recordFixWorkerCompleted(wasSuccessful: boolean, stateDir: string = STATE_DIR): void {
 	const state = loadEmergencyState(stateDir);
 	state.fixWorkerActive = false;
 
-	if (success) {
+	if (wasSuccessful) {
 		// Don't auto-deactivate - let health check confirm
 		sessionLogger.info("Fix worker completed successfully, awaiting health check confirmation");
 	} else {

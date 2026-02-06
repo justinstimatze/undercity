@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-02-06T08:40:56.046Z",
+  "generatedAt": "2026-02-06T09:16:40.910Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -18,22 +18,22 @@
         },
         {
           "file": "worker/prompt-builder.ts",
-          "line": 101,
-          "context": "unknown"
+          "line": 104,
+          "context": "buildResearchPrompt"
         },
         {
           "file": "automated-pm.ts",
-          "line": 540,
+          "line": 541,
           "context": "map"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1347,
+          "line": 1348,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1809,
+          "line": 1810,
           "context": "info"
         },
         {
@@ -43,12 +43,12 @@
         },
         {
           "file": "research-roi.ts",
-          "line": 139,
+          "line": 140,
           "context": "calculateKnowledgeSaturation"
         },
         {
           "file": "research-roi.ts",
-          "line": 203,
+          "line": 204,
           "context": "filter"
         },
         {
@@ -63,7 +63,7 @@
         },
         {
           "file": "task-planner.ts",
-          "line": 401,
+          "line": 402,
           "context": "gatherPlanningContext"
         }
       ]
@@ -100,7 +100,7 @@
         },
         {
           "file": "knowledge-extractor.ts",
-          "line": 510,
+          "line": 511,
           "context": "for"
         },
         {
@@ -147,17 +147,17 @@
         },
         {
           "file": "ast-index.ts",
-          "line": 394,
+          "line": 395,
           "context": "getRepoRoot"
         },
         {
           "file": "automated-pm.ts",
-          "line": 553,
+          "line": 554,
           "context": "if"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1810,
+          "line": 1811,
           "context": "info"
         },
         {
@@ -172,7 +172,7 @@
         },
         {
           "file": "task-planner.ts",
-          "line": 397,
+          "line": 398,
           "context": "gatherPlanningContext"
         },
         {
@@ -247,7 +247,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1615,
+          "line": 1616,
           "context": "if"
         }
       ]
@@ -269,7 +269,7 @@
       "calledFrom": [
         {
           "file": "error-fix-patterns.ts",
-          "line": 291,
+          "line": 292,
           "context": "if"
         },
         {
@@ -285,7 +285,7 @@
       "calledFrom": [
         {
           "file": "error-fix-patterns.ts",
-          "line": 291,
+          "line": 292,
           "context": "if"
         },
         {
@@ -317,7 +317,7 @@
         },
         {
           "file": "knowledge-extractor.ts",
-          "line": 578,
+          "line": 579,
           "context": "push"
         }
       ]
@@ -349,7 +349,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1492,
+          "line": 1493,
           "context": "startTask"
         },
         {
@@ -386,7 +386,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 722,
+          "line": 723,
           "context": "if"
         },
         {
@@ -418,7 +418,7 @@
       "calledFrom": [
         {
           "file": "task-planner.ts",
-          "line": 922,
+          "line": 923,
           "context": "join"
         }
       ]
@@ -429,12 +429,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 716,
+          "line": 717,
           "context": "for"
         },
         {
           "file": "automated-pm.ts",
-          "line": 789,
+          "line": 790,
           "context": "now"
         }
       ]
@@ -450,7 +450,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1667,
+          "line": 1668,
           "context": "info"
         },
         {
@@ -466,12 +466,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 1656,
+          "line": 1657,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1673,
+          "line": 1674,
           "context": "info"
         },
         {
@@ -508,7 +508,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1276,
+          "line": 1277,
           "context": "info"
         }
       ]

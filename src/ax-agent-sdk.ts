@@ -20,6 +20,7 @@ import type {
 	AxLoggerFunction,
 	AxModelConfig,
 } from "@ax-llm/ax";
+import { MAX_TURNS_SINGLE } from "./constants.js";
 import { sessionLogger } from "./logger.js";
 import { MODEL_NAMES, type ModelTier } from "./types.js";
 
@@ -155,7 +156,7 @@ export class AxAgentSDK implements AxAIService<string, string, ModelTier> {
 	 * Main chat completion method
 	 *
 	 * Converts Ax's chat request to Agent SDK query format,
-	 * executes with maxTurns: 1, and converts response back.
+	 * executes with maxTurns: MAX_TURNS_SINGLE, and converts response back.
 	 */
 	async chat(
 		req: Readonly<AxChatRequest<string | ModelTier>>,
@@ -178,7 +179,7 @@ export class AxAgentSDK implements AxAIService<string, string, ModelTier> {
 				prompt,
 				options: {
 					model,
-					maxTurns: 1,
+					maxTurns: MAX_TURNS_SINGLE,
 					permissionMode: "bypassPermissions",
 				},
 			})) {

@@ -21,6 +21,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { MAX_TURNS_SINGLE } from "./constants.js";
 import {
 	checkoutBranch,
 	deleteBranch,
@@ -201,7 +202,7 @@ async function resolveConflictWithAI(
 				prompt,
 				options: {
 					model: MODEL_NAMES.sonnet,
-					maxTurns: 1,
+					maxTurns: MAX_TURNS_SINGLE,
 					permissionMode: "bypassPermissions",
 				},
 			})) {

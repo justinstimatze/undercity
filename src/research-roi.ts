@@ -9,6 +9,7 @@
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { MAX_TURNS_SINGLE } from "./constants.js";
 import { findSimilarDecisions } from "./decision-tracker.js";
 import { type AddLearningResult, findRelevantLearnings, loadKnowledge, NO_QUALITY_THRESHOLDS } from "./knowledge.js";
 import { sessionLogger } from "./logger.js";
@@ -298,7 +299,7 @@ Respond with ONLY valid JSON (no markdown, no explanation outside JSON):
 				model: MODEL_NAMES.sonnet,
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
-				maxTurns: 1,
+				maxTurns: MAX_TURNS_SINGLE,
 				cwd,
 			},
 		})) {

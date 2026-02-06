@@ -650,7 +650,7 @@ export class MetricsTracker {
 	/**
 	 * Complete task tracking and return metrics
 	 */
-	completeTask(success: boolean): TaskMetrics | null {
+	completeTask(wasSuccessful: boolean): TaskMetrics | null {
 		if (!this.taskStartTime || !this.taskId || !this.sessionId || !this.objective) {
 			return null;
 		}
@@ -662,7 +662,7 @@ export class MetricsTracker {
 			taskId: this.taskId,
 			sessionId: this.sessionId,
 			objective: this.objective,
-			success,
+			success: wasSuccessful,
 			durationMs,
 			totalTokens: this.totalTokens,
 			agentsSpawned: this.agentsSpawned,

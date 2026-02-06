@@ -11,6 +11,7 @@ import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { type FunctionDeclaration, type MethodDeclaration, Project, type SourceFile, SyntaxKind } from "ts-morph";
+import { TIMEOUT_GIT_CMD_MS } from "./constants.js";
 import { sessionLogger } from "./logger.js";
 
 // Cached ts-morph project for reuse
@@ -245,7 +246,7 @@ export function findFilesImporting(symbolName: string, cwd: string): string[] {
 		const result = execSync(`git grep -l "import.*${symbolName}" -- "*.ts" "*.tsx" 2>/dev/null || true`, {
 			encoding: "utf-8",
 			cwd,
-			timeout: 5000,
+			timeout: TIMEOUT_GIT_CMD_MS,
 		});
 
 		return result
