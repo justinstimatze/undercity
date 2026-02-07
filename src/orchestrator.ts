@@ -268,8 +268,8 @@ export class Orchestrator {
 		this.multiLensAtOpus = options.multiLensAtOpus ?? false;
 		this.pushOnSuccess = options.pushOnSuccess ?? false; // Default to no push - user must explicitly opt in
 		// Verification retry options with defaults
-		// maxAttempts of 7 allows: 3 at first tier + 3 at second + 1 at third (or more at opus)
-		this.maxAttempts = options.maxAttempts ?? 7;
+		// maxAttempts of 4 allows: 2 at first tier + 2 at second tier
+		this.maxAttempts = options.maxAttempts ?? 4;
 		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
 		this.maxReviewPassesPerTier = options.maxReviewPassesPerTier ?? 2;
 		this.maxOpusReviewPasses = options.maxOpusReviewPasses ?? 6;

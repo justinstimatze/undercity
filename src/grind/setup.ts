@@ -243,7 +243,7 @@ export function parseGrindOptions(options: GrindOptions): GrindConfig {
 	const fileConfig = loadConfig();
 
 	const maxCount = parseInt(options.count || "0", 10);
-	const parallelism = Math.min(5, Math.max(1, parseInt(options.parallel || String(fileConfig.parallel), 10)));
+	const parallelism = Math.min(3, Math.max(1, parseInt(options.parallel || String(fileConfig.parallel), 10)));
 
 	// CLI overrides config file, which overrides defaults
 	const maxAttempts = options.maxAttempts ? parseInt(options.maxAttempts, 10) : fileConfig.maxAttempts;

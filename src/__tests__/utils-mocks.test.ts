@@ -129,7 +129,7 @@ describe("utils/mocks", () => {
 			expect(config.model).toBe("sonnet");
 			expect(config.verbose).toBe(false);
 			expect(config.autoCommit).toBe(true);
-			expect(config.maxAttempts).toBe(7);
+			expect(config.maxAttempts).toBe(4);
 		});
 
 		it("should create a mock config with overrides", () => {

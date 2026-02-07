@@ -44,18 +44,14 @@ describe("worker/escalation-logic", () => {
 			expect(result).toBeNull();
 		});
 
-		it("returns null when error has appeared fewer than 3 times", () => {
-			const history = [{ message: "same error message" }, { message: "same error message" }];
+		it("returns null when error has appeared fewer than 2 times", () => {
+			const history = [{ message: "same error message" }];
 			const result = checkRepeatedErrorLoop("same error message", history);
 			expect(result).toBeNull();
 		});
 
-		it("triggers failure when same error appears 3+ times", () => {
-			const history = [
-				{ message: "same error message" },
-				{ message: "same error message" },
-				{ message: "same error message" },
-			];
+		it("triggers failure when same error appears 2+ times", () => {
+			const history = [{ message: "same error message" }, { message: "same error message" }];
 			const result = checkRepeatedErrorLoop("same error message", history);
 			expect(result).not.toBeNull();
 			expect(result?.shouldEscalate).toBe(false);
@@ -66,7 +62,7 @@ describe("worker/escalation-logic", () => {
 		it("compares only first 80 chars for matching", () => {
 			const longError = "A".repeat(100);
 			const slightlyDifferent = "A".repeat(80) + "B".repeat(20);
-			const history = [{ message: longError }, { message: longError }, { message: longError }];
+			const history = [{ message: longError }, { message: longError }];
 			// First 80 chars match, so this should trigger
 			const result = checkRepeatedErrorLoop(slightlyDifferent, history);
 			expect(result?.forceFailure).toBe(true);

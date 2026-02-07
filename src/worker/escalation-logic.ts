@@ -47,13 +47,13 @@ export function checkRepeatedErrorLoop(
 ): EscalationResult | null {
 	const sameErrorCount = errorHistory.filter((e) => e.message.slice(0, 80) === errorMessage.slice(0, 80)).length;
 
-	if (sameErrorCount >= 3) {
+	if (sameErrorCount >= 2) {
 		sessionLogger.warn(
 			{
 				errorMessage: errorMessage.slice(0, 100),
 				occurrences: sameErrorCount,
 			},
-			"Ralph loop detection: same error 3+ times - failing fast",
+			"Ralph loop detection: same error 2+ times - failing fast",
 		);
 		return {
 			shouldEscalate: false,

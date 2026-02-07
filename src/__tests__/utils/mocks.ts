@@ -367,7 +367,7 @@ export function createMockConfig(overrides: Partial<UndercityRc> = {}): Undercit
 		multiLens: false,
 		parallel: 1,
 		push: false,
-		maxAttempts: 7,
+		maxAttempts: 4,
 		maxRetriesPerTier: 3,
 		maxReviewPassesPerTier: 2,
 		maxOpusReviewPasses: 6,

@@ -79,7 +79,7 @@ describe("config.ts", () => {
 			expect(config.multiLens).toBe(false);
 			expect(config.parallel).toBe(1);
 			expect(config.push).toBe(false);
-			expect(config.maxAttempts).toBe(7);
+			expect(config.maxAttempts).toBe(4);
 			expect(config.maxRetriesPerTier).toBe(3);
 			expect(config.maxReviewPassesPerTier).toBe(2);
 			expect(config.maxOpusReviewPasses).toBe(6);
@@ -379,7 +379,7 @@ describe("config.ts", () => {
 			const loaded = loadConfig();
 
 			expect(loaded.parallel).toBe(1); // default
-			expect(loaded.maxAttempts).toBe(7); // default
+			expect(loaded.maxAttempts).toBe(4); // default
 			expect(consoleWarnSpy).toHaveBeenCalled();
 
 			consoleWarnSpy.mockRestore();
@@ -524,7 +524,7 @@ describe("config.ts", () => {
 			expect(defaults.multiLens).toBe(false);
 			expect(defaults.parallel).toBe(1);
 			expect(defaults.push).toBe(false);
-			expect(defaults.maxAttempts).toBe(7);
+			expect(defaults.maxAttempts).toBe(4);
 			expect(defaults.maxRetriesPerTier).toBe(3);
 			expect(defaults.maxReviewPassesPerTier).toBe(2);
 			expect(defaults.maxOpusReviewPasses).toBe(6);

@@ -278,7 +278,7 @@ describe("worker/verification-handler", () => {
 		const createConfig = () => ({
 			maxAttempts: 5,
 			maxRetriesPerTier: 3,
-			maxOpusRetries: 7,
+			maxOpusRetries: 3,
 			startingModel: "sonnet" as const,
 			maxTier: "opus" as const,
 			runTypecheck: true,

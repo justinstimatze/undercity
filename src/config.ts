@@ -101,7 +101,7 @@ const DEFAULT_CONFIG: Required<UndercityRc> = {
 	multiLens: false,
 	parallel: 1,
 	push: false,
-	maxAttempts: 7,
+	maxAttempts: 4,
 	maxRetriesPerTier: 3,
 	maxReviewPassesPerTier: 2,
 	maxOpusReviewPasses: 6,

@@ -490,8 +490,8 @@ export class TaskWorker {
 	} | null = null;
 
 	constructor(options: SoloOptions = {}) {
-		// Default 7 attempts allows full escalation: 2 haiku + 2 sonnet + 3 opus
-		this.maxAttempts = options.maxAttempts ?? 7;
+		// Default 4 attempts: 2 at first tier + 2 at second tier
+		this.maxAttempts = options.maxAttempts ?? 4;
 		this.startingModel = options.startingModel ?? "sonnet";
 		this.autoCommit = options.autoCommit ?? true;
 		this.stream = options.stream ?? false;
@@ -507,7 +507,7 @@ export class TaskWorker {
 		this.multiLensAtOpus = options.multiLensAtOpus ?? false;
 		// 2 retries per tier before escalating (was 3, but that's too slow)
 		this.maxRetriesPerTier = options.maxRetriesPerTier ?? 3;
-		this.maxOpusRetries = options.maxOpusRetries ?? 7;
+		this.maxOpusRetries = options.maxOpusRetries ?? 3;
 		// Enable planning by default - haiku plans, sonnet reviews
 		this.enablePlanning = options.enablePlanning ?? true;
 		// Skip optional verification for trivial tasks to reduce overhead
