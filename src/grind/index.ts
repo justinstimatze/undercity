@@ -470,6 +470,29 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 							status: "merged",
 							modifiedFiles: taskResult.modifiedFiles,
 						});
+					} else if (taskResult.result?.status === "complete" && !taskResult.branch) {
+						// Task completed without needing merge (meta-tasks, fast-path tasks)
+						markTaskComplete(taskId);
+						output.taskComplete(taskId, `Task complete (${taskModel}, no merge needed)`);
+						completedCount++;
+						updateGrindProgress(completedCount, totalTasksInSession);
+
+						logTaskComplete({
+							batchId,
+							taskId,
+							model: taskResult.result?.model ?? taskModel,
+							attempts: taskResult.result?.attempts ?? 1,
+							fileCount: 0,
+							tokens: taskResult.result?.tokenUsage?.total ?? 0,
+							durationMs: batchDurationMs,
+						});
+
+						taskResults.push({
+							task: taskResult.task,
+							taskId,
+							status: "merged",
+							modifiedFiles: [],
+						});
 					} else {
 						const errorMsg = taskResult.mergeError || taskResult.result?.error || "Unknown error";
 						markTaskFailed({ id: taskId, error: errorMsg });

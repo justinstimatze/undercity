@@ -1160,6 +1160,16 @@ export class Orchestrator {
 				checkpoint: this.recoveredCheckpoints.get(task),
 			};
 			writeTaskAssignment(assignment);
+
+			// Verify assignment was actually persisted (debug: investigate missing checkpoints)
+			if (worktreePath) {
+				const { existsSync } = await import("node:fs");
+				const expectedPath = `${worktreePath}/.undercity-assignment.json`;
+				if (!existsSync(expectedPath)) {
+					sessionLogger.warn({ taskId, worktreePath, expectedPath }, "Assignment file missing immediately after write");
+				}
+			}
+
 			this.recoveredCheckpoints.delete(task);
 
 			let handoffContext = this.handoffContexts.get(task);
@@ -1366,7 +1376,10 @@ export class Orchestrator {
 		err: unknown,
 	): ParallelTaskResult {
 		const workerName = nameFromId(taskId);
-		this.fileTracker.stopTaskTracking(taskId);
+		// Only stop file tracking if it was started (fast-path tasks skip tracking)
+		if (worktreePath) {
+			this.fileTracker.stopTaskTracking(taskId);
+		}
 		this.updateTaskStatus(taskId, "failed", { error: String(err) });
 		output.taskFailed(taskId, "Task error", String(err), { workerName });
 
