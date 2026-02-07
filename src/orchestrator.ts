@@ -201,7 +201,16 @@ function getModifiedFilesInWorktree(worktreePath: string, mainBranch: string): s
 }
 
 /**
- * Main production orchestrator for parallel task execution.
+ * Orchestrator - Central coordinator for autonomous task execution
+ *
+ * Manages the full lifecycle of parallel task execution in isolated worktrees:
+ * - Worker pool management with health monitoring and recovery
+ * - Task scheduling with conflict prediction and deferral
+ * - Serial merge queue with rebase-verify-merge workflow
+ * - Rate limit tracking and opus budget enforcement
+ * - Crash recovery from interrupted batches
+ *
+ * This is the main entry point for the Undercity autonomous agent framework.
  */
 export class Orchestrator {
 	private maxConcurrent: number;
