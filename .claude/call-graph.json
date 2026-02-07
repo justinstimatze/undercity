@@ -1,25 +1,15 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-02-07T04:40:23.862Z",
+  "generatedAt": "2026-02-07T05:09:20.623Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
       "definedIn": "knowledge.ts",
       "calledFrom": [
         {
-          "file": "worker/context-builder.ts",
-          "line": 101,
-          "context": "if"
-        },
-        {
           "file": "worker/verification-handler.ts",
           "line": 370,
           "context": "slice"
-        },
-        {
-          "file": "worker/prompt-builder.ts",
-          "line": 104,
-          "context": "buildResearchPrompt"
         },
         {
           "file": "automated-pm.ts",
@@ -59,6 +49,16 @@
         {
           "file": "knowledge.ts",
           "line": 231,
+          "context": "if"
+        },
+        {
+          "file": "prompt-builder.ts",
+          "line": 154,
+          "context": "buildResearchPrompt"
+        },
+        {
+          "file": "prompt-builder.ts",
+          "line": 370,
           "context": "if"
         },
         {
@@ -136,13 +136,13 @@
       "definedIn": "task-file-patterns.ts",
       "calledFrom": [
         {
-          "file": "worker/context-builder.ts",
-          "line": 156,
-          "context": "if"
+          "file": "orchestrator.ts",
+          "line": 1836,
+          "context": "for"
         },
         {
           "file": "orchestrator.ts",
-          "line": 1811,
+          "line": 1864,
           "context": "for"
         },
         {
@@ -171,6 +171,11 @@
           "context": "if"
         },
         {
+          "file": "prompt-builder.ts",
+          "line": 426,
+          "context": "if"
+        },
+        {
           "file": "task-planner.ts",
           "line": 398,
           "context": "gatherPlanningContext"
@@ -187,8 +192,8 @@
       "definedIn": "task-file-patterns.ts",
       "calledFrom": [
         {
-          "file": "worker/context-builder.ts",
-          "line": 158,
+          "file": "prompt-builder.ts",
+          "line": 428,
           "context": "if"
         }
       ]
@@ -198,13 +203,13 @@
       "definedIn": "task-file-patterns.ts",
       "calledFrom": [
         {
-          "file": "worker/context-builder.ts",
-          "line": 165,
+          "file": "worker/verification-handler.ts",
+          "line": 410,
           "context": "if"
         },
         {
-          "file": "worker/verification-handler.ts",
-          "line": 410,
+          "file": "prompt-builder.ts",
+          "line": 435,
           "context": "if"
         }
       ]
@@ -247,7 +252,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1616,
+          "line": 1627,
           "context": "if"
         }
       ]
@@ -300,8 +305,8 @@
       "definedIn": "error-fix-patterns.ts",
       "calledFrom": [
         {
-          "file": "worker/context-builder.ts",
-          "line": 109,
+          "file": "prompt-builder.ts",
+          "line": 378,
           "context": "if"
         }
       ]
@@ -328,7 +333,7 @@
       "calledFrom": [
         {
           "file": "orchestrator.ts",
-          "line": 1267,
+          "line": 1292,
           "context": "if"
         },
         {
@@ -349,7 +354,7 @@
         },
         {
           "file": "worker.ts",
-          "line": 1493,
+          "line": 1504,
           "context": "startTask"
         },
         {
@@ -508,7 +513,7 @@
       "calledFrom": [
         {
           "file": "worker.ts",
-          "line": 1277,
+          "line": 1278,
           "context": "info"
         }
       ]

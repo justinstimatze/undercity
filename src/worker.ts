@@ -771,6 +771,7 @@ export class TaskWorker {
 			handoffContext: this.currentHandoffContext,
 			errorHistory: this.errorHistory,
 			ticket: this.currentTicket,
+			complexityLevel: this.complexityAssessment?.level,
 		};
 	}
 
@@ -1406,9 +1407,19 @@ export class TaskWorker {
 		const phaseStart = Date.now();
 		let targetFiles: string[] = [];
 
+		// First pass: fast keyword-only assessment to guide context mode
+		const roughAssessment = assessComplexityFast(task);
+		const roughContextMode: ContextMode =
+			roughAssessment.level === "trivial" || roughAssessment.level === "simple"
+				? "minimal"
+				: roughAssessment.level === "complex" || roughAssessment.level === "critical"
+					? "full"
+					: "compact";
+		// Opus override: always use full context when starting at opus
+		const effectiveContextMode: ContextMode = this.startingModel === "opus" ? "full" : roughContextMode;
+
 		try {
-			const contextMode: ContextMode = this.startingModel === "opus" ? "full" : "compact";
-			this.currentBriefing = await prepareContext(task, { cwd: this.workingDirectory, mode: contextMode });
+			this.currentBriefing = await prepareContext(task, { cwd: this.workingDirectory, mode: effectiveContextMode });
 			targetFiles = this.currentBriefing.targetFiles;
 			const sigCount = this.currentBriefing.functionSignatures.length;
 			output.debug(`Found ${targetFiles.length} target files, ${sigCount} signatures`, { taskId });

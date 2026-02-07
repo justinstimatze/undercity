@@ -11,7 +11,7 @@
 | **Learning** | `knowledge.ts`, `task-file-patterns.ts`, `error-fix-patterns.ts`, `capability-ledger.ts`, `decision-tracker.ts` | Knowledge compounding, patterns |
 | **PM** | `automated-pm.ts`, `task-classifier.ts` | Decision resolution, task generation |
 | **RAG** | `rag/{engine,database,hybrid-search,embedder,chunker}.ts` | Vector + FTS5 semantic search |
-| **Infrastructure** | `storage.ts`, `task.ts`, `persistence.ts`, `verification.ts`, `review.ts`, `config.ts`, `constants.ts`, `types.ts`, `output.ts`, `logger.ts`, `context-builder.ts` | Storage, verification, config, constants, types |
+| **Infrastructure** | `storage.ts`, `task.ts`, `persistence.ts`, `verification.ts`, `review.ts`, `config.ts`, `constants.ts`, `types.ts`, `output.ts`, `logger.ts`, `prompt-builder.ts` | Storage, verification, config, constants, types |
 | **Analysis** | `metrics.ts`, `feedback-metrics.ts`, `self-tuning.ts`, `effectiveness-analysis.ts`, `experiment.ts` | Metrics, routing, A/B testing |
 
 ## Task -> File Mapping
@@ -26,7 +26,7 @@
 - Create pre-execution plans with review -> `task-planner.ts` (planTaskWithReview)
 - Check task complexity -> `complexity.ts` or `task-decomposer.ts`
 - Run verification (build/test/lint) -> `verification.ts`
-- Generate codebase context -> `context.ts` (summarization) + `context-builder.ts` (pre-flight preparation)
+- Generate codebase context -> `context.ts` (summarization) + `prompt-builder.ts` (context building)
 - Query symbol definitions -> `ast-index.ts` (ASTIndexManager)
 - Persist state -> `persistence.ts`
 - Store/retrieve learnings -> `knowledge.ts`
@@ -46,12 +46,16 @@ Orchestrator.run():
 2. Fetch tasks (task.ts:getAllItems) -> filter: pending|in_progress, !isDecomposed
 3. Decompose (task-decomposer:checkAndDecompose) -> atomic subtasks + model tier
 4. Group by model -> execute sonnet -> opus (cheapest first)
-5. Per task:
-   - Spawn worktree (WorktreeManager.createWorktree)
-   - Run TaskWorker (AI does work)
-   - Check conflicts (FileTracker.checkConflicts)
-   - Queue merge (MergeQueue.add)
-   - Process MergeQueue (serial rebase -> test -> merge)
+5. Per batch:
+   - Filter conflicting tasks (filterConflictingTasks) -> defer overlapping file predictions
+   - Per task:
+     - Meta-tasks: fast path (no worktree, run in repo root)
+     - Impl tasks: spawn worktree (WorktreeManager.createWorktree)
+     - Run TaskWorker (AI does work, context depth adapts to complexity)
+     - Check conflicts (FileTracker.checkConflicts)
+     - Queue merge (MergeQueue.add) [skipped for meta-tasks]
+     - Process MergeQueue (serial rebase -> test -> merge)
+   - Deferred tasks prepended to next batch
 6. Update status (task.ts:markTaskComplete|markTaskFailed)
 7. Auto-complete parent if all subtasks done
 ```

@@ -78,6 +78,7 @@ import {
 import { indexTaskOutcome } from "./task-classifier.js";
 import { findRelevantFiles } from "./task-file-patterns.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
+import { extractMetaTaskType } from "./task-schema.js";
 import type {
 	ActiveTaskState,
 	BatchMetadata,
@@ -927,12 +928,15 @@ export class Orchestrator {
 			const batch = remaining.slice(0, this.maxConcurrent);
 			const deferred = remaining.slice(this.maxConcurrent);
 
+			// Pre-assign file ownership: defer tasks with predicted file conflicts
+			const { execute, defer } = this.filterConflictingTasks(batch);
+
 			batchNum++;
-			const totalBatches = batchNum + Math.ceil(deferred.length / this.maxConcurrent);
+			const totalBatches = batchNum + Math.ceil((deferred.length + defer.length) / this.maxConcurrent);
 
-			output.section(`Batch ${batchNum}/~${totalBatches}: Processing ${batch.length} tasks`);
+			output.section(`Batch ${batchNum}/~${totalBatches}: Processing ${execute.length} tasks`);
 
-			const preparedTasks = await this.scheduleBatchTasks(batch, results);
+			const preparedTasks = await this.scheduleBatchTasks(execute, results);
 
 			if (batchNum === 1 && preparedTasks.length > 0) {
 				this.initializeBatch(batchId, preparedTasks);
@@ -944,7 +948,8 @@ export class Orchestrator {
 			const batchResults = await this.executeBatchWorkers(preparedTasks, mainBranch);
 			results.push(...batchResults);
 
-			remaining = deferred;
+			// Deferred tasks go to front of remaining queue (run in next batch)
+			remaining = [...defer, ...deferred];
 		}
 
 		if (this.draining && remaining.length > 0) {
@@ -992,6 +997,15 @@ export class Orchestrator {
 					merged: false,
 					mergeError: `Skipped: too similar to in-progress task "${similarTask.task.objective.substring(0, 50)}"`,
 				});
+				continue;
+			}
+
+			// Fast path: meta-tasks analyze the task board, not source code
+			const metaType = extractMetaTaskType(task);
+			if (metaType !== null) {
+				const workerName = nameFromId(taskId);
+				preparedTasks.push({ task, taskId, worktreePath: "", branch: "" });
+				output.success(`Spawned worker: ${workerName} (${taskId}) [no worktree]`);
 				continue;
 			}
 
@@ -1068,8 +1082,11 @@ export class Orchestrator {
 		mainBranch: string,
 	): Promise<ParallelTaskResult> {
 		const { task, taskId, worktreePath, branch } = prepared;
+		const isFastPath = !worktreePath;
 
-		this.fileTracker.startTaskTracking(taskId, taskId);
+		if (!isFastPath) {
+			this.fileTracker.startTaskTracking(taskId, taskId);
+		}
 		this.updateTaskStatus(taskId, "running");
 
 		try {
@@ -1098,12 +1115,15 @@ export class Orchestrator {
 				this.opusTasksUsed++;
 			}
 
+			// Fast path: meta-tasks use main repo, not worktree
+			const workingDirectory = worktreePath || this.worktreeManager.getMainRepoPath();
+
 			const worker = new TaskWorker({
 				startingModel: effectiveModel,
 				autoCommit: this.autoCommit,
 				stream: this.stream,
 				verbose: this.verbose,
-				workingDirectory: worktreePath,
+				workingDirectory,
 				reviewPasses: effectiveReview,
 				multiLensAtOpus: this.multiLensAtOpus,
 				maxAttempts: this.maxAttempts,
@@ -1212,12 +1232,17 @@ export class Orchestrator {
 		mainBranch: string,
 		variant: { id: string; model: string; reviewEnabled?: boolean } | null,
 	): Promise<ParallelTaskResult> {
-		const modifiedFiles = getModifiedFilesInWorktree(worktreePath, mainBranch);
+		const isFastPath = !worktreePath;
 
-		for (const file of modifiedFiles) {
-			this.fileTracker.recordFileAccess(taskId, file, "edit", taskId, worktreePath);
+		// Fast path: meta-tasks don't modify source files, skip file tracking and merge
+		const modifiedFiles = isFastPath ? [] : getModifiedFilesInWorktree(worktreePath, mainBranch);
+
+		if (!isFastPath) {
+			for (const file of modifiedFiles) {
+				this.fileTracker.recordFileAccess(taskId, file, "edit", taskId, worktreePath);
+			}
+			this.fileTracker.stopTaskTracking(taskId);
 		}
-		this.fileTracker.stopTaskTracking(taskId);
 
 		// Handle decomposition: agent determined task needs to be broken down
 		const decompositionResult = handleTaskDecomposition(
@@ -1816,6 +1841,44 @@ export class Orchestrator {
 
 		// Use extracted pure function for conflict detection
 		return buildPredictedConflicts(taskPredictions, taskObjectives);
+	}
+
+	/**
+	 * Filter batch tasks by predicted file ownership to prevent conflicts.
+	 * Tasks with overlapping high-confidence file predictions are deferred
+	 * to a later batch (after the conflicting task completes).
+	 */
+	private filterConflictingTasks(batchTasks: string[]): {
+		execute: string[];
+		defer: string[];
+	} {
+		if (batchTasks.length <= 1) {
+			return { execute: batchTasks, defer: [] };
+		}
+
+		const execute: string[] = [];
+		const defer: string[] = [];
+		const fileOwnership = new Map<string, string>();
+
+		for (const task of batchTasks) {
+			const predictions = findRelevantFiles(task, 10);
+			// Only consider high-confidence predictions
+			const claimed = predictions.filter((p) => p.score >= 0.5);
+
+			const hasConflict = claimed.some((p) => fileOwnership.has(p.file));
+
+			if (hasConflict) {
+				defer.push(task);
+				output.warning(`Deferred task (predicted conflict): ${task.substring(0, 60)}`);
+			} else {
+				execute.push(task);
+				for (const p of claimed) {
+					fileOwnership.set(p.file, task);
+				}
+			}
+		}
+
+		return { execute, defer };
 	}
 
 	/**

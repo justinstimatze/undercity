@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	adjustModelFromMetrics,
 	assessComplexityFast,
+	assessComplexityQuantitative,
 	canHandleWithLocalTools,
 	getTeamComposition,
 	type QuantitativeMetrics,
@@ -519,6 +520,67 @@ describe("complexity", () => {
 			const buggyScore = scoreFromMetrics(buggy);
 
 			expect(buggyScore.score).toBeGreaterThan(stableScore.score);
+		});
+	});
+
+	describe("scoreFromMetrics reduced file-characteristic weights", () => {
+		const createBaseMetrics = (): QuantitativeMetrics => ({
+			fileCount: 0,
+			totalLines: 0,
+			functionCount: 0,
+			unhealthyFiles: [],
+			crossPackage: false,
+			packages: [],
+			git: {
+				avgChangeFrequency: 0,
+				hotspots: [],
+				bugProneFiles: [],
+			},
+		});
+
+		it("large files (>1000 lines) contribute +1, not +2", () => {
+			const metrics = { ...createBaseMetrics(), fileCount: 1, totalLines: 2000 };
+			const result = scoreFromMetrics(metrics);
+			// fileCount:1 = +0, lines:2000 = +1 (was +2 before reduction)
+			expect(result.score).toBe(1);
+		});
+
+		it("many functions (>20) contribute +1, not +2", () => {
+			const metrics = { ...createBaseMetrics(), fileCount: 1, functionCount: 30 };
+			const result = scoreFromMetrics(metrics);
+			// fileCount:1 = +0, functions:30 = +1 (was +2 before reduction)
+			expect(result.score).toBe(1);
+		});
+	});
+
+	describe("assessComplexityQuantitative shape caps", () => {
+		it("caps non-critical-keyword tasks below critical level", () => {
+			// "rename X in 8 files" has no critical keywords but many files
+			const result = assessComplexityQuantitative(
+				"rename methodName to method_name",
+				["a.ts", "b.ts", "c.ts", "d.ts", "e.ts", "f.ts", "g.ts", "h.ts"],
+				"/nonexistent",
+			);
+			expect(result.level).not.toBe("critical");
+			expect(result.signals).not.toContain("shape-cap:no-critical-keywords");
+			// Level should be capped at complex or below
+		});
+
+		it("allows critical level when critical keywords present", () => {
+			const result = assessComplexityQuantitative(
+				"fix security vulnerability in authentication",
+				["auth.ts"],
+				"/nonexistent",
+			);
+			// Security + auth keywords should allow critical
+			expect(result.signals.some((s) => s.includes("critical:"))).toBe(true);
+		});
+
+		it("caps single-file tasks at standard", () => {
+			const result = assessComplexityQuantitative("update the module", ["large-module.ts"], "/nonexistent");
+			// Single file should not exceed standard regardless of file metrics
+			const levelOrder = ["trivial", "simple", "standard", "complex", "critical"];
+			expect(levelOrder.indexOf(result.level)).toBeLessThanOrEqual(levelOrder.indexOf("standard"));
 		});
 	});
 

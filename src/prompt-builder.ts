@@ -8,6 +8,7 @@
  * Previously split across worker/prompt-builder.ts and worker/context-builder.ts.
  */
 
+import type { ComplexityLevel } from "./complexity.js";
 import { sanitizeContent } from "./content-sanitizer.js";
 import type { ContextBriefing } from "./context.js";
 import { generateToolsPrompt } from "./efficiency-tools.js";
@@ -310,7 +311,10 @@ export function formatTicketContext(ticket: TicketContent): string {
 /**
  * Build the context section for a standard implementation task prompt
  */
-export async function buildImplementationContext(config: ContextBuildConfig): Promise<ContextBuildResult> {
+export async function buildImplementationContext(
+	config: ContextBuildConfig,
+	complexityLevel?: ComplexityLevel,
+): Promise<ContextBuildResult> {
 	const {
 		task,
 		stateDir,
@@ -327,6 +331,9 @@ export async function buildImplementationContext(config: ContextBuildConfig): Pr
 	let injectedLearningIds: string[] = [];
 	let predictedFiles: string[] = [];
 	let classifierPrediction: ContextBuildResult["classifierPrediction"];
+
+	// Lightweight tasks skip expensive context that provides minimal benefit
+	const isLightweight = complexityLevel === "trivial" || complexityLevel === "simple";
 
 	// Add assignment context for worker identity and recovery
 	if (assignmentContext) {
@@ -357,58 +364,61 @@ export async function buildImplementationContext(config: ContextBuildConfig): Pr
 		sections.push(toolsPrompt);
 	}
 
-	// Add relevant learnings from previous tasks (compact format for token efficiency)
-	const relevantLearnings = findRelevantLearnings(task, 5, stateDir);
-	if (relevantLearnings.length > 0) {
-		const learningsPrompt = formatLearningsCompact(relevantLearnings);
-		sections.push(learningsPrompt);
-		injectedLearningIds = relevantLearnings.map((l) => l.id);
-	}
-
-	// Add failure warnings ("signs for Ralph") from past failures
-	const failureWarnings = getFailureWarningsForTask(task, 2, stateDir);
-	if (failureWarnings) {
-		sections.push(failureWarnings);
-	}
-
-	// Add semantic warnings from similar failed tasks (RAG-based classification)
-	if (hasClassificationData(stateDir)) {
-		try {
-			const classification = await classifyTask(task, stateDir);
-
-			// Convert riskScore (0-1) to riskLevel for effectiveness tracking
-			const riskLevel: "low" | "medium" | "high" =
-				classification.riskScore < 0.33 ? "low" : classification.riskScore < 0.66 ? "medium" : "high";
-
-			// Capture classifier prediction for effectiveness tracking
-			classifierPrediction = {
-				riskLevel,
-				confidence: classification.confidence,
-			};
-
-			if (classification.similarTasks.some((t) => t.outcome === "failure")) {
-				const failedSimilar = classification.similarTasks.filter((t) => t.outcome === "failure");
-				const warningLines = [
-					"SIMILAR TASKS HAVE FAILED BEFORE:",
-					...failedSimilar.slice(0, 3).map((t) => {
-						const reason = t.failureReason || "unknown reason";
-						const objective = t.objective.length > 60 ? `${t.objective.substring(0, 60)}...` : t.objective;
-						return `  - "${objective}" failed: ${reason}`;
-					}),
-					"",
-					"Learn from these failures - avoid the same mistakes.",
-				];
-				sections.push(warningLines.join("\n"));
-			}
-		} catch {
-			// Classification failed - continue without it
+	// Skip expensive context for lightweight tasks - too simple to benefit
+	if (!isLightweight) {
+		// Add relevant learnings from previous tasks (compact format for token efficiency)
+		const relevantLearnings = findRelevantLearnings(task, 5, stateDir);
+		if (relevantLearnings.length > 0) {
+			const learningsPrompt = formatLearningsCompact(relevantLearnings);
+			sections.push(learningsPrompt);
+			injectedLearningIds = relevantLearnings.map((l) => l.id);
 		}
-	}
 
-	// Ralph-style: inject RULES from error patterns and current session errors
-	const errorRules = formatPatternsAsRules(task, errorHistory, stateDir);
-	if (errorRules) {
-		sections.push(errorRules);
+		// Add failure warnings ("signs for Ralph") from past failures
+		const failureWarnings = getFailureWarningsForTask(task, 2, stateDir);
+		if (failureWarnings) {
+			sections.push(failureWarnings);
+		}
+
+		// Add semantic warnings from similar failed tasks (RAG-based classification)
+		if (hasClassificationData(stateDir)) {
+			try {
+				const classification = await classifyTask(task, stateDir);
+
+				// Convert riskScore (0-1) to riskLevel for effectiveness tracking
+				const riskLevel: "low" | "medium" | "high" =
+					classification.riskScore < 0.33 ? "low" : classification.riskScore < 0.66 ? "medium" : "high";
+
+				// Capture classifier prediction for effectiveness tracking
+				classifierPrediction = {
+					riskLevel,
+					confidence: classification.confidence,
+				};
+
+				if (classification.similarTasks.some((t) => t.outcome === "failure")) {
+					const failedSimilar = classification.similarTasks.filter((t) => t.outcome === "failure");
+					const warningLines = [
+						"SIMILAR TASKS HAVE FAILED BEFORE:",
+						...failedSimilar.slice(0, 3).map((t) => {
+							const reason = t.failureReason || "unknown reason";
+							const objective = t.objective.length > 60 ? `${t.objective.substring(0, 60)}...` : t.objective;
+							return `  - "${objective}" failed: ${reason}`;
+						}),
+						"",
+						"Learn from these failures - avoid the same mistakes.",
+					];
+					sections.push(warningLines.join("\n"));
+				}
+			} catch {
+				// Classification failed - continue without it
+			}
+		}
+
+		// Ralph-style: inject RULES from error patterns and current session errors
+		const errorRules = formatPatternsAsRules(task, errorHistory, stateDir);
+		if (errorRules) {
+			sections.push(errorRules);
+		}
 	}
 
 	// Add file suggestions based on task-file patterns
@@ -420,8 +430,8 @@ export async function buildImplementationContext(config: ContextBuildConfig): Pr
 		sections.push(fileSuggestions);
 	}
 
-	// Add co-modification hints based on target files from context
-	if (briefing?.targetFiles && briefing.targetFiles.length > 0) {
+	// Skip co-modification hints for lightweight tasks
+	if (!isLightweight && briefing?.targetFiles && briefing.targetFiles.length > 0) {
 		const coModHints = formatCoModificationHints(briefing.targetFiles);
 		if (coModHints) {
 			sections.push(coModHints);

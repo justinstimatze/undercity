@@ -360,18 +360,18 @@ export function scoreFromMetrics(metrics: QuantitativeMetrics): {
 		signals.push(`files:${metrics.fileCount}(many)`);
 	}
 
-	// Lines of code scoring
+	// Lines of code scoring (measures FILE complexity, not TASK complexity - reduced weight)
 	if (metrics.totalLines > 1000) {
-		score += 2;
+		score += 1;
 		signals.push(`lines:${metrics.totalLines}(large)`);
 	} else if (metrics.totalLines > 500) {
 		score += 1;
 		signals.push(`lines:${metrics.totalLines}`);
 	}
 
-	// Function count scoring
+	// Function count scoring (measures FILE complexity, not TASK complexity - reduced weight)
 	if (metrics.functionCount > 20) {
-		score += 2;
+		score += 1;
 		signals.push(`functions:${metrics.functionCount}(many)`);
 	} else if (metrics.functionCount > 10) {
 		score += 1;
@@ -1231,14 +1231,28 @@ export function assessComplexityQuantitative(
 	}
 
 	// Apply level cap from keyword assessment
+	const levelOrder: ComplexityLevel[] = ["trivial", "simple", "standard", "complex", "critical"];
 	if (levelCap) {
-		const levelOrder: ComplexityLevel[] = ["trivial", "simple", "standard", "complex", "critical"];
 		const capIndex = levelOrder.indexOf(levelCap);
 		const levelIndex = levelOrder.indexOf(level);
 		if (levelIndex > capIndex) {
 			level = levelCap;
 			combinedSignals.push(`capped-from:${levelOrder[levelIndex]}`);
 		}
+	}
+
+	// Task shape caps: prevent file metrics from overriding task nature
+	// Only critical-keyword tasks can reach "critical" level
+	const hasCriticalKeywords = criticalSignals.length > 0;
+	if (!hasCriticalKeywords && level === "critical") {
+		level = "complex";
+		combinedSignals.push("shape-cap:no-critical-keywords");
+	}
+
+	// Single-file tasks cap at "standard"
+	if (metrics.fileCount === 1 && levelOrder.indexOf(level) > levelOrder.indexOf("standard")) {
+		level = "standard";
+		combinedSignals.push("shape-cap:single-file");
 	}
 
 	// Determine scope from metrics

@@ -127,6 +127,8 @@ export interface AgentLoopContext {
 	errorHistory: Array<{ category: string; message: string; attempt: number }>;
 	/** Rich ticket content for task context */
 	ticket?: TicketContent;
+	/** Rough complexity level from fast assessment (guides context injection depth) */
+	complexityLevel?: import("../complexity.js").ComplexityLevel;
 }
 
 // =============================================================================
@@ -469,18 +471,21 @@ async function buildPrompt(
 	}
 
 	// Standard implementation task: build prompt with context
-	const contextResult = await buildImplementationContext({
-		task: context.task,
-		stateDir: config.stateDir,
-		workingDirectory: config.workingDirectory,
-		assignmentContext: deps.buildAssignmentContext(),
-		handoffContextSection: context.handoffContext ? deps.buildHandoffContextSection() : undefined,
-		briefing: context.briefing,
-		executionPlan: context.executionPlan,
-		lastPostMortem: state.lastPostMortem,
-		errorHistory: context.errorHistory,
-		ticket: context.ticket,
-	});
+	const contextResult = await buildImplementationContext(
+		{
+			task: context.task,
+			stateDir: config.stateDir,
+			workingDirectory: config.workingDirectory,
+			assignmentContext: deps.buildAssignmentContext(),
+			handoffContextSection: context.handoffContext ? deps.buildHandoffContextSection() : undefined,
+			briefing: context.briefing,
+			executionPlan: context.executionPlan,
+			lastPostMortem: state.lastPostMortem,
+			errorHistory: context.errorHistory,
+			ticket: context.ticket,
+		},
+		context.complexityLevel,
+	);
 
 	return {
 		prompt: contextResult.prompt,
