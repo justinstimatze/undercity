@@ -846,6 +846,14 @@ export function markTaskComplete(paramsOrId: MarkTaskCompleteParams | string, pa
 
 /**
  * Mark a task as failed
+ * - Updates task status to "failed" in SQLite database
+ * - Records error message and completion timestamp
+ * - Optionally stores last attempt context for retry with human guidance
+ *
+ * @param paramsOrId - Task ID string or MarkTaskFailedParams object
+ * @param error - Error message describing the failure (required when using id signature)
+ * @param pathParam - Optional path to state directory (defaults to .undercity)
+ * @returns void - Updates database state as side effect
  */
 export function markTaskFailed(params: MarkTaskFailedParams): void;
 export function markTaskFailed(id: string, error: string, path?: string): void;
