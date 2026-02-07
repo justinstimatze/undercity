@@ -68,7 +68,7 @@ export const MAX_THINKING_TOKENS_OPUS = 10_000;
 // ---------------------------------------------------------------------------
 
 /** Maximum attempts to merge a branch before giving up */
-export const MAX_MERGE_RETRIES = 3;
+export const MAX_MERGE_RETRY_COUNT = 3;
 
 // ---------------------------------------------------------------------------
 // File lock retry configuration

@@ -17,7 +17,7 @@ import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { pmRefineTask } from "./automated-pm.js";
 import { updateLedger } from "./capability-ledger.js";
-import { MAX_MERGE_RETRIES } from "./constants.js";
+import { MAX_MERGE_RETRY_COUNT } from "./constants.js";
 import {
 	getEmergencyModeStatus,
 	hasExceededMaxFixAttempts,
@@ -1435,7 +1435,7 @@ export class Orchestrator {
 
 		let pendingMerges = [...orderedTasks];
 
-		for (let pass = 0; pass < MAX_MERGE_RETRIES && pendingMerges.length > 0; pass++) {
+		for (let pass = 0; pass < MAX_MERGE_RETRY_COUNT && pendingMerges.length > 0; pass++) {
 			if (pass > 0) {
 				output.section(`Merge retry pass ${pass + 1}: retrying ${pendingMerges.length} failed merge(s)`);
 			}

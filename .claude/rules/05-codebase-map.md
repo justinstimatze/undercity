@@ -103,7 +103,7 @@ Note: task-file-patterns, error-fix-patterns, and decision-tracker are SQLite-ba
 
 **Worktrees:** Location `<repo>-worktrees/task-<id>`. Auto-cleanup on success. Leaks: `git worktree list`.
 
-**MergeQueue:** Serial only. Retry up to MAX_MERGE_RETRIES (3) times per branch. Tasks that fail all retries remain pending for manual intervention.
+**MergeQueue:** Serial only. Retry up to MAX_MERGE_RETRY_COUNT (3) times per branch. Tasks that fail all retries remain pending for manual intervention.
 
 **Commands:** `grind` = process board. `grind "goal"` = run single task.
 
