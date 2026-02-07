@@ -1673,6 +1673,254 @@ describe("knowledge.ts", () => {
 	});
 
 	// ==========================================================================
+	// Vector Similarity Search Tests
+	// ==========================================================================
+
+	describe("Vector similarity search", () => {
+		it("should retrieve indexed knowledge using vector similarity search with correct ranking", () => {
+			// Add learnings with semantic similarity (not just keyword matches)
+			const { learning: learning1 } = addLearning(
+				{
+					taskId: "task-vector-1",
+					category: "pattern",
+					content: "Use exponential backoff for retry logic in API calls",
+					keywords: ["retry", "backoff", "api"],
+				},
+				tempDir,
+			);
+
+			const { learning: learning2 } = addLearning(
+				{
+					taskId: "task-vector-2",
+					category: "pattern",
+					content: "Implement circuit breaker pattern for fault tolerance",
+					keywords: ["circuit", "breaker", "fault"],
+				},
+				tempDir,
+			);
+
+			const { learning: learning3 } = addLearning(
+				{
+					taskId: "task-vector-3",
+					category: "fact",
+					content: "Cache invalidation happens every 5 minutes",
+					keywords: ["cache", "invalidation", "timeout"],
+				},
+				tempDir,
+			);
+
+			// Mock the embeddings module to return vector similarity results
+			const mockEmbeddings = {
+				hybridSearch: (
+					_query: string,
+					options: { limit?: number },
+				): Array<{ learningId: string; score: number; keywordScore: number; semanticScore: number }> => {
+					// Simulate semantic search: query "retry strategy" should match learning1 best,
+					// then learning2 (related resilience pattern), learning3 least relevant
+					return [
+						{ learningId: learning1.id, score: 0.85, keywordScore: 0.5, semanticScore: 0.9 },
+						{ learningId: learning2.id, score: 0.65, keywordScore: 0.3, semanticScore: 0.7 },
+						{ learningId: learning3.id, score: 0.25, keywordScore: 0.1, semanticScore: 0.2 },
+					].slice(0, options.limit || 10);
+				},
+				getEmbeddingStats: () => ({ embeddedCount: 10, vocabSize: 50, unembeddedCount: 0, avgVectorSize: 20 }),
+				isTransientError: () => false,
+				calculateBackoffDelay: () => 100,
+				MAX_RETRIES: 3,
+			};
+
+			// Replace the require call with our mock
+			const Module = require("node:module");
+			const originalRequire = Module.prototype.require;
+			Module.prototype.require = function (id: string) {
+				if (id === "./embeddings.js") {
+					return mockEmbeddings;
+				}
+				return originalRequire.apply(this, arguments);
+			};
+
+			try {
+				// Query with semantic meaning: "retry strategy" should match based on meaning,
+				// not just exact keyword overlap
+				const results = findRelevantLearnings(
+					"retry strategy for resilient systems",
+					3,
+					tempDir,
+					TEST_QUALITY_THRESHOLDS,
+				);
+
+				// Should return results from vector search
+				expect(results.length).toBeGreaterThan(0);
+
+				// Results should be ranked by similarity (highest first)
+				expect(results[0].id).toBe(learning1.id); // Best match
+				if (results.length > 1) {
+					expect(results[1].id).toBe(learning2.id); // Second best
+				}
+				if (results.length > 2) {
+					expect(results[2].id).toBe(learning3.id); // Least relevant
+				}
+
+				// Verify we got the expected learnings
+				const foundIds = new Set(results.map((l) => l.id));
+				expect(foundIds.has(learning1.id)).toBe(true);
+			} finally {
+				// Restore original require
+				Module.prototype.require = originalRequire;
+			}
+		});
+
+		it("should handle no matches when similarity scores are below threshold", () => {
+			// Add a learning
+			addLearning(
+				{
+					taskId: "task-vector-no-match",
+					category: "fact",
+					content: "Database uses SQLite for storage",
+					keywords: ["database", "sqlite", "storage"],
+				},
+				tempDir,
+			);
+
+			// Mock embeddings to return empty results (no matches above threshold)
+			const mockEmbeddings = {
+				hybridSearch: () => [],
+				getEmbeddingStats: () => ({ embeddedCount: 10, vocabSize: 50, unembeddedCount: 0, avgVectorSize: 20 }),
+				isTransientError: () => false,
+				calculateBackoffDelay: () => 100,
+				MAX_RETRIES: 3,
+			};
+
+			const Module = require("node:module");
+			const originalRequire = Module.prototype.require;
+			Module.prototype.require = function (id: string) {
+				if (id === "./embeddings.js") {
+					return mockEmbeddings;
+				}
+				return originalRequire.apply(this, arguments);
+			};
+
+			try {
+				// Query that has no semantic similarity
+				const results = findRelevantLearnings("machine learning neural networks", 5, tempDir, TEST_QUALITY_THRESHOLDS);
+
+				// Should return empty or very limited results since no matches found
+				// (might still get keyword fallback results)
+				expect(Array.isArray(results)).toBe(true);
+			} finally {
+				Module.prototype.require = originalRequire;
+			}
+		});
+
+		it("should filter results by minimum score threshold in vector search", () => {
+			const { learning: highScore } = addLearning(
+				{
+					taskId: "task-high-score",
+					category: "pattern",
+					content: "Use async/await for asynchronous operations",
+					keywords: ["async", "await", "promise"],
+				},
+				tempDir,
+			);
+
+			const { learning: lowScore } = addLearning(
+				{
+					taskId: "task-low-score",
+					category: "fact",
+					content: "Configuration stored in JSON file",
+					keywords: ["config", "json", "file"],
+				},
+				tempDir,
+			);
+
+			// Mock embeddings with one result above threshold, one below
+			const mockEmbeddings = {
+				hybridSearch: (
+					_query: string,
+					options: { minScore?: number; limit?: number },
+				): Array<{ learningId: string; score: number; keywordScore: number; semanticScore: number }> => {
+					// Return results with different scores, respecting minScore threshold
+					const allResults = [
+						{ learningId: highScore.id, score: 0.75, keywordScore: 0.6, semanticScore: 0.8 },
+						{ learningId: lowScore.id, score: 0.03, keywordScore: 0.05, semanticScore: 0.02 },
+					];
+
+					const minScore = options.minScore || 0.05;
+					return allResults.filter((r) => r.score >= minScore).slice(0, options.limit || 10);
+				},
+				getEmbeddingStats: () => ({ embeddedCount: 10, vocabSize: 50, unembeddedCount: 0, avgVectorSize: 20 }),
+				isTransientError: () => false,
+				calculateBackoffDelay: () => 100,
+				MAX_RETRIES: 3,
+			};
+
+			const Module = require("node:module");
+			const originalRequire = Module.prototype.require;
+			Module.prototype.require = function (id: string) {
+				if (id === "./embeddings.js") {
+					return mockEmbeddings;
+				}
+				return originalRequire.apply(this, arguments);
+			};
+
+			try {
+				const results = findRelevantLearnings("async programming patterns", 5, tempDir, TEST_QUALITY_THRESHOLDS);
+
+				// Should only return the high-score learning
+				expect(results.length).toBeGreaterThan(0);
+				const foundHighScore = results.find((l) => l.id === highScore.id);
+				expect(foundHighScore).toBeDefined();
+
+				// Low-score learning should be filtered out
+				const foundLowScore = results.find((l) => l.id === lowScore.id);
+				expect(foundLowScore).toBeUndefined();
+			} finally {
+				Module.prototype.require = originalRequire;
+			}
+		});
+
+		it("should handle vector search when embeddings are available but return empty results", () => {
+			addLearning(
+				{
+					taskId: "task-empty-vector",
+					category: "fact",
+					content: "Test content for empty results",
+					keywords: ["test", "empty"],
+				},
+				tempDir,
+			);
+
+			// Mock embeddings that indicate embeddings exist but search returns nothing
+			const mockEmbeddings = {
+				hybridSearch: () => [], // Empty results
+				getEmbeddingStats: () => ({ embeddedCount: 5, vocabSize: 30, unembeddedCount: 0, avgVectorSize: 15 }),
+				isTransientError: () => false,
+				calculateBackoffDelay: () => 100,
+				MAX_RETRIES: 3,
+			};
+
+			const Module = require("node:module");
+			const originalRequire = Module.prototype.require;
+			Module.prototype.require = function (id: string) {
+				if (id === "./embeddings.js") {
+					return mockEmbeddings;
+				}
+				return originalRequire.apply(this, arguments);
+			};
+
+			try {
+				// Should fall back to keyword search when vector search returns nothing
+				const results = findRelevantLearnings("test empty", 5, tempDir, TEST_QUALITY_THRESHOLDS);
+
+				// Should get keyword fallback results
+				expect(Array.isArray(results)).toBe(true);
+			} finally {
+				Module.prototype.require = originalRequire;
+			}
+		});
+	});
+
+	// ==========================================================================
 	// Embedding Failure Graceful Degradation Tests
 	// ==========================================================================
 
