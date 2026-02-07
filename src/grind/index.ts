@@ -40,6 +40,9 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 	// Phase 1: Setup
 	// =========================================================================
 
+	// Create AbortController for timer cleanup
+	const abortController = new AbortController();
+
 	// Acquire lock to prevent concurrent execution
 	const lockResult = acquireGrindLock();
 	if (!lockResult.acquired) {
@@ -47,6 +50,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			`Another grind process is already running (PID ${lockResult.existingPid}, started ${lockResult.startedAt})`,
 		);
 		output.info("Use 'pkill -f undercity' to kill existing processes, or wait for completion");
+		abortController.abort();
 		process.exit(1);
 	}
 
@@ -56,6 +60,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 	// Set up cleanup on exit
 	const cleanup = () => {
 		grindAbortController.abort();
+		abortController.abort();
 		releaseGrindLock();
 	};
 	setupSignalHandlers(cleanup);
@@ -88,6 +93,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 	if (!diskCheck.ok) {
 		cleanup();
 		output.error(`Insufficient disk space: ${diskCheck.availableGB}GB available, need at least 2GB`);
+		abortController.abort();
 		process.exit(1);
 	}
 
@@ -171,6 +177,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		const durationMs = parseDuration(config.duration);
 		if (durationMs === null) {
 			output.error(`Invalid duration format: ${config.duration}. Use format like "6h" or "30m"`);
+			abortController.abort();
 			process.exit(1);
 		}
 
@@ -239,6 +246,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		if (!baselineResult.passed) {
 			output.error("Baseline check failed - fix issues before running grind:");
 			output.error(baselineResult.feedback);
+			abortController.abort();
 			process.exit(1);
 		}
 		output.success(baselineResult.cached ? "Baseline verified (cached)" : "Baseline verified");
@@ -543,6 +551,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 				output.error(`Grind execution failed: ${grindError}`);
 				totalFailed += prioritizedTasks.length;
 				consecutiveNoProgressCycles++;
+				abortController.abort();
 			}
 
 			// Too many cycles with no progress - stop to avoid burning tokens
@@ -578,9 +587,11 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 
 		clearGrindProgress();
 
+		// Defense-in-depth: abort controller + direct cleanup
 		if (drainTimer) {
 			clearTimeout(drainTimer);
 		}
+		abortController.abort();
 
 		if (sessionStarted) {
 			endGrindSession({
@@ -630,7 +641,10 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 	} catch (error) {
 		grindAbortController.abort();
 		clearGrindProgress();
+		abortController.abort();
 		output.error(`Grind error: ${error instanceof Error ? error.message : error}`);
 		process.exit(1);
+	} finally {
+		abortController.abort();
 	}
 }
