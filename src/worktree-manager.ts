@@ -311,21 +311,44 @@ export class WorktreeManager {
 			gitLogger.debug({ baseBranch }, "Creating worktree from local main HEAD");
 			execGit(["worktree", "add", "-b", branchName, worktreePath, baseBranch], this.repoRoot);
 
-			// Install dependencies in the worktree so verification can run
-			gitLogger.info({ sessionId, worktreePath }, "Installing dependencies in worktree");
-			try {
-				execFileSync("pnpm", ["install", "--frozen-lockfile"], {
-					cwd: worktreePath,
-					encoding: "utf-8",
-					stdio: ["pipe", "pipe", "pipe"],
-				});
-				gitLogger.info({ sessionId }, "Dependencies installed successfully");
-			} catch (installError) {
-				gitLogger.warn(
-					{ sessionId, error: String(installError) },
-					"Failed to install dependencies in worktree - verification may fail",
-				);
-				// Don't throw - let the task continue and fail at verification stage with clearer error
+			// Copy dependencies via hard-link from main repo (fast, ~0.1s vs 5-9s for pnpm install).
+			// cp -al creates hard links for regular files and preserves symlinks, which matches
+			// pnpm's node_modules structure (.pnpm/ hard links to global store, top-level are symlinks).
+			gitLogger.info({ sessionId, worktreePath }, "Setting up dependencies in worktree");
+			const mainNodeModules = join(this.repoRoot, "node_modules");
+			if (existsSync(mainNodeModules)) {
+				try {
+					execFileSync("cp", ["-al", mainNodeModules, join(worktreePath, "node_modules")], {
+						encoding: "utf-8",
+						stdio: ["pipe", "pipe", "pipe"],
+					});
+					gitLogger.info({ sessionId }, "Hard-linked node_modules from main repo");
+				} catch (linkError) {
+					gitLogger.warn(
+						{ sessionId, error: String(linkError) },
+						"Hard-link copy failed, falling back to pnpm install",
+					);
+					try {
+						execFileSync("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], {
+							cwd: worktreePath,
+							encoding: "utf-8",
+							stdio: ["pipe", "pipe", "pipe"],
+						});
+						gitLogger.info({ sessionId }, "Dependencies installed via pnpm fallback");
+					} catch (installError) {
+						gitLogger.warn({ sessionId, error: String(installError) }, "Failed to install dependencies in worktree");
+					}
+				}
+			} else {
+				try {
+					execFileSync("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], {
+						cwd: worktreePath,
+						encoding: "utf-8",
+						stdio: ["pipe", "pipe", "pipe"],
+					});
+				} catch (installError) {
+					gitLogger.warn({ sessionId, error: String(installError) }, "Failed to install dependencies in worktree");
+				}
 			}
 
 			// Copy gitignored directories that agents may need to edit

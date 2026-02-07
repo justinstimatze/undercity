@@ -79,6 +79,7 @@ import { indexTaskOutcome } from "./task-classifier.js";
 import { findRelevantFiles } from "./task-file-patterns.js";
 import { isPlanTask, runPlanner } from "./task-planner.js";
 import { extractMetaTaskType } from "./task-schema.js";
+import { extractPathsFromObjective } from "./task-validator.js";
 import type {
 	ActiveTaskState,
 	BatchMetadata,
@@ -1883,19 +1884,24 @@ export class Orchestrator {
 		const fileOwnership = new Map<string, string>();
 
 		for (const task of batchTasks) {
+			// Primary: pattern-based predictions with learned weighting
 			const predictions = findRelevantFiles(task, 10);
-			// Only consider high-confidence predictions
-			const claimed = predictions.filter((p) => p.score >= 0.5);
+			const highConfidence = predictions.filter((p) => p.score >= 0.5);
 
-			const hasConflict = claimed.some((p) => fileOwnership.has(p.file));
+			// Fallback: regex-extracted file paths from task description.
+			// Covers tasks with no pattern history (new task types, explicit file mentions).
+			const claimedFiles =
+				highConfidence.length > 0 ? highConfidence.map((p) => p.file) : extractPathsFromObjective(task);
+
+			const hasConflict = claimedFiles.some((f) => fileOwnership.has(f));
 
 			if (hasConflict) {
 				defer.push(task);
 				output.warning(`Deferred task (predicted conflict): ${task.substring(0, 60)}`);
 			} else {
 				execute.push(task);
-				for (const p of claimed) {
-					fileOwnership.set(p.file, task);
+				for (const f of claimedFiles) {
+					fileOwnership.set(f, task);
 				}
 			}
 		}
