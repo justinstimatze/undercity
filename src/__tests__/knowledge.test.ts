@@ -16,6 +16,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { embedAllLearnings, getEmbeddingStats, hybridSearch } from "../embeddings.js";
 import { EmbeddingError } from "../errors.js";
 import {
 	addLearning,
@@ -30,6 +31,7 @@ import {
 	markLearningsUsed,
 	pruneUnusedLearnings,
 } from "../knowledge.js";
+import { closeDatabase, getDatabase, upsertLearning } from "../storage.js";
 
 /**
  * Relaxed quality thresholds for testing.
@@ -1879,6 +1881,98 @@ describe("knowledge.ts", () => {
 			// Search for cache-related tasks
 			const results = findRelevantLearnings("Implement query result caching", 5, tempDir, TEST_QUALITY_THRESHOLDS);
 			expect(results.some((l) => l.id === result.learning.id)).toBe(true);
+		});
+	});
+
+	// ==========================================================================
+	// RAG Indexing Integration Tests
+	// ==========================================================================
+
+	describe("RAG Indexing Integration", () => {
+		it("should initialize knowledge extractor with RAG indexing capability", async () => {
+			// Initialize SQLite database schema
+			const db = getDatabase(tempDir);
+			expect(db).toBeDefined();
+
+			// Create 3 diverse learnings for hybrid search (minimum threshold)
+			const learning1: Learning = {
+				id: "learn-rag-1",
+				taskId: "task-rag-1",
+				category: "pattern",
+				content: "Use Zod schemas for API validation with strict type checking",
+				keywords: ["zod", "validation", "api", "schema"],
+				confidence: 0.5,
+				usedCount: 0,
+				successCount: 0,
+				createdAt: new Date().toISOString(),
+			};
+
+			const learning2: Learning = {
+				id: "learn-rag-2",
+				taskId: "task-rag-2",
+				category: "gotcha",
+				content: "TypeScript ESM imports require .js extension for relative imports",
+				keywords: ["typescript", "esm", "import", "extension"],
+				confidence: 0.5,
+				usedCount: 0,
+				successCount: 0,
+				createdAt: new Date().toISOString(),
+			};
+
+			const learning3: Learning = {
+				id: "learn-rag-3",
+				taskId: "task-rag-3",
+				category: "fact",
+				content: "SQLite database uses WAL mode for better concurrency",
+				keywords: ["sqlite", "database", "wal", "concurrency"],
+				confidence: 0.5,
+				usedCount: 0,
+				successCount: 0,
+				createdAt: new Date().toISOString(),
+			};
+
+			// Insert learnings using upsertLearning
+			upsertLearning(learning1, tempDir);
+			upsertLearning(learning2, tempDir);
+			upsertLearning(learning3, tempDir);
+
+			// Generate TF-IDF embeddings for all learnings
+			const embeddedCount = await embedAllLearnings(tempDir);
+
+			// Verify embeddings were created
+			expect(embeddedCount).toBe(3);
+
+			// Verify embedding stats
+			const stats = getEmbeddingStats(tempDir);
+			expect(stats.embeddedCount).toBe(3);
+
+			// Test hybrid search with a query that should match
+			const results = hybridSearch("validation schema typescript", { limit: 5 }, tempDir);
+
+			// Validate results structure
+			expect(Array.isArray(results)).toBe(true);
+			expect(results.length).toBeGreaterThan(0);
+
+			// Verify result structure
+			for (const result of results) {
+				expect(result).toHaveProperty("learningId");
+				expect(result).toHaveProperty("score");
+				expect(result).toHaveProperty("keywordScore");
+				expect(result).toHaveProperty("semanticScore");
+				expect(typeof result.learningId).toBe("string");
+				expect(typeof result.score).toBe("number");
+				expect(typeof result.keywordScore).toBe("number");
+				expect(typeof result.semanticScore).toBe("number");
+			}
+
+			// Verify at least one result has non-zero semantic score (confirms RAG is working)
+			const hasSemanticScore = results.some((r) => r.semanticScore > 0);
+			expect(hasSemanticScore).toBe(true);
+		});
+
+		afterEach(() => {
+			// Close database connection before cleanup
+			closeDatabase();
 		});
 	});
 });
