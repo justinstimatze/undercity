@@ -50,8 +50,14 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 		process.exit(1);
 	}
 
+	// Create AbortController for timer lifecycle management
+	const grindAbortController = new AbortController();
+
 	// Set up cleanup on exit
-	const cleanup = () => releaseGrindLock();
+	const cleanup = () => {
+		grindAbortController.abort();
+		releaseGrindLock();
+	};
 	setupSignalHandlers(cleanup);
 
 	// Parse options
@@ -174,6 +180,14 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 				output.success("Auto-drain complete");
 			});
 		}, durationMs);
+
+		// Cancel drain timer if session is aborted (defense-in-depth with clearTimeout below)
+		grindAbortController.signal.addEventListener("abort", () => {
+			if (drainTimer) {
+				clearTimeout(drainTimer);
+				drainTimer = null;
+			}
+		});
 
 		output.info(`Auto-drain scheduled in ${config.duration} (${formatDuration(durationMs)})`);
 	}
@@ -614,6 +628,7 @@ export async function handleGrind(options: GrindOptions): Promise<void> {
 			await handlePostmortem({});
 		}
 	} catch (error) {
+		grindAbortController.abort();
 		clearGrindProgress();
 		output.error(`Grind error: ${error instanceof Error ? error.message : error}`);
 		process.exit(1);
