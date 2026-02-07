@@ -11,7 +11,7 @@
 | **Learning** | `knowledge.ts`, `task-file-patterns.ts`, `error-fix-patterns.ts`, `capability-ledger.ts`, `decision-tracker.ts` | Knowledge compounding, patterns |
 | **PM** | `automated-pm.ts`, `task-classifier.ts` | Decision resolution, task generation |
 | **RAG** | `rag/{engine,database,hybrid-search,embedder,chunker}.ts` | Vector + FTS5 semantic search |
-| **Infrastructure** | `storage.ts`, `task.ts`, `persistence.ts`, `verification.ts`, `review.ts`, `config.ts`, `constants.ts`, `types.ts`, `output.ts`, `logger.ts` | Storage, verification, config, constants, types |
+| **Infrastructure** | `storage.ts`, `task.ts`, `persistence.ts`, `verification.ts`, `review.ts`, `config.ts`, `constants.ts`, `types.ts`, `output.ts`, `logger.ts`, `context-builder.ts` | Storage, verification, config, constants, types |
 | **Analysis** | `metrics.ts`, `feedback-metrics.ts`, `self-tuning.ts`, `effectiveness-analysis.ts`, `experiment.ts` | Metrics, routing, A/B testing |
 
 ## Task -> File Mapping
@@ -26,7 +26,7 @@
 - Create pre-execution plans with review -> `task-planner.ts` (planTaskWithReview)
 - Check task complexity -> `complexity.ts` or `task-decomposer.ts`
 - Run verification (build/test/lint) -> `verification.ts`
-- Generate codebase context -> `context.ts`
+- Generate codebase context -> `context.ts` (summarization) + `context-builder.ts` (pre-flight preparation)
 - Query symbol definitions -> `ast-index.ts` (ASTIndexManager)
 - Persist state -> `persistence.ts`
 - Store/retrieve learnings -> `knowledge.ts`
