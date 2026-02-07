@@ -106,7 +106,7 @@ const DEFAULT_CONFIG: Required<UndercityRc> = {
 	maxReviewPassesPerTier: 2,
 	maxOpusReviewPasses: 6,
 	auditBash: false,
-	useSystemPromptPreset: false,
+	useSystemPromptPreset: true,
 	useExtendedContext: true,
 	maxBudgetPerTask: 0,
 	autoApprove: false,

@@ -18,6 +18,7 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import chalk from "chalk";
+import { MAX_THINKING_TOKENS_OPUS } from "../constants.js";
 import type { ContextBriefing } from "../context.js";
 import { captureDecision, parseAgentOutputForDecisions } from "../decision-tracker.js";
 import { dualLogger } from "../dual-logger.js";
@@ -550,7 +551,7 @@ export async function runAgentLoop(
 		workingDirectory: config.workingDirectory,
 		maxTurns,
 		stopHooks,
-		maxThinkingTokens: undefined, // No cap: Opus 4.6 adaptive thinking self-selects depth
+		maxThinkingTokens: state.currentModel === "opus" ? MAX_THINKING_TOKENS_OPUS : undefined,
 		preToolUseHooks,
 		useSystemPromptPreset: config.useSystemPromptPreset,
 		taskContextForPrompt,

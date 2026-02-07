@@ -57,6 +57,13 @@ export const MAX_TURNS_PLANNING = 10;
 export const MAX_TURNS_EXTENDED_PLANNING = 15;
 
 // ---------------------------------------------------------------------------
+// Thinking budget
+// ---------------------------------------------------------------------------
+
+/** Cap Opus extended thinking to avoid 150s+ turns */
+export const MAX_THINKING_TOKENS_OPUS = 10_000;
+
+// ---------------------------------------------------------------------------
 // Merge and orchestration
 // ---------------------------------------------------------------------------
 
