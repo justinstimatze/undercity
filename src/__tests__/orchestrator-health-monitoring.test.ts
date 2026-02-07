@@ -68,6 +68,16 @@ describe("orchestrator/health-monitoring", () => {
 			expect(state.recoveryAttempts).toBeInstanceOf(Map);
 			expect(state.recoveryAttempts.size).toBe(0);
 		});
+
+		it("creates initial state with null abort controller", () => {
+			const state = createHealthMonitorState();
+			expect(state.abortController).toBeNull();
+		});
+
+		it("creates initial state with null timeout handle", () => {
+			const state = createHealthMonitorState();
+			expect(state.timeoutHandle).toBeNull();
+		});
 	});
 
 	describe("startHealthMonitoring", () => {
@@ -143,6 +153,84 @@ describe("orchestrator/health-monitoring", () => {
 			expect(scanActiveTasks1).not.toHaveBeenCalled();
 			expect(scanActiveTasks2).toHaveBeenCalledTimes(1);
 		});
+
+		it("creates new AbortController on start", () => {
+			const config = createConfig();
+			const deps: HealthMonitorDependencies = {
+				scanActiveTasks: vi.fn(() => []),
+			};
+
+			startHealthMonitoring(state, config, deps);
+
+			expect(state.abortController).toBeInstanceOf(AbortController);
+			expect(state.abortController?.signal.aborted).toBe(false);
+		});
+
+		it("sets up timeout when timeoutMs is configured", () => {
+			const config = createConfig({ timeoutMs: 5000 });
+			const deps: HealthMonitorDependencies = {
+				scanActiveTasks: vi.fn(() => []),
+			};
+
+			startHealthMonitoring(state, config, deps);
+
+			expect(state.timeoutHandle).not.toBeNull();
+		});
+
+		it("does not set up timeout when timeoutMs is 0", () => {
+			const config = createConfig({ timeoutMs: 0 });
+			const deps: HealthMonitorDependencies = {
+				scanActiveTasks: vi.fn(() => []),
+			};
+
+			startHealthMonitoring(state, config, deps);
+
+			expect(state.timeoutHandle).toBeNull();
+		});
+
+		it("does not set up timeout when timeoutMs is undefined", () => {
+			const config = createConfig(); // timeoutMs not set
+			const deps: HealthMonitorDependencies = {
+				scanActiveTasks: vi.fn(() => []),
+			};
+
+			startHealthMonitoring(state, config, deps);
+
+			expect(state.timeoutHandle).toBeNull();
+		});
+
+		it("stops monitoring when timeout expires", () => {
+			const config = createConfig({ timeoutMs: 5000 });
+			const deps: HealthMonitorDependencies = {
+				scanActiveTasks: vi.fn(() => []),
+			};
+
+			startHealthMonitoring(state, config, deps);
+			expect(state.intervalHandle).not.toBeNull();
+
+			// Advance time past timeout
+			vi.advanceTimersByTime(5000);
+
+			// Should be stopped
+			expect(state.intervalHandle).toBeNull();
+			expect(state.abortController).toBeNull();
+			expect(state.timeoutHandle).toBeNull();
+		});
+
+		it("does not run interval callback when aborted", () => {
+			const config = createConfig({ checkIntervalMs: 1000 });
+			const scanActiveTasks = vi.fn(() => []);
+			const deps: HealthMonitorDependencies = { scanActiveTasks };
+
+			startHealthMonitoring(state, config, deps);
+
+			// Abort the controller
+			state.abortController?.abort();
+
+			// Advance time - should not call scanActiveTasks
+			vi.advanceTimersByTime(1000);
+			expect(scanActiveTasks).not.toHaveBeenCalled();
+		});
 	});
 
 	describe("stopHealthMonitoring", () => {
@@ -182,6 +270,54 @@ describe("orchestrator/health-monitoring", () => {
 			// Should not throw
 			expect(() => stopHealthMonitoring(state)).not.toThrow();
 			expect(state.intervalHandle).toBeNull();
+		});
+
+		it("aborts the AbortController", () => {
+			const state = createHealthMonitorState();
+			const config = createConfig();
+			const deps: HealthMonitorDependencies = { scanActiveTasks: vi.fn(() => []) };
+
+			startHealthMonitoring(state, config, deps);
+			const controller = state.abortController;
+			expect(controller?.signal.aborted).toBe(false);
+
+			stopHealthMonitoring(state);
+
+			expect(controller?.signal.aborted).toBe(true);
+			expect(state.abortController).toBeNull();
+		});
+
+		it("clears timeout handle", () => {
+			const state = createHealthMonitorState();
+			const config = createConfig({ timeoutMs: 10000 });
+			const deps: HealthMonitorDependencies = { scanActiveTasks: vi.fn(() => []) };
+
+			startHealthMonitoring(state, config, deps);
+			expect(state.timeoutHandle).not.toBeNull();
+
+			stopHealthMonitoring(state);
+
+			expect(state.timeoutHandle).toBeNull();
+		});
+
+		it("implements defense-in-depth cleanup", () => {
+			const state = createHealthMonitorState();
+			const config = createConfig({ timeoutMs: 10000 });
+			const deps: HealthMonitorDependencies = { scanActiveTasks: vi.fn(() => []) };
+
+			startHealthMonitoring(state, config, deps);
+
+			// All resources should be allocated
+			expect(state.abortController).not.toBeNull();
+			expect(state.intervalHandle).not.toBeNull();
+			expect(state.timeoutHandle).not.toBeNull();
+
+			stopHealthMonitoring(state);
+
+			// All resources should be cleaned up
+			expect(state.abortController).toBeNull();
+			expect(state.intervalHandle).toBeNull();
+			expect(state.timeoutHandle).toBeNull();
 		});
 	});
 
@@ -428,6 +564,51 @@ describe("orchestrator/health-monitoring", () => {
 			expect(parsed.reason).toBe("Stuck in reviewing phase");
 			expect(parsed.attempt).toBe(1);
 			expect(parsed.message).toContain("Health check detected inactivity");
+		});
+	});
+
+	describe("resource leak prevention", () => {
+		beforeEach(() => {
+			vi.useFakeTimers();
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it("handles rapid start/stop cycles without leaking resources", () => {
+			const state = createHealthMonitorState();
+			const config = createConfig({ timeoutMs: 10000 });
+			const deps: HealthMonitorDependencies = { scanActiveTasks: vi.fn(() => []) };
+
+			// Rapid cycles
+			for (let i = 0; i < 10; i++) {
+				startHealthMonitoring(state, config, deps);
+				expect(state.intervalHandle).not.toBeNull();
+				expect(state.abortController).not.toBeNull();
+				expect(state.timeoutHandle).not.toBeNull();
+
+				stopHealthMonitoring(state);
+				expect(state.intervalHandle).toBeNull();
+				expect(state.abortController).toBeNull();
+				expect(state.timeoutHandle).toBeNull();
+			}
+		});
+
+		it("prevents interval from running after abort", () => {
+			const state = createHealthMonitorState();
+			const config = createConfig({ checkIntervalMs: 1000 });
+			const scanActiveTasks = vi.fn(() => []);
+			const deps: HealthMonitorDependencies = { scanActiveTasks };
+
+			startHealthMonitoring(state, config, deps);
+
+			// Stop monitoring
+			stopHealthMonitoring(state);
+
+			// Advance time - should not call scanActiveTasks
+			vi.advanceTimersByTime(5000);
+			expect(scanActiveTasks).not.toHaveBeenCalled();
 		});
 	});
 });

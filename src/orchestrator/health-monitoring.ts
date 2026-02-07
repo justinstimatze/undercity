@@ -25,6 +25,8 @@ export interface HealthMonitorConfig {
 	attemptRecovery: boolean;
 	/** Max recovery attempts before giving up (default: 2) */
 	maxRecoveryAttempts: number;
+	/** Optional timeout in ms after which monitoring auto-stops (0 = no timeout, default: 0) */
+	timeoutMs?: number;
 }
 
 /**
@@ -45,6 +47,8 @@ export interface HealthMonitorState {
 	abortController: AbortController | null;
 	/** Track recovery attempts per task (taskId → attempts) */
 	recoveryAttempts: Map<string, number>;
+	/** Timeout handle for auto-stop */
+	timeoutHandle: ReturnType<typeof setTimeout> | null;
 }
 
 /**
@@ -61,6 +65,7 @@ export function createHealthMonitorState(): HealthMonitorState {
 		intervalHandle: null,
 		abortController: null,
 		recoveryAttempts: new Map(),
+		timeoutHandle: null,
 	};
 }
 
@@ -96,18 +101,27 @@ export function startHealthMonitoring(
 	// Clear any existing interval
 	stopHealthMonitoring(state);
 
+	// Create new AbortController for this monitoring session
+	const controller = new AbortController();
+	state.abortController = controller;
+
 	output.debug(
 		`Health monitoring started (check every ${config.checkIntervalMs / 1000}s, stuck after ${config.stuckThresholdMs / 1000}s)`,
 	);
 
-	const controller = new AbortController();
-	state.abortController = controller;
+	// Set up optional timeout
+	if (config.timeoutMs && config.timeoutMs > 0) {
+		state.timeoutHandle = setTimeout(() => {
+			output.debug(`Health monitoring timeout reached (${config.timeoutMs}ms)`);
+			controller.abort();
+		}, config.timeoutMs);
+	}
 
+	// Start interval with abort signal checking
 	state.intervalHandle = setInterval(() => {
-		if (controller.signal.aborted) {
-			return;
+		if (!controller.signal.aborted) {
+			checkWorkerHealth(state, config, deps);
 		}
-		checkWorkerHealth(state, config, deps);
 	}, config.checkIntervalMs);
 
 	// Wire abort signal to clear the interval for signal-based cancellation
@@ -133,15 +147,22 @@ export function startHealthMonitoring(
  */
 export function stopHealthMonitoring(state: HealthMonitorState): void {
 	// Signal-based cancellation: abort triggers the listener that clears the interval
+	// Defense-in-depth: also clean up directly to ensure timers are cleared regardless of execution path
 	if (state.abortController) {
 		state.abortController.abort();
 		state.abortController = null;
 	}
-	// Defense-in-depth: clear interval directly in case abort listener didn't fire
+
 	if (state.intervalHandle) {
 		clearInterval(state.intervalHandle);
 		state.intervalHandle = null;
 	}
+
+	if (state.timeoutHandle) {
+		clearTimeout(state.timeoutHandle);
+		state.timeoutHandle = null;
+	}
+
 	// Clear recovery attempts tracking
 	state.recoveryAttempts.clear();
 }
