@@ -221,6 +221,9 @@ export function parseDuration(duration: string): number | null {
 
 /**
  * Format milliseconds as human-readable duration
+ *
+ * @param {number} ms - Duration in milliseconds to format
+ * @returns {string} Human-readable duration string (e.g., "2h 30m" or "45m")
  */
 export function formatDuration(ms: number): string {
 	const hours = Math.floor(ms / (60 * 60 * 1000));
