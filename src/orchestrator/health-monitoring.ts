@@ -41,6 +41,8 @@ export interface HealthMonitorDependencies {
 export interface HealthMonitorState {
 	/** Active interval handle */
 	intervalHandle: ReturnType<typeof setInterval> | null;
+	/** AbortController for signal-based cancellation of health monitoring */
+	abortController: AbortController | null;
 	/** Track recovery attempts per task (taskId → attempts) */
 	recoveryAttempts: Map<string, number>;
 }
@@ -57,6 +59,7 @@ export interface HealthMonitorState {
 export function createHealthMonitorState(): HealthMonitorState {
 	return {
 		intervalHandle: null,
+		abortController: null,
 		recoveryAttempts: new Map(),
 	};
 }
@@ -97,9 +100,23 @@ export function startHealthMonitoring(
 		`Health monitoring started (check every ${config.checkIntervalMs / 1000}s, stuck after ${config.stuckThresholdMs / 1000}s)`,
 	);
 
+	const controller = new AbortController();
+	state.abortController = controller;
+
 	state.intervalHandle = setInterval(() => {
+		if (controller.signal.aborted) {
+			return;
+		}
 		checkWorkerHealth(state, config, deps);
 	}, config.checkIntervalMs);
+
+	// Wire abort signal to clear the interval for signal-based cancellation
+	controller.signal.addEventListener("abort", () => {
+		if (state.intervalHandle) {
+			clearInterval(state.intervalHandle);
+			state.intervalHandle = null;
+		}
+	});
 }
 
 /**
@@ -115,6 +132,12 @@ export function startHealthMonitoring(
  * // state.recoveryAttempts.size === 0
  */
 export function stopHealthMonitoring(state: HealthMonitorState): void {
+	// Signal-based cancellation: abort triggers the listener that clears the interval
+	if (state.abortController) {
+		state.abortController.abort();
+		state.abortController = null;
+	}
+	// Defense-in-depth: clear interval directly in case abort listener didn't fire
 	if (state.intervalHandle) {
 		clearInterval(state.intervalHandle);
 		state.intervalHandle = null;
