@@ -209,6 +209,19 @@ export class WorktreeManager {
 			throw new WorktreeError(`Could not create Undercity directories: ${String(error)}`, "directory-creation");
 		}
 
+		// Enable worktree-specific config once (not per-worktree-creation).
+		// Then pin core.bare=false in the main worktree's config so that even if
+		// concurrent agent processes corrupt .git/config, the main worktree stays
+		// functional (.git/config.worktree takes precedence over .git/config).
+		if (this.isGitRepo()) {
+			try {
+				execGit(["config", "extensions.worktreeConfig", "true"], this.repoRoot);
+				execGit(["config", "--worktree", "core.bare", "false"], this.repoRoot);
+			} catch (error) {
+				gitLogger.warn({ error: String(error) }, "Failed to pin worktree config - bare repo race may still occur");
+			}
+		}
+
 		gitLogger.debug(
 			{
 				repoRoot: this.repoRoot,
@@ -294,14 +307,6 @@ export class WorktreeManager {
 		const baseBranch = this.mainBranch;
 
 		try {
-			// Enable worktreeConfig extension if not already enabled
-			// This allows worktree-specific config without affecting main repo
-			try {
-				execGit(["config", "extensions.worktreeConfig", "true"], this.repoRoot);
-			} catch {
-				// Ignore if already enabled
-			}
-
 			// Create the worktree with a new branch from local main HEAD
 			gitLogger.debug({ baseBranch }, "Creating worktree from local main HEAD");
 			execGit(["worktree", "add", "-b", branchName, worktreePath, baseBranch], this.repoRoot);
