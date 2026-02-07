@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-02-06T19:10:57.088Z",
+  "generatedAt": "2026-02-07T00:20:33.211Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -33,7 +33,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1833,
+          "line": 1845,
           "context": "info"
         },
         {
@@ -58,7 +58,7 @@
         },
         {
           "file": "knowledge.ts",
-          "line": 230,
+          "line": 231,
           "context": "if"
         },
         {
@@ -157,7 +157,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1834,
+          "line": 1846,
           "context": "info"
         },
         {
@@ -328,7 +328,7 @@
       "calledFrom": [
         {
           "file": "orchestrator.ts",
-          "line": 1266,
+          "line": 1267,
           "context": "if"
         },
         {
@@ -450,7 +450,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1691,
+          "line": 1703,
           "context": "info"
         },
         {
@@ -466,12 +466,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 1680,
+          "line": 1692,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1697,
+          "line": 1709,
           "context": "info"
         },
         {

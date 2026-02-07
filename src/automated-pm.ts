@@ -1372,6 +1372,15 @@ export async function pmPropose(
 		.map((t) => t.objective)
 		.join("\n");
 
+	const failedTasks = validTasks
+		.filter((t) => t.status === "failed")
+		.slice(-10)
+		.map((t) => {
+			const errorSnippet = t.error ? t.error.slice(0, 120) : "unknown error";
+			return `- ${t.objective} (${errorSnippet})`;
+		})
+		.join("\n");
+
 	// Gather system health context for self-aware task generation
 	const grindSummary = getLastGrindSummary();
 	const effectivenessReport = analyzeEffectiveness(stateDir);
@@ -1419,6 +1428,9 @@ ${completedRecently || "No recent completions"}
 PENDING TASKS (don't duplicate these):
 ${pendingTasks || "No pending tasks"}
 
+PREVIOUSLY FAILED TASKS (do NOT propose similar work):
+${failedTasks || "No recent failures"}
+
 RISKY AREAS (from patterns):
 ${riskyAreas || "No risky areas identified"}
 
@@ -1427,7 +1439,7 @@ YOUR TASK:
 1. Identify gaps, technical debt, or missing features
 2. Consider what would make this codebase better
 3. Propose tasks across DIFFERENT AMBITION LEVELS (see below)
-4. Avoid duplicating pending or recently completed tasks
+4. Avoid duplicating pending, recently completed, or previously failed tasks
 5. If system health shows issues (low success rate, broken learning systems), prioritize fixing those
 
 === REQUIRED AMBITION DISTRIBUTION ===
