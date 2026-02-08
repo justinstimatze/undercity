@@ -11,7 +11,16 @@
  * - Token usage tracked for cost analysis
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	appendFileSync,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	statSync,
+	unwatchFile,
+	watchFile,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { ValidationError, WorktreeError } from "./errors.js";
 
@@ -848,4 +857,67 @@ export function getCurrentGrindStatus(): {
 		fastPathComplete: 0,
 		fastPathFailed: 0,
 	};
+}
+
+/**
+ * Stream events in real-time (tail -f behavior)
+ *
+ * Displays existing events and watches for new ones until interrupted.
+ * Uses fs.watchFile to monitor the events file for changes.
+ *
+ * @param formatEvent - Function to format an event for display
+ * @param onStop - Optional callback when streaming stops
+ */
+export function streamEvents(formatEvent: (event: unknown) => void, onStop?: () => void): void {
+	const path = getEventsPath();
+	let lastSize = 0;
+	let stopped = false;
+
+	// Display existing events first
+	const existing = readRecentEvents(50);
+	for (const event of existing) {
+		formatEvent(event);
+	}
+
+	// Track current file size
+	if (existsSync(path)) {
+		lastSize = statSync(path).size;
+	}
+
+	// Watch for changes
+	const watcher = () => {
+		if (stopped || !existsSync(path)) return;
+
+		const currentSize = statSync(path).size;
+		if (currentSize > lastSize) {
+			// Read new content
+			const content = readFileSync(path, "utf-8");
+			const newLines = content.slice(lastSize).trim().split("\n").filter(Boolean);
+
+			for (const line of newLines) {
+				try {
+					const event = JSON.parse(line) as GrindEvent;
+					formatEvent(event);
+				} catch {
+					// Skip invalid lines
+				}
+			}
+
+			lastSize = currentSize;
+		}
+	};
+
+	// Poll every 500ms for changes
+	watchFile(path, { interval: 500 }, watcher);
+
+	// Setup signal handlers for cleanup
+	const cleanup = () => {
+		if (stopped) return;
+		stopped = true;
+		unwatchFile(path, watcher);
+		if (onStop) onStop();
+	};
+
+	process.on("SIGINT", cleanup);
+	process.on("SIGTERM", cleanup);
 }

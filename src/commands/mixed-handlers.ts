@@ -65,6 +65,7 @@ export interface StatusOptions {
 	count?: string;
 	human?: boolean;
 	events?: boolean;
+	follow?: boolean;
 }
 
 export interface TuningOptions {
@@ -748,7 +749,57 @@ export async function handleEmergency(options: EmergencyOptions): Promise<void> 
  * Handle the status command
  */
 export async function handleStatus(options: StatusOptions): Promise<void> {
-	const { getCurrentGrindStatus, readRecentEvents } = await import("../grind-events.js");
+	const { getCurrentGrindStatus, readRecentEvents, streamEvents } = await import("../grind-events.js");
+
+	// Follow mode - stream events in real-time
+	if (options.follow) {
+		const formatEvent = (event: unknown) => {
+			const e = event as {
+				ts: string;
+				type: string;
+				task?: string;
+				model?: string;
+				attempts?: number;
+				secs?: number;
+				reason?: string;
+				error?: string;
+				tasks?: number;
+				parallelism?: number;
+				ok?: number;
+				fail?: number;
+				mins?: number;
+			};
+			const time = new Date(e.ts).toLocaleTimeString();
+			const taskPart = e.task ? ` [${e.task.slice(0, 12)}]` : "";
+
+			if (options.human) {
+				// Construct message from event type and data
+				let msg = "";
+				if (e.type === "task_complete") {
+					msg = `${e.model} in ${e.attempts} attempts (${e.secs}s)`;
+				} else if (e.type === "task_failed") {
+					msg = `${e.reason} [${e.model}] ${e.error || ""}`;
+				} else if (e.type === "grind_start") {
+					msg = `${e.tasks} tasks, parallelism ${e.parallelism}`;
+				} else if (e.type === "grind_end") {
+					msg = `${e.ok} ok, ${e.fail} fail in ${e.mins}m`;
+				}
+				console.log(`${chalk.dim(time)}${taskPart} ${chalk.bold(e.type)} ${msg}`);
+			} else {
+				console.log(JSON.stringify(event));
+			}
+		};
+
+		streamEvents(formatEvent, () => {
+			if (options.human) {
+				console.log(chalk.dim("\nStopped following events"));
+			}
+			process.exit(0);
+		});
+
+		// Keep process alive
+		return new Promise(() => {});
+	}
 
 	if (options.events) {
 		const count = Number.parseInt(options.count || "20", 10);

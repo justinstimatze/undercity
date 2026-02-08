@@ -188,6 +188,7 @@ export const mixedCommands: CommandModule = {
 			.option("-n, --count <n>", "Number of recent events to show", "20")
 			.option("--human", "Output human-readable format instead of JSON")
 			.option("--events", "Show raw events instead of summary")
+			.option("-f, --follow", "Stream events in real-time (like tail -f)")
 			.action((options: StatusOptions) => handleStatus(options));
 
 		// Index command - build/update AST index for smart context
