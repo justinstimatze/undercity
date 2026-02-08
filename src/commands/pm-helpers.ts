@@ -6,6 +6,7 @@
 
 import chalk from "chalk";
 import type { TaskProposal } from "../automated-pm.js";
+import { sessionLogger } from "../logger.js";
 import { classifyTask, hasClassificationData } from "../task-classifier.js";
 import { getTaskType } from "../task-schema.js";
 import { validateTaskObjective, validateTaskPaths } from "../task-security.js";
@@ -142,6 +143,15 @@ export async function addProposalsToBoard(
 				const classification = await classifyTask(p.objective);
 				if (classification.recommendation === "reject") {
 					rejected++;
+					sessionLogger.info(
+						{
+							objective: p.objective.substring(0, 80),
+							riskScore: classification.riskScore,
+							confidence: classification.confidence,
+							reason: classification.riskFactors[0] ?? "Similar tasks failed",
+						},
+						"Proposal rejected by classifier",
+					);
 					if (isHuman) {
 						console.log(chalk.red(`  ✗ Rejected (high risk): ${p.objective.substring(0, 50)}...`));
 						const riskPct = (classification.riskScore * 100).toFixed(0);

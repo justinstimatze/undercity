@@ -1436,26 +1436,43 @@ ${riskyAreas || "No risky areas identified"}
 
 ${systemHealthContext ? `SYSTEM HEALTH (self-analysis):\n${systemHealthContext}\n` : ""}
 YOUR TASK:
-1. Identify gaps, technical debt, or missing features
-2. Consider what would make this codebase better
+1. Propose tasks that deliver NEW FUNCTIONALITY or FIX REAL BUGS - not defensive coding busywork
+2. Prioritize features from the product vision over generic code quality improvements
 3. Propose tasks across DIFFERENT AMBITION LEVELS (see below)
 4. Avoid duplicating pending, recently completed, or previously failed tasks
 5. If system health shows issues (low success rate, broken learning systems), prioritize fixing those
+
+=== VALUE GUIDANCE ===
+
+HIGH-VALUE tasks (prefer these):
+- New user-facing features or CLI commands
+- Bug fixes for known broken behavior
+- Performance improvements with measurable impact
+- Integration with external tools or services
+- Workflow improvements that save user time
+
+LOW-VALUE tasks (avoid these):
+- Adding try-catch/error handling to code that works fine
+- Adding logging, JSDoc, or comments to existing code
+- Adding AbortController/timeout to things that don't need it
+- Wrapping working code in defensive patterns "just in case"
+- Any task that starts with "Add" followed by a defensive coding pattern
 
 === REQUIRED AMBITION DISTRIBUTION ===
 
 You MUST generate proposals across these ambition levels:
 
-**INCREMENTAL (1-2 proposals)**: Single file, focused changes
-- Example: "Add try-catch wrapper to fetchUser() in src/api/users.ts"
+**INCREMENTAL (1 proposal)**: Single file, focused changes
+- Example: "Fix merge-queue retry logic to preserve error context on rebase failure"
 - Requires: Specific file path + specific function/change
 
 **MODERATE (1-2 proposals)**: Multi-file, feature enhancements
-- Example: "Add structured logging to all worker/* modules with task context"
+- Example: "Add --dry-run flag to grind command that shows planned execution without running"
 - Requires: Clear module/directory scope + specific improvement
 
-**AMBITIOUS (1 proposal)**: Architectural, cross-cutting improvements
-- Example: "Refactor verification to run typecheck, lint, and tests in parallel"
+**AMBITIOUS (2 proposals)**: Architectural, cross-cutting improvements
+- Example: "Implement parallel merge queue with conflict-aware batching"
+- Example: "Add interactive task dashboard with real-time worker status"
 - Requires: Clear direction and expected outcome (will be decomposed before execution)
 - May span multiple modules or introduce new architectural patterns
 
@@ -1474,6 +1491,13 @@ WRONG (unbounded scope):
 - "Audit all TypeScript files for type safety" (never ends)
 - "Comprehensive security review" (too broad)
 
+WRONG (defensive busywork - no real value):
+- "Add try-catch wrapper to X" (defensive coding, not a feature)
+- "Add structured logging to Y" (logging is not a deliverable)
+- "Add AbortController timeout to Z" (micro-optimization, not a feature)
+- "Add JSDoc comments to W" (documentation churn, not a feature)
+- "Add input validation to V" (unless there's a known bug from missing validation)
+
 Every task MUST produce a code change (add/modify/delete code or config files).
 
 Output task proposals in this exact JSON format:
@@ -1491,7 +1515,7 @@ Output task proposals in this exact JSON format:
 ]
 \`\`\`
 
-Generate 4-5 proposals with the required ambition distribution.`;
+Generate 5 proposals with the required ambition distribution (1 incremental, 1-2 moderate, 2 ambitious).`;
 
 	try {
 		let resultJson = "";

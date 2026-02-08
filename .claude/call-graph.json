@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-02-07T23:13:33.407Z",
+  "generatedAt": "2026-02-08T03:45:54.295Z",
   "functions": [
     {
       "function": "findRelevantLearnings",
@@ -23,7 +23,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1845,
+          "line": 1869,
           "context": "info"
         },
         {
@@ -157,7 +157,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1846,
+          "line": 1870,
           "context": "info"
         },
         {
@@ -455,7 +455,7 @@
         },
         {
           "file": "automated-pm.ts",
-          "line": 1703,
+          "line": 1727,
           "context": "info"
         },
         {
@@ -471,12 +471,12 @@
       "calledFrom": [
         {
           "file": "automated-pm.ts",
-          "line": 1692,
+          "line": 1716,
           "context": "info"
         },
         {
           "file": "automated-pm.ts",
-          "line": 1709,
+          "line": 1733,
           "context": "info"
         },
         {
@@ -486,7 +486,7 @@
         },
         {
           "file": "grind/index.ts",
-          "line": 305,
+          "line": 327,
           "context": "import"
         }
       ]

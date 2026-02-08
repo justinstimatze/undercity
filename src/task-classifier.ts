@@ -134,14 +134,27 @@ export async function classifyTask(objective: string, stateDir?: string): Promis
 	// More matches = higher confidence (capped at 1.0)
 	const confidence = Math.min(totalWeight / 3, 1);
 
-	const recommendation =
-		riskScore >= RISK_THRESHOLD_REJECT ? "reject" : riskScore >= RISK_THRESHOLD_REVIEW ? "review" : "proceed";
+	const isLowConfidence = confidence < 0.3;
+	const recommendation = isLowConfidence
+		? riskScore >= RISK_THRESHOLD_REJECT
+			? "review"
+			: "proceed"
+		: riskScore >= RISK_THRESHOLD_REJECT
+			? "reject"
+			: riskScore >= RISK_THRESHOLD_REVIEW
+				? "review"
+				: "proceed";
+
+	if (isLowConfidence && riskScore >= RISK_THRESHOLD_REJECT) {
+		riskFactors.push("Low confidence classification - downgraded from reject to review");
+	}
 
 	logger.debug(
 		{
 			objective: objective.substring(0, 50),
 			riskScore,
 			confidence,
+			isLowConfidence,
 			recommendation,
 			similarCount: similarTasks.length,
 		},
