@@ -175,6 +175,165 @@ async function getModelDistribution(): Promise<Record<"haiku" | "sonnet" | "opus
 	return counts;
 }
 
+/**
+ * Calculate duration estimates by complexity level and model
+ * Returns average duration in milliseconds for each combination
+ */
+async function getDurationEstimates(): Promise<{
+	byComplexity: Record<string, { avgDurationMs: number; count: number; p50: number; p90: number }>;
+	byModel: Record<string, { avgDurationMs: number; count: number; p50: number; p90: number }>;
+	overall: { avgDurationMs: number; count: number; p50: number; p90: number };
+}> {
+	const metrics = await loadTaskMetrics();
+
+	// Filter to successful tasks with valid duration
+	const validMetrics = metrics.filter((m) => m.success && m.durationMs > 0);
+
+	if (validMetrics.length === 0) {
+		return {
+			byComplexity: {},
+			byModel: {},
+			overall: { avgDurationMs: 0, count: 0, p50: 0, p90: 0 },
+		};
+	}
+
+	// Helper to calculate percentiles
+	const calculatePercentiles = (durations: number[]): { p50: number; p90: number } => {
+		if (durations.length === 0) return { p50: 0, p90: 0 };
+		const sorted = [...durations].sort((a, b) => a - b);
+		const p50Index = Math.floor(sorted.length * 0.5);
+		const p90Index = Math.floor(sorted.length * 0.9);
+		return {
+			p50: sorted[p50Index] || 0,
+			p90: sorted[p90Index] || sorted[sorted.length - 1] || 0,
+		};
+	};
+
+	// Group by complexity level
+	const byComplexity: Record<string, number[]> = {};
+	for (const m of validMetrics) {
+		const level = m.complexityLevel || "standard";
+		if (!byComplexity[level]) byComplexity[level] = [];
+		byComplexity[level].push(m.durationMs);
+	}
+
+	// Group by model
+	const byModel: Record<string, number[]> = {};
+	for (const m of validMetrics) {
+		const model = m.finalModel || "sonnet";
+		if (!byModel[model]) byModel[model] = [];
+		byModel[model].push(m.durationMs);
+	}
+
+	// Calculate stats for each group
+	const complexityStats: Record<string, { avgDurationMs: number; count: number; p50: number; p90: number }> = {};
+	for (const [level, durations] of Object.entries(byComplexity)) {
+		const percentiles = calculatePercentiles(durations);
+		complexityStats[level] = {
+			avgDurationMs: durations.reduce((sum, d) => sum + d, 0) / durations.length,
+			count: durations.length,
+			p50: percentiles.p50,
+			p90: percentiles.p90,
+		};
+	}
+
+	const modelStats: Record<string, { avgDurationMs: number; count: number; p50: number; p90: number }> = {};
+	for (const [model, durations] of Object.entries(byModel)) {
+		const percentiles = calculatePercentiles(durations);
+		modelStats[model] = {
+			avgDurationMs: durations.reduce((sum, d) => sum + d, 0) / durations.length,
+			count: durations.length,
+			p50: percentiles.p50,
+			p90: percentiles.p90,
+		};
+	}
+
+	// Overall stats
+	const allDurations = validMetrics.map((m) => m.durationMs);
+	const overallPercentiles = calculatePercentiles(allDurations);
+	const overall = {
+		avgDurationMs: allDurations.reduce((sum, d) => sum + d, 0) / allDurations.length,
+		count: allDurations.length,
+		p50: overallPercentiles.p50,
+		p90: overallPercentiles.p90,
+	};
+
+	return { byComplexity: complexityStats, byModel: modelStats, overall };
+}
+
+/**
+ * Calculate prediction accuracy metrics by comparing predicted vs actual durations
+ * Uses historical data where predictions were recorded
+ */
+async function getPredictionAccuracy(): Promise<{
+	mae: number; // Mean Absolute Error in ms
+	rmse: number; // Root Mean Squared Error in ms
+	withinThreshold: number; // % of predictions within 20% of actual
+	sampleSize: number;
+} | null> {
+	const metrics = await loadTaskMetrics();
+
+	// For now, we don't have stored predictions in the schema
+	// This would require storing predicted duration when task starts
+	// Return null to indicate no prediction data available yet
+	// Future enhancement: add predictedDurationMs field to TaskMetrics
+
+	// As a placeholder, calculate prediction accuracy using avg duration by complexity
+	const validMetrics = metrics.filter((m) => m.success && m.durationMs > 0 && m.complexityLevel);
+
+	if (validMetrics.length < 5) {
+		return null; // Not enough data
+	}
+
+	// Build a simple prediction model: avg duration by complexity
+	const complexityAvg: Record<string, number> = {};
+	const complexityCounts: Record<string, number> = {};
+
+	for (const m of validMetrics) {
+		const level = m.complexityLevel as string;
+		complexityAvg[level] = (complexityAvg[level] || 0) + m.durationMs;
+		complexityCounts[level] = (complexityCounts[level] || 0) + 1;
+	}
+
+	for (const level of Object.keys(complexityAvg)) {
+		complexityAvg[level] /= complexityCounts[level];
+	}
+
+	// Calculate errors using leave-one-out cross-validation approach
+	let sumAbsError = 0;
+	let sumSqError = 0;
+	let withinThresholdCount = 0;
+
+	for (const m of validMetrics) {
+		const level = m.complexityLevel as string;
+		const predicted = complexityAvg[level] || 0;
+		const actual = m.durationMs;
+
+		const absError = Math.abs(predicted - actual);
+		const sqError = (predicted - actual) ** 2;
+		const percentError = actual > 0 ? absError / actual : 0;
+
+		sumAbsError += absError;
+		sumSqError += sqError;
+
+		if (percentError <= 0.2) {
+			// Within 20%
+			withinThresholdCount++;
+		}
+	}
+
+	const mae = sumAbsError / validMetrics.length;
+	const rmse = Math.sqrt(sumSqError / validMetrics.length);
+	const withinThreshold = (withinThresholdCount / validMetrics.length) * 100;
+
+	return {
+		mae,
+		rmse,
+		withinThreshold,
+		sampleSize: validMetrics.length,
+	};
+}
+
 export function launchMetricsDashboard(): void {
 	const screen = blessed.screen({
 		smartCSR: true,
@@ -266,7 +425,7 @@ export function launchMetricsDashboard(): void {
 	}) as LogWidget;
 
 	// BOTTOM RIGHT - Overall Gauges
-	const successGauge = grid.set(9, 8, 3, 4, contrib.gauge, {
+	const successGauge = grid.set(9, 8, 1.5, 4, contrib.gauge, {
 		label: " SUCCESS RATE ",
 		stroke: "green",
 		fill: "black",
@@ -274,18 +433,35 @@ export function launchMetricsDashboard(): void {
 		style: { border: { fg: "green" } },
 	}) as GaugeWidget;
 
+	// NEW - Duration Estimates by Complexity
+	const durationEstimatesBox = grid.set(10.5, 8, 1.5, 4, blessed.box, {
+		label: " DURATION ESTIMATES ",
+		tags: true,
+		border: { type: "line" },
+		style: {
+			fg: "blue",
+			bg: "black",
+			border: { fg: "blue" },
+			label: { fg: "white", bold: true },
+		},
+	}) as LogWidget;
+
 	// Track update state
 	let lastUpdateTime = 0;
 	let complexityStats: Record<string, { total: number; successful: number; rate: number }> | null = null;
 	let dailyCostData: { dates: string[]; costs: number[] } | null = null;
 	let modelDistribution: Record<"haiku" | "sonnet" | "opus", number> | null = null;
+	let durationEstimates: Awaited<ReturnType<typeof getDurationEstimates>> | null = null;
+	let predictionAccuracy: Awaited<ReturnType<typeof getPredictionAccuracy>> | null = null;
 
 	async function loadHistoricalData(): Promise<void> {
 		try {
-			[complexityStats, dailyCostData, modelDistribution] = await Promise.all([
+			[complexityStats, dailyCostData, modelDistribution, durationEstimates, predictionAccuracy] = await Promise.all([
 				getComplexityStats(),
 				getDailyCostData(14),
 				getModelDistribution(),
+				getDurationEstimates(),
+				getPredictionAccuracy(),
 			]);
 		} catch {
 			// Ignore errors, data will be null
@@ -348,40 +524,6 @@ export function launchMetricsDashboard(): void {
 			costBox.setContent(`{gray-fg}No cost data{/}`);
 		}
 
-		// SESSION STATS
-		if (liveMetrics) {
-			const sessionMs = Date.now() - liveMetrics.sessionStartedAt;
-			const sessionMin = Math.floor(sessionMs / 60000);
-			const sessionHr = Math.floor(sessionMin / 60);
-			const minRemaining = sessionMin % 60;
-			const sessionStr = sessionHr > 0 ? `${sessionHr}h ${minRemaining}m` : `${sessionMin}m`;
-
-			const successRate =
-				liveMetrics.queries.total > 0 ? (liveMetrics.queries.successful / liveMetrics.queries.total) * 100 : 0;
-
-			const cacheRate =
-				liveMetrics.tokens.input + liveMetrics.tokens.cacheRead > 0
-					? (liveMetrics.tokens.cacheRead / (liveMetrics.tokens.input + liveMetrics.tokens.cacheRead)) * 100
-					: 0;
-
-			sessionBox.setContent(
-				`{bold}Session Duration:{/}\n  {green-fg}${sessionStr}{/}\n\n` +
-					`{bold}Queries:{/}\n` +
-					`  Total:    ${liveMetrics.queries.total}\n` +
-					`  Success:  {green-fg}${liveMetrics.queries.successful}{/}\n` +
-					`  Failed:   {red-fg}${liveMetrics.queries.failed}{/}\n` +
-					`  Limited:  {yellow-fg}${liveMetrics.queries.rateLimited}{/}\n\n` +
-					`{bold}Success Rate:{/} {green-fg}${successRate.toFixed(1)}%{/}\n` +
-					`{bold}Cache Hit:{/}    {cyan-fg}${cacheRate.toFixed(1)}%{/}`,
-			);
-
-			// Update success gauge
-			successGauge.setPercent(Math.round(successRate));
-		} else {
-			sessionBox.setContent(`{gray-fg}No session data{/}`);
-			successGauge.setPercent(0);
-		}
-
 		// Reload historical data every 30 seconds
 		const now = Date.now();
 		if (now - lastUpdateTime > 30000) {
@@ -438,6 +580,112 @@ export function launchMetricsDashboard(): void {
 			complexityBox.setContent(content || "{gray-fg}No complexity data available{/}");
 		} else {
 			complexityBox.setContent("{gray-fg}Loading historical metrics...{/}");
+		}
+
+		// DURATION ESTIMATES
+		if (durationEstimates?.byComplexity) {
+			const levels = ["trivial", "simple", "standard", "complex", "critical"];
+			let content = "";
+
+			// Show overall estimate first
+			if (durationEstimates.overall.count > 0) {
+				const avgMin = (durationEstimates.overall.avgDurationMs / 60000).toFixed(1);
+				const p50Min = (durationEstimates.overall.p50 / 60000).toFixed(1);
+				const p90Min = (durationEstimates.overall.p90 / 60000).toFixed(1);
+				content += `{bold}Overall:{/} {cyan-fg}${avgMin}m{/} {dim}(P50: ${p50Min}m, P90: ${p90Min}m){/}\n\n`;
+			}
+
+			// Show by complexity level
+			for (const level of levels) {
+				const stats = durationEstimates.byComplexity[level];
+				if (!stats || stats.count === 0) continue;
+
+				const avgMin = (stats.avgDurationMs / 60000).toFixed(1);
+				const p90Min = (stats.p90 / 60000).toFixed(1);
+
+				// Color code by duration: green (<5m), yellow (5-15m), red (>15m)
+				const color = stats.avgDurationMs < 300000 ? "green" : stats.avgDurationMs < 900000 ? "yellow" : "red";
+
+				content += `{dim}${level.padEnd(8)}{/} {${color}-fg}${avgMin}m{/} {dim}(P90: ${p90Min}m){/}\n`;
+			}
+
+			durationEstimatesBox.setContent(content || "{gray-fg}No duration data{/}");
+		} else {
+			durationEstimatesBox.setContent("{gray-fg}Insufficient data for estimates{/}\n\n{dim}Need 5+ completed tasks{/}");
+		}
+
+		// Update session box to include prediction accuracy if available
+		if (liveMetrics && predictionAccuracy) {
+			const sessionMs = Date.now() - liveMetrics.sessionStartedAt;
+			const sessionMin = Math.floor(sessionMs / 60000);
+			const sessionHr = Math.floor(sessionMin / 60);
+			const minRemaining = sessionMin % 60;
+			const sessionStr = sessionHr > 0 ? `${sessionHr}h ${minRemaining}m` : `${sessionMin}m`;
+
+			const successRate =
+				liveMetrics.queries.total > 0 ? (liveMetrics.queries.successful / liveMetrics.queries.total) * 100 : 0;
+
+			const cacheRate =
+				liveMetrics.tokens.input + liveMetrics.tokens.cacheRead > 0
+					? (liveMetrics.tokens.cacheRead / (liveMetrics.tokens.input + liveMetrics.tokens.cacheRead)) * 100
+					: 0;
+
+			const maeMin = (predictionAccuracy.mae / 60000).toFixed(1);
+			const accuracyColor =
+				predictionAccuracy.withinThreshold >= 70
+					? "green"
+					: predictionAccuracy.withinThreshold >= 50
+						? "yellow"
+						: "red";
+
+			sessionBox.setContent(
+				`{bold}Session Duration:{/}\n  {green-fg}${sessionStr}{/}\n\n` +
+					`{bold}Queries:{/}\n` +
+					`  Total:    ${liveMetrics.queries.total}\n` +
+					`  Success:  {green-fg}${liveMetrics.queries.successful}{/}\n` +
+					`  Failed:   {red-fg}${liveMetrics.queries.failed}{/}\n` +
+					`  Limited:  {yellow-fg}${liveMetrics.queries.rateLimited}{/}\n\n` +
+					`{bold}Success Rate:{/} {green-fg}${successRate.toFixed(1)}%{/}\n` +
+					`{bold}Cache Hit:{/}    {cyan-fg}${cacheRate.toFixed(1)}%{/}\n\n` +
+					`{bold}Prediction Accuracy:{/}\n` +
+					`  MAE: {dim}${maeMin}m{/}\n` +
+					`  Within 20%: {${accuracyColor}-fg}${predictionAccuracy.withinThreshold.toFixed(0)}%{/}`,
+			);
+
+			// Update success gauge
+			successGauge.setPercent(Math.round(successRate));
+		} else if (liveMetrics) {
+			// Original session box content when no prediction accuracy
+			const sessionMs = Date.now() - liveMetrics.sessionStartedAt;
+			const sessionMin = Math.floor(sessionMs / 60000);
+			const sessionHr = Math.floor(sessionMin / 60);
+			const minRemaining = sessionMin % 60;
+			const sessionStr = sessionHr > 0 ? `${sessionHr}h ${minRemaining}m` : `${sessionMin}m`;
+
+			const successRate =
+				liveMetrics.queries.total > 0 ? (liveMetrics.queries.successful / liveMetrics.queries.total) * 100 : 0;
+
+			const cacheRate =
+				liveMetrics.tokens.input + liveMetrics.tokens.cacheRead > 0
+					? (liveMetrics.tokens.cacheRead / (liveMetrics.tokens.input + liveMetrics.tokens.cacheRead)) * 100
+					: 0;
+
+			sessionBox.setContent(
+				`{bold}Session Duration:{/}\n  {green-fg}${sessionStr}{/}\n\n` +
+					`{bold}Queries:{/}\n` +
+					`  Total:    ${liveMetrics.queries.total}\n` +
+					`  Success:  {green-fg}${liveMetrics.queries.successful}{/}\n` +
+					`  Failed:   {red-fg}${liveMetrics.queries.failed}{/}\n` +
+					`  Limited:  {yellow-fg}${liveMetrics.queries.rateLimited}{/}\n\n` +
+					`{bold}Success Rate:{/} {green-fg}${successRate.toFixed(1)}%{/}\n` +
+					`{bold}Cache Hit:{/}    {cyan-fg}${cacheRate.toFixed(1)}%{/}`,
+			);
+
+			// Update success gauge
+			successGauge.setPercent(Math.round(successRate));
+		} else {
+			sessionBox.setContent(`{gray-fg}No session data{/}`);
+			successGauge.setPercent(0);
 		}
 
 		screen.render();
