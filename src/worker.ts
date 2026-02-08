@@ -757,6 +757,8 @@ export class TaskWorker {
 			recordTokenUsage: (message: unknown, model: ModelTier) => this.metricsTracker.recordTokenUsage(message, model),
 			buildAssignmentContext: () => this.buildAssignmentContext(),
 			buildHandoffContextSection: () => this.buildHandoffContextSection(),
+			onHeartbeat: () => this.updateHeartbeat(),
+			shouldWrapUp: () => this.shouldWrapUp,
 		};
 	}
 
@@ -830,6 +832,34 @@ export class TaskWorker {
 	}
 
 	/**
+	 * Heartbeat callback for the agent loop.
+	 * Throttled to once per 30s to avoid excessive I/O.
+	 * Updates the checkpoint timestamp and checks for nudges.
+	 */
+	private updateHeartbeat(): void {
+		const now = Date.now();
+		const HEARTBEAT_INTERVAL_MS = 30_000;
+		if (now - this.lastHeartbeatMs < HEARTBEAT_INTERVAL_MS) {
+			return;
+		}
+		this.lastHeartbeatMs = now;
+
+		try {
+			const checkpoint: TaskCheckpoint = {
+				phase: "executing",
+				model: this.currentModel,
+				attempts: this.attempts,
+				savedAt: new Date(),
+			};
+			updateTaskCheckpoint(this.workingDirectory, checkpoint);
+		} catch {
+			// Silent failure - heartbeats are optional
+		}
+
+		this.checkForNudge();
+	}
+
+	/**
 	 * Check for and respond to health check nudge files from the orchestrator.
 	 * Nudge files are written by the orchestrator when a worker appears stuck.
 	 */
@@ -847,10 +877,19 @@ export class TaskWorker {
 				reason: string;
 				attempt: number;
 				message: string;
+				action?: "wrap_up" | "continue";
 			};
 
 			output.debug(`Received health check nudge: ${nudge.reason} (attempt ${nudge.attempt})`);
-			sessionLogger.info({ reason: nudge.reason, attempt: nudge.attempt }, "Worker received health check nudge");
+			sessionLogger.info(
+				{ reason: nudge.reason, attempt: nudge.attempt, action: nudge.action },
+				"Worker received health check nudge",
+			);
+
+			if (nudge.action === "wrap_up") {
+				sessionLogger.warn("Health monitor requested wrap-up on final recovery attempt");
+				this.shouldWrapUp = true;
+			}
 
 			// Clear the nudge file to acknowledge receipt
 			unlinkSync(nudgePath);
@@ -1178,6 +1217,9 @@ export class TaskWorker {
 		this.errorHistory = [];
 		// Clear review output from previous task
 		this.lastReviewOutput = "";
+		// Reset heartbeat and wrap-up state for new task
+		this.lastHeartbeatMs = 0;
+		this.shouldWrapUp = false;
 
 		this.saveCheckpoint("starting");
 		this.cleanupDirtyState();
@@ -2192,6 +2234,12 @@ Be concise and specific. Focus on actionable insights.`;
 
 	/** Post-mortem analysis from previous tier (only set on escalation) */
 	private lastPostMortem?: string;
+
+	/** Timestamp of last heartbeat sent to health monitor (throttle to avoid excessive I/O) */
+	private lastHeartbeatMs: number = 0;
+
+	/** Whether health monitor has requested early wrap-up */
+	private shouldWrapUp: boolean = false;
 
 	/**
 	 * Decide whether to escalate to a better model

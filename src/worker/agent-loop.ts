@@ -147,6 +147,10 @@ export interface AgentLoopDependencies {
 	buildAssignmentContext: () => string;
 	/** Build handoff context section */
 	buildHandoffContextSection: () => string;
+	/** Heartbeat callback - called during agent loop to signal liveness */
+	onHeartbeat?: () => void;
+	/** Check if the worker should wrap up early (nudge from health monitor) */
+	shouldWrapUp?: () => boolean;
 }
 
 // =============================================================================
@@ -580,9 +584,20 @@ export async function runAgentLoop(
 	const timing = createMessageTiming();
 
 	// Execute agent query loop
+	let wrapUpInjected = false;
 	for await (const message of query(queryParams)) {
 		timing.msgCount++;
 		const msg = message as Record<string, unknown>;
+
+		// Signal liveness to health monitor
+		deps.onHeartbeat?.();
+
+		// Check if health monitor wants us to wrap up
+		if (!wrapUpInjected && deps.shouldWrapUp?.()) {
+			wrapUpInjected = true;
+			sessionLogger.warn("Health monitor requested wrap-up - breaking agent loop");
+			break;
+		}
 
 		// Log slow messages
 		logSlowMessageGap(msg, timing);

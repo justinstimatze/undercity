@@ -12,6 +12,20 @@ import { readTaskAssignment } from "../persistence.js";
 import type { ActiveTaskState } from "../types.js";
 
 /**
+ * Phase-specific stuck thresholds.
+ * The executing phase gets more leeway since agents legitimately spend 5-10+ minutes
+ * making edits. Phases with less expected work get tighter thresholds.
+ */
+const PHASE_STUCK_THRESHOLDS_MS: Record<string, number> = {
+	starting: 120_000, // 2 min
+	context: 180_000, // 3 min
+	executing: 600_000, // 10 min
+	verifying: 300_000, // 5 min
+	reviewing: 300_000, // 5 min
+	committing: 120_000, // 2 min
+};
+
+/**
  * Configuration for worker health monitoring
  */
 export interface HealthMonitorConfig {
@@ -220,12 +234,13 @@ export function checkWorkerHealth(
 			continue;
 		}
 
-		// Check checkpoint staleness
+		// Check checkpoint staleness using phase-specific thresholds
 		const checkpointMs = new Date(assignment.checkpoint.savedAt).getTime();
 		const staleDurationMs = now - checkpointMs;
+		const phase = assignment.checkpoint.phase;
+		const phaseThreshold = PHASE_STUCK_THRESHOLDS_MS[phase] ?? config.stuckThresholdMs;
 
-		if (staleDurationMs > config.stuckThresholdMs) {
-			const phase = assignment.checkpoint.phase;
+		if (staleDurationMs > phaseThreshold) {
 			const workerName = nameFromId(task.taskId);
 			output.warning(`Worker [${workerName}] stuck in '${phase}' phase for ${Math.round(staleDurationMs / 1000)}s`);
 			if (task.worktreePath) {
@@ -272,7 +287,7 @@ export function handleStuckWorker(
 		output.info(`Nudging [${workerName}] (recovery attempt ${attempts + 1}/${config.maxRecoveryAttempts})`);
 
 		// Write a nudge file to the worktree that the worker can detect
-		writeNudgeFile(worktreePath, stuckPhase, attempts + 1);
+		writeNudgeFile(worktreePath, stuckPhase, attempts + 1, config.maxRecoveryAttempts);
 	} else {
 		// Max recovery attempts exceeded - log for manual intervention
 		// Note: We don't actually kill the process here because we don't have
@@ -294,32 +309,29 @@ export function handleStuckWorker(
  * @param {string} worktreePath - Path to the worktree where nudge file will be written
  * @param {string} stuckPhase - Phase where the worker is stuck (e.g., "executing", "verifying")
  * @param {number} attempt - Recovery attempt number (1-indexed)
+ * @param {number} maxAttempts - Maximum recovery attempts before giving up
  * @returns {void}
- * @example
- * writeNudgeFile("/repo/worktrees/task-abc123", "executing", 1);
- * // Creates /repo/worktrees/task-abc123/.undercity-nudge with JSON:
- * // {
- * //   "timestamp": "2024-01-15T10:30:00.000Z",
- * //   "reason": "Stuck in executing phase",
- * //   "attempt": 1,
- * //   "message": "Health check detected inactivity. Please continue or report status."
- * // }
  */
-export function writeNudgeFile(worktreePath: string, stuckPhase: string, attempt: number): void {
+export function writeNudgeFile(worktreePath: string, stuckPhase: string, attempt: number, maxAttempts: number): void {
 	try {
+		const isFinalAttempt = attempt >= maxAttempts;
+		const action = isFinalAttempt ? "wrap_up" : "continue";
 		const nudgePath = `${worktreePath}/.undercity-nudge`;
 		const nudgeContent = JSON.stringify(
 			{
 				timestamp: new Date().toISOString(),
 				reason: `Stuck in ${stuckPhase} phase`,
 				attempt,
-				message: "Health check detected inactivity. Please continue or report status.",
+				action,
+				message: isFinalAttempt
+					? "Final recovery attempt. Wrap up current work and proceed to verification."
+					: "Health check detected inactivity. Please continue or report status.",
 			},
 			null,
 			2,
 		);
 		writeFileSync(nudgePath, nudgeContent, "utf-8");
-		output.debug(`Wrote nudge file to ${nudgePath}`);
+		output.debug(`Wrote nudge file to ${nudgePath} (action: ${action})`);
 	} catch (err) {
 		output.debug(`Failed to write nudge file: ${err}`);
 	}
