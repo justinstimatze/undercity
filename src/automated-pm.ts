@@ -598,6 +598,14 @@ async function gatherPMContext(decision: DecisionPoint, stateDir: string): Promi
 				"RAG search found relevant context",
 			);
 		}
+
+		// Track RAG search metrics
+		const { recordRagSearch } = await import("./live-metrics.js");
+		recordRagSearch({
+			query: decision.question,
+			resultsCount: context.ragResults.length,
+			wasUsed: context.ragResults.length > 0,
+		});
 	} catch {
 		// Continue without RAG results - it's optional
 	}
@@ -1878,6 +1886,14 @@ export async function pmRefineTask(
 		if (ragResults.length > 0) {
 			ragContext = ragResults.map((r) => `- ${r.chunk.content.substring(0, 200)}...`).join("\n");
 		}
+
+		// Track RAG search metrics
+		const { recordRagSearch } = await import("./live-metrics.js");
+		recordRagSearch({
+			query: objective,
+			resultsCount: ragResults.length,
+			wasUsed: ragContext.length > 0,
+		});
 	} catch {
 		// RAG not available
 	}

@@ -76,6 +76,15 @@ export interface LiveMetrics {
 		/** When this grind session started */
 		startedAt: number;
 	};
+	/** RAG search stats - tracks semantic search usage */
+	ragSearches: {
+		/** Total number of RAG searches performed */
+		total: number;
+		/** Total number of results found across all searches */
+		resultsFound: number;
+		/** Number of searches that returned results used by the agent */
+		searchesUsed: number;
+	};
 }
 
 // Use main worktree so metrics aggregate from all worktrees
@@ -112,6 +121,11 @@ function createEmptyMetrics(): LiveMetrics {
 			totalApiMs: 0,
 			totalDurationMs: 0,
 			turns: 0,
+		},
+		ragSearches: {
+			total: 0,
+			resultsFound: 0,
+			searchesUsed: 0,
 		},
 	};
 }
@@ -347,5 +361,21 @@ export function updateGrindProgress(completed: number, total?: number): void {
 export function clearGrindProgress(): void {
 	const metrics = loadLiveMetrics();
 	metrics.grind = undefined;
+	saveLiveMetrics(metrics);
+}
+
+/**
+ * Record a RAG search operation
+ */
+export function recordRagSearch(params: { query: string; resultsCount: number; wasUsed: boolean }): void {
+	const metrics = loadLiveMetrics();
+
+	// Update RAG search counters
+	metrics.ragSearches.total++;
+	metrics.ragSearches.resultsFound += params.resultsCount;
+	if (params.wasUsed) {
+		metrics.ragSearches.searchesUsed++;
+	}
+
 	saveLiveMetrics(metrics);
 }
