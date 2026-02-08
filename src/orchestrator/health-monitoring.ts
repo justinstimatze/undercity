@@ -113,7 +113,7 @@ export function startHealthMonitoring(
 	if (config.timeoutMs && config.timeoutMs > 0) {
 		state.timeoutHandle = setTimeout(() => {
 			output.debug(`Health monitoring timeout reached (${config.timeoutMs}ms)`);
-			controller.abort();
+			stopHealthMonitoring(state);
 		}, config.timeoutMs);
 	}
 
